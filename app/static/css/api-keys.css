@@ -1,0 +1,842 @@
+:root {
+    --card-bg: rgba(20, 20, 28, 0.95);
+    --border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.api-keys-page {
+    min-height: 100vh;
+    margin: 0;
+    font-family: 'Manrope', 'Inter', sans-serif;
+    background: #0c0c14;
+    color: #f5f6fb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.api-keys-wrapper {
+    width: 100%;
+    max-width: 1080px;
+    background: linear-gradient(145deg, rgba(18, 18, 26, 0.95), rgba(12, 12, 20, 0.95));
+    border-radius: 24px;
+    padding: 2.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
+}
+
+.api-keys-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.api-keys-header h1 {
+    margin: 0;
+    font-size: 1.9rem;
+}
+
+.api-keys-header p {
+    margin: 0.35rem 0 0;
+    color: #c5c7d3;
+    font-size: 1rem;
+}
+
+.settings-shell {
+    display: flex;
+    gap: 1.75rem;
+}
+
+.settings-nav {
+    width: 210px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.tab-button {
+    background: transparent;
+    border: none;
+    border-radius: 14px;
+    color: #cfd2e7;
+    padding: 0.85rem 1rem;
+    text-align: left;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.tab-button.active {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
+.tab-button .tag {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    background: rgba(255, 255, 255, 0.12);
+    color: #f5f6fb;
+}
+
+.settings-content {
+    flex: 1;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+.api-keys-card,
+.data-controls-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 1.75rem;
+    margin-bottom: 1.5rem;
+    backdrop-filter: blur(12px);
+}
+
+.api-keys-card h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1.25rem;
+}
+
+.api-keys-card p {
+    margin: 0 0 1rem;
+    color: #b4b6c4;
+    font-size: 0.95rem;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    background: rgba(255, 255, 255, 0.08);
+    color: #cfd2e7;
+    margin-bottom: 1rem;
+}
+
+.status-pill.active {
+    background: rgba(75, 222, 151, 0.12);
+    color: #6ff2b9;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1.2rem;
+}
+
+.input-group label {
+    font-weight: 600;
+    color: #f1f2f8;
+}
+
+.input-group input {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 0.95rem 1rem;
+    font-size: 1rem;
+    color: #f5f6fb;
+}
+
+.input-group input:focus {
+    outline: none;
+    border-color: rgba(113, 160, 255, 0.8);
+    box-shadow: 0 0 0 3px rgba(113, 160, 255, 0.2);
+}
+
+.api-key-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.85rem;
+    margin-top: 1.5rem;
+}
+
+.btn {
+    border: none;
+    border-radius: 12px;
+    padding: 0.85rem 1.5rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #4b6bff, #8a7bff);
+    color: #fff;
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.back-link {
+    color: #98a6ff;
+    text-decoration: none;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.api-key-status {
+    margin-top: 1rem;
+    font-size: 0.95rem;
+    color: #9fa7ff;
+}
+
+.btn-ghost {
+    background: rgba(255, 255, 255, 0.04);
+    color: #f5f6fb;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #f05252, #b51717);
+    color: #fff;
+}
+
+.data-controls-card {
+    padding: 2rem;
+}
+
+.data-controls-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.data-controls-header h2 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.data-controls-header p {
+    margin: 0.35rem 0 0;
+    color: #b4b6c4;
+}
+
+.data-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(134, 164, 255, 0.15);
+    color: #9eb7ff;
+    font-size: 0.85rem;
+}
+
+.data-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+}
+
+.data-control-tile {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 1.25rem;
+    background: rgba(18, 22, 36, 0.85);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    transition: border 0.2s ease, transform 0.2s ease;
+}
+
+.data-control-tile:hover {
+    border-color: rgba(134, 164, 255, 0.4);
+    transform: translateY(-2px);
+}
+
+.data-control-tile h3 {
+    margin: 0 0 0.3rem;
+    font-size: 1.05rem;
+}
+
+.data-control-tile p {
+    margin: 0;
+    color: #b4b6c4;
+    font-size: 0.9rem;
+}
+
+.tile-main {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+}
+
+.tile-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: #9eb7ff;
+}
+
+.data-control-tile.caution {
+    background: rgba(40, 12, 12, 0.85);
+    border-color: rgba(255, 99, 99, 0.3);
+}
+
+.data-control-tile.subtle {
+    background: rgba(13, 23, 39, 0.85);
+}
+
+.data-export-callout {
+    margin-top: 2rem;
+    border: 1px dashed rgba(255, 255, 255, 0.3);
+    border-radius: 18px;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: rgba(17, 31, 54, 0.8);
+}
+
+.data-export-callout h3 {
+    margin: 0 0 0.3rem;
+}
+
+.data-export-callout p {
+    margin: 0;
+    color: #cfd2e7;
+}
+
+.callout-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 16px;
+    background: rgba(134, 164, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9eb7ff;
+    font-size: 1.2rem;
+}
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 8, 15, 0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 1000;
+}
+
+.modal-backdrop.open {
+    display: flex;
+}
+
+.modal-card {
+    position: relative;
+    width: min(420px, 100%);
+    background: rgba(16, 18, 30, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 2rem 1.75rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-card h3 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.modal-card p {
+    margin: 0;
+    color: #b4b6c4;
+}
+
+.modal-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.modal-icon.caution {
+    background: rgba(255, 99, 99, 0.15);
+    color: #ff7a7a;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.modal-close-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background: transparent;
+    border: none;
+    color: #9ba0b7;
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 0.35rem;
+}
+
+.modal-close-btn:hover {
+    color: #fff;
+}
+
+@media (max-width: 768px) {
+    body.api-keys-page {
+        padding: 1rem;
+    }
+    .api-keys-wrapper {
+        padding: 1.5rem;
+    }
+    .api-keys-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .settings-shell {
+        flex-direction: column;
+    }
+    .settings-nav {
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    .tab-button {
+        flex: 1 1 150px;
+        text-align: center;
+    }
+    .api-key-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .data-controls-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .data-export-callout {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .data-export-callout .btn {
+        width: 100%;
+    }
+}
+
+/* =============================================================================
+   Memory Management Styles
+   ============================================================================= */
+
+.memory-tile .tile-icon {
+    background: rgba(168, 139, 255, 0.15);
+    color: #a88bff;
+}
+
+.modal-card-lg {
+    width: min(560px, 100%);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.memory-modal-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.memory-modal-header .modal-icon {
+    background: rgba(168, 139, 255, 0.15);
+    color: #a88bff;
+    flex-shrink: 0;
+}
+
+.memory-modal-header h3 {
+    margin: 0 0 0.25rem;
+}
+
+.memory-modal-header p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #9ba0b7;
+}
+
+.memory-list-container {
+    flex: 1;
+    overflow-y: auto;
+    margin: 1rem 0;
+    min-height: 200px;
+    max-height: 400px;
+}
+
+.memory-loading,
+.memory-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 3rem 1rem;
+    color: #7a7f96;
+    text-align: center;
+}
+
+.memory-loading i,
+.memory-empty i {
+    font-size: 2rem;
+    opacity: 0.5;
+}
+
+.memory-empty p {
+    max-width: 280px;
+    line-height: 1.5;
+}
+
+.memory-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.memory-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    transition: all 0.2s ease;
+}
+
+.memory-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.memory-item.deleting {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.memory-item.deleted {
+    opacity: 0;
+    transform: translateX(-10px);
+}
+
+.memory-item-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.memory-type-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.08);
+    color: #9ba0b7;
+}
+
+.memory-text {
+    flex: 1;
+    font-size: 0.9rem;
+    color: #e0e2ec;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.memory-delete-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: #6b7086;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.memory-item:hover .memory-delete-btn {
+    opacity: 1;
+}
+
+.memory-delete-btn:hover {
+    background: rgba(255, 99, 99, 0.15);
+    color: #ff7a7a;
+}
+
+.memory-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 1rem;
+}
+
+/* Memory Buckets */
+.memory-buckets {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.memory-bucket {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.memory-bucket-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.bucket-icon {
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+.bucket-label {
+    flex: 1;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #b8bac8;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.bucket-count {
+    font-size: 0.75rem;
+    color: #6b7086;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+}
+
+.memory-bucket-list {
+    list-style: none;
+    margin: 0;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.memory-bucket-list .memory-item {
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+}
+
+.memory-bucket-list .memory-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.memory-bucket-list .memory-text {
+    font-size: 0.85rem;
+}
+
+.memory-bucket-list .memory-delete-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 0.75rem;
+}
+
+/* Memory item actions container */
+.memory-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+/* Pin button */
+.memory-pin-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: #4a4e5c;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    opacity: 0;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.memory-item:hover .memory-pin-btn {
+    opacity: 1;
+}
+
+.memory-pin-btn:hover {
+    background: rgba(168, 139, 255, 0.15);
+    color: #a88bff;
+}
+
+.memory-pin-btn.active {
+    opacity: 1;
+    color: #a88bff;
+}
+
+.memory-pin-btn.active:hover {
+    background: rgba(168, 139, 255, 0.2);
+}
+
+.memory-pin-btn.loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Pinned memory item */
+.memory-item.pinned {
+    background: rgba(168, 139, 255, 0.06);
+    border-left: 2px solid rgba(168, 139, 255, 0.4);
+}
+
+.memory-item.pinned .memory-text {
+    color: #e8e4f0;
+}
+
+.memory-count {
+    font-size: 0.85rem;
+    color: #7a7f96;
+}
+
+.memory-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-ghost {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #b4b6c4;
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.15s ease;
+}
+
+.btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+.btn-ghost i {
+    font-size: 0.8rem;
+}
+
+/* Memory type badge colors */
+.memory-type-badge[title="Preference"] {
+    background: rgba(255, 183, 77, 0.15);
+    color: #ffb74d;
+}
+
+.memory-type-badge[title="Project"] {
+    background: rgba(100, 181, 246, 0.15);
+    color: #64b5f6;
+}
+
+.memory-type-badge[title="Fact"] {
+    background: rgba(168, 139, 255, 0.15);
+    color: #a88bff;
+}
+
+.memory-type-badge[title="Skill"] {
+    background: rgba(129, 199, 132, 0.15);
+    color: #81c784;
+}
+
+.memory-type-badge[title="Context"] {
+    background: rgba(144, 164, 174, 0.15);
+    color: #90a4ae;
+}
+
+@media (max-width: 768px) {
+    .memory-modal-footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .memory-count {
+        text-align: center;
+    }
+
+    .memory-actions {
+        justify-content: center;
+    }
+}

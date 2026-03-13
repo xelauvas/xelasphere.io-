@@ -1,0 +1,345 @@
+/* === Premium Design System === */
+:root {
+    /* Minimal, familiar palette */
+    --card-depth: 0 2px 8px rgba(0,0,0,.08),
+                  0 12px 30px rgba(0,0,0,.12);
+    --card-border: 1px solid rgba(255,255,255,0.08);
+    --card-bg: rgba(32,34,37,0.9);
+    --card-bg-hover: rgba(42,45,50,0.95);
+}
+  
+  /* === Premium Logo Container === */
+.logo-container {
+    width: 3.4375rem;
+    height: 3.4375rem;
+    margin: 0 auto 1.5rem;
+    border-radius: 1rem;
+    background: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transform: none;
+    box-shadow: var(--card-depth);
+    isolation: isolate;
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+  
+  .logo-container::before,
+  .logo-container::after {
+    content: none;
+  }
+  
+  .logo-container img {
+    width: auto;
+    height: 85%;
+    display: block;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,.2));
+    transform: translateZ(0);
+    transition: transform 0.2s ease, filter 0.2s ease;
+  }
+  
+  .logo-container:hover img {
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,.3));
+    transform: scale(1.03);
+  }
+  
+  /* === Premium Options Grid === */
+.options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.875rem;
+    padding: 1.5rem 0;
+    margin: 0 auto;
+    max-width: 42rem;
+    width: 100%;
+    transform: none;
+    position: relative;
+  }
+
+  /* Hide extra options on desktop (show only 3 + More) */
+  .options button:nth-child(4):not(.more-button),
+  .options button:nth-child(5):not(.more-button),
+  .options button:nth-child(6):not(.more-button) {
+    display: none;
+  }
+
+  /* Mobile responsive styles moved to mobile.css */
+
+  /* === ChatGPT/Claude Style Cards === */
+.options button {
+    position: relative;
+    width: 100%;
+    height: auto;
+    min-height: 4.5rem;
+    padding: 1rem 1.25rem;
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+    color: #e8ecf2;
+    text-align: left;
+    cursor: pointer;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+    isolation: isolate;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  /* Icon Container */
+  .option-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    min-width: 2.5rem;
+    border-radius: 0.625rem;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+    transition: all 0.25s ease;
+  }
+
+  .option-icon svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  /* Content Container */
+  .option-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .options button .button-text {
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.95);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Card Content Styling */
+.subtitle {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.8rem;
+    font-weight: 400;
+    transition: color 0.2s ease;
+    position: relative;
+    z-index: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Card Hover Effects - Lift + Shadow + Glow */
+.options button:hover {
+    transform: translateY(-3px);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow:
+      0 4px 12px rgba(0, 0, 0, 0.15),
+      0 8px 24px rgba(0, 0, 0, 0.1);
+  }
+
+  .options button:hover .option-icon {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+
+.options button:hover .subtitle {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  /* Card Active State */
+.options button:active {
+    transform: translateY(-1px);
+    transition: all 0.1s ease-out;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+
+  /* Remove old pseudo-elements */
+  .options button::before,
+  .options button::after,
+  .options button > .shine-overlay {
+    display: none;
+  }
+  
+  /* === Premium More Button === */
+.more-button {
+    padding: 0.625rem 1rem;
+    font-size: 0.78rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--background-dark, #212121);
+    color: #e8ecf2;
+    cursor: pointer;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    transition: all 0.25s ease;
+  }
+
+  .more-button.loading {
+    cursor: not-allowed;
+    opacity: 0.7;
+    pointer-events: none;
+  }
+  
+  /* === Premium Animations === */
+
+  /* Staggered entrance animation - slide up with fade and subtle bounce */
+  @keyframes optionSlideIn {
+    0% {
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+    60% {
+      opacity: 1;
+      transform: translateY(-4px) scale(1.01);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* Exit animation - scale down and fade */
+  @keyframes optionSlideOut {
+    0% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.95);
+    }
+  }
+
+  /* Skeleton shimmer effect */
+  @keyframes optionShimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  /* Pulse animation for loading state */
+  @keyframes optionPulse {
+    0%, 100% {
+      opacity: 0.4;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
+  /* New option entrance class - staggered delays set via CSS custom property */
+  .options button.fade-in-new {
+    animation: optionSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    opacity: 0;
+  }
+
+  /* Staggered delays for each button */
+  .options button.fade-in-new:nth-child(1) { animation-delay: 0ms; }
+  .options button.fade-in-new:nth-child(2) { animation-delay: 50ms; }
+  .options button.fade-in-new:nth-child(3) { animation-delay: 100ms; }
+  .options button.fade-in-new:nth-child(4) { animation-delay: 150ms; }
+  .options button.fade-in-new:nth-child(5) { animation-delay: 200ms; }
+  .options button.fade-in-new:nth-child(6) { animation-delay: 250ms; }
+  .options button.fade-in-new:nth-child(7) { animation-delay: 300ms; }
+  .options button.fade-in-new:nth-child(8) { animation-delay: 350ms; }
+
+  /* Exit animation class */
+  .options button.fade-out {
+    animation: optionSlideOut 0.25s ease-out forwards;
+    pointer-events: none;
+  }
+
+  /* Skeleton placeholder while loading */
+  .options button.skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.03) 25%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.03) 75%
+    );
+    background-size: 200% 100%;
+    animation: optionShimmer 1.5s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .options button.skeleton .button-text,
+  .options button.skeleton .subtitle {
+    background: rgba(255, 255, 255, 0.1);
+    color: transparent;
+    border-radius: 4px;
+  }
+
+  /* Loading state for container */
+  .options.loading {
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  @keyframes containedShine {
+    0% {
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+    20% {
+      opacity: 0.8;
+    }
+    30% {
+      opacity: 0.8;
+    }
+    40% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+  }
+
+  @keyframes softShine {
+    0% {
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+    20% {
+      opacity: 1;
+    }
+    30% {
+      opacity: 1;
+    }
+    40% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  
+  /* Mobile styles are in mobile.css */

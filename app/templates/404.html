@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>404 - Page Not Found</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e5e5e5;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh; /* Dynamic viewport for mobile */
+            padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+        }
+
+        .container {
+            text-align: center;
+            margin: auto;
+            padding: clamp(1rem, 5vw, 2rem);
+            max-width: 500px;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 8vw, 4rem);
+            margin-bottom: 1rem;
+            color: #fff;
+        }
+
+        p {
+            font-size: clamp(1rem, 3vw, 1.25rem);
+            margin-bottom: 1.5rem;
+            color: #a0a0a0;
+            line-height: 1.6;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: clamp(0.75rem, 2vw, 1rem) clamp(1.5rem, 4vw, 2rem);
+            border: none;
+            border-radius: 8px;
+            background: #10A37F;
+            color: #fff;
+            text-decoration: none;
+            font-size: clamp(0.9rem, 2.5vw, 1rem);
+            font-weight: 500;
+            min-height: 44px;
+            min-width: 44px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .btn:hover {
+            background: #0d8a6a;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .btn {
+                transition: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>404</h1>
+        <p>The page you're looking for doesn't exist or has been moved.</p>
+        {% if requested_url %}
+        <p style="font-size: 0.9rem; word-break: break-all;">Requested: <strong>{{ requested_url }}</strong></p>
+        {% endif %}
+        <a href="/" class="btn">Go Home</a>
+    </div>
+</body>
+</html>

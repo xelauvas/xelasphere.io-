@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/chat_sessions/{sessionId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /artifacts/{artifactId} {
+        allow read, update, delete: if canAccessArtifact(userId) && validArtifactType(request.resource.data);
+        allow create: if canAccessArtifact(userId) && validArtifactType(request.resource.data);
+
+        match /revisions/{revisionId} {
+          allow read, write: if canAccessArtifact(userId);
+        }
+
+        match /comments/{commentId} {
+          allow read, write: if canAccessArtifact(userId);
+        }
+      }
+    }
+
+    // Shared artifacts - public read access
+    match /shared_artifacts/{shareToken} {
+      // Allow authenticated users to create share links
+      allow create: if request.auth != null;
+      // Allow anyone to read shared artifacts (public access)
+      allow read: if true;
+      // Only the creator can delete/update share links
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+  }
+
+  function canAccessArtifact(userId) {
+    return request.auth != null && request.auth.uid == userId;
+  }
+
+  function validArtifactType(data) {
+    return !(\"type\" in data) || data.type == 'code';
+  }
+}

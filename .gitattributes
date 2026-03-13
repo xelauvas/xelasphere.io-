@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.py  text diff=python
+*.js  text
+*.html text diff=html
+*.css text diff=css
+*.json text
+*.md  text
+*.txt text
+*.bat text eol=crlf
+*.cmd text eol=crlf

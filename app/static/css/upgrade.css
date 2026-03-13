@@ -1,0 +1,380 @@
+:root {
+    color-scheme: dark;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body.upgrade-body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 20% 20%, rgba(103, 85, 231, 0.2), transparent 45%),
+                radial-gradient(circle at 80% 10%, rgba(113, 246, 255, 0.15), transparent 40%),
+                #05060c;
+    color: #f2f4ff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 4rem 1.5rem;
+}
+
+.upgrade-frame {
+    width: min(1100px, 100%);
+    background: rgba(5, 7, 14, 0.8);
+    border-radius: 28px;
+    padding: clamp(2rem, 4vw, 3.5rem);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.upgrade-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 2rem;
+    margin-bottom: 2.5rem;
+    flex-wrap: wrap;
+}
+
+.upgrade-header .header-copy {
+    flex: 1 1 320px;
+}
+
+.upgrade-header .header-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.billing-toggle-row {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2rem;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: rgba(245, 248, 255, 0.92);
+    text-decoration: none;
+    font-weight: 600;
+    position: relative;
+    padding: 0.4rem 0;
+    transition: color 0.2s ease;
+}
+
+.back-link::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 90px;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(118, 92, 255, 0.5), rgba(244, 146, 255, 0.4));
+    transition: transform 0.25s ease, opacity 0.25s ease;
+    opacity: 0.75;
+}
+
+.back-link:hover {
+    color: #ffffff;
+}
+
+.back-link:hover::after {
+    transform: translateX(4px);
+    opacity: 1;
+}
+
+.back-link-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.9rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.icon-sheen {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(125deg, transparent 40%, rgba(255, 255, 255, 0.18) 60%, transparent 75%);
+    transform: translateX(-60%);
+    transition: transform 0.4s ease;
+}
+
+.back-link:hover .icon-sheen {
+    transform: translateX(20%);
+}
+
+.back-link-copy {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+
+.back-link-label {
+    font-size: 0.58rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.back-link-text {
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+}
+
+.upgrade-header .eyebrow {
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: rgba(199, 204, 255, 0.8);
+    margin-bottom: 0.75rem;
+    font-size: 0.7rem;
+}
+
+.upgrade-header h1 {
+    margin: 0;
+    font-size: clamp(2.4rem, 3.8vw, 3.2rem);
+    font-weight: 600;
+    color: #fdfefe;
+}
+
+.upgrade-header .lede {
+    margin-top: 0.85rem;
+    margin-bottom: 0;
+    color: rgba(226, 229, 255, 0.75);
+    line-height: 1.6;
+    max-width: 460px;
+}
+
+.plan-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.02);
+    padding: 0.85rem 1.2rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.plan-toggle .toggle-hint {
+    font-weight: 500;
+    color: rgba(143, 251, 214, 0.8);
+    font-size: 0.85rem;
+}
+
+.plan-toggle span.active {
+    color: #fff;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 64px;
+    height: 32px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 999px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    top: 3px;
+    background-color: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+}
+
+input:checked + .slider:before {
+    transform: translateX(30px);
+}
+
+.pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 1.5rem;
+}
+
+.pricing-card {
+    border-radius: 24px;
+    padding: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    min-height: 520px;
+}
+
+.plus-card {
+    background: rgba(12, 14, 24, 0.75);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.free-card {
+    background: rgba(7, 9, 18, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.business-card {
+    background: linear-gradient(135deg, rgba(87, 89, 255, 0.75), rgba(150, 103, 255, 0.75));
+    position: relative;
+    transform: translateY(-0.5rem);
+    box-shadow: 0 20px 60px rgba(98, 70, 255, 0.35);
+}
+
+.recommended-pill {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+    padding: 0.35rem 0.9rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.card-header h3 {
+    margin: 0;
+    font-size: 1.4rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.card-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.card-description {
+    margin: 0.4rem 0 0.9rem;
+    color: rgba(219, 223, 255, 0.75);
+    line-height: 1.5;
+}
+
+.plan-tag {
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.price {
+    margin: 0;
+    font-size: 2.5rem;
+    font-weight: 600;
+}
+
+.price span {
+    font-size: 1rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.subline {
+    margin: 0.1rem 0 0;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9rem;
+}
+
+.card-btn {
+    border-radius: 999px;
+    padding: 0.9rem 1.2rem;
+    border: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.card-btn.disabled {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.55);
+    cursor: not-allowed;
+}
+
+.card-btn.outline {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: transparent;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.card-btn.primary {
+    background: #f2e7ff;
+    color: #332153;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.card-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    font-size: 0.95rem;
+}
+
+.card-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.card-list i {
+    color: #a5ffdf;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+    .upgrade-frame {
+        padding: 1.75rem;
+    }
+    .pricing-card {
+        transform: none !important;
+    }
+    .upgrade-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .upgrade-header .header-actions {
+        width: 100%;
+    }
+    .plan-toggle {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .billing-toggle-row {
+        margin-bottom: 1.5rem;
+    }
+}

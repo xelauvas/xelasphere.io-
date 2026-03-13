@@ -1,0 +1,215 @@
+/**
+ * Theme Toggle Component
+ * Based on XelaSphere Design Specifications
+ */
+
+/* ==================== */
+/* THEME TOGGLE BUTTON */
+/* ==================== */
+
+.theme-toggle {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  z-index: var(--z-fixed);
+}
+
+.theme-toggle__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-in-out);
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-toggle__button:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-xl);
+  transform: scale(1.05);
+}
+
+.theme-toggle__button:active {
+  transform: scale(0.95);
+}
+
+.theme-toggle__button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* ==================== */
+/* ICON CONTAINER */
+/* ==================== */
+
+.theme-toggle__icon-container {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+
+.theme-toggle__icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: var(--icon-md);
+  color: var(--text-primary);
+  transition: all var(--duration-normal) var(--ease-in-out);
+}
+
+/* Hide/show icons based on theme */
+.theme-toggle__icon--sun {
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(90deg) scale(0);
+}
+
+.theme-toggle__icon--moon {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(0deg) scale(1);
+}
+
+[data-theme="light"] .theme-toggle__icon--sun {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(0deg) scale(1);
+}
+
+[data-theme="light"] .theme-toggle__icon--moon {
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(-90deg) scale(0);
+}
+
+/* ==================== */
+/* TOOLTIP */
+/* ==================== */
+
+.theme-toggle__tooltip {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  right: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-in-out);
+}
+
+.theme-toggle__button:hover .theme-toggle__tooltip {
+  opacity: 1;
+}
+
+/* Arrow */
+.theme-toggle__tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: var(--space-3);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid var(--bg-elevated);
+}
+
+/* ==================== */
+/* THEME TRANSITION OVERLAY */
+/* ==================== */
+
+.theme-transition-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-primary);
+  opacity: 0;
+  pointer-events: none;
+  z-index: var(--z-modal);
+  transition: opacity var(--duration-normal) var(--ease-in-out);
+}
+
+.theme-transition-overlay.is-active {
+  opacity: 0.5;
+}
+
+/* ==================== */
+/* MOBILE POSITIONING */
+/* ==================== */
+
+@media (max-width: 768px) {
+  .theme-toggle {
+    bottom: var(--space-4);
+    right: var(--space-4);
+  }
+
+  .theme-toggle__button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .theme-toggle__tooltip {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .theme-toggle__tooltip::after {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+/* Adjust when artifact panel is open */
+body.artifact-panel-open .theme-toggle {
+  right: calc(var(--artifact-panel-width, var(--panel-width-default, 480px)) + var(--space-6));
+  transition: right var(--duration-normal) var(--ease-smooth);
+}
+
+body.artifact-panel-resizing .theme-toggle {
+  transition: none;
+}
+
+@media (max-width: 768px) {
+  body.artifact-panel-open .theme-toggle {
+    right: var(--space-4);
+  }
+}
+
+/* ==================== */
+/* ACCESSIBILITY */
+/* ==================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle__button,
+  .theme-toggle__icon,
+  .theme-transition-overlay {
+    transition: none;
+  }
+
+  body.artifact-panel-open .theme-toggle {
+    transition: none;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .theme-toggle__button {
+    border-width: 2px;
+  }
+}

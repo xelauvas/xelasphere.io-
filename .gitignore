@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+flask_session/
+instance/
+logs/
+*.log
+.env
+.env.docker
+*firebase*.json
+node_modules/
+package-lock.json
+model_cache/
+.vscode/
+.idea/
+*.swp
+*.swo
+uploads/
+nltk_data/
+gcloud init/

@@ -1,0 +1,332 @@
+:root {
+    --bg: #050505;
+    --card: rgba(255, 255, 255, 0.04);
+    --border: rgba(255, 255, 255, 0.08);
+    --text: #f7f7f7;
+    --text-muted: rgba(247, 247, 247, 0.65);
+    --accent: #60a5fa;
+    --accent-soft: rgba(96, 165, 250, 0.15);
+    --danger: #ef4444;
+    --success: #22c55e;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body.profile-edit-page {
+    font-family: 'Manrope', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 2rem 1rem 3rem;
+}
+
+.profile-edit-shell {
+    width: min(900px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.profile-edit-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+}
+
+.profile-edit-header h1 {
+    font-size: 2rem;
+    margin: 0.25rem 0;
+}
+
+.profile-edit-header p {
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.back-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.header-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border);
+}
+
+.flash-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.flash {
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    background: var(--accent-soft);
+    color: var(--text);
+}
+
+.flash-danger {
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.flash-success {
+    background: rgba(34, 197, 94, 0.15);
+}
+
+.profile-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.profile-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 1.25rem;
+    padding: 1.5rem;
+}
+
+.profile-card.secondary {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.card-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.card-header p {
+    margin: 0.25rem 0 0;
+    color: var(--text-muted);
+}
+
+.two-column-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-top: 1.25rem;
+}
+
+label span {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 0.35rem;
+}
+
+input[type="text"],
+input[type="url"],
+select,
+textarea {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text);
+    font-size: 0.95rem;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.textarea-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 1rem;
+}
+
+.photo-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1rem;
+    align-items: center;
+    margin-top: 1.25rem;
+}
+
+.photo-preview {
+    width: 124px;
+    height: 124px;
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.photo-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.upload-btn {
+    border: 1px dashed var(--border);
+    border-radius: 0.85rem;
+    padding: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.upload-btn input {
+    display: none;
+}
+
+.muted {
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.toggle-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.toggle {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.toggle input {
+    display: none;
+}
+
+.indicator {
+    width: 2.5rem;
+    height: 1.3rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.15);
+    position: relative;
+    transition: background 0.2s ease;
+}
+
+.indicator::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s ease;
+}
+
+.toggle input:checked + .indicator {
+    background: var(--accent);
+}
+
+.toggle input:checked + .indicator::after {
+    transform: translateX(1.15rem);
+}
+
+.toggle strong {
+    display: block;
+}
+
+.toggle p {
+    margin: 0.2rem 0 0;
+    color: var(--text-muted);
+}
+
+.shortcut-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.shortcut {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.9rem;
+    border-radius: 1rem;
+    border: 1px solid var(--border);
+    text-decoration: none;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.shortcut i {
+    font-size: 1.2rem;
+    color: var(--accent);
+}
+
+.shortcut p {
+    margin: 0.2rem 0 0;
+    color: var(--text-muted);
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.hero-btn {
+    border: none;
+    border-radius: 999px;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+    min-width: 140px;
+}
+
+.hero-btn.primary {
+    background: var(--accent);
+    color: #020617;
+}
+
+.hero-btn.ghost {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+    .photo-grid {
+        grid-template-columns: 1fr;
+        justify-items: center;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .profile-edit-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

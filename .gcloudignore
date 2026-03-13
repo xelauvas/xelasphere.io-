@@ -1,0 +1,61 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+.env
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs & temp
+logs/
+*.log
+flask_session/
+uploads/
+
+# Secrets (handled separately)
+secrets/
+*.pem
+*.key
+.env.*
+!.env.example
+
+# Docker (not needed in cloud build)
+docker-compose*.yml
+
+# Tests
+tests/
+*_test.py
+test_*.py
+.pytest_cache/
+.coverage
+
+# Documentation
+*.md
+docs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Google Cloud SDK (local install)
+gcloud init/
+gcloud/
+
+# Node modules (if any)
+node_modules/

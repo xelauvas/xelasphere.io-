@@ -1,0 +1,18 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    env_file:
+      - .env.docker
+    environment:
+      FLASK_ENV: production
+      FIREBASE_CRED_PATH: /run/secrets/firebase.json
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./flask_session:/app/flask_session
+      - ./secrets/firebase-service-account.json:/run/secrets/firebase.json:ro
+    restart: unless-stopped

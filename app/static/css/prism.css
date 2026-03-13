@@ -1,0 +1,138 @@
+/* --- General Variables for Colors --- */
+:root {
+    --bg-syntax: #282c34;          /* Dark background from screenshot */
+    --text-syntax: #abb2bf;        /* Default text color */
+    --keyword-color: #c678dd;      /* Keywords (purple) */
+    --function-color: #ef6161;     /* Functions (blue) */
+    --string-color: #98c379;       /* Strings (green) */
+    --number-color: #d19a66;       /* Numbers (orange) */
+    --variable-color: #e06c75;     /* Variables (red) */
+    --comment-color: #5c6370;      /* Comments (gray) */
+    --operator-color: #56b6c2;     /* Operators (cyan) */
+    --class-name-color: #e57b7b;   /* Class names (yellow) */
+    --punctuation-color: #abb2bf;  /* Punctuation (default text color) */
+    --constant-color: #d19a66;     /* Constants (orange) */
+    --builtin-color: #56b6c2;      /* Built-in functions/classes (cyan) */
+    --namespace-color: #e5c07b;    /* Namespaces (yellow) */
+    --attr-name-color: #d19a66;    /* Attribute names (orange) */
+    --tag-color: #e06c75;          /* HTML/XML tags (red) */
+    --text-shadow: none;
+    --border-radius-syntax: 5px;
+    --padding-syntax: 1em;
+    --font-family-syntax: 'Fira Code', Consolas, Monaco, 'Courier New', monospace;
+    --font-size-syntax: 1em;
+    --line-height-syntax: 1.5;
+}
+
+/* --- Syntax Highlighting Base Styles --- */
+body .prism-code,
+body code[class*="language-"],
+body pre[class*="language-"] {
+    background-color: var(--bg-syntax);
+    color: var(--text-syntax);
+    padding: var(--padding-syntax);
+    border-radius: var(--border-radius-syntax);
+    font-family: var(--font-family-syntax);
+    font-size: var(--font-size-syntax);
+    line-height: var(--line-height-syntax);
+    text-shadow: var(--text-shadow);
+    white-space: pre-wrap; /* Allows wrapping for better readability */
+}
+
+/* Only pre should scroll - code element inherits and shouldn't have its own scrollbar */
+body pre[class*="language-"] {
+    overflow: auto;
+}
+
+body code[class*="language-"] {
+    overflow: visible;
+}
+
+body pre[class*="language-"]::before,
+body code[class*="language-"]::before {
+    display: none !important;
+}
+
+/* --- Syntax Highlighting Colors --- */
+body .prism-code .keyword,
+body code[class*="language-"] .keyword,
+body pre[class*="language-"] .keyword {
+    color: var(--keyword-color);
+    font-weight: bold;
+}
+
+body .prism-code .function,
+body code[class*="language-"] .function,
+body pre[class*="language-"] .function {
+    color: var(--function-color);
+}
+
+body .prism-code .string,
+body code[class*="language-"] .string,
+body pre[class*="language-"] .string {
+    color: var(--string-color);
+}
+
+body .prism-code .number,
+body code[class*="language-"] .number,
+body pre[class*="language-"] .number {
+    color: var(--number-color);
+}
+
+body .prism-code .variable,
+body code[class*="language-"] .variable,
+body pre[class*="language-"] .variable {
+    color: var(--variable-color);
+}
+
+body .prism-code .comment,
+body code[class*="language-"] .comment,
+body pre[class*="language-"] .comment {
+    color: var(--comment-color);
+    font-style: italic;
+    opacity: 0.85; /* Slightly faded for comments */
+}
+
+body .prism-code .operator,
+body code[class*="language-"] .operator,
+body pre[class*="language-"] .operator {
+    color: var(--operator-color);
+    background-color: transparent;
+}
+
+body .prism-code .class-name,
+body code[class*="language-"] .class-name,
+body pre[class*="language-"] .class-name {
+    color: var(--class-name-color);
+    font-weight: 600;
+}
+
+body .prism-code .constant,
+body code[class*="language-"] .constant,
+body pre[class*="language-"] .constant {
+    color: var(--constant-color);
+}
+
+body .prism-code .builtin,
+body code[class*="language-"] .builtin,
+body pre[class*="language-"] .builtin {
+    color: var(--builtin-color);
+}
+
+body .prism-code .namespace,
+body code[class*="language-"] .namespace,
+body pre[class*="language-"] .namespace {
+    color: var(--namespace-color);
+}
+
+body .prism-code .attr-name,
+body code[class*="language-"] .attr-name,
+body pre[class*="language-"] .attr-name {
+    color: var(--attr-name-color);
+}
+
+body .prism-code .tag,
+body code[class*="language-"] .tag,
+body pre[class*="language-"] .tag {
+    color: var(--tag-color);
+}

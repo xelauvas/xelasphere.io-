@@ -1,0 +1,299 @@
+/**
+ * Tree View Styles
+ * Renders project structure as interactive tree view
+ */
+
+/* === Tree View Container === */
+.tree-view-window {
+    background: #0d1117 !important;
+    border-radius: 10px !important;
+    overflow: hidden !important;
+    width: 100% !important;
+    max-width: 760px !important;
+    margin: 1rem auto !important;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', 'Monaco', monospace !important;
+    font-size: 13px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.5) !important;
+    display: block !important;
+}
+
+/* === Tree View Header === */
+.tree-view-window .tree-view-header {
+    background: linear-gradient(180deg, #1c2128 0%, #161b22 100%) !important;
+    padding: 0 14px !important;
+    height: 38px !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+    user-select: none !important;
+}
+
+/* Traffic lights */
+.tree-view-window .tree-view-dots {
+    display: flex !important;
+    gap: 8px !important;
+    align-items: center !important;
+}
+
+.tree-view-window .tree-view-dot {
+    width: 12px !important;
+    height: 12px !important;
+    border-radius: 50% !important;
+    display: inline-block !important;
+}
+
+.tree-view-window .tree-view-dot.red {
+    background: #ff5f57 !important;
+    box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.2) !important;
+}
+
+.tree-view-window .tree-view-dot.yellow {
+    background: #febc2e !important;
+    box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.2) !important;
+}
+
+.tree-view-window .tree-view-dot.green {
+    background: #28c840 !important;
+    box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Tree view title */
+.tree-view-window .tree-view-title {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    color: #8b949e !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.02em !important;
+}
+
+.tree-view-window .tree-view-title i {
+    font-size: 12px !important;
+    color: #10A37F !important;
+}
+
+/* Tree view actions */
+.tree-view-window .tree-view-actions {
+    display: flex !important;
+    gap: 4px !important;
+}
+
+.tree-view-window .tree-view-actions button {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 6px !important;
+    color: #8b949e !important;
+    font-size: 11px !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.tree-view-window .tree-view-actions button:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #c9d1d9 !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* === Tree View Body === */
+.tree-view-window .tree-view-body {
+    padding: 16px 12px !important;
+    max-height: 400px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    background: #0d1117 !important;
+}
+
+/* === Tree List === */
+.tree-view-window .tree-list {
+    list-style: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.tree-view-window .tree-list .tree-list {
+    padding-left: 24px !important;
+    margin: 0 !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+    margin-left: 8px !important;
+}
+
+/* === Tree Item === */
+.tree-view-window .tree-item {
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1 !important;
+    list-style: none !important;
+}
+
+.tree-view-window .tree-item-content {
+    display: flex !important;
+    align-items: center !important;
+    padding: 6px 8px !important;
+    border-radius: 6px !important;
+    cursor: default !important;
+    transition: background 0.15s ease !important;
+    margin: 1px 0 !important;
+}
+
+.tree-view-window .tree-item-content:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.tree-view-window .tree-folder.has-children > .tree-item-content {
+    cursor: pointer !important;
+}
+
+.tree-view-window .tree-folder.has-children > .tree-item-content:hover {
+    background: rgba(16, 163, 127, 0.1) !important;
+}
+
+/* Toggle icon */
+.tree-view-window .tree-toggle {
+    width: 16px !important;
+    height: 16px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    color: #6e7681 !important;
+    font-size: 10px !important;
+    flex-shrink: 0 !important;
+    transition: transform 0.2s ease !important;
+    margin-right: 4px !important;
+}
+
+.tree-view-window .tree-folder.collapsed > .tree-item-content .tree-toggle i {
+    transform: rotate(-90deg) !important;
+}
+
+/* File/Folder icon */
+.tree-view-window .tree-icon {
+    width: 20px !important;
+    height: 20px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin-right: 8px !important;
+    font-size: 14px !important;
+    flex-shrink: 0 !important;
+}
+
+/* Folder icons */
+.tree-view-window .tree-folder .folder-icon {
+    color: #e8ab4c !important;
+    display: inline-block !important;
+}
+
+.tree-view-window .tree-folder .folder-icon-open {
+    color: #f0c674 !important;
+    display: none !important;
+}
+
+.tree-view-window .tree-folder.expanded > .tree-item-content .folder-icon {
+    display: none !important;
+}
+
+.tree-view-window .tree-folder.expanded > .tree-item-content .folder-icon-open {
+    display: inline-block !important;
+}
+
+/* File icons */
+.tree-view-window .tree-file .tree-icon {
+    color: #8b949e !important;
+}
+
+.tree-view-window .tree-file .tree-icon i {
+    font-size: 14px !important;
+}
+
+/* Item name */
+.tree-view-window .tree-name {
+    color: #c9d1d9 !important;
+    font-size: 13px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace !important;
+}
+
+.tree-view-window .tree-folder > .tree-item-content .tree-name {
+    font-weight: 600 !important;
+    color: #e6edf3 !important;
+}
+
+/* === Collapsed state === */
+.tree-view-window .tree-folder.collapsed > .tree-list {
+    display: none !important;
+}
+
+/* === Expanded state === */
+.tree-view-window .tree-folder.expanded > .tree-list {
+    display: block !important;
+}
+
+/* === Scrollbar === */
+.tree-view-window .tree-view-body::-webkit-scrollbar {
+    width: 6px !important;
+}
+
+.tree-view-window .tree-view-body::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+
+.tree-view-window .tree-view-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-radius: 3px !important;
+}
+
+.tree-view-window .tree-view-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* === Mobile Responsive === */
+@media (max-width: 600px) {
+    .tree-view-window {
+        border-radius: 8px !important;
+        margin: 0.75rem auto !important;
+    }
+
+    .tree-view-window .tree-view-header {
+        height: 34px !important;
+        padding: 0 12px !important;
+    }
+
+    .tree-view-window .tree-view-dot {
+        width: 10px !important;
+        height: 10px !important;
+    }
+
+    .tree-view-window .tree-view-dots {
+        gap: 6px !important;
+    }
+
+    .tree-view-window .tree-view-title {
+        font-size: 11px !important;
+    }
+
+    .tree-view-window .tree-view-body {
+        padding: 10px 6px !important;
+        font-size: 12px !important;
+        max-height: 300px !important;
+    }
+
+    .tree-view-window .tree-list .tree-list {
+        padding-left: 16px !important;
+    }
+
+    .tree-view-window .tree-item-content {
+        padding: 4px 6px !important;
+    }
+}

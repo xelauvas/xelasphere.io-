@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Icons Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #fff;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        .subtitle {
+            text-align: center;
+            color: rgba(255,255,255,0.6);
+            margin-bottom: 40px;
+            font-size: 0.9rem;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 30px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            background: rgba(255,255,255,0.08);
+            transform: translateY(-2px);
+        }
+        .icon-container {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .lottie-icon {
+            width: 60px;
+            height: 60px;
+        }
+        .icon-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #fff;
+        }
+        .icon-label {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 15px;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .status.loading {
+            background: rgba(255,193,7,0.2);
+            color: #ffc107;
+        }
+        .status.success {
+            background: rgba(76,175,80,0.2);
+            color: #4caf50;
+        }
+        .status.error {
+            background: rgba(244,67,54,0.2);
+            color: #f44336;
+        }
+        .preview-section {
+            max-width: 600px;
+            margin: 50px auto 0;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 30px;
+        }
+        .preview-section h2 {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+        .preview-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px 6px 6px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+        }
+        .preview-badge .lottie-preview {
+            width: 32px;
+            height: 32px;
+        }
+        .preview-badge .temp {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        .preview-badge .city {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.6);
+        }
+        .greeting-preview {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .controls button {
+            padding: 8px 16px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        .controls button:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        .controls button.active {
+            background: rgba(100,149,237,0.3);
+            border-color: rgba(100,149,237,0.5);
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 40px;
+            color: rgba(255,255,255,0.5);
+            text-decoration: none;
+        }
+        .back-link:hover {
+            color: #fff;
+        }
+
+        /* PNG Cloud CSS Animation Section */
+        .png-section {
+            max-width: 800px;
+            margin: 60px auto 0;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 30px;
+        }
+        .png-section h2 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        .png-section .subtitle {
+            margin-bottom: 30px;
+        }
+        .png-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+        }
+        .png-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .png-card-dark {
+            background: rgba(0,0,0,0.3);
+        }
+        .png-card-light {
+            background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%);
+        }
+        .png-icon-container {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 10px;
+            position: relative;
+            overflow: visible;
+            border: 1px dashed rgba(255,255,255,0.3);
+        }
+        .png-cloud {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            animation: cloudFloat 4s ease-in-out infinite;
+        }
+        .png-cloud.rain {
+            filter: brightness(0.7) saturate(0.8);
+        }
+        .png-cloud.storm {
+            filter: brightness(0.5) saturate(0.6);
+        }
+        .png-cloud.snow {
+            filter: brightness(0.85) saturate(0.9) hue-rotate(10deg);
+        }
+        .png-cloud.drizzle {
+            filter: brightness(0.8) saturate(0.85);
+        }
+        @keyframes cloudFloat {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(4px); }
+        }
+        .png-label {
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.8);
+            margin-top: 8px;
+        }
+        .png-card-light .png-label {
+            color: rgba(0,0,0,0.7);
+        }
+
+        /* Comparison row */
+        .comparison-row {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 40px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .comparison-item {
+            text-align: center;
+        }
+        .comparison-item h3 {
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 15px;
+            color: rgba(255,255,255,0.7);
+        }
+        .comparison-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px 8px 8px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 24px;
+        }
+        .comparison-badge img {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+            animation: cloudFloat 4s ease-in-out infinite;
+        }
+        .comparison-badge .lottie-compare {
+            width: 32px;
+            height: 32px;
+        }
+
+        /* Weather effects for test page */
+        .weather-cloud-wrapper {
+            position: relative;
+            width: 100%;
+            height: 70%;
+            z-index: 2;
+        }
+
+        .weather-rain-drops {
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 100%;
+            height: 60%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .weather-drop {
+            position: absolute;
+            width: 2px;
+            height: 6px;
+            background: linear-gradient(to bottom, #60a5fa, #3b82f6);
+            border-radius: 2px;
+            animation: rainFall 0.8s linear infinite;
+            opacity: 0.9;
+        }
+
+        @keyframes rainFall {
+            0% { transform: translateY(-4px); opacity: 0; }
+            20% { opacity: 0.9; }
+            100% { transform: translateY(12px); opacity: 0; }
+        }
+
+        .weather-snowflakes {
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 100%;
+            height: 70%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .weather-flake {
+            position: absolute;
+            background: radial-gradient(circle, #ffffff 0%, #e0f2fe 50%, transparent 70%);
+            border-radius: 50%;
+            opacity: 0;
+        }
+
+        .weather-flake:nth-child(1) { width: 4px; height: 4px; animation: snowFall1 2.5s ease-in-out infinite; }
+        .weather-flake:nth-child(2) { width: 3px; height: 3px; animation: snowFall2 3s ease-in-out infinite 0.5s; }
+        .weather-flake:nth-child(3) { width: 5px; height: 5px; animation: snowFall3 2.8s ease-in-out infinite 1s; }
+        .weather-flake:nth-child(4) { width: 3px; height: 3px; animation: snowFall1 3.2s ease-in-out infinite 1.5s; }
+        .weather-flake:nth-child(5) { width: 4px; height: 4px; animation: snowFall2 2.6s ease-in-out infinite 0.8s; }
+
+        @keyframes snowFall1 {
+            0% { transform: translateY(-2px) translateX(0); opacity: 0; }
+            10% { opacity: 0.9; }
+            50% { transform: translateY(6px) translateX(-3px); opacity: 0.8; }
+            100% { transform: translateY(14px) translateX(2px); opacity: 0; }
+        }
+
+        @keyframes snowFall2 {
+            0% { transform: translateY(-2px) translateX(0); opacity: 0; }
+            10% { opacity: 0.85; }
+            50% { transform: translateY(5px) translateX(3px); opacity: 0.7; }
+            100% { transform: translateY(12px) translateX(-2px); opacity: 0; }
+        }
+
+        @keyframes snowFall3 {
+            0% { transform: translateY(-2px) translateX(0); opacity: 0; }
+            10% { opacity: 0.95; }
+            30% { transform: translateY(3px) translateX(-2px); }
+            70% { transform: translateY(8px) translateX(3px); opacity: 0.6; }
+            100% { transform: translateY(14px) translateX(0); opacity: 0; }
+        }
+
+        .weather-lightning {
+            position: absolute;
+            bottom: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3;
+            animation: lightningFlash 2s ease-in-out infinite;
+        }
+
+        .weather-lightning svg {
+            filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.8));
+        }
+
+        @keyframes lightningFlash {
+            0%, 75%, 100% { opacity: 0; transform: translateX(-50%) scale(0.8); }
+            80%, 85% { opacity: 1; transform: translateX(-50%) scale(1); }
+            82% { opacity: 0.3; }
+            90% { opacity: 0; }
+        }
+
+        @keyframes cloudFloat {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(2px); }
+        }
+
+        .weather-badge {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 20px;
+            align-items: center;
+        }
+
+        .weather-cloud-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            animation: cloudFloat 4s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <h1>Weather Lottie Icons Test</h1>
+    <p class="subtitle">Preview all weather animations before going live</p>
+
+    <div class="grid" id="icons-grid"></div>
+
+    <div class="preview-section">
+        <h2>Live Preview (as it appears in greeting)</h2>
+        <div class="greeting-preview">Good afternoon, Alex.</div>
+        <div class="preview-badge" id="preview-badge">
+            <div class="lottie-preview" id="preview-icon"></div>
+            <span class="temp">7°</span>
+            <span class="city">Criccieth</span>
+        </div>
+        <div class="controls" id="controls"></div>
+    </div>
+
+    <!-- PNG Cloud + Lottie Effects Section -->
+    <div class="png-section">
+        <h2>PNG Cloud + Lottie Effects</h2>
+        <p class="subtitle">Real cloud image layered with Lottie animation overlays</p>
+
+        <div class="png-grid" id="png-lottie-grid">
+            <!-- Weather icons generated by JS using PNG + Lottie -->
+        </div>
+
+        <p class="subtitle" style="margin-top: 30px; margin-bottom: 20px;">Live badge preview with Lottie effects:</p>
+        <div class="comparison-row" style="border-top: none; padding-top: 0; flex-wrap: wrap;">
+            <div class="comparison-item">
+                <h3>Partly Cloudy</h3>
+                <div class="weather-badge" style="display: inline-flex; padding: 6px 12px; align-items: center;">
+                    <span id="lottie-badge-partly" style="width: 32px; height: 32px; position: relative; display: inline-block; overflow: visible;"></span>
+                    <span style="margin-left: 8px;">18° Partly</span>
+                </div>
+            </div>
+            <div class="comparison-item">
+                <h3>Rain</h3>
+                <div class="weather-badge" style="display: inline-flex; padding: 6px 12px; align-items: center;">
+                    <span id="lottie-badge-rain" style="width: 32px; height: 32px; position: relative; display: inline-block;"></span>
+                    <span style="margin-left: 8px;">7° Rain</span>
+                </div>
+            </div>
+            <div class="comparison-item">
+                <h3>Snow</h3>
+                <div class="weather-badge" style="display: inline-flex; padding: 6px 12px; align-items: center;">
+                    <span id="lottie-badge-snow" style="width: 32px; height: 32px; position: relative; display: inline-block;"></span>
+                    <span style="margin-left: 8px;">-2° Snow</span>
+                </div>
+            </div>
+            <div class="comparison-item">
+                <h3>Storm</h3>
+                <div class="weather-badge" style="display: inline-flex; padding: 6px 12px; align-items: center;">
+                    <span id="lottie-badge-storm" style="width: 32px; height: 32px; position: relative; display: inline-block;"></span>
+                    <span style="margin-left: 8px;">15° Storm</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clear Night Stars Test -->
+    <div class="png-section" style="margin-top: 40px;">
+        <h2>Clear Night - Lottie Stars</h2>
+        <p class="subtitle">Twinkling stars animation</p>
+        <div style="display: flex; gap: 40px; justify-content: center; margin-top: 20px; flex-wrap: wrap;">
+            <div style="text-align: center;">
+                <div id="moon-test" style="width: 100px; height: 100px; background: linear-gradient(180deg, #0a0a1a 0%, #1a1a3a 100%); border-radius: 8px;"></div>
+                <div class="png-label" style="margin-top: 10px;">Clear Night</div>
+            </div>
+            <div style="text-align: center;">
+                <div id="stars-only" style="width: 100px; height: 100px; background: linear-gradient(180deg, #0a0a1a 0%, #1a1a3a 100%); border-radius: 8px;"></div>
+                <div class="png-label" style="margin-top: 10px;">Stars Only</div>
+            </div>
+        </div>
+        <p class="subtitle" style="margin-top: 30px;">Badge Preview:</p>
+        <div style="display: flex; justify-content: center; margin-top: 15px;">
+            <div class="weather-badge" style="display: inline-flex; padding: 6px 12px; align-items: center; background: rgba(10,10,30,0.8);">
+                <span id="moon-badge" style="width: 32px; height: 32px; display: inline-block;"></span>
+                <span style="margin-left: 8px;">5° Clear Night</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Standalone Lightning Test -->
+    <div class="png-section" style="margin-top: 40px;">
+        <h2>Lightning Animation Test (Standalone)</h2>
+        <p class="subtitle">Direct Lottie load without PNG overlay</p>
+        <div style="display: flex; gap: 40px; justify-content: center; margin-top: 20px;">
+            <div style="text-align: center;">
+                <div id="lightning-test" style="width: 100px; height: 100px; background: #333; border-radius: 8px;"></div>
+                <div class="png-label" style="margin-top: 10px;">Lightning Only</div>
+            </div>
+            <div style="text-align: center;">
+                <div id="rain-test" style="width: 100px; height: 100px; background: #333; border-radius: 8px;"></div>
+                <div class="png-label" style="margin-top: 10px;">Rain Only</div>
+            </div>
+        </div>
+    </div>
+
+    <a href="/" class="back-link">← Back to App</a>
+
+    <script>
+        const weatherIcons = [
+            { id: 'clear-day', name: 'Clear Day', label: 'Sunny' },
+            { id: 'clear-night', name: 'Clear Night', label: 'Clear night' },
+            { id: 'partly-cloudy-day', name: 'Partly Cloudy Day', label: 'Partly cloudy' },
+            { id: 'partly-cloudy-night', name: 'Partly Cloudy Night', label: 'Partly cloudy' },
+            { id: 'cloudy', name: 'Cloudy', label: 'Overcast' },
+            { id: 'fog', name: 'Fog', label: 'Foggy' },
+            { id: 'drizzle', name: 'Drizzle', label: 'Light rain' },
+            { id: 'rain', name: 'Rain', label: 'Rainy' },
+            { id: 'snow', name: 'Snow', label: 'Snowy' },
+            { id: 'thunderstorm', name: 'Thunderstorm', label: 'Stormy' }
+        ];
+
+        const animations = {};
+        let previewAnim = null;
+
+        // Create grid cards
+        const grid = document.getElementById('icons-grid');
+        weatherIcons.forEach(icon => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <div class="icon-container">
+                    <div class="lottie-icon" id="icon-${icon.id}"></div>
+                </div>
+                <div class="icon-name">${icon.name}</div>
+                <div class="icon-label">${icon.label}</div>
+                <span class="status loading" id="status-${icon.id}">Loading...</span>
+            `;
+            grid.appendChild(card);
+
+            // Load animation
+            const container = document.getElementById(`icon-${icon.id}`);
+            const statusEl = document.getElementById(`status-${icon.id}`);
+
+            try {
+                const anim = lottie.loadAnimation({
+                    container: container,
+                    renderer: 'svg',
+                    loop: true,
+                    autoplay: true,
+                    path: `/static/lottie/${icon.id}.json`
+                });
+
+                anim.addEventListener('DOMLoaded', () => {
+                    statusEl.textContent = 'Loaded';
+                    statusEl.className = 'status success';
+                });
+
+                anim.addEventListener('data_failed', () => {
+                    statusEl.textContent = 'Failed';
+                    statusEl.className = 'status error';
+                });
+
+                anim.addEventListener('error', () => {
+                    statusEl.textContent = 'Error';
+                    statusEl.className = 'status error';
+                });
+
+                animations[icon.id] = anim;
+            } catch (e) {
+                statusEl.textContent = 'Error';
+                statusEl.className = 'status error';
+            }
+        });
+
+        // Create control buttons
+        const controls = document.getElementById('controls');
+        weatherIcons.forEach(icon => {
+            const btn = document.createElement('button');
+            btn.textContent = icon.name;
+            btn.onclick = () => setPreview(icon.id, btn);
+            controls.appendChild(btn);
+        });
+
+        // Preview function
+        function setPreview(iconId, btn) {
+            // Update active button
+            document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Destroy previous preview
+            if (previewAnim) {
+                previewAnim.destroy();
+            }
+
+            // Load new preview
+            const container = document.getElementById('preview-icon');
+            container.innerHTML = '';
+
+            previewAnim = lottie.loadAnimation({
+                container: container,
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                path: `/static/lottie/${iconId}.json`
+            });
+        }
+
+        // Set initial preview
+        setPreview('clear-day', controls.children[0]);
+
+        // PNG + Lottie Effect configuration
+        const cloudSrc = '/static/img/clouds/50.png';
+        const lottieEffects = {
+            'rain': '/static/lottie/rain-effect.json',
+            'drizzle': '/static/lottie/drizzle-effect.json',
+            'snow': '/static/lottie/snow-effect.json',
+            'thunderstorm': '/static/lottie/lightning-effect.json',
+            'partly-cloudy-day': '/static/lottie/sun-peek.json',
+            'partly-cloudy-night': '/static/lottie/moon-peek.json'
+        };
+
+        const pngLottieTypes = [
+            { type: 'cloudy', label: 'Cloudy', filter: '' },
+            { type: 'partly-cloudy-day', label: 'Partly Cloudy (Day)', filter: '' },
+            { type: 'partly-cloudy-night', label: 'Partly Cloudy (Night)', filter: '' },
+            { type: 'drizzle', label: 'Drizzle', filter: 'brightness(0.8) saturate(0.85)' },
+            { type: 'rain', label: 'Rain', filter: 'brightness(0.75) saturate(0.8)' },
+            { type: 'snow', label: 'Snow', filter: 'brightness(0.9) saturate(0.85)' },
+            { type: 'thunderstorm', label: 'Thunderstorm', filter: 'brightness(0.5) saturate(0.6)' }
+        ];
+
+        // Create PNG + Lottie weather icons
+        function createPNGLottieIcon(container, type, filter) {
+            console.log('[Test] Creating icon for:', type, 'effect:', lottieEffects[type]);
+            container.innerHTML = '';
+            container.style.position = 'relative';
+            container.style.overflow = 'visible';
+
+            // Create cloud image
+            const img = document.createElement('img');
+            img.src = cloudSrc;
+            img.style.position = 'absolute';
+            img.style.top = '0';
+            img.style.left = '0';
+            img.style.width = '100%';
+            img.style.height = '65%';
+            img.style.objectFit = 'contain';
+            img.style.zIndex = '1';
+            if (filter) img.style.filter = filter;
+            img.style.animation = 'cloudFloat 4s ease-in-out infinite';
+            img.onload = () => console.log('[Test] Cloud image loaded for:', type);
+            img.onerror = (e) => console.log('[Test] Cloud image FAILED for:', type, e);
+            container.appendChild(img);
+
+            // Add Lottie effect overlay if needed
+            if (lottieEffects[type]) {
+                console.log('[Test] Adding Lottie effect for:', type);
+                const effectContainer = document.createElement('div');
+                effectContainer.style.position = 'absolute';
+                effectContainer.style.top = '0';
+                effectContainer.style.left = '0';
+                effectContainer.style.width = '100%';
+                effectContainer.style.height = '100%';
+                effectContainer.style.pointerEvents = 'none';
+                effectContainer.style.zIndex = '2';
+                container.appendChild(effectContainer);
+
+                const anim = lottie.loadAnimation({
+                    container: effectContainer,
+                    renderer: 'svg',
+                    loop: true,
+                    autoplay: true,
+                    path: lottieEffects[type]
+                });
+                anim.addEventListener('DOMLoaded', () => console.log('[Test] Lottie loaded:', type));
+                anim.addEventListener('error', (e) => console.log('[Test] Lottie error:', type, e));
+
+                // For thunderstorm, also add rain
+                if (type === 'thunderstorm') {
+                    const rainEffect = document.createElement('div');
+                    rainEffect.style.position = 'absolute';
+                    rainEffect.style.top = '0';
+                    rainEffect.style.left = '0';
+                    rainEffect.style.width = '100%';
+                    rainEffect.style.height = '100%';
+                    rainEffect.style.pointerEvents = 'none';
+                    rainEffect.style.zIndex = '2';
+                    container.appendChild(rainEffect);
+
+                    lottie.loadAnimation({
+                        container: rainEffect,
+                        renderer: 'svg',
+                        loop: true,
+                        autoplay: true,
+                        path: lottieEffects['rain']
+                    });
+                }
+            }
+        }
+
+        // Populate the PNG + Lottie grid
+        const pngLottieGrid = document.getElementById('png-lottie-grid');
+        pngLottieTypes.forEach(weather => {
+            const card = document.createElement('div');
+            card.className = 'png-card png-card-dark';
+
+            const iconContainer = document.createElement('div');
+            iconContainer.className = 'png-icon-container';
+            iconContainer.style.width = '64px';
+            iconContainer.style.height = '64px';
+
+            createPNGLottieIcon(iconContainer, weather.type, weather.filter);
+
+            const label = document.createElement('div');
+            label.className = 'png-label';
+            label.textContent = weather.label;
+
+            card.appendChild(iconContainer);
+            card.appendChild(label);
+            pngLottieGrid.appendChild(card);
+        });
+
+        // Populate badge icons with Lottie effects
+        function createBadgeIcon(containerId, type, filter) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            createPNGLottieIcon(container, type, filter);
+        }
+
+        createBadgeIcon('lottie-badge-partly', 'partly-cloudy-day', '');
+        createBadgeIcon('lottie-badge-rain', 'rain', 'brightness(0.75) saturate(0.8)');
+        createBadgeIcon('lottie-badge-snow', 'snow', 'brightness(0.9) saturate(0.85)');
+        createBadgeIcon('lottie-badge-storm', 'thunderstorm', 'brightness(0.5) saturate(0.6)');
+
+        // Standalone animation tests
+        const lightningTest = document.getElementById('lightning-test');
+        const rainTest = document.getElementById('rain-test');
+
+        if (lightningTest) {
+            console.log('[Test] Loading standalone lightning...');
+            const lightningAnim = lottie.loadAnimation({
+                container: lightningTest,
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                path: '/static/lottie/lightning-effect.json'
+            });
+            lightningAnim.addEventListener('DOMLoaded', () => console.log('[Test] Lightning loaded OK'));
+            lightningAnim.addEventListener('data_failed', () => console.log('[Test] Lightning FAILED'));
+        }
+
+        if (rainTest) {
+            console.log('[Test] Loading standalone rain...');
+            lottie.loadAnimation({
+                container: rainTest,
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                path: '/static/lottie/rain-effect.json'
+            });
+        }
+
+        // Stars Lottie test
+        const starsEffect = '/static/lottie/clear-night.json';
+
+        // Stars test
+        const moonTest = document.getElementById('moon-test');
+        if (moonTest) {
+            lottie.loadAnimation({
+                container: moonTest,
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                path: starsEffect
+            });
+        }
+
+        // Stars only
+        const starsOnly = document.getElementById('stars-only');
+        if (starsOnly) {
+            lottie.loadAnimation({
+                container: starsOnly,
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                path: starsEffect
+            });
+        }
+
+        // Stars badge
+        const moonBadge = document.getElementById('moon-badge');
+        if (moonBadge) {
+            lottie.loadAnimation({
+                container: moonBadge,
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                path: starsEffect
+            });
+        }
+    </script>
+</body>
+</html>

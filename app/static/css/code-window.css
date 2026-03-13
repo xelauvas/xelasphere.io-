@@ -1,0 +1,445 @@
+/* === Professional Code Window - VS Code Inspired === */
+
+/* --- Main Container --- */
+.code-window {
+    background: #1e1e1e;
+    border-radius: 12px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 760px;
+    margin: 1.25rem auto;
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', monospace;
+    font-size: 13.5px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+        0 4px 6px rgba(0, 0, 0, 0.1),
+        0 10px 40px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    position: relative;
+}
+
+/* --- Code Header (Title Bar) --- */
+.code-header {
+    background: linear-gradient(180deg, #323233 0%, #2d2d2d 100%);
+    padding: 0 16px;
+    height: 42px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.4);
+    position: relative;
+    user-select: none;
+}
+
+/* Traffic Light Dots (macOS style) */
+.code-header::before {
+    content: '';
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    background: #ff5f57;
+    border-radius: 50%;
+    box-shadow:
+        20px 0 0 #febc2e,
+        40px 0 0 #28c840;
+}
+
+/* Language Indicator Badge */
+.language-indicator {
+    background: rgba(255, 255, 255, 0.08);
+    color: #9d9d9d;
+    padding: 4px 10px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 70px;
+    transition: all 0.2s ease;
+}
+
+.language-indicator:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #c5c5c5;
+}
+
+/* Language icon dot */
+.language-indicator::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #4ec9b0;
+}
+
+/* Copy Button */
+.copy-button {
+    background: transparent;
+    color: #858585;
+    padding: 6px 12px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-left: auto;
+    font-family: inherit;
+}
+
+.copy-button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #d4d4d4;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.copy-button:active {
+    transform: scale(0.96);
+}
+
+.copy-button.copied {
+    color: #4ec9b0;
+    background: rgba(78, 201, 176, 0.1);
+}
+
+.copy-button i,
+.copy-button svg {
+    font-size: 13px;
+    transition: transform 0.15s ease;
+}
+
+.copy-button span {
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* Sticky Copy Button */
+.copy-button.sticky {
+    position: fixed;
+    top: 12px;
+    right: 16px;
+    z-index: 100;
+    background: rgba(30, 30, 30, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* --- Code Content Area --- */
+.code-window pre {
+    margin: 0;
+    padding: 20px 24px;
+    overflow: auto !important; /* Single scrollbar on pre only */
+    max-height: 560px;
+    background: #1e1e1e;
+    position: relative;
+}
+
+/* Override Prism's overflow - pre handles scrolling, not inner code */
+.code-window pre[class*="language-"] {
+    overflow: auto !important;
+    margin: 0;
+    padding: 20px 24px;
+}
+
+.code-window code {
+    display: block;
+    padding: 0;
+    line-height: 1.7;
+    font-size: 13.5px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', monospace;
+    color: #d4d4d4;
+    background: transparent;
+    white-space: pre;
+    tab-size: 4;
+    -moz-tab-size: 4;
+    word-wrap: normal;
+    word-break: normal;
+    overflow-wrap: normal;
+    overflow: visible !important; /* Code element should NOT scroll - let pre handle it */
+    max-height: none !important;
+    font-variant-ligatures: contextual;
+    font-feature-settings: "calt" 1, "liga" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* Ensure Prism code elements don't add scrollbars - only pre scrolls */
+.code-window code[class*="language-"] {
+    overflow: visible !important;
+    max-height: none !important;
+}
+
+/* --- Professional Scrollbar --- */
+.code-window pre::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.code-window pre::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+.code-window pre::-webkit-scrollbar-thumb {
+    background: #424242;
+    border-radius: 5px;
+    border: 2px solid #1e1e1e;
+}
+
+.code-window pre::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.code-window pre::-webkit-scrollbar-corner {
+    background: #1e1e1e;
+}
+
+/* Firefox scrollbar */
+.code-window pre {
+    scrollbar-width: thin;
+    scrollbar-color: #424242 #1e1e1e;
+}
+
+/* --- Syntax Highlighting (Prism/Highlight.js compatible) --- */
+
+/* Comments */
+.code-window .token.comment,
+.code-window .token.prolog,
+.code-window .token.doctype,
+.code-window .token.cdata,
+.code-window .hljs-comment {
+    color: #6a9955;
+    font-style: italic;
+}
+
+/* Keywords */
+.code-window .token.keyword,
+.code-window .token.tag,
+.code-window .token.boolean,
+.code-window .token.constant,
+.code-window .hljs-keyword,
+.code-window .hljs-built_in {
+    color: #569cd6;
+}
+
+/* Strings */
+.code-window .token.string,
+.code-window .token.char,
+.code-window .token.attr-value,
+.code-window .hljs-string {
+    color: #ce9178;
+}
+
+/* Numbers */
+.code-window .token.number,
+.code-window .hljs-number {
+    color: #b5cea8;
+}
+
+/* Functions */
+.code-window .token.function,
+.code-window .hljs-title.function_ {
+    color: #dcdcaa;
+}
+
+/* Classes & Types */
+.code-window .token.class-name,
+.code-window .token.builtin,
+.code-window .hljs-title.class_ {
+    color: #4ec9b0;
+}
+
+/* Variables & Parameters */
+.code-window .token.variable,
+.code-window .token.parameter,
+.code-window .hljs-variable,
+.code-window .hljs-params {
+    color: #9cdcfe;
+}
+
+/* Operators & Punctuation */
+.code-window .token.operator,
+.code-window .token.punctuation,
+.code-window .hljs-punctuation {
+    color: #d4d4d4;
+}
+
+/* Properties */
+.code-window .token.property,
+.code-window .hljs-property,
+.code-window .hljs-attr {
+    color: #9cdcfe;
+}
+
+/* Regex */
+.code-window .token.regex {
+    color: #d16969;
+}
+
+/* Important/Bold */
+.code-window .token.important,
+.code-window .token.bold {
+    font-weight: bold;
+}
+
+/* Italic */
+.code-window .token.italic {
+    font-style: italic;
+}
+
+/* --- Line Numbers (Optional) --- */
+.code-window.with-line-numbers pre {
+    padding-left: 60px;
+    counter-reset: line;
+}
+
+.code-window.with-line-numbers code {
+    position: relative;
+}
+
+.code-window .line-numbers-rows {
+    position: absolute;
+    left: 0;
+    top: 20px;
+    width: 44px;
+    padding-right: 12px;
+    text-align: right;
+    color: #858585;
+    font-size: 13px;
+    line-height: 1.7;
+    border-right: 1px solid #333;
+    user-select: none;
+    pointer-events: none;
+}
+
+/* --- Selection Styling --- */
+.code-window code::selection,
+.code-window code *::selection {
+    background: rgba(38, 79, 120, 0.6);
+    color: inherit;
+}
+
+/* --- Focus State --- */
+.code-window:focus-within {
+    outline: none;
+    box-shadow:
+        0 4px 6px rgba(0, 0, 0, 0.1),
+        0 10px 40px rgba(0, 0, 0, 0.25),
+        0 0 0 2px rgba(78, 201, 176, 0.3);
+}
+
+/* --- Dark/Light Mode Variants --- */
+.code-window.light-mode {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.12);
+    box-shadow:
+        0 4px 6px rgba(0, 0, 0, 0.05),
+        0 10px 40px rgba(0, 0, 0, 0.08);
+}
+
+.code-window.light-mode .code-header {
+    background: linear-gradient(180deg, #f8f8f8 0%, #e8e8e8 100%);
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.code-window.light-mode .language-indicator {
+    background: rgba(0, 0, 0, 0.06);
+    color: #666;
+}
+
+.code-window.light-mode .copy-button {
+    color: #666;
+}
+
+.code-window.light-mode pre,
+.code-window.light-mode code {
+    background: #ffffff;
+    color: #1e1e1e;
+}
+
+.code-window.light-mode pre::-webkit-scrollbar-track {
+    background: #f5f5f5;
+}
+
+.code-window.light-mode pre::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-color: #f5f5f5;
+}
+
+/* --- Override Conflicts --- */
+pre[class*="language-"]::before {
+    display: none !important;
+}
+
+pre[class*="language-"] {
+    padding-top: 20px !important;
+    margin: 0 !important;
+    background: #1e1e1e !important;
+}
+
+.code-window pre,
+.code-window code,
+.code-window div:not(.code-header) {
+    background: #1e1e1e !important;
+    color: #d4d4d4;
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+    .code-window {
+        border-radius: 8px;
+        margin: 1rem auto;
+    }
+
+    .code-header {
+        height: 38px;
+        padding: 0 12px;
+    }
+
+    .code-header::before {
+        width: 10px;
+        height: 10px;
+        left: 12px;
+        box-shadow:
+            16px 0 0 #febc2e,
+            32px 0 0 #28c840;
+    }
+
+    .language-indicator {
+        margin-left: 56px;
+        font-size: 10px;
+        padding: 3px 8px;
+    }
+
+    .code-window pre {
+        padding: 16px;
+        max-height: 400px;
+    }
+
+    .code-window code {
+        font-size: 12px;
+        line-height: 1.6;
+    }
+}
+
+/* --- Animation for Copy Feedback --- */
+@keyframes copyPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.copy-button.copied {
+    animation: copyPulse 0.3s ease;
+}

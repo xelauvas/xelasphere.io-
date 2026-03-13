@@ -1,0 +1,184 @@
+/**
+ * Text Selection Quote Feature Styles
+ */
+
+/* ================================================
+   FLOATING "ASK ABOUT THIS" BUTTON
+   ================================================ */
+
+.text-selection-ask-btn {
+    position: fixed;
+    z-index: 10100;
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: rgba(48, 48, 48, 0.95);
+    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    transition: all 0.15s ease;
+    opacity: 0;
+    transform: scale(0.9) translateY(4px);
+    white-space: nowrap;
+    backdrop-filter: blur(8px);
+}
+
+.text-selection-ask-btn.visible {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+.text-selection-ask-btn:hover {
+    background: rgba(60, 60, 60, 0.98);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.text-selection-ask-btn:active {
+    transform: scale(0.97) translateY(0);
+}
+
+.text-selection-ask-btn i {
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+/* ================================================
+   QUOTE REPLY INDICATOR
+   Matches input-row shape, kisses it directly
+   ================================================ */
+
+.quote-reply-indicator {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 0;
+    /* Match input-row styling */
+    background: var(--composer-surface, rgba(30, 30, 46, 0.95));
+    border: 1px solid var(--composer-border-color, rgba(255, 255, 255, 0.08));
+    border-bottom: none;
+    /* Round top only - bottom connects to input */
+    border-radius: var(--composer-radius, 1.5rem) var(--composer-radius, 1.5rem) 0 0;
+    overflow: hidden;
+    animation: quoteSlideUp 0.15s ease-out;
+}
+
+@keyframes quoteSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* When quote is present, round input-row bottom only */
+.quote-reply-indicator + .input-row,
+.input-container:has(.quote-reply-indicator) .input-row {
+    border-top: none;
+    border-radius: 0 0 var(--composer-radius, 1.5rem) var(--composer-radius, 1.5rem);
+}
+
+.quote-reply-bar {
+    width: 3px;
+    background: rgba(255, 255, 255, 0.3);
+    flex-shrink: 0;
+}
+
+.quote-reply-content {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 16px;
+}
+
+.quote-reply-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.quote-reply-text {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #a1a1aa;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
+}
+
+.quote-reply-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    color: #6b6b6b;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.quote-reply-close:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+}
+
+.quote-reply-close i {
+    font-size: 14px;
+}
+
+/* ================================================
+   MOBILE RESPONSIVE
+   ================================================ */
+
+@media (max-width: 600px) {
+    .text-selection-ask-btn {
+        padding: 10px 16px;
+        font-size: 14px;
+        border-radius: 28px;
+    }
+
+    .quote-reply-content {
+        padding: 8px 12px;
+    }
+
+    .quote-reply-text {
+        font-size: 12px;
+    }
+
+    .quote-reply-close {
+        width: 40px;
+    }
+}
+
+/* ================================================
+   SELECTION HIGHLIGHT IN AI MESSAGES
+   ================================================ */
+
+.ai-message ::selection,
+.assistant-message ::selection,
+[data-role="assistant"] ::selection,
+.message.ai .message-content ::selection {
+    background: rgba(255, 255, 255, 0.2);
+    color: inherit;
+}

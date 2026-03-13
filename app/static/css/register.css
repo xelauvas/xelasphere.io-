@@ -1,0 +1,20 @@
+/**
+ * XELAS Register Page Styles
+ *
+ * NOTE: The register page now shares the same design system as the login page.
+ * All shared styles are defined in login.css including:
+ * - Animated background
+ * - Card styling
+ * - Form inputs
+ * - Social buttons
+ * - Flash messages
+ * - Footer
+ * - Mobile responsive styles
+ *
+ * Register-specific additions (password toggle, strength indicator)
+ * are also in login.css under "REGISTER PAGE EXTRAS" section.
+ *
+ * This file is kept for any register-specific overrides if needed.
+ */
+
+/* Register page specific overrides (if any) */

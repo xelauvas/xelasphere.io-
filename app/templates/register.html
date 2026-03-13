@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Animated Background -->
+<div class="login-page-background"></div>
+
+<div class="login-page-container">
+    <div class="login-card">
+        <!-- Brand Header -->
+        <div class="login-brand">
+            <a href="/" title="Go to Home">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="xelaSphere" class="brand-logo-img">
+            </a>
+        </div>
+
+        <!-- Page Header -->
+        <div class="login-header">
+            <h2 class="login-title">Create your account</h2>
+            <p class="login-subtitle">Let's get you set up</p>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages-container">
+              {% for category, message in messages %}
+                <div class="flash-alert flash-alert-{{ category }}" role="alert" aria-live="polite">
+                    <span class="flash-icon">
+                        {% if category == 'danger' or category == 'error' %}
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M10 6V11M10 14H10.01M19 10C19 14.9706 14.9706 19 10 19C5.02944 19 1 14.9706 1 10C1 5.02944 5.02944 1 10 1C14.9706 1 19 5.02944 19 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        {% elif category == 'success' %}
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 10L8.5 12.5L14 7M19 10C19 14.9706 14.9706 19 10 19C5.02944 19 1 14.9706 1 10C1 5.02944 5.02944 1 10 1C14.9706 1 19 5.02944 19 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        {% else %}
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M10 6V11M10 14H10.01M19 10C19 14.9706 14.9706 19 10 19C5.02944 19 1 14.9706 1 10C1 5.02944 5.02944 1 10 1C14.9706 1 19 5.02944 19 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        {% endif %}
+                    </span>
+                    <span class="flash-message">{{ message }}</span>
+                    <button type="button" class="flash-close" aria-label="Close" data-dismiss="alert">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M13 1L1 13M1 1L13 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <!-- Social Login Options -->
+        <div class="social-login-section">
+            <div class="social-buttons">
+                <a href="#" class="social-btn" aria-label="Sign up with Apple" title="Sign up with Apple">
+                    <img src="{{ url_for('static', filename='images/apple.svg') }}" alt="" width="20" height="20">
+                </a>
+                <a href="{{ url_for('auth_routes.discord_login') }}" class="social-btn" aria-label="Sign up with Discord" title="Sign up with Discord">
+                    <img src="{{ url_for('static', filename='images/discord.svg') }}" alt="" width="20" height="20">
+                </a>
+                <a href="{{ url_for('auth_routes.google_login') }}" class="social-btn" aria-label="Sign up with Google" title="Sign up with Google">
+                    <img src="{{ url_for('static', filename='images/google.svg') }}" alt="" width="20" height="20">
+                </a>
+                <a href="{{ url_for('auth_routes.microsoft_login') }}" class="social-btn" aria-label="Sign up with Microsoft" title="Sign up with Microsoft">
+                    <img src="{{ url_for('static', filename='images/microsoft.svg') }}" alt="" width="20" height="20">
+                </a>
+            </div>
+        </div>
+
+        <!-- Separator -->
+        <div class="login-separator">
+            <span>or</span>
+        </div>
+
+        <!-- Register Form -->
+        <form action="{{ url_for('auth_routes.register') }}" method="post" class="login-form" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <!-- Email Field -->
+            <div class="form-group">
+                <label for="email" class="form-label visually-hidden">Email address</label>
+                <input
+                    type="email"
+                    class="form-input"
+                    id="email"
+                    name="email"
+                    placeholder="Email address"
+                    required
+                    autocomplete="email"
+                    spellcheck="false"
+                >
+            </div>
+
+            <!-- Password Field -->
+            <div class="form-group">
+                <label for="password" class="form-label visually-hidden">Password</label>
+                <div class="password-input-wrapper">
+                    <input
+                        type="password"
+                        class="form-input"
+                        id="password"
+                        name="password"
+                        placeholder="Password"
+                        required
+                        minlength="8"
+                        autocomplete="new-password"
+                    >
+                    <button type="button" class="password-toggle" aria-label="Toggle password visibility">
+                        <svg class="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <svg class="eye-off-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                            <path d="M17.94 17.94A10.07 10.07 0 0112 20C5 20 1 12 1 12A18.45 18.45 0 015.06 5.06M9.9 4.24A9.12 9.12 0 0112 4C19 4 23 12 23 12A18.5 18.5 0 0119.73 16.74M14.12 14.12A3 3 0 119.88 9.88" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M1 1L23 23" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+                <!-- Password Strength Indicator -->
+                <div class="password-strength-container">
+                    <div class="password-strength-bar">
+                        <div class="password-strength-fill" id="password-strength-fill"></div>
+                    </div>
+                    <span class="password-strength-text" id="password-strength-text"></span>
+                </div>
+                <p class="form-hint">At least 8 characters with uppercase, lowercase, number, and special character</p>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" class="submit-btn">
+                <span class="submit-text">Create account</span>
+                <svg class="submit-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 3L11 8L6 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </form>
+
+        <!-- Footer Links -->
+        <div class="login-footer">
+            <p class="legal-text">
+                By creating an account, you agree to our
+                <a href="#">Terms of Service</a> and
+                <a href="#">Privacy Policy</a>
+            </p>
+            <div class="register-link-container">
+                <span class="register-prompt">Already have an account?</span>
+                <a href="{{ url_for('auth_routes.login') }}" class="register-link">Sign in</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('.login-form');
+    const inputs = document.querySelectorAll('.form-input');
+    const submitBtn = document.querySelector('.submit-btn');
+    const passwordInput = document.getElementById('password');
+    const passwordToggle = document.querySelector('.password-toggle');
+    const strengthFill = document.getElementById('password-strength-fill');
+    const strengthText = document.getElementById('password-strength-text');
+
+    // Add focus animation class to inputs
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            this.closest('.form-group').classList.add('focused');
+        });
+
+        input.addEventListener('blur', function() {
+            this.closest('.form-group').classList.remove('focused');
+        });
+    });
+
+    // Password visibility toggle
+    if (passwordToggle && passwordInput) {
+        passwordToggle.addEventListener('click', function() {
+            const eyeIcon = this.querySelector('.eye-icon');
+            const eyeOffIcon = this.querySelector('.eye-off-icon');
+
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                eyeIcon.style.display = 'none';
+                eyeOffIcon.style.display = 'block';
+            } else {
+                passwordInput.type = 'password';
+                eyeIcon.style.display = 'block';
+                eyeOffIcon.style.display = 'none';
+            }
+        });
+    }
+
+    // Password strength checker
+    if (passwordInput && strengthFill && strengthText) {
+        passwordInput.addEventListener('input', function() {
+            const password = this.value;
+            const strength = checkPasswordStrength(password);
+
+            strengthFill.style.width = strength.percent + '%';
+            strengthFill.className = 'password-strength-fill ' + strength.class;
+            strengthText.textContent = strength.text;
+            strengthText.className = 'password-strength-text ' + strength.class;
+        });
+    }
+
+    function checkPasswordStrength(password) {
+        let score = 0;
+
+        if (password.length === 0) {
+            return { percent: 0, class: '', text: '' };
+        }
+
+        if (password.length >= 8) score++;
+        if (password.length >= 12) score++;
+        if (/[a-z]/.test(password)) score++;
+        if (/[A-Z]/.test(password)) score++;
+        if (/[0-9]/.test(password)) score++;
+        if (/[^a-zA-Z0-9]/.test(password)) score++;
+
+        if (score <= 2) {
+            return { percent: 25, class: 'weak', text: 'Weak' };
+        } else if (score <= 4) {
+            return { percent: 50, class: 'fair', text: 'Fair' };
+        } else if (score <= 5) {
+            return { percent: 75, class: 'good', text: 'Good' };
+        } else {
+            return { percent: 100, class: 'strong', text: 'Strong' };
+        }
+    }
+
+    // Form submission with loading state
+    form.addEventListener('submit', function(e) {
+        if (!form.checkValidity()) {
+            e.preventDefault();
+            inputs.forEach(input => {
+                if (!input.validity.valid) {
+                    input.classList.add('invalid');
+                }
+            });
+            return;
+        }
+
+        submitBtn.classList.add('loading');
+        submitBtn.disabled = true;
+    });
+
+    // Remove invalid class on input
+    inputs.forEach(input => {
+        input.addEventListener('input', function() {
+            this.classList.remove('invalid');
+        });
+    });
+
+    // Flash message handling
+    document.querySelectorAll('.flash-close').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const alert = this.closest('.flash-alert');
+            alert.style.animation = 'slideOut 300ms ease-out forwards';
+            setTimeout(() => alert.remove(), 300);
+        });
+    });
+
+    // Auto-dismiss success messages
+    document.querySelectorAll('.flash-alert-success').forEach(alert => {
+        setTimeout(() => {
+            alert.style.animation = 'slideOut 300ms ease-out forwards';
+            setTimeout(() => alert.remove(), 300);
+        }, 5000);
+    });
+});
+</script>
+{% endblock %}

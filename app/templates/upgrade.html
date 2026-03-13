@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upgrade • XelaSphere</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/upgrade.css') }}">
+</head>
+<body class="upgrade-body">
+    <div class="upgrade-frame">
+        <header class="upgrade-header">
+            <div class="header-copy">
+                <p class="eyebrow">Plans</p>
+                <h1>Upgrade your plan</h1>
+            </div>
+            <div class="header-actions">
+                <a href="{{ url_for('pages.index') }}" class="back-link" aria-label="Resume previous chat thread">
+                    <span class="back-link-icon">
+                        <span class="icon-sheen"></span>
+                        <i class="fas fa-comments"></i>
+                    </span>
+                    <div class="back-link-copy">
+                        <span class="back-link-label">Workspace</span>
+                        <strong class="back-link-text">Resume chat</strong>
+                    </div>
+                </a>
+            </div>
+        </header>
+        <div class="billing-toggle-row">
+            <div class="plan-toggle" role="group" aria-label="Billing cadence">
+                <span class="toggle-label" data-mode="monthly">Monthly</span>
+                <label class="switch">
+                    <input type="checkbox" id="billing-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+                <span class="toggle-label active" data-mode="yearly">Yearly</span>
+                <span class="toggle-hint">Yearly saves more</span>
+            </div>
+        </div>
+
+        <section class="pricing-grid">
+            <article class="pricing-card free-card">
+                <div class="card-header">
+                    <div class="card-title-row">
+                        <h3>{{ free_plan.name }}</h3>
+                        {% if free_plan.tag %}
+                        <span class="plan-tag">{{ free_plan.tag }}</span>
+                        {% endif %}
+                    </div>
+                    <p class="card-description">{{ free_plan.description }}</p>
+                    <p class="price"
+                       data-monthly-price="{{ free_plan.pricing.monthly.price }}"
+                       data-monthly-period="{{ free_plan.pricing.monthly.period }}"
+                       data-yearly-price="{{ free_plan.pricing.yearly.price }}"
+                       data-yearly-period="{{ free_plan.pricing.yearly.period }}">
+                        <span class="price-value">{{ free_plan.pricing.yearly.price }}</span>
+                        <span class="price-period">{{ free_plan.pricing.yearly.period }}</span>
+                    </p>
+                    <p class="subline"
+                       data-monthly-note="{{ free_plan.pricing.monthly.note }}"
+                       data-yearly-note="{{ free_plan.pricing.yearly.note }}">
+                       {{ free_plan.pricing.yearly.note }}
+                    </p>
+                </div>
+                <button class="card-btn {{ free_plan.button_style or 'outline' }}" {% if free_plan.is_current %}disabled{% endif %}>
+                    {{ 'Your current plan' if free_plan.is_current else free_plan.button_label }}
+                </button>
+                <ul class="card-list">
+                    {% for highlight in free_plan.highlights %}
+                    <li><i class="fas fa-check"></i> {{ highlight }}</li>
+                    {% endfor %}
+                </ul>
+            </article>
+
+            <article class="pricing-card plus-card">
+                <div class="card-header">
+                    <div class="card-title-row">
+                        <h3>{{ plus_plan.name }}</h3>
+                        {% if plus_plan.tag %}
+                        <span class="plan-tag">{{ plus_plan.tag }}</span>
+                        {% endif %}
+                    </div>
+                    <p class="card-description">{{ plus_plan.description }}</p>
+                    <p class="price"
+                       data-monthly-price="{{ plus_plan.pricing.monthly.price }}"
+                       data-monthly-period="{{ plus_plan.pricing.monthly.period }}"
+                       data-yearly-price="{{ plus_plan.pricing.yearly.price }}"
+                       data-yearly-period="{{ plus_plan.pricing.yearly.period }}">
+                        <span class="price-value">{{ plus_plan.pricing.yearly.price }}</span>
+                        <span class="price-period">{{ plus_plan.pricing.yearly.period }}</span>
+                    </p>
+                    <p class="subline"
+                       data-monthly-note="{{ plus_plan.pricing.monthly.note }}"
+                       data-yearly-note="{{ plus_plan.pricing.yearly.note }}">
+                       {{ plus_plan.pricing.yearly.note }}
+                    </p>
+                </div>
+                <button class="card-btn {{ plus_plan.button_style or 'outline' }}" {% if plus_plan.is_current %}disabled{% endif %}>
+                    {{ 'Your current plan' if plus_plan.is_current else plus_plan.button_label }}
+                </button>
+                <ul class="card-list">
+                    {% for highlight in plus_plan.highlights %}
+                    <li><i class="fas fa-check"></i> {{ highlight }}</li>
+                    {% endfor %}
+                </ul>
+            </article>
+
+            <article class="pricing-card business-card">
+                {% if business_plan.tag %}
+                <div class="recommended-pill">{{ business_plan.tag | upper }}</div>
+                {% endif %}
+                <div class="card-header">
+                    <div class="card-title-row">
+                        <h3>{{ business_plan.name }}</h3>
+                    </div>
+                    <p class="card-description">{{ business_plan.description }}</p>
+                    <p class="price"
+                       data-monthly-price="{{ business_plan.pricing.monthly.price }}"
+                       data-monthly-period="{{ business_plan.pricing.monthly.period }}"
+                       data-yearly-price="{{ business_plan.pricing.yearly.price }}"
+                       data-yearly-period="{{ business_plan.pricing.yearly.period }}">
+                        <span class="price-value">{{ business_plan.pricing.yearly.price }}</span>
+                        <span class="price-period">{{ business_plan.pricing.yearly.period }}</span>
+                    </p>
+                    <p class="subline"
+                       data-monthly-note="{{ business_plan.pricing.monthly.note }}"
+                       data-yearly-note="{{ business_plan.pricing.yearly.note }}">
+                        {{ business_plan.pricing.yearly.note }}
+                    </p>
+                </div>
+                <button class="card-btn {{ business_plan.button_style or 'outline' }}" {% if business_plan.is_current %}disabled{% endif %}>
+                    {{ 'Your current plan' if business_plan.is_current else business_plan.button_label }}
+                </button>
+                <ul class="card-list">
+                    {% for highlight in business_plan.highlights %}
+                    <li><i class="fas fa-check"></i> {{ highlight }}</li>
+                    {% endfor %}
+                </ul>
+            </article>
+        </section>
+    </div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const billingToggle = document.getElementById('billing-toggle');
+    const priceBlocks = document.querySelectorAll('.price');
+    const noteBlocks = document.querySelectorAll('.subline');
+    const toggleLabels = document.querySelectorAll('.plan-toggle .toggle-label');
+
+    const applyMode = (mode) => {
+        priceBlocks.forEach(block => {
+            const priceEl = block.querySelector('.price-value');
+            const periodEl = block.querySelector('.price-period');
+            if (priceEl) {
+                priceEl.textContent = block.dataset[`${mode}Price`] || '';
+            }
+            if (periodEl) {
+                periodEl.textContent = block.dataset[`${mode}Period`] || '';
+            }
+        });
+
+        noteBlocks.forEach(note => {
+            note.textContent = note.dataset[`${mode}Note`] || '';
+        });
+
+        toggleLabels.forEach(label => {
+            label.classList.toggle('active', label.dataset.mode === mode);
+        });
+    };
+
+    billingToggle.addEventListener('change', () => {
+        const mode = billingToggle.checked ? 'yearly' : 'monthly';
+        applyMode(mode);
+    });
+
+    applyMode('yearly');
+});
+</script>
+</body>
+</html>

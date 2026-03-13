@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{{ artifact.title }} - Shared Artifact</title>
+
+    <!-- Prism.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/themes/prism-tomorrow.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/plugins/autoloader/prism-autoloader.min.js"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+
+    <!-- Google Fonts - Inter & JetBrains Mono for Design System -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Design System -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-tokens.css') }}">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Fix double scrollbar - only pre should scroll */
+        pre[class*="language-"] { overflow: auto; }
+        code[class*="language-"] { overflow: visible; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: var(--leading-normal);
+        }
+
+        .shared-header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-primary);
+            padding: var(--space-5) var(--space-6);
+            position: sticky;
+            top: 0;
+            z-index: var(--z-sticky);
+            backdrop-filter: blur(20px);
+        }
+
+        .shared-header__inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--space-6);
+        }
+
+        .shared-header__branding {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
+        .shared-header__logo {
+            font-size: var(--text-2xl);
+            color: var(--color-primary-500);
+        }
+
+        .shared-header__brand-name {
+            font-size: var(--text-lg);
+            font-weight: var(--font-bold);
+            color: var(--text-primary);
+        }
+
+        .shared-header__title {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .shared-header__artifact-title {
+            font-size: var(--text-2xl);
+            font-weight: var(--font-semibold);
+            color: var(--text-primary);
+            margin-bottom: var(--space-1);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .shared-header__meta {
+            font-size: var(--text-sm);
+            color: var(--text-tertiary);
+        }
+
+        .shared-header__badge {
+            display: inline-flex;
+            align-items: center;
+            padding: var(--space-1) var(--space-3);
+            border-radius: var(--radius-full);
+            background: rgba(14, 165, 233, 0.15);
+            color: var(--color-primary-300);
+            font-size: var(--text-xs);
+            font-family: var(--font-mono);
+            text-transform: uppercase;
+            letter-spacing: var(--tracking-wide);
+            font-weight: var(--font-semibold);
+        }
+
+        .shared-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: var(--space-8) var(--space-6);
+        }
+
+        .shared-tabs {
+            display: flex;
+            gap: var(--space-2);
+            margin-bottom: var(--space-6);
+            border-bottom: 1px solid var(--border-primary);
+            padding-bottom: var(--space-3);
+        }
+
+        .shared-tab {
+            padding: var(--space-2) var(--space-4);
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: var(--text-base);
+            cursor: pointer;
+            border-radius: var(--radius-md) var(--radius-md) 0 0;
+            transition: all var(--duration-fast) var(--ease-in-out);
+            font-family: var(--font-sans);
+            font-weight: var(--font-medium);
+        }
+
+        .shared-tab:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .shared-tab.active {
+            background: var(--bg-tertiary);
+            color: var(--color-primary-500);
+            font-weight: var(--font-semibold);
+        }
+
+        .shared-panel {
+            display: none;
+        }
+
+        .shared-panel.active {
+            display: block;
+        }
+
+        .shared-preview {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            min-height: clamp(300px, 50vh, 500px);
+        }
+
+        .shared-preview__frame {
+            width: 100%;
+            height: clamp(400px, 60vh, 600px);
+            border: none;
+            background: #fff;
+        }
+
+        .shared-code {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: var(--space-4);
+            min-height: clamp(300px, 50vh, 500px);
+        }
+
+        .shared-file-tree {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-xl);
+            padding: var(--space-4);
+            overflow-y: auto;
+            max-height: clamp(200px, 60vh, 700px);
+        }
+
+        .shared-file-node {
+            padding: var(--space-2) var(--space-3);
+            margin: var(--space-1) 0;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-in-out);
+            font-size: var(--text-sm);
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .shared-file-node:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .shared-file-node.active {
+            background: var(--bg-active);
+            color: var(--color-primary-500);
+            font-weight: var(--font-medium);
+        }
+
+        .shared-file-node i {
+            font-size: var(--text-sm);
+            opacity: 0.7;
+        }
+
+        .shared-code-viewer {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .shared-code-viewer__header {
+            padding: var(--space-3) var(--space-4);
+            border-bottom: 1px solid var(--border-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-secondary);
+        }
+
+        .shared-code-viewer__filename {
+            font-size: var(--text-sm);
+            font-weight: var(--font-medium);
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+        }
+
+        .shared-code-viewer__copy-btn {
+            padding: var(--space-2) var(--space-3);
+            background: rgba(14, 165, 233, 0.15);
+            border: 1px solid var(--color-primary-700);
+            color: var(--color-primary-500);
+            border-radius: var(--radius-md);
+            font-size: var(--text-sm);
+            font-weight: var(--font-medium);
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-in-out);
+            font-family: var(--font-sans);
+        }
+
+        .shared-code-viewer__copy-btn:hover {
+            background: rgba(14, 165, 233, 0.25);
+            border-color: var(--color-primary-600);
+        }
+
+        .shared-code-viewer__content {
+            flex: 1;
+            overflow: auto;
+        }
+
+        .shared-code-viewer__content pre {
+            margin: 0;
+            padding: var(--space-4);
+        }
+
+        .shared-code-viewer__content code {
+            font-family: var(--font-mono);
+            font-size: var(--text-sm);
+            line-height: var(--leading-relaxed);
+        }
+
+        .shared-info {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-xl);
+            padding: var(--space-6);
+        }
+
+        .shared-info__grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: var(--space-5);
+        }
+
+        .shared-info__item {
+            padding-bottom: var(--space-4);
+            border-bottom: 1px solid var(--border-primary);
+        }
+
+        .shared-info__label {
+            font-size: var(--text-xs);
+            text-transform: uppercase;
+            letter-spacing: var(--tracking-wide);
+            color: var(--text-tertiary);
+            margin-bottom: var(--space-2);
+            font-weight: var(--font-semibold);
+        }
+
+        .shared-info__value {
+            font-size: var(--text-base);
+            color: var(--text-primary);
+            font-weight: var(--font-medium);
+        }
+
+        .shared-footer {
+            max-width: 1400px;
+            margin: var(--space-12) auto 0;
+            padding: var(--space-6);
+            text-align: center;
+            color: var(--text-tertiary);
+            font-size: var(--text-sm);
+        }
+
+        .shared-footer a {
+            color: var(--color-primary-500);
+            text-decoration: none;
+            transition: color var(--duration-fast) var(--ease-in-out);
+        }
+
+        .shared-footer a:hover {
+            color: var(--color-primary-400);
+            text-decoration: underline;
+        }
+
+        /* Responsive - Tablet */
+        @media (max-width: 768px) {
+            .shared-header__inner {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .shared-code {
+                grid-template-columns: 1fr;
+            }
+
+            .shared-file-tree {
+                max-height: clamp(150px, 35vh, 300px);
+            }
+
+            .shared-tabs {
+                overflow-x: auto;
+                flex-wrap: nowrap;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .shared-tab {
+                min-height: 44px; /* Touch target */
+                padding: var(--space-3) var(--space-4);
+            }
+        }
+
+        /* Responsive - Small tablets */
+        @media (max-width: 600px) {
+            .shared-container {
+                padding: var(--space-4);
+            }
+
+            .shared-header {
+                padding: var(--space-4);
+            }
+
+            .shared-preview__frame {
+                height: clamp(300px, 50vh, 450px);
+            }
+        }
+
+        /* Responsive - Mobile */
+        @media (max-width: 480px) {
+            .shared-container {
+                padding: var(--space-3);
+            }
+
+            .shared-header {
+                padding: var(--space-3);
+            }
+
+            .shared-header__brand-name {
+                font-size: var(--text-base);
+            }
+
+            .shared-header__artifact-title {
+                font-size: var(--text-lg);
+            }
+
+            .shared-preview__frame {
+                height: clamp(250px, 45vh, 400px);
+            }
+
+            .shared-file-tree {
+                max-height: clamp(120px, 30vh, 200px);
+            }
+        }
+
+        /* TV / Large screens */
+        @media (min-width: 1920px) {
+            .shared-container {
+                max-width: 1600px;
+            }
+
+            .shared-preview__frame {
+                height: clamp(600px, 65vh, 900px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="shared-header">
+        <div class="shared-header__inner">
+            <div class="shared-header__branding">
+                <i class="fas fa-code shared-header__logo"></i>
+                <span class="shared-header__brand-name">XelaSphere</span>
+            </div>
+            <div class="shared-header__title">
+                <h1 class="shared-header__artifact-title">{{ artifact.title }}</h1>
+                <div class="shared-header__meta">
+                    Shared {{ shared_at | default('recently') }}
+                    {% if artifact.primaryLanguage %}
+                    <span class="shared-header__badge">{{ artifact.primaryLanguage }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="shared-container">
+        <div class="shared-tabs">
+            <button class="shared-tab active" data-tab="preview">
+                <i class="fas fa-eye"></i> Preview
+            </button>
+            <button class="shared-tab" data-tab="code">
+                <i class="fas fa-code"></i> Code
+            </button>
+            <button class="shared-tab" data-tab="info">
+                <i class="fas fa-info-circle"></i> Info
+            </button>
+        </div>
+
+        <div class="shared-panel active" data-panel="preview">
+            <div class="shared-preview">
+                <iframe class="shared-preview__frame" id="preview-frame" sandbox="allow-scripts allow-same-origin" title="Artifact preview"></iframe>
+            </div>
+        </div>
+
+        <div class="shared-panel" data-panel="code">
+            <div class="shared-code">
+                <div class="shared-file-tree" id="file-tree"></div>
+                <div class="shared-code-viewer">
+                    <div class="shared-code-viewer__header">
+                        <span class="shared-code-viewer__filename" id="current-filename">Select a file</span>
+                        <button class="shared-code-viewer__copy-btn" id="copy-code-btn">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                    <div class="shared-code-viewer__content">
+                        <pre><code id="code-block" class="language-javascript"></code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="shared-panel" data-panel="info">
+            <div class="shared-info">
+                <div class="shared-info__grid">
+                    <div class="shared-info__item">
+                        <div class="shared-info__label">Version</div>
+                        <div class="shared-info__value">v{{ artifact.activeVersionNumber | default(1) }}</div>
+                    </div>
+                    <div class="shared-info__item">
+                        <div class="shared-info__label">Files</div>
+                        <div class="shared-info__value">{{ artifact.activeVersion.fileCount | default(artifact.activeVersion.files | length) }}</div>
+                    </div>
+                    <div class="shared-info__item">
+                        <div class="shared-info__label">Primary Language</div>
+                        <div class="shared-info__value">{{ artifact.primaryLanguage | default('Code') | capitalize }}</div>
+                    </div>
+                    <div class="shared-info__item">
+                        <div class="shared-info__label">Entrypoint</div>
+                        <div class="shared-info__value">{{ artifact.activeVersion.entrypointPath | default('Not set') }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="shared-footer">
+        <p>Powered by <a href="/">XelaSphere</a> - AI-powered chat with artifacts</p>
+    </footer>
+
+    <script>
+        // Artifact data from server
+        const artifactData = {{ artifact | tojson | safe }};
+
+        // Tab switching
+        const tabs = document.querySelectorAll('.shared-tab');
+        const panels = document.querySelectorAll('.shared-panel');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetPanel = tab.dataset.tab;
+
+                tabs.forEach(t => t.classList.remove('active'));
+                panels.forEach(p => p.classList.remove('active'));
+
+                tab.classList.add('active');
+                document.querySelector(`[data-panel="${targetPanel}"]`).classList.add('active');
+            });
+        });
+
+        // --- Helpers ---
+        function buildFileMap(version) {
+            const map = {};
+            (version.files || []).forEach(file => { if (file.path) map[file.path] = file; });
+            return map;
+        }
+
+        function escapeHtml(text) {
+            return (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function escapeScript(text) {
+            return (text || '').replace(/<\/script>/gi, '<\\/script>');
+        }
+
+        function stripImports(code) {
+            if (!code) return '';
+            let result = code;
+            result = result.replace(/import\s+type\s+\{[\s\S]*?\}\s*from\s*['"][^'"]*['"];?/g, '');
+            result = result.replace(/import\s+type\s+\w+\s+from\s*['"][^'"]*['"];?/g, '');
+            result = result.replace(/import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]*['"];?/g, '');
+            result = result.replace(/import\s*\*\s*as\s+\w+\s+from\s*['"][^'"]*['"];?/g, '');
+            result = result.replace(/import\s+\w+\s*,\s*\{[\s\S]*?\}\s*from\s*['"][^'"]*['"];?/g, '');
+            result = result.replace(/import\s+\w+\s+from\s*['"][^'"]*['"];?/g, '');
+            result = result.replace(/import\s*['"][^'"]*['"];?/g, '');
+            result = result.replace(/import\s*\(\s*['"][^'"]*['"]\s*\)/g, 'null');
+            result = result.split('\n').filter(line => {
+                const t = line.trim();
+                if (/^import\s/.test(t) || t.startsWith('import{') || t.startsWith('import(')) return false;
+                if (/\bimport\s*[\s\S]*?from\s*['"]/.test(t)) return false;
+                if (/\bimport\s*['"]/.test(t)) return false;
+                return true;
+            }).join('\n');
+            return result;
+        }
+
+        function transformForBrowser(code) {
+            if (!code) return '';
+            let transformed = stripImports(code);
+            const lines = transformed.split('\n');
+            const outputLines = [];
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed === '') { outputLines.push(line); continue; }
+                let processed = line;
+                processed = processed.replace(/export\s+default\s+function\s+/, 'function ');
+                processed = processed.replace(/export\s+default\s+class\s+/, 'class ');
+                processed = processed.replace(/export\s+default\s+(\([^)]*\)\s*=>)/, 'const App = $1');
+                if (/^\s*export\s+default\s+\w+\s*;?\s*$/.test(processed)) continue;
+                processed = processed.replace(/export\s+function\s+/, 'function ');
+                processed = processed.replace(/export\s+const\s+/, 'const ');
+                processed = processed.replace(/export\s+let\s+/, 'let ');
+                if (/^\s*export\s*\{[^}]*\}\s*;?\s*$/.test(processed)) continue;
+                outputLines.push(processed);
+            }
+            return outputLines.join('\n');
+        }
+
+        // --- Renderers ---
+        const RENDERERS = [
+            {
+                name: 'image',
+                matches: version => {
+                    const entry = (version.entrypointPath || '').toLowerCase();
+                    if (/\.(png|jpg|jpeg|gif|webp|bmp)$/.test(entry)) return true;
+                    const entryFile = version.files?.find(f => f.path === version.entrypointPath);
+                    return entryFile?.mime?.startsWith('image/');
+                },
+                render: (frame, version) => {
+                    if (!frame) return;
+                    const fileMap = buildFileMap(version);
+                    const entry = fileMap[version.entrypointPath] || version.files?.[0];
+                    if (!entry || !entry.isBinary) {
+                        frame.srcdoc = '<p style="padding:1rem;color:#fff;font-family:sans-serif;">Image not found.</p>';
+                        return;
+                    }
+                    const mime = entry.mime || 'image/png';
+                    frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"/><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#060a14;}img{max-width:100%;max-height:100vh;object-fit:contain;}</style></head><body><img src="data:${mime};base64,${entry.content}" alt="${escapeHtml(entry.path)}"></body></html>`;
+                }
+            },
+            {
+                name: 'html',
+                matches: version => {
+                    const entry = (version.entrypointPath || '').toLowerCase();
+                    const hasHtml = entry.endsWith('.html') || entry.endsWith('.htm') ||
+                        version.files?.some(file => file.path?.toLowerCase() === 'index.html');
+                    if (!hasHtml) return false;
+                    const hasReact = version.files?.some(f => {
+                        const path = (f.path || '').toLowerCase();
+                        if (path.endsWith('.jsx') || path.endsWith('.tsx')) return true;
+                        const content = f.content || '';
+                        return content.includes('import React') || content.includes('from "react"') || content.includes("from 'react'") ||
+                               content.includes('useState(') || content.includes('useEffect(') || content.includes('useRef(') ||
+                               content.includes('React.createElement') || content.includes('ReactDOM.render') || content.includes('createRoot');
+                    });
+                    if (hasReact) return false;
+                    return true;
+                },
+                render: (frame, version) => {
+                    if (!frame) return;
+                    const fileMap = buildFileMap(version);
+                    const entry = version.entrypointPath && fileMap[version.entrypointPath]
+                        ? fileMap[version.entrypointPath]
+                        : version.files?.find(file => file.path?.toLowerCase() === 'index.html') || version.files?.[0];
+                    if (!entry) { frame.srcdoc = '<p style="padding:1rem;color:#fff;">Nothing to preview.</p>'; return; }
+
+                    const cssBlocks = version.files.filter(file => (file.language || '').toLowerCase() === 'css' && file.path !== entry.path)
+                        .map(file => `<style>${file.content}</style>`).join('\n');
+                    const scriptBlocks = version.files.filter(file => (file.language || '').toLowerCase() === 'javascript' && file.path !== entry.path)
+                        .map(file => `<script>${escapeScript(stripImports(file.content))}</script>`).join('\n');
+
+                    let htmlContent = entry.content || '';
+                    htmlContent = htmlContent.replace(/<script([^>]*)>([\s\S]*?)<\/script>/gi, (match, attrs, code) => {
+                        if (/\bsrc\s*=/.test(attrs)) return match;
+                        if (/\btype\s*=\s*["']module["']/.test(attrs)) return match;
+                        return `<script${attrs}>${stripImports(code)}</script>`;
+                    });
+
+                    const isCompleteDocument = /<!doctype\s+html|<html[\s>]/i.test(htmlContent);
+                    const cssFileMap = {}, jsFileMap = {};
+                    version.files.forEach(file => {
+                        const path = (file.path || '').toLowerCase();
+                        if (path.endsWith('.css')) { cssFileMap[file.path] = file.content || ''; cssFileMap[path] = file.content || ''; }
+                        else if (path.endsWith('.js') || (file.language || '').toLowerCase() === 'javascript') { jsFileMap[file.path] = file.content || ''; jsFileMap[path] = file.content || ''; }
+                    });
+
+                    let doc;
+                    if (isCompleteDocument) {
+                        doc = htmlContent;
+                        doc = doc.replace(/<link\s+[^>]*rel\s*=\s*["']stylesheet["'][^>]*>/gi, (match) => {
+                            const hrefMatch = match.match(/href\s*=\s*["']([^"']+)["']/i);
+                            if (hrefMatch) { const css = cssFileMap[hrefMatch[1]] || cssFileMap[hrefMatch[1].toLowerCase()]; if (css) return `<style>${css}</style>`; }
+                            return match;
+                        });
+                        doc = doc.replace(/<script\s+[^>]*src\s*=\s*["']([^"']+)["'][^>]*>\s*<\/script>/gi, (match, src) => {
+                            const js = jsFileMap[src] || jsFileMap[src.toLowerCase()];
+                            if (js) return `<script>${escapeScript(stripImports(js))}</script>`;
+                            return match;
+                        });
+                    } else {
+                        doc = `<!doctype html><html><head><meta charset="utf-8"/>${cssBlocks}</head><body>${htmlContent}${scriptBlocks}</body></html>`;
+                    }
+                    frame.srcdoc = doc;
+                }
+            },
+            {
+                name: 'markdown',
+                matches: version => {
+                    const entry = (version.entrypointPath || '').toLowerCase();
+                    return entry.endsWith('.md') || entry.endsWith('.markdown');
+                },
+                render: (frame, version) => {
+                    if (!frame) return;
+                    const fileMap = buildFileMap(version);
+                    const entry = version.entrypointPath && fileMap[version.entrypointPath] ? fileMap[version.entrypointPath] : version.files?.[0];
+                    if (!entry) { frame.srcdoc = '<p style="padding:1rem;color:#fff;">Nothing to preview.</p>'; return; }
+                    frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"/>
+                        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+                        <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"><\/script>
+                        <style>body{font-family:'Inter',system-ui,sans-serif;background:#060a14;color:#f4f4f4;padding:24px;line-height:1.6;}pre{background:rgba(255,255,255,0.06);padding:12px;border-radius:8px;overflow:auto;}code{font-family:'JetBrains Mono',monospace;}a{color:#7fb9ff;}</style>
+                    </head><body><div id="content"></div><script>
+                        const raw = ${JSON.stringify(entry.content || '')};
+                        document.getElementById('content').innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(marked.parse(raw)) : marked.parse(raw);
+                    <\/script></body></html>`;
+                }
+            },
+            {
+                name: 'react',
+                matches: version => {
+                    const entry = (version.entrypointPath || '').toLowerCase();
+                    if (entry.endsWith('.jsx') || entry.endsWith('.tsx')) return true;
+                    if (version.files?.some(f => { const p = (f.path || '').toLowerCase(); return p.endsWith('.jsx') || p.endsWith('.tsx'); })) return true;
+                    return version.files?.some(file => {
+                        const content = file.content || '';
+                        const lang = (file.language || '').toLowerCase();
+                        return lang === 'jsx' || lang === 'tsx' || content.includes('import React') ||
+                               content.includes('from "react"') || content.includes("from 'react'") ||
+                               (content.includes('React.') && content.includes('render'));
+                    });
+                },
+                render: (frame, version) => {
+                    if (!frame) return;
+                    const fileMap = buildFileMap(version);
+                    const jsFiles = version.files?.filter(f => { const p = (f.path || '').toLowerCase(); return p.endsWith('.js') || p.endsWith('.jsx') || p.endsWith('.tsx') || p.endsWith('.ts'); }) || [];
+                    const htmlFiles = version.files?.filter(f => { const p = (f.path || '').toLowerCase(); return p.endsWith('.html') || p.endsWith('.htm'); }) || [];
+
+                    let inlineScripts = '';
+                    for (const htmlFile of htmlFiles) {
+                        const scriptRegex = /<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi;
+                        let match;
+                        while ((match = scriptRegex.exec(htmlFile.content || '')) !== null) {
+                            if (match[1].trim()) { inlineScripts += transformForBrowser(match[1]) + '\n\n'; }
+                        }
+                    }
+
+                    const cssBlocks = version.files?.filter(file => (file.path || '').toLowerCase().endsWith('.css'))
+                        .map(file => `<style>${file.content}</style>`).join('\n') || '';
+
+                    let appFile = jsFiles.find(f => { const p = (f.path || '').toLowerCase(); return p.includes('app.jsx') || p.includes('app.js') || p.includes('app.tsx'); });
+                    let indexFile = jsFiles.find(f => { const p = (f.path || '').toLowerCase(); return p.includes('index.jsx') || p.includes('index.js') || p.includes('index.tsx'); });
+
+                    let combinedCode = '';
+                    let mainComponent = 'App';
+
+                    for (const file of jsFiles) {
+                        const path = (file.path || '').toLowerCase();
+                        if (path.includes('index.') || path.includes('app.')) continue;
+                        combinedCode += transformForBrowser(file.content || '') + '\n\n';
+                    }
+                    if (appFile) combinedCode += transformForBrowser(appFile.content || '') + '\n\n';
+                    if (indexFile) combinedCode += transformForBrowser(indexFile.content || '') + '\n\n';
+
+                    if (!appFile && jsFiles.length > 0) {
+                        const mainFile = jsFiles.find(f => !f.path?.toLowerCase().includes('index.')) || jsFiles[0];
+                        combinedCode += transformForBrowser(mainFile.content || '') + '\n\n';
+                        const patterns = [/function\s+([A-Z][A-Za-z0-9]*)\s*\(/, /const\s+([A-Z][A-Za-z0-9]*)\s*=\s*\(?/, /class\s+([A-Z][A-Za-z0-9]*)/];
+                        for (const p of patterns) { const m = mainFile.content?.match(p); if (m) { mainComponent = m[1]; break; } }
+                    }
+                    if (inlineScripts) {
+                        combinedCode += inlineScripts;
+                        if (mainComponent === 'App' && !appFile) {
+                            const patterns = [/function\s+([A-Z][A-Za-z0-9]*)\s*\(/, /const\s+([A-Z][A-Za-z0-9]*)\s*=\s*\(?/, /class\s+([A-Z][A-Za-z0-9]*)/];
+                            for (const p of patterns) { const m = inlineScripts.match(p); if (m) { mainComponent = m[1]; break; } }
+                        }
+                    }
+
+                    let hasRenderCall = false;
+                    if (indexFile) hasRenderCall = indexFile.content?.includes('createRoot') || indexFile.content?.includes('ReactDOM.render');
+                    if (!hasRenderCall && inlineScripts) hasRenderCall = inlineScripts.includes('createRoot') || inlineScripts.includes('ReactDOM.render') || inlineScripts.includes('.render(');
+
+                    const autoRender = !hasRenderCall ? `\nconst root = ReactDOM.createRoot(document.getElementById('root'));\nroot.render(<${mainComponent} />);` : '';
+
+                    // Final safety: strip remaining imports
+                    let safeCode = combinedCode;
+                    safeCode = safeCode.split('\n').filter(line => {
+                        const t = line.trim();
+                        if (/\bimport\s*[\s\S]*?from\s*['"]/.test(t)) return false;
+                        if (/\bimport\s*['"]/.test(t)) return false;
+                        return true;
+                    }).join('\n');
+
+                    frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+                        <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
+                        <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
+                        <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+                        <script src="https://unpkg.com/framer-motion@11/dist/framer-motion.js"><\/script>
+                        ${cssBlocks}
+                        <style>body{margin:0;padding:0;background:#1a1a2e;color:#f4f4f4;font-family:system-ui,-apple-system,sans-serif;}#root{min-height:100vh;}</style>
+                    </head><body><div id="root"></div><script type="text/babel">
+                        const {useState,useEffect,useRef,useCallback,useMemo,useContext,createContext,Fragment}=React;
+                        const motion=(typeof Motion!=='undefined'&&Motion.motion)?Motion.motion:new Proxy({},{get:(_,tag)=>React.forwardRef((props,ref)=>{const{initial,animate,exit,transition,whileHover,whileTap,variants,...rest}=props;return React.createElement(tag,{...rest,ref});})});
+                        const AnimatePresence=(typeof Motion!=='undefined'&&Motion.AnimatePresence)?Motion.AnimatePresence:({children})=>children;
+                        try{${safeCode}${autoRender}}catch(error){document.getElementById('root').innerHTML='<div style="padding:2rem;color:#ff6b6b;font-family:monospace;"><strong>React Error:</strong><br/>'+error.message+'</div>';console.error('React render error:',error);}
+                    <\/script></body></html>`;
+                }
+            },
+            {
+                name: 'svg',
+                matches: version => {
+                    const entry = (version.entrypointPath || '').toLowerCase();
+                    if (entry.endsWith('.svg')) return true;
+                    return version.files?.some(file => (file.path || '').toLowerCase().endsWith('.svg'));
+                },
+                render: (frame, version) => {
+                    if (!frame) return;
+                    const fileMap = buildFileMap(version);
+                    const entry = version.entrypointPath && fileMap[version.entrypointPath]
+                        ? fileMap[version.entrypointPath]
+                        : version.files?.find(f => (f.path || '').toLowerCase().endsWith('.svg')) || version.files?.[0];
+                    if (!entry) { frame.srcdoc = '<p style="padding:1rem;color:#fff;">No SVG file found.</p>'; return; }
+                    frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"/><style>body{margin:0;padding:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#060a14;}svg{max-width:95%;max-height:95vh;height:auto;}</style></head><body>${entry.content || ''}</body></html>`;
+                }
+            },
+            {
+                name: 'mermaid',
+                matches: version => {
+                    const entry = (version.entrypointPath || '').toLowerCase();
+                    if (entry.endsWith('.mmd') || entry.endsWith('.mermaid')) return true;
+                    return version.files?.some(file => {
+                        const content = file.content || '';
+                        const lang = (file.language || '').toLowerCase();
+                        return lang === 'mermaid' || content.trim().startsWith('graph ') || content.trim().startsWith('sequenceDiagram') ||
+                               content.trim().startsWith('classDiagram') || content.trim().startsWith('stateDiagram') ||
+                               content.trim().startsWith('erDiagram') || content.trim().startsWith('gantt') ||
+                               content.trim().startsWith('pie') || content.trim().startsWith('journey') ||
+                               content.trim().startsWith('gitGraph') || content.trim().startsWith('flowchart');
+                    });
+                },
+                render: (frame, version) => {
+                    if (!frame) return;
+                    const fileMap = buildFileMap(version);
+                    let entry = version.entrypointPath && fileMap[version.entrypointPath] ? fileMap[version.entrypointPath]
+                        : version.files?.find(f => { const p = (f.path || '').toLowerCase(); return p.endsWith('.mmd') || p.endsWith('.mermaid'); }) || version.files?.[0];
+                    if (!entry) { frame.srcdoc = '<p style="padding:1rem;color:#fff;">No diagram found.</p>'; return; }
+                    frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+                        <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"><\/script>
+                        <style>body{margin:0;padding:24px;background:#060a14;color:#f4f4f4;font-family:system-ui,sans-serif;}.mermaid{display:flex;justify-content:center;align-items:center;}</style>
+                    </head><body><div class="mermaid">${escapeHtml(entry.content || '')}</div><script>
+                        try{mermaid.initialize({startOnLoad:true,theme:'dark',themeVariables:{darkMode:true,background:'#060a14',primaryColor:'#5681ff',primaryTextColor:'#f4f4f4',primaryBorderColor:'#7fb9ff',lineColor:'#7fb9ff',secondaryColor:'#4a5568',tertiaryColor:'#2d3748'}});}
+                        catch(error){document.body.innerHTML='<div style="padding:2rem;color:#ff8686;font-family:monospace;"><strong>Mermaid Error:</strong> '+error.message+'</div>';}
+                    <\/script></body></html>`;
+                }
+            },
+            {
+                name: 'plain',
+                matches: () => true,
+                render: (frame, version) => {
+                    if (!frame) return;
+                    const entry = version.files?.find(file => file.path === version.entrypointPath) || version.files?.[0];
+                    const text = entry?.content || 'Nothing to preview.';
+                    frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"/><style>body{font-family:'JetBrains Mono',monospace;background:#060a14;color:#f5f5f5;padding:24px;white-space:pre-wrap;}</style></head><body>${escapeHtml(text)}</body></html>`;
+                }
+            }
+        ];
+
+        // Render preview using the RENDERERS pipeline
+        function renderPreview() {
+            const frame = document.getElementById('preview-frame');
+            const version = artifactData.activeVersion;
+
+            if (!version || !version.files || version.files.length === 0) {
+                frame.srcdoc = '<p style="padding:2rem;text-align:center;color:#999;">No files to preview</p>';
+                return;
+            }
+
+            for (const renderer of RENDERERS) {
+                if (renderer.matches(version)) {
+                    renderer.render(frame, version);
+                    return;
+                }
+            }
+        }
+
+        // Render file tree
+        function renderFileTree() {
+            const treeContainer = document.getElementById('file-tree');
+            const version = artifactData.activeVersion;
+
+            if (!version || !version.files || version.files.length === 0) {
+                treeContainer.innerHTML = '<p style="color:#999;font-size:0.9rem;">No files</p>';
+                return;
+            }
+
+            treeContainer.innerHTML = '';
+
+            version.files.forEach((file, index) => {
+                const node = document.createElement('div');
+                node.className = 'shared-file-node';
+                if (index === 0) node.classList.add('active');
+
+                const icon = document.createElement('i');
+                icon.className = 'fas fa-file-code';
+
+                const name = document.createTextNode(file.path);
+
+                node.appendChild(icon);
+                node.appendChild(name);
+
+                node.addEventListener('click', () => {
+                    document.querySelectorAll('.shared-file-node').forEach(n => n.classList.remove('active'));
+                    node.classList.add('active');
+                    renderCodeViewer(file);
+                });
+
+                treeContainer.appendChild(node);
+            });
+
+            // Auto-select first file
+            if (version.files.length > 0) {
+                renderCodeViewer(version.files[0]);
+            }
+        }
+
+        // Render code viewer
+        function renderCodeViewer(file) {
+            const filename = document.getElementById('current-filename');
+            const codeBlock = document.getElementById('code-block');
+
+            filename.textContent = file.path;
+            codeBlock.textContent = file.content || '';
+
+            // Set language class for Prism
+            const lang = (file.language || 'javascript').toLowerCase();
+            codeBlock.className = `language-${lang}`;
+
+            // Trigger Prism highlighting
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightElement(codeBlock);
+            }
+        }
+
+        // Copy code button
+        document.getElementById('copy-code-btn').addEventListener('click', () => {
+            const codeBlock = document.getElementById('code-block');
+            const text = codeBlock.textContent;
+
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('copy-code-btn');
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                }, 2000);
+            }).catch(err => {
+                alert('Failed to copy code');
+            });
+        });
+
+        // Initialize on load
+        window.addEventListener('load', () => {
+            renderPreview();
+            renderFileTree();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+# Google Cloud Build configuration for XelaSphere
+# Automatically builds and deploys to Cloud Run on git push
+
+steps:
+  # Step 1: Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/xelasphere:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/xelasphere:latest'
+      - '-f'
+      - 'Dockerfile'
+      - '.'
+    timeout: '1200s'  # 20 min (PyTorch dependencies take time)
+
+  # Step 2: Push the image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/xelasphere:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/xelasphere:latest'
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'xelasphere'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/xelasphere:$COMMIT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--memory'
+      - '${_MEMORY}'
+      - '--cpu'
+      - '${_CPU}'
+      - '--timeout'
+      - '${_TIMEOUT}'
+      - '--min-instances'
+      - '${_MIN_INSTANCES}'
+      - '--max-instances'
+      - '${_MAX_INSTANCES}'
+      - '--concurrency'
+      - '${_CONCURRENCY}'
+      - '--port'
+      - '5001'
+      - '--allow-unauthenticated'
+      - '--update-env-vars'
+      - 'FLASK_ENV=production'
+
+# Store images in Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/xelasphere:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/xelasphere:latest'
+
+# Substitution variables (can override in Cloud Build trigger settings)
+substitutions:
+  _REGION: 'us-central1'
+  _MEMORY: '4Gi'
+  _CPU: '2'
+  _TIMEOUT: '300'
+  _MIN_INSTANCES: '1'
+  _MAX_INSTANCES: '10'
+  _CONCURRENCY: '10'
+
+# Build timeout (25 minutes for large dependencies)
+timeout: '1500s'
+
+# Build options
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'  # Faster builds

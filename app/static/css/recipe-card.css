@@ -1,0 +1,123 @@
+/* Recipe Card Styles - matches app design tokens */
+
+.recipe-card {
+    background: transparent;
+    border: none;
+    padding: 0;
+    max-width: 700px;
+    margin: 1rem 0;
+    font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+}
+
+.recipe-cards-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* Recipe Header */
+.recipe-card .recipe-header {
+    margin-bottom: 10px;
+}
+
+.recipe-card .recipe-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary, #f5f5f5);
+    margin-bottom: 2px;
+}
+
+.recipe-card .recipe-meta {
+    font-size: 13px;
+    display: flex;
+    gap: 12px;
+    color: var(--text-tertiary, #737373);
+}
+
+/* Sections */
+.recipe-card .section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-disabled, #525252);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Ingredients */
+.recipe-card .recipe-ingredients {
+    margin-bottom: 10px;
+}
+
+.recipe-card .ingredient-item {
+    padding: 3px 0;
+    color: var(--text-secondary, #a3a3a3);
+    font-size: 14px;
+    display: flex;
+    align-items: flex-start;
+}
+
+.recipe-card .ingredient-bullet {
+    color: var(--text-tertiary, #737373);
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+/* Instructions */
+.recipe-card .instruction-item {
+    padding: 4px 0;
+    color: var(--text-secondary, #a3a3a3);
+    font-size: 14px;
+    line-height: 1.5;
+    display: flex;
+    align-items: flex-start;
+}
+
+.recipe-card .instruction-number {
+    color: var(--text-tertiary, #737373);
+    font-weight: 500;
+    min-width: 22px;
+    flex-shrink: 0;
+}
+
+/* Tip */
+.recipe-card .recipe-tip {
+    margin-top: 8px;
+    color: var(--text-secondary, #a3a3a3);
+    font-size: 13px;
+}
+
+.recipe-card .tip-icon {
+    color: var(--text-tertiary, #737373);
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    .recipe-card .recipe-title {
+        font-size: 15px;
+    }
+
+    .recipe-card .ingredient-item,
+    .recipe-card .instruction-item {
+        font-size: 13px;
+    }
+}
+
+/* Print */
+@media print {
+    .recipe-card {
+        color: black !important;
+        page-break-inside: avoid;
+    }
+
+    .recipe-card .recipe-title,
+    .recipe-card .section-title {
+        color: black !important;
+    }
+
+    .recipe-card .ingredient-item,
+    .recipe-card .instruction-item,
+    .recipe-card .recipe-tip {
+        color: #333 !important;
+    }
+}

@@ -1,0 +1,338 @@
+"""ChatSession class for Firestore chat session operations.
+
+This module handles all chat session CRUD operations with Firestore,
+including message saving, session history, and session management.
+"""
+
+import logging
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from google.cloud import firestore as gc_firestore
+
+logger = logging.getLogger(__name__)
+
+
+def _adjust_user_session_total(db, user_id: str, delta: int) -> None:
+    """Increment or decrement a user's stored session count."""
+    if not user_id or delta == 0:
+        return
+    try:
+        db.collection('users').document(user_id).set(
+            {'total_sessions': gc_firestore.Increment(delta)},
+            merge=True
+        )
+    except Exception as exc:
+        logger.warning(f"Failed to adjust total_sessions for {user_id}: {exc}")
+
+
+class ChatSession:
+    """Handle chat session operations in Firestore."""
+
+    def __init__(self, db_client: gc_firestore.Client):
+        self.db = db_client
+        pass
+
+    def create_session(self, user_id: str, session_name: Optional[str] = None, temporary: bool = False) -> str:
+        session_id = f"session_{uuid.uuid4()}"
+        session_ref = self._get_session_ref(user_id, session_id)
+        now = datetime.utcnow()
+        session_data = {
+            'session_name': session_name or 'New Chat',
+            'messages': [],
+            'pages': [],
+            'active_page_id': None,
+            'created_at': now,
+            'status': 'temporary' if temporary else 'active',
+            'is_temporary': temporary,
+            'last_updated': now,
+            'is_pinned': False,
+            'pinned_at': None,
+            # Unread notification tracking for cross-device sync
+            'unread_count': 0,
+            'last_message_at': None,
+            'last_read_at': now
+        }
+        session_ref.set(session_data)
+        if not temporary:
+            _adjust_user_session_total(self.db, user_id, 1)
+        return session_id
+
+    def compute_embedding(self, text: str) -> List[float]:
+        try:
+            from app.memory_v2.embeddings import embed_text
+            result = embed_text(text)
+            if result is not None:
+                return result.tolist()
+        except Exception:
+            pass
+        return []
+
+    def extract_key_info(self, text: str) -> List[str]:
+        return [text]
+
+    def update_session_preferences(self, user_id: str, session_id: str, preferences: List[str]) -> None:
+        session_ref = self._get_session_ref(user_id, session_id)
+        session_doc = session_ref.get()
+        if session_doc.exists:
+            existing_preferences = session_doc.to_dict().get('preferences', [])
+            updated_preferences = list(set(existing_preferences + preferences))
+        else:
+            updated_preferences = preferences
+        session_ref.set({'preferences': updated_preferences}, merge=True)
+
+    def save_messages(self, user_id: str, session_id: str, messages: List[Dict[str, Any]], is_active_session: bool = True) -> None:
+        """Save messages to a session.
+
+        Args:
+            user_id: The user's ID
+            session_id: The session ID to save to
+            messages: List of message dictionaries to save
+            is_active_session: If False, increment unread_count for cross-device notifications
+        """
+        if not messages:
+            return
+
+        session_ref = self._get_session_ref(user_id, session_id)
+
+        # Process messages for Firestore storage
+        processed_messages = []
+        for message in messages:
+            message_copy = message.copy()
+
+            # Convert SearchResult objects to dictionaries
+            if 'search_results' in message_copy:
+                if isinstance(message_copy['search_results'], list):
+                    from pydantic import BaseModel
+                    message_copy['search_results'] = [
+                        {
+                            'title': result.title,
+                            'link': str(result.link),
+                            'snippet': result.snippet,
+                            'source_domain': result.source_domain,
+                            'website_name': result.website_name,
+                            'favicon': result.favicon,
+                            'relevance_score': float(result.relevance_score),
+                            'timestamp': result.timestamp.isoformat()
+                        } if isinstance(result, BaseModel) else result
+                        for result in message_copy['search_results']
+                    ]
+
+            # Add quantized embedding when response text exists
+            # Uses int8 quantization to reduce Firestore storage by 4x
+            response_text = message_copy.get('response', '')
+            if response_text:
+                try:
+                    from .embedding_utils import embedding_to_storage
+                    raw_embedding = self.compute_embedding(response_text)
+                    if raw_embedding:
+                        message_copy['embedding'] = embedding_to_storage(raw_embedding)
+                    else:
+                        message_copy['embedding'] = {}
+                except ImportError:
+                    # Fallback to raw embedding if utils not available
+                    message_copy['embedding'] = self.compute_embedding(response_text)
+            else:
+                message_copy['embedding'] = {}
+
+            # Extract key info
+            key_info = self.extract_key_info(message_copy.get('prompt', ''))
+            self.update_session_preferences(user_id, session_id, key_info)
+
+            processed_messages.append(message_copy)
+
+        # Update Firestore with fallback for edge cases
+        now = datetime.utcnow()
+        try:
+            update_data = {
+                'messages': gc_firestore.ArrayUnion(processed_messages),
+                'last_updated': now,
+                'last_message_at': now
+            }
+            # Increment unread_count only if this isn't the active session (for cross-device notifications)
+            if not is_active_session:
+                update_data['unread_count'] = gc_firestore.Increment(1)
+
+            session_ref.update(update_data)
+            logger.info(f"Successfully saved {len(processed_messages)} message(s) to session {session_id}")
+        except Exception as update_err:
+            logger.warning(f"ArrayUnion update failed for session {session_id}: {update_err}, trying fallback...")
+            # Fallback: read current messages and append
+            try:
+                doc = session_ref.get()
+                if doc.exists:
+                    current_data = doc.to_dict()
+                    current_messages = current_data.get('messages', [])
+                    current_messages.extend(processed_messages)
+                    fallback_update = {
+                        'messages': current_messages,
+                        'last_updated': now,
+                        'last_message_at': now
+                    }
+                    if not is_active_session:
+                        current_unread = current_data.get('unread_count', 0)
+                        fallback_update['unread_count'] = current_unread + 1
+                    session_ref.update(fallback_update)
+                    logger.info(f"Fallback save succeeded - now {len(current_messages)} messages in session {session_id}")
+                else:
+                    # Document doesn't exist - create it
+                    session_ref.set({
+                        'messages': processed_messages,
+                        'last_updated': now,
+                        'created_at': now,
+                        'session_name': 'Chat',
+                        'status': 'active',
+                        'last_message_at': now,
+                        'unread_count': 0 if is_active_session else 1,
+                        'last_read_at': now
+                    })
+                    logger.info(f"Created new document with {len(processed_messages)} message(s)")
+            except Exception as fallback_err:
+                logger.error(f"Fallback save also failed for session {session_id}: {fallback_err}")
+
+    def get_history(self, user_id: str, page_size: int = 10, page_token: Optional[str] = None) -> Dict[str, Any]:
+        sessions_query = self._get_sessions_query(user_id, page_token)
+        sessions = sessions_query.limit(page_size + 1).stream()
+
+        chat_history = []
+        next_token = None
+
+        for idx, session_doc in enumerate(sessions):
+            if idx >= page_size:
+                next_token = session_doc.id
+                break
+
+            session_data = session_doc.to_dict()
+            if not isinstance(session_data, dict):
+                logger.warning(f"Skipping session with unexpected data format: {session_data}")
+                continue
+
+            status = session_data.get('status', 'active')
+            is_temporary = session_data.get('is_temporary', status == 'temporary')
+            if status in ('archived', 'temporary'):
+                continue
+
+            session_name = session_data.get('session_name', f"Chat {idx + 1}")
+            created_at = session_data.get('created_at')
+            created_at_str = created_at.isoformat() if created_at and isinstance(created_at, datetime) else None
+            pinned_at = session_data.get('pinned_at')
+            if isinstance(pinned_at, datetime):
+                pinned_at = pinned_at.isoformat()
+            pages_raw = session_data.get('pages') or []
+            normalized_pages = []
+            for page in pages_raw:
+                if not isinstance(page, dict):
+                    continue
+                normalized = page.copy()
+                created_at = normalized.get('createdAt') or normalized.get('created_at')
+                if isinstance(created_at, datetime):
+                    normalized['createdAt'] = created_at.isoformat()
+                    normalized.pop('created_at', None)
+                normalized_pages.append(normalized)
+
+            messages = session_data.get('messages', [])
+
+            # Get last_updated timestamp
+            last_updated = session_data.get('last_updated')
+            last_updated_str = last_updated.isoformat() if last_updated and isinstance(last_updated, datetime) else None
+
+            chat_history.append({
+                'session_id': session_doc.id,
+                'session_name': session_name,
+                'created_at': created_at_str,
+                'last_updated': last_updated_str or created_at_str,
+                'messages': messages,
+                'pages': normalized_pages,
+                'active_page_id': session_data.get('active_page_id'),
+                'status': status,
+                'pinned_at': pinned_at,
+                'is_temporary': is_temporary
+            })
+
+        return {'chat_history': chat_history, 'next_page_token': next_token}
+
+    def get_session(self, user_id: str, session_id: str) -> Optional[Dict[str, Any]]:
+        session_doc = self._get_session_ref(user_id, session_id).get()
+        if not session_doc.exists:
+            return None
+
+        session_data = session_doc.to_dict() or {}
+        created_at = session_data.get('created_at')
+        pinned_at = session_data.get('pinned_at')
+
+        if isinstance(created_at, datetime):
+            created_at = created_at.isoformat()
+        if isinstance(pinned_at, datetime):
+            pinned_at = pinned_at.isoformat()
+
+        pages_raw = session_data.get('pages') or []
+        normalized_pages = []
+        for page in pages_raw:
+            if not isinstance(page, dict):
+                continue
+            normalized = page.copy()
+            created_at_page = normalized.get('createdAt') or normalized.get('created_at')
+            if isinstance(created_at_page, datetime):
+                normalized['createdAt'] = created_at_page.isoformat()
+                normalized.pop('created_at', None)
+            normalized_pages.append(normalized)
+
+        return {
+            'session_id': session_id,
+            'session_name': session_data.get('session_name', 'Untitled Session'),
+            'created_at': created_at,
+            'messages': session_data.get('messages', []),
+            'pages': normalized_pages,
+            'active_page_id': session_data.get('active_page_id'),
+            'status': session_data.get('status', 'active'),
+            'pinned_at': pinned_at,
+            'is_temporary': session_data.get('is_temporary', False),
+            'model_label': session_data.get('model_label') or session_data.get('model') or ''
+        }
+
+    def archive_session(self, user_id: str, session_id: str) -> Dict[str, Any]:
+        session_ref = self._get_session_ref(user_id, session_id)
+        session_doc = session_ref.get()
+        if not session_doc.exists:
+            raise ValueError("Chat session not found.")
+
+        archived_at = datetime.utcnow()
+        session_ref.set({
+            'status': 'archived',
+            'archived_at': archived_at,
+            'last_updated': archived_at
+        }, merge=True)
+        return {'archived_at': archived_at.isoformat()}
+
+    def pin_session(self, user_id: str, session_id: str, pinned: bool = True) -> Dict[str, Any]:
+        session_ref = self._get_session_ref(user_id, session_id)
+        session_doc = session_ref.get()
+        if not session_doc.exists:
+            raise ValueError("Chat session not found.")
+
+        pinned_at_value = datetime.utcnow() if pinned else None
+        update_payload = {
+            'is_pinned': pinned,
+            'pinned_at': pinned_at_value,
+            'last_updated': datetime.utcnow()
+        }
+        session_ref.set(update_payload, merge=True)
+        return {
+            'is_pinned': pinned,
+            'pinned_at': pinned_at_value.isoformat() if pinned_at_value else None
+        }
+
+    def _get_session_ref(self, user_id: str, session_id: str) -> gc_firestore.DocumentReference:
+        return self.db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
+
+    def _get_sessions_query(self, user_id: str, page_token: Optional[str] = None) -> gc_firestore.Query:
+        # Order by last_updated so most recently active sessions appear first
+        query = self.db.collection('users').document(user_id) \
+            .collection('chat_sessions') \
+            .order_by('last_updated', direction=gc_firestore.Query.DESCENDING)
+        if page_token:
+            last_doc = self._get_session_ref(user_id, page_token).get()
+            if last_doc.exists:
+                query = query.start_after(last_doc)
+        return query

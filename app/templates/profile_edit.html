@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Edit Profile · XelaSphere</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/profile-edit.css') }}">
+</head>
+<body class="profile-edit-page">
+    <div class="profile-edit-shell">
+        <header class="profile-edit-header">
+            <div>
+                <a class="back-link" href="{{ url_for('auth_routes.dashboard') }}" aria-label="Back to dashboard">
+                    <span aria-hidden="true">←</span> Back to dashboard
+                </a>
+                <h1>Edit profile</h1>
+                <p>Control how teammates see you across chats and shared sessions.</p>
+            </div>
+            <img src="{{ form_defaults.picture or url_for('static', filename='images/default-profile.png') }}"
+                 alt="Profile photo" class="header-avatar">
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-stack" role="status" aria-live="polite">
+                    {% for category, message in messages %}
+                        <div class="flash flash-{{ category }}">
+                            <i class="fas fa-circle-info"></i>
+                            <span>{{ message }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <form class="profile-edit-form" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <section class="profile-card photo-card">
+                <div class="card-header">
+                    <div>
+                        <h2>Profile photo</h2>
+                        <p>Upload a square image at least 240×240 px for best quality.</p>
+                    </div>
+                </div>
+                <div class="photo-grid">
+                    <div class="photo-preview">
+                        <img id="profile-photo-preview"
+                             src="{{ form_defaults.picture or url_for('static', filename='images/default-profile.png') }}"
+                             alt="Current profile photo">
+                    </div>
+                    <div class="photo-actions">
+                        <label for="profile_photo" class="upload-btn">
+                            <i class="fas fa-upload"></i>
+                            <span>Upload new photo</span>
+                            <input type="file" id="profile_photo" name="profile_photo" accept="image/*">
+                        </label>
+                        <p class="muted">PNG, JPG, WEBP, or GIF. 5 MB max.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="profile-card">
+                <div class="card-header">
+                    <div>
+                        <h2>Basic information</h2>
+                        <p>Standard details displayed across the workspace.</p>
+                    </div>
+                </div>
+                <div class="two-column-grid">
+                    <label>
+                        <span>Display name</span>
+                        <input type="text" name="display_name" value="{{ form_defaults.display_name }}" required>
+                    </label>
+                    <label>
+                        <span>Username</span>
+                        <input type="text" name="username" value="{{ form_defaults.username }}" placeholder="username">
+                    </label>
+                    <label>
+                        <span>Job title</span>
+                        <input type="text" name="job_title" value="{{ form_defaults.job_title }}">
+                    </label>
+                    <label>
+                        <span>Team / Department</span>
+                        <input type="text" name="team" value="{{ form_defaults.team }}">
+                    </label>
+                    <label>
+                        <span>Timezone</span>
+                        <select name="timezone">
+                            {% for value, label in timezones %}
+                                <option value="{{ value }}" {% if value == form_defaults.timezone %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>
+                        <span>Location</span>
+                        <input type="text" name="location" value="{{ form_defaults.location }}" placeholder="City, Country">
+                    </label>
+                    <label>
+                        <span>Website</span>
+                        <input type="url" name="website" value="{{ form_defaults.website }}" placeholder="https://example.com">
+                    </label>
+                </div>
+                <label class="textarea-label">
+                    <span>Bio</span>
+                    <textarea name="bio" rows="4" placeholder="A short introduction for teammates.">{{ form_defaults.bio }}</textarea>
+                </label>
+            </section>
+
+            <section class="profile-card">
+                <div class="card-header">
+                    <div>
+                        <h2>Preferences</h2>
+                        <p>Control visibility and notifications.</p>
+                    </div>
+                </div>
+                <div class="toggle-list">
+                    <label class="toggle">
+                        <input type="checkbox" name="show_status" {% if form_defaults.show_status %}checked{% endif %}>
+                        <span class="indicator"></span>
+                        <div>
+                            <strong>Show active status</strong>
+                            <p>Display your online indicator in menus.</p>
+                        </div>
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" name="product_updates" {% if form_defaults.product_updates %}checked{% endif %}>
+                        <span class="indicator"></span>
+                        <div>
+                            <strong>Product updates</strong>
+                            <p>Get occasional notes about new features.</p>
+                        </div>
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" name="security_alerts" {% if form_defaults.security_alerts %}checked{% endif %}>
+                        <span class="indicator"></span>
+                        <div>
+                            <strong>Security alerts</strong>
+                            <p>Always notify me about account changes.</p>
+                        </div>
+                    </label>
+                </div>
+            </section>
+
+            <section class="profile-card secondary">
+                <div class="card-header">
+                    <div>
+                        <h2>Security shortcuts</h2>
+                        <p>Manage sensitive settings from one place.</p>
+                    </div>
+                </div>
+                <div class="shortcut-grid">
+                    <a href="/account/manage" class="shortcut">
+                        <i class="fas fa-key"></i>
+                        <div>
+                            <strong>Password & sign-in</strong>
+                            <p>Change password or enable MFA.</p>
+                        </div>
+                    </a>
+                    <a href="/account/manage" class="shortcut">
+                        <i class="fas fa-bell"></i>
+                        <div>
+                            <strong>Alerts</strong>
+                            <p>Fine-tune security notifications.</p>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <div class="form-actions">
+                <button type="submit" class="hero-btn primary">Save profile</button>
+                <a href="{{ url_for('auth_routes.dashboard') }}" class="hero-btn ghost">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    <script>
+    const fileInput = document.getElementById('profile_photo');
+    const previewImg = document.getElementById('profile-photo-preview');
+    if (fileInput) {
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                previewImg.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+    </script>
+</body>
+</html>

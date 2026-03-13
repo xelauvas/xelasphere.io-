@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="description" content="Production-grade AI chat platform with 10+ model orchestration — Claude, GPT, Gemini, Grok & open-source. Artifacts, memory, web search, and file processing.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://xelasphere.com/">
+    <meta property="og:title" content="XelaSphere — Multi-Model AI Chat Platform">
+    <meta property="og:description" content="10+ AI models. Artifacts with versioning. Memory. Web search. File processing. Built for real work.">
+    <meta property="og:image" content="https://xelasphere.com/static/images/og-image-v2.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="XelaSphere — Multi-Model AI Chat Platform">
+    <meta name="twitter:image" content="https://xelasphere.com/static/images/og-image-v2.png">
+    <title>XelaSphere</title>
+
+    <!-- Critical FOUC Prevention - MUST be first, inline to prevent flash -->
+    <style>
+        /* Hide chatbox on homepage until JS adds page-ready class */
+        body:not(.page-ready):not(.has-messages) .chatbox {
+            opacity: 0 !important;
+            visibility: hidden !important;
+        }
+        /* CRITICAL: Set chatbox flex centering BEFORE external CSS loads */
+        /* This prevents layout shift where content starts at top then moves to center */
+        .chatbox {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        /* When chat has messages, override to flex-start */
+        body.has-messages .chatbox {
+            justify-content: flex-start !important;
+            align-items: stretch !important;
+        }
+        /* Ensure greeting stays hidden until .visible class is added */
+        .greeting-container:not(.visible) {
+            opacity: 0 !important;
+        }
+        /* Prevent SVG icon size flash - set explicit size immediately */
+        .sidebar-toggle-button svg {
+            width: 1.25rem !important;
+            height: 1.25rem !important;
+            min-width: 1.25rem !important;
+            min-height: 1.25rem !important;
+            flex-shrink: 0 !important;
+        }
+    </style>
+
+    <!-- markdown-it and plugins -->
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.0.0/dist/markdown-it.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it-task-lists@2.1.1/dist/markdown-it-task-lists.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+    <script>
+        // Initialize markdown-it with options
+        const md = window.markdownit({
+            html: false,          // Disable raw HTML for security
+            linkify: true,        // Auto-convert URLs to links
+            typographer: true,    // Smart quotes, dashes
+            breaks: true          // Convert \n to <br>
+        }).use(window.markdownitTaskLists, {
+            enabled: true,
+            label: true,
+            labelAfter: true
+        });
+
+        // Create marked.parse compatible function for backwards compatibility
+        window.marked = {
+            parse: (text) => md.render(text || '')
+        };
+    </script>
+
+    <!-- KaTeX for math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+    <!-- Prism.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/components/prism-python.min.js"></script>
+
+    <!-- Mermaid Diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+    <!-- CodeMirror -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/material-darker.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/edit/closebrackets.min.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+
+    <!-- Custom CSS -->
+    <!-- Responsive Foundation (load first for CSS variables) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-foundation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/code-window.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal-window.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tree-view.css') }}?v=1.1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/message-styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/recipe-card.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/prism.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/options-btn.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/model-select.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}">
+
+    <!-- Artifact Panel -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-tokens.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/artifact-panel.css') }}?v=3">
+
+    <!-- Voice Mode -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/voice-mode.css') }}">
+
+    <!-- Email Composer -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/email-composer.css') }}">
+
+    <!-- Toast Notifications -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/toast.css') }}">
+
+    <!-- Text Selection Quote -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/text-selection-quote.css') }}">
+
+    <!-- Email Edit Toolbar -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/email-edit-toolbar.css') }}">
+
+    <!-- Mobile Responsive -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+
+    <!-- Context Menu (long-press actions) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/context-menu.css') }}">
+
+    <!-- Crypto Charts -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/crypto-chart.css') }}">
+
+
+    <!-- Lightweight Charts (TradingView) -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+
+    <!-- Premium Features JS (code headers, callouts, animations) -->
+    <script defer src="{{ url_for('static', filename='js/premiumFeatures.js') }}"></script>
+
+    <!-- Email Composer JS -->
+    <script defer src="{{ url_for('static', filename='js/emailComposer.js') }}"></script>
+
+    <!-- Text Selection Quote JS -->
+    <script defer src="{{ url_for('static', filename='js/textSelectionQuote.js') }}"></script>
+
+    <!-- Email Edit Toolbar JS -->
+    <script defer src="{{ url_for('static', filename='js/emailEditToolbar.js') }}"></script>
+
+    <!-- Search Auto-Detection JS -->
+    <script defer src="{{ url_for('static', filename='js/searchAutoDetect.js') }}"></script>
+
+    <!-- Mobile Long-Press Context Menu JS -->
+    <script defer src="{{ url_for('static', filename='js/mobileLongPress.js') }}"></script>
+
+    <!-- Mobile Message Actions (Long-Press Popup) -->
+    <script defer src="{{ url_for('static', filename='js/messageActions.js') }}"></script>
+
+    <!-- URL Preview JS -->
+    <script defer src="{{ url_for('static', filename='js/urlPreview.js') }}"></script>
+
+    <!-- Lottie Animation Player -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+</head>
+<body data-guest-mode="{{ 'true' if is_guest else 'false' }}"
+      data-guest-message-count="{{ guest_message_count|default(0) }}"
+      data-guest-message-limit="{{ guest_message_limit|default(5) }}"
+      data-guest-banner-threshold="{{ guest_banner_threshold|default(3) }}">
+
+    {% if is_guest %}
+    <!-- Guest Mode Signup Modal -->
+    <div id="guest-signup-modal" class="guest-modal" style="display: none;">
+        <div class="guest-modal-backdrop"></div>
+        <div class="guest-modal-content">
+            <div class="guest-modal-header">
+                <h2 class="guest-modal-title">Unlock the full experience</h2>
+            </div>
+            <div class="guest-modal-body">
+                <ul class="guest-modal-features">
+                    <li>Unlimited conversations</li>
+                    <li>Speech to text & Voice mode</li>
+                    <li>Multiple AI models</li>
+                    <li>File uploads & Web search</li>
+                    <li>Chat history & sync</li>
+                    <li>Image generation</li>
+                </ul>
+            </div>
+            <div class="guest-modal-footer">
+                <a href="/auth/register" class="guest-modal-btn guest-modal-btn-primary">Create Free Account</a>
+                <a href="/auth/login" class="guest-modal-btn guest-modal-btn-secondary">Already have an account? Sign In</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Mobile Overlay for Sidebar Drawer -->
+    <div class="mobile-overlay" id="mobile-overlay" style="opacity: 0; visibility: hidden;"></div>
+
+    <!-- Swipe Indicator for Mobile -->
+    <div class="swipe-indicator" style="opacity: 0;"></div>
+
+    <div class="page-wrapper">
+        <!-- Mobile Header Bar -->
+        <header class="mobile-header-bar" id="mobile-header-bar">
+            <!-- Left: Burger menu -->
+            <button class="mobile-header-burger" id="mobile-header-burger" aria-label="Open menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
+            <!-- Center: Model Selector -->
+            <div class="mobile-model-select{% if is_guest %} guest-disabled{% endif %}" id="mobile-model-select">
+                <div class="mobile-model-header">
+                    <span class="mobile-model-name">{% if is_guest %}Llama3.3 70B{% else %}Llama3.1 70B{% endif %}</span>
+                    <svg class="mobile-model-arrow" width="10" height="10" viewBox="0 0 12 12" fill="none">
+                        <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="mobile-model-options" id="mobile-model-options">
+                    <!-- Populated dynamically from model-list -->
+                </div>
+            </div>
+
+            <!-- Right: Ghost button -->
+            {% if not is_guest %}
+            <button id="temp-chat-button" class="mobile-header-ghost temp-chat-button" type="button" aria-label="Start a temporary chat">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28" style="width: 28px !important; height: 28px !important; min-width: 28px; min-height: 28px;" aria-hidden="true">
+                  <path
+                    d="M12 5.4
+                       c-3.55 0-6.4 2.85-6.4 6.4v6.0
+                       l1.85-1.25 1.85 1.25 1.85-1.25 1.85 1.25 1.85-1.25 1.85 1.25v-6.0
+                       c0-3.55-2.85-6.4-6.4-6.4z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.25"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                  />
+                  <circle cx="10.55" cy="12.05" r="0.7" fill="currentColor"/>
+                  <circle cx="13.45" cy="12.05" r="0.7" fill="currentColor"/>
+                </svg>
+            </button>
+            {% else %}
+            <div class="mobile-header-spacer"></div>
+            {% endif %}
+        </header>
+
+        <!-- Legacy temp-chat-launcher for desktop (hidden on mobile) -->
+        {% if not is_guest %}
+        <div class="temp-chat-launcher desktop-only">
+            <button id="temp-chat-button-desktop" class="temp-chat-button" type="button" aria-label="Start a temporary chat" data-tooltip="Go Incognito">
+                <span class="temp-chat-icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                      <path
+                        d="M12 5.4
+                           c-3.55 0-6.4 2.85-6.4 6.4v6.0
+                           l1.85-1.25 1.85 1.25 1.85-1.25 1.85 1.25 1.85-1.25 1.85 1.25v-6.0
+                           c0-3.55-2.85-6.4-6.4-6.4z"
+                        fill="none"
+                        stroke="#e6e6e6"
+                        stroke-width="1.25"
+                        stroke-linejoin="round"
+                        stroke-linecap="round"
+                      />
+                      <circle class="ghost-eye ghost-eye-left" cx="10.55" cy="12.05" r="0.7" fill="#e6e6e6"/>
+                      <circle class="ghost-eye ghost-eye-right" cx="13.45" cy="12.05" r="0.7" fill="#e6e6e6"/>
+                    </svg>
+                </span>
+            </button>
+        </div>
+        {% endif %}
+        <!-- Left Sidebar -->
+        <div id="sidebar" class="left-sidebar closed{% if is_guest %} guest-sidebar{% endif %}">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-logo-link" title="Go to Home">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="XelaSphere logo" class="sidebar-logo">
+                </a>
+                <button id="sidebar-toggle-button" class="sidebar-toggle-button" aria-label="Toggle sidebar" data-tooltip="Toggle sidebar">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" class="sidebar-icon-svg">
+                        <!-- outer shape -->
+                        <rect
+                          x="3"
+                          y="4"
+                          width="18"
+                          height="16"
+                          rx="2"
+                          ry="2"
+                          stroke="#B3B3B3"
+                          stroke-width="1.5"
+                          fill="none"
+                        />
+                        <!-- vertical divider (sidebar) -->
+                        <line
+                          x1="9"
+                          y1="4"
+                          x2="9"
+                          y2="20"
+                          stroke="#B3B3B3"
+                          stroke-width="1.5"
+                        />
+                    </svg>
+                </button>
+            </div>
+                <div class="sidebar-content">
+                {% if is_guest %}
+                <!-- Guest Sidebar Content - Clean minimal style -->
+                <div class="guest-sidebar-content">
+                    <div class="guest-sidebar-empty">
+                        <p>Sign up or log in to save your chat history</p>
+                    </div>
+                </div>
+                {% else %}
+                <!-- Regular User Sidebar Content -->
+                <div class="sidebar-quick-actions">
+                    <div class="sidebar-quick-actions-inner">
+                    <button class="sidebar-action-btn has-shortcut" id="action-new-chat" aria-label="New Chat" data-shortcut-win="Ctrl+Shift+O" data-shortcut-mac="⌘+Shift+O">
+                        <span class="sidebar-action-icon" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg"
+                                 width="18" height="18"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2"
+                                 stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <!-- Claude-style compose/new chat icon -->
+                                <path d="M12 20h9"></path>
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                            </svg>
+                        </span>
+                        <span class="sidebar-action-text">New Chat</span>
+                        <span class="shortcut-hint"></span>
+                    </button>
+                    <button class="sidebar-action-btn has-shortcut" id="action-search-chat" aria-label="Search Chat" data-shortcut-win="Ctrl+K" data-shortcut-mac="⌘+K">
+                        <span class="sidebar-action-icon" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg"
+                                 width="18" height="18"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2"
+                                 stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <!-- Clean magnifying glass -->
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <path d="M21 21l-4.35-4.35"></path>
+                            </svg>
+                        </span>
+                        <span class="sidebar-action-text">Search</span>
+                        <span class="shortcut-hint"></span>
+                    </button>
+                    <button class="sidebar-action-btn has-shortcut" id="action-images" aria-label="Images" data-shortcut-win="Ctrl+Shift+I" data-shortcut-mac="⌘+Shift+I">
+                        <span class="sidebar-action-icon" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg"
+                                 width="18" height="18"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2"
+                                 stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <!-- Clean image/gallery icon -->
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21 15 16 10 5 21"></polyline>
+                            </svg>
+                        </span>
+                        <span class="sidebar-action-text">Images</span>
+                        <span class="shortcut-hint"></span>
+                    </button>
+                    </div>
+                </div>
+                <ul id="tab-list">
+                    <!-- Chat session items will be dynamically added here -->
+                </ul>
+                {% endif %}
+            </div>
+            <div class="sidebar-footer">
+                {% if session.get('user') %}
+                    <div class="profile-header" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
+                        <img src="{{ session['user'].get('picture') or url_for('static', filename='images/default-profile.png') }}" 
+                             alt="{{ session['user']['name'] }}" class="profile-image"
+                             onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/default-profile.png') }}';">
+                        <span class="profile-name">{{ session['user']['name'] }}</span>
+                        <div class="dropdown-container glass-panel compact">
+                            <div class="dropdown-menu footer-dropdown">
+                                <div class="footer-profile-block">
+                                    <img src="{{ session['user'].get('picture') or url_for('static', filename='images/default-profile.png') }}" 
+                                         alt="{{ session['user']['name'] }}" class="footer-avatar"
+                                         onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/default-profile.png') }}';">
+                                    <div class="footer-profile-info">
+                                        <span class="profile-name">{{ session['user']['name'] }}</span>
+                                        <span class="profile-email">{{ session['user']['email'] }}</span>
+                                    </div>
+                                    {% if session['user'].get('show_status', True) %}
+                                    <span class="profile-status-dot" aria-label="Online"></span>
+                                    {% endif %}
+                                </div>
+                                <nav class="footer-link-list" aria-label="Quick links">
+                                    <a href="/dashboard">
+                                        <i class="fas fa-home"></i>
+                                        <span>Dashboard</span>
+                                    </a>
+                                    <a href="/account/manage">
+                                        <i class="fas fa-sliders-h"></i>
+                                        <span>Settings</span>
+                                    </a>
+                                    <a href="/upgrade" class="highlight">
+                                        <i class="fas fa-star"></i>
+                                        <span>Upgrade</span>
+                                    </a>
+                                    <a href="/help">
+                                        <i class="far fa-question-circle"></i>
+                                        <span>Help</span>
+                                    </a>
+                                </nav>
+                                <form id="logout-form" action="{{ url_for('auth_routes.logout') }}" method="post" style="display: none;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                </form>
+                                <button class="logout-button compact" onclick="document.getElementById('logout-form').submit(); return false;">
+                                    <i class="fas fa-sign-out-alt"></i> Log Out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                {% elif is_guest %}
+                    <div class="guest-auth-buttons">
+                        <a href="/auth/register" class="guest-auth-btn signup">Sign up</a>
+                        <a href="/auth/login" class="guest-auth-btn login">Log in</a>
+                    </div>
+                {% else %}
+                    <a href="{{ url_for('auth_routes.login') }}" class="login-btn">Login</a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if is_guest %}
+        <!-- Guest Login Button (shows when sidebar closed) -->
+        <a href="/auth/login" class="guest-floating-login" id="guest-floating-login">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                <polyline points="10 17 15 12 10 7"/>
+                <line x1="15" y1="12" x2="3" y2="12"/>
+            </svg>
+        </a>
+        {% endif %}
+
+        <!-- Content Wrapper -->
+        <div class="content-wrapper right-closed left-closed">
+            <div class="toggle-button" aria-label="Toggle sidebar">
+                <span class="hamburger-line"></span>
+            </div>
+            <div class="container chat-area" aria-label="Chat Interface">
+                <div class="chat-stage">
+                <div class="chat-shell" role="region" aria-label="Chat workspace">
+                    <header class="chat-shell__header">
+                        <div class="model-select-wrapper{% if is_guest %} guest-disabled{% endif %}">
+                            <div class="model-select{% if is_guest %} disabled{% endif %}" id="model" tabindex="{% if is_guest %}-1{% else %}0{% endif %}" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="model-list" aria-label="Select AI Model"{% if is_guest %} aria-disabled="true" title="Sign up to use different models"{% endif %}>
+                                Auto (Recommended)
+                            </div>
+                            <div class="model-select-content" id="model-list" role="listbox" aria-label="Available AI Models">
+                                <div role="option" class="model-option selected" data-value="auto" data-label="Auto (Recommended)" tabindex="-1" aria-selected="true">
+                                    <div class="model-meta">
+                                        <span class="model-name">Auto (Recommended)</span>
+                                        <span class="model-note">smart routing</span>
+                                    </div>
+                                    <span class="model-badge">Smart</span>
+                                </div>
+                                <div role="option" class="model-option" data-value="llama-3.3-70b-versatile" data-label="Llama 3.3 70B" tabindex="-1">
+                                    <div class="model-meta">
+                                        <span class="model-name">Llama 3.3 70B</span>
+                                        <span class="model-note">fast all-rounder</span>
+                                    </div>
+                                    <span class="model-badge">Groq</span>
+                                </div>
+                                <div role="option" class="model-option" data-value="qwen/qwen3-32b" data-label="Qwen 3 32B" tabindex="-1">
+                                    <div class="model-meta">
+                                        <span class="model-name">Qwen 3 32B</span>
+                                        <span class="model-note">coding & math</span>
+                                    </div>
+                                    <span class="model-badge">Groq</span>
+                                </div>
+                                <div role="option" class="model-option" data-value="qwen-3-235b-a22b-instruct-2507" data-label="Qwen 235B" tabindex="-1">
+                                    <div class="model-meta">
+                                        <span class="model-name">Qwen 235B</span>
+                                        <span class="model-note">complex reasoning</span>
+                                    </div>
+                                    <span class="model-badge">Cerebras</span>
+                                </div>
+                                <div role="option" class="model-option" data-value="deepseek-chat" data-label="DeepSeek V3" tabindex="-1">
+                                    <div class="model-meta">
+                                        <span class="model-name">DeepSeek V3</span>
+                                        <span class="model-note">top-tier coding</span>
+                                    </div>
+                                    <span class="model-badge">DeepSeek</span>
+                                </div>
+                                <div role="option" class="model-option" data-value="deepseek-reasoner" data-label="DeepSeek R1" tabindex="-1">
+                                    <div class="model-meta">
+                                        <span class="model-name">DeepSeek R1</span>
+                                        <span class="model-note">reasoning</span>
+                                    </div>
+                                    <span class="model-badge">DeepSeek</span>
+                                </div>
+                                <div role="option" class="model-option" data-value="cognitivecomputations/dolphin-mistral-24b-venice-edition:free" data-label="Venice" tabindex="-1">
+                                    <div class="model-meta">
+                                        <span class="model-name">Venice</span>
+                                        <span class="model-note">uncensored</span>
+                                    </div>
+                                    <span class="model-badge">OpenRouter</span>
+                                </div>
+                                <div role="option" class="model-option" data-value="kimi-k2.5" data-label="Kimi K2.5" tabindex="-1">
+                                    <div class="model-meta">
+                                        <span class="model-name">Kimi K2.5</span>
+                                        <span class="model-note">reasoning</span>
+                                    </div>
+                                    <span class="model-badge">Moonshot</span>
+                                </div>
+                                <div role="option" class="model-option" data-value="kimi-latest" data-label="Kimi Latest" tabindex="-1">
+                                    <div class="model-meta">
+                                        <span class="model-name">Kimi Latest</span>
+                                        <span class="model-note">long context</span>
+                                    </div>
+                                    <span class="model-badge">Moonshot</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="loading-indicator" style="display:none;"></div>
+                        <div id="error-message" style="display:none;"></div>
+                        <div id="offline-indicator" class="offline-status" role="status" aria-live="polite">
+                            <span class="offline-dot" aria-hidden="true"></span>
+                            <div class="offline-text">
+                                <span class="offline-heading">Working offline</span>
+                                <span class="offline-detail">Messages are stored locally until connectivity returns.</span>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div class="chat-shell__messages" id="chat-scroll-region" role="log" aria-live="polite" aria-atomic="true" tabindex="0">
+                        <div class="conversation-panel">
+                        <div class="chatbox" id="chatbox">
+                            <div class="greeting-container" id="greeting-container" data-username="{{ session['user']['name'] if session.get('user') else '' }}" data-is-guest="{{ 'true' if is_guest else 'false' }}"{% if session_has_messages %} style="display: none !important;"{% endif %}>
+                                <h1 class="greeting-text" id="greeting-text"></h1>
+                            </div>
+                            <div id="page-controls" class="page-controls hidden" aria-live="polite"></div>
+                            <div id="chat-display">
+                                <!-- Messages will be rendered here -->
+                            </div>
+                            <div class="options" data-ephemeral="true"{% if session_has_messages %} style="display: none !important;"{% endif %}>
+                                {% for option in options %}
+                                <button class="options-button{% if option.title == 'More' %} more-button{% endif %}" data-action="{{ option.action }}" data-icon="{{ option.icon|default('star') }}">
+                                    <span class="option-icon">
+                                        {% set icon = option.icon|default('star') %}
+                                        {% if icon == 'edit' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                        {% elif icon == 'code' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                                        {% elif icon == 'image' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                        {% elif icon == 'search' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                        {% elif icon == 'info' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                        {% elif icon == 'calendar' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                        {% elif icon == 'activity' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                        {% elif icon == 'dollar' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                        {% elif icon == 'globe' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                                        {% elif icon == 'gift' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+                                        {% elif icon == 'film' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
+                                        {% elif icon == 'home' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                                        {% elif icon == 'book' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                                        {% elif icon == 'heart' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                                        {% elif icon == 'zap' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                        {% elif icon == 'coffee' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+                                        {% elif icon == 'music' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                                        {% elif icon == 'sun' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                                        {% elif icon == 'sparkles' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M5 19l1 3 1-3 3-1-3-1-1-3-1 3-3 1 3 1z"/><path d="M19 5l.5 1.5L21 7l-1.5.5L19 9l-.5-1.5L17 7l1.5-.5L19 5z"/></svg>
+                                        {% elif icon == 'lightbulb' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+                                        {% elif icon == 'message' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                        {% elif icon == 'more' %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                                        {% else %}
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                                        {% endif %}
+                                    </span>
+                                    <span class="option-content">
+                                        <span class="button-text">{{ option.title }}</span>
+                                        <span class="subtitle">{{ option.subtitle }}</span>
+                                    </span>
+                                </button>
+                                {% endfor %}
+                            </div>
+
+                        </div>
+                        </div>
+                        <div class="chat-shell__extras">
+                            <div class="formatted-response">{{ formatted_response|sanitize_html }}</div>
+                            <div id="image-container">
+                                <div id="loading-animation" class="loading-container" style="display: none;">
+                                    <div class="loading-circle">
+                                        <div class="loading-icon">
+                                            <i class="fas fa-image"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Generated images will appear here -->
+                            </div>
+                            <div class="message-warning"></div>
+                        </div>
+                    </div>
+
+                    <footer class="chat-shell__composer" role="form" aria-label="Message Input">
+                        <div class="input-container">
+                            {% if not is_guest %}
+                            <div class="temp-composer-header" aria-hidden="true">
+                                <span class="incognito" aria-hidden="true">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" focusable="false">
+                                      <circle cx="12" cy="12" r="12" fill="white"/>
+                                      <g fill="currentColor">
+                                        <path d="M8 7.5h8l1 2H7z"/>
+                                        <rect x="5.5" y="9.5" width="13" height="1.5" rx="0.75"/>
+                                        <circle cx="9" cy="14" r="2"/>
+                                        <circle cx="15" cy="14" r="2"/>
+                                        <rect x="11" y="13.6" width="2" height="0.8" rx="0.4"/>
+                                      </g>
+                                    </svg>
+                                </span>
+                                <p class="temp-composer-label"></p>
+                            </div>
+                            {% endif %}
+                            {% if is_guest %}
+                            <!-- Guest Mode Signup Banner -->
+                            <div id="guest-signup-banner" class="guest-banner" style="display: none;">
+                                <span class="guest-banner-text">Sign up to save your chat</span>
+                                <a href="/auth/register" class="guest-banner-btn guest-banner-btn-primary">Sign up</a>
+                                <button id="guest-banner-dismiss" class="guest-banner-btn guest-banner-btn-secondary">Dismiss</button>
+                            </div>
+                            {% endif %}
+                            <div class="input-row">
+                                <div class="actions-menu" id="actions-menu">
+                                    <button class="actions-toggle" id="actions-toggle" aria-haspopup="true" aria-expanded="false" aria-label="More actions">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <line x1="12" y1="5" x2="12" y2="19"/>
+                                            <line x1="5" y1="12" x2="19" y2="12"/>
+                                        </svg>
+                                    </button>
+                                    <div class="actions-popover" id="actions-popover" role="menu">
+                                        <!-- File Upload -->
+                                        <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data" class="action-form">
+                                            <label for="file-upload" class="action-btn{% if is_guest %} guest-disabled{% endif %}" aria-label="{% if is_guest %}Sign up to upload files{% else %}Upload files{% endif %}" role="menuitem" data-tooltip="{% if is_guest %}Sign up to upload{% else %}Upload{% endif %}"{% if is_guest %} aria-disabled="true"{% endif %}>
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                                                </svg>
+                                                {% if is_guest %}<span class="guest-lock-icon"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg></span>{% endif %}
+                                            </label>
+                                            <input type="file" id="file-upload" name="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.text,.md,.csv,.json,.rtf,.yaml,.yml,.toml,.xml,.html,.htm,.svg,.ini,.cfg,.conf,.env,.py,.pyw,.js,.mjs,.cjs,.ts,.tsx,.jsx,.java,.kt,.kts,.scala,.c,.h,.cpp,.hpp,.cc,.cs,.go,.rs,.rb,.erb,.php,.swift,.dart,.lua,.pl,.pm,.r,.sql,.sh,.bash,.zsh,.fish,.ps1,.psm1,.css,.scss,.sass,.less,.vue,.svelte,.hs,.lhs,.ex,.exs,.clj,.cljs,.cljc,.ml,.mli,.fs,.fsx,.erl,.hrl,.elm,.v,.sv,.vhd,.vhdl,.asm,.s,.dockerfile,.makefile,.mk,.gradle,.cmake,.tf,.tfvars,.proto,.graphql,.gql,.sol,.zig,.nim,.cr,.jl,.log" style="display: none;" multiple{% if is_guest %} disabled{% endif %}>
+                                        </form>
+
+                                        <div class="popover-divider"></div>
+
+                                        <!-- Web Search Toggle -->
+                                        <label class="action-btn search-btn{% if is_guest %} guest-disabled{% endif %}" for="enable-search" role="menuitemcheckbox" aria-checked="false" data-tooltip="{% if is_guest %}Sign up to use search{% else %}Search{% endif %}"{% if is_guest %} aria-disabled="true"{% endif %}>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="12" cy="12" r="10"/>
+                                                <line x1="2" y1="12" x2="22" y2="12"/>
+                                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                                            </svg>
+                                            {% if is_guest %}<span class="guest-lock-icon"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg></span>{% endif %}
+                                            <input type="checkbox" id="enable-search" name="enable_search"{% if is_guest %} disabled{% endif %}>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="textarea-container">
+                                    <textarea class="chat-input" id="prompt" placeholder="{% if is_guest %}Try XelaSphere ({{ guest_message_limit - guest_message_count }} messages left){% else %}Ask anything{% endif %}" aria-label="Type your message here" rows="1" autofocus></textarea>
+                                    <!-- Microphone button for dictation -->
+                                    <button class="microphone-button{% if is_guest %} guest-disabled{% endif %}" id="microphone-button" aria-label="{% if is_guest %}Sign up to use voice{% else %}Start voice input{% endif %}" {% if not is_guest %}data-tooltip="Dictate"{% endif %}{% if is_guest %} disabled{% endif %}>
+                                        <i class="fa-solid fa-microphone-lines"></i>
+                                    </button>
+                                    <!-- Voice mode button (shown when input is empty) -->
+                                    <button class="voice-mode-button{% if is_guest %} guest-disabled{% endif %}" id="voice-mode-button" aria-label="{% if is_guest %}Sign up to use voice mode{% else %}Use voice mode{% endif %}" data-tooltip="{% if is_guest %}Sign up for voice mode{% else %}Use voice mode{% endif %}"{% if is_guest %} disabled{% endif %}>
+                                        <span class="voice-bars">
+                                            <span class="voice-bar"></span>
+                                            <span class="voice-bar"></span>
+                                            <span class="voice-bar"></span>
+                                            <span class="voice-bar"></span>
+                                        </span>
+                                        <span class="voice-check">
+                                            <i class="fas fa-check"></i>
+                                        </span>
+                                    </button>
+                                    <!-- Send button inside pill (shown when input has text) -->
+                                    <button class="send-button" id="send-button" aria-label="Send Message">
+                                        <i class="fas fa-arrow-up"></i>
+                                        <i class="fas fa-stop"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="arrow-down at-bottom" id="downArrow">
+                                <i class="fas fa-arrow-down"></i>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+                </div>
+            </div>
+
+            <!-- Artifact Panel (Right Code Editor Panel) -->
+        <aside id="artifact-panel" class="artifact-panel" aria-hidden="true" role="complementary" aria-label="Code artifact viewer">
+            <!-- Resize Handle -->
+            <div id="artifact-panel-resize" class="artifact-panel__resize-handle" aria-hidden="true"></div>
+
+            <!-- Clean Header: Title + Close -->
+            <header class="artifact-panel__header">
+                <h2 id="artifact-panel-title" class="artifact-panel__title">Artifact</h2>
+                <button id="artifact-panel-close" class="artifact-panel__close-btn" type="button" aria-label="Close artifact panel">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+            </header>
+
+            <!-- Hidden elements for JS compatibility -->
+            <span id="artifact-panel-status" class="sr-only" aria-live="polite"></span>
+            <span id="artifact-panel-language" class="sr-only">Code</span>
+            <button id="artifact-switch-btn" class="sr-only" type="button"></button>
+            <div id="artifact-switcher-dropdown" class="artifact-switcher-dropdown" role="listbox" aria-hidden="true">
+                <p class="artifact-switcher-dropdown__title">Switch between artifacts</p>
+                <ul id="artifact-switcher-list" class="artifact-switcher-dropdown__list" role="listbox"></ul>
+            </div>
+            <button id="artifact-publish-btn" class="sr-only" type="button">Publish</button>
+
+            <!-- Pill Tab Toggle -->
+            <div class="artifact-panel__tab-toggle">
+                <button data-artifact-tab="preview" class="artifact-panel__tab-btn is-active" role="tab" aria-selected="true" aria-controls="artifact-preview-panel">Preview</button>
+                <button data-artifact-tab="code" class="artifact-panel__tab-btn" role="tab" aria-selected="false" aria-controls="artifact-code-panel">Code</button>
+            </div>
+
+            <!-- Panel Body -->
+            <div class="artifact-panel__body">
+                <!-- Preview Tab -->
+                <section id="artifact-preview-panel" data-artifact-panel="preview" class="artifact-panel__section is-active" role="tabpanel">
+                    <div class="artifact-preview-frame">
+                        <iframe id="artifact-preview-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups" title="Artifact preview"></iframe>
+                    </div>
+                </section>
+
+                <!-- Code Tab -->
+                <section id="artifact-code-panel" data-artifact-panel="code" class="artifact-panel__section" role="tabpanel">
+                    <div class="artifact-code artifact-code--no-tree">
+                        <div class="artifact-code__viewer">
+                            <header class="artifact-code__viewer-header">
+                                <div class="artifact-file-select-wrapper">
+                                    <i class="fas fa-file-code"></i>
+                                    <select id="artifact-file-select" class="artifact-file-select" aria-label="Select file">
+                                        <option value="">Select a file</option>
+                                    </select>
+                                </div>
+                                <span id="artifact-current-file" class="sr-only">Select a file</span>
+                                <div class="artifact-code__actions">
+                                    <button id="artifact-edit-mode-toggle" class="artifact-code__action-btn" type="button" aria-pressed="false">
+                                        <i class="fas fa-pencil-alt"></i> <span>Edit</span>
+                                    </button>
+                                    <button id="artifact-copy-file-btn" class="artifact-code__action-btn" type="button">
+                                        <i class="fas fa-copy"></i> <span>Copy</span>
+                                    </button>
+                                    <button id="artifact-copy-all-btn" class="artifact-code__action-btn" type="button">
+                                        <i class="fas fa-copy"></i> <span>Copy All</span>
+                                    </button>
+                                    <button id="artifact-copy-version-btn" class="artifact-code__action-btn sr-only" type="button">Copy Version</button>
+                                    <button id="artifact-save-edit-btn" class="hero-btn primary" type="button" style="display:none;">
+                                        <i class="fas fa-save"></i> <span>Save</span>
+                                    </button>
+                                    <button id="artifact-revert-edit-btn" class="hero-btn ghost" type="button" style="display:none;">
+                                        <i class="fas fa-undo"></i> <span>Revert</span>
+                                    </button>
+                                </div>
+                            </header>
+                            <div id="artifact-code-display">
+                                <pre class="artifact-code__block"><code id="artifact-code-block" class="language-javascript"></code></pre>
+                            </div>
+                            <div id="artifact-edit-codemirror"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Info Tab (hidden, accessible via JS) -->
+                <section id="artifact-info-panel" data-artifact-panel="info" class="artifact-panel__section" role="tabpanel">
+                    <dl id="artifact-info-list" class="artifact-info-list"></dl>
+                </section>
+
+                <!-- Composer Tab (hidden) -->
+                <section id="artifact-composer-panel" data-artifact-panel="composer" class="artifact-panel__section" role="tabpanel">
+                    <div class="artifact-composer">
+                        <header class="artifact-composer__header">
+                            <h3 class="artifact-composer__title"><i class="fas fa-wand-magic-sparkles"></i> Create New Artifact</h3>
+                            <p class="artifact-composer__subtitle">Describe what you'd like to build</p>
+                        </header>
+                        <div class="artifact-composer__body">
+                            <div class="artifact-composer__form">
+                                <label class="artifact-composer__label" for="composer-prompt"><i class="fas fa-lightbulb"></i> Your idea</label>
+                                <textarea id="composer-prompt" class="artifact-composer__textarea" placeholder="e.g., Create an interactive data visualization..." rows="4"></textarea>
+                                <div class="artifact-composer__actions">
+                                    <button id="composer-submit-btn" class="artifact-composer__submit-btn" type="button" disabled><i class="fas fa-sparkles"></i> Generate Artifact</button>
+                                    <button id="composer-clear-btn" class="artifact-composer__clear-btn" type="button"><i class="fas fa-eraser"></i> Clear</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Diff Tab (hidden) -->
+                <section id="artifact-diff-panel" data-artifact-panel="diff" class="artifact-panel__section" role="tabpanel">
+                    <div class="artifact-diff">
+                        <div class="artifact-diff__controls">
+                            <div class="artifact-diff__selector">
+                                <label for="artifact-diff-from">Compare:</label>
+                                <select id="artifact-diff-from" class="artifact-diff__version-select"></select>
+                                <span>→</span>
+                                <select id="artifact-diff-to" class="artifact-diff__version-select"></select>
+                            </div>
+                            <div class="artifact-diff__mode-toggle">
+                                <button data-diff-mode="side-by-side" class="artifact-diff__mode-btn is-active" type="button">Side by Side</button>
+                                <button data-diff-mode="unified" class="artifact-diff__mode-btn" type="button">Unified</button>
+                            </div>
+                        </div>
+                        <div id="artifact-diff-file-list" class="artifact-diff__file-list"></div>
+                        <div id="artifact-diff-viewer" class="artifact-diff__content">
+                            <p class="artifact-diff__placeholder">Select two versions to compare</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Bottom Action Bar -->
+            <footer class="artifact-panel__footer">
+                <div class="artifact-panel__footer-left">
+                    <select id="artifact-version-select" class="artifact-panel__version-select" aria-label="Select version"></select>
+                </div>
+                <div class="artifact-panel__footer-right">
+                    <button id="artifact-refresh-btn" class="artifact-panel__footer-btn" type="button" title="Refresh preview" aria-label="Refresh">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button id="artifact-download-btn" class="artifact-panel__footer-btn" type="button" title="Download ZIP" aria-label="Download">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button id="artifact-copy-btn" class="artifact-panel__footer-btn" type="button" title="Copy code" aria-label="Copy">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                    <button id="artifact-share-btn" class="artifact-panel__footer-btn" type="button" title="Share" aria-label="Share">
+                        <i class="fas fa-share-alt"></i>
+                    </button>
+                </div>
+            </footer>
+        </aside>
+        </div> <!-- End of .content-wrapper -->
+
+        <!-- Sources Button -->
+        <button id="sources-btn" aria-label="Toggle Sources" style="display:none;">
+            <span>Sources</span>
+            <div id="favicon-container"></div>
+        </button>
+
+        <!-- Right Sidebar -->
+        <div id="right-sidebar" class="right-sidebar closed">
+            <div class="right-sidebar-header">
+                <h2>More</h2>
+                <button class="close-sidebar-btn" aria-label="Close Sidebar">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="search-results-container" class="search-results-container">
+                <!-- Search results will be dynamically appended here -->
+            </div>
+        </div>
+    </div> <!-- End of .page-wrapper -->
+
+    <div class="history-search-modal" id="history-search-modal" aria-hidden="true">
+        <div class="history-search-backdrop" data-history-search-close></div>
+        <div class="history-search-dialog" role="dialog" aria-modal="true" aria-labelledby="history-search-title">
+            <div class="history-search-header">
+                <div class="history-search-input">
+                    <span class="history-search-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="6"></circle>
+                            <path d="M18 18l4 4"></path>
+                        </svg>
+                    </span>
+                    <input type="text" id="history-search-input" placeholder="Search all chats" autocomplete="off" aria-label="Search your chat history">
+                    <button class="history-search-close" type="button" data-history-search-close aria-label="Close search overlay">Esc</button>
+                </div>
+                <p class="history-search-hint">Search names and content across every conversation</p>
+            </div>
+            <div class="history-search-results" id="history-search-results" role="list">
+                <!-- Results injected dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <div class="images-gallery-modal" id="images-gallery-modal" aria-hidden="true">
+        <div class="images-gallery-backdrop" data-images-close></div>
+        <div class="images-gallery-dialog" role="dialog" aria-modal="true" aria-labelledby="images-gallery-title">
+            <header class="images-gallery-header">
+                <div class="images-gallery-heading">
+                    <p class="images-gallery-eyebrow">AI Images</p>
+                    <h2 id="images-gallery-title">Recent creations</h2>
+                </div>
+                <button class="images-close-btn" type="button" data-images-close aria-label="Close image gallery overlay">
+                    Esc
+                </button>
+            </header>
+            <div class="images-gallery-cta">
+                <div>
+                    <p class="images-cta-title">Create something new</p>
+                    <p class="images-cta-desc">Use your imagination or paste a prompt to generate visuals.</p>
+                </div>
+                <button class="images-primary-btn" id="images-create-btn" type="button">
+                    <i class="fas fa-wand-magic-sparkles"></i>
+                    New image
+                </button>
+            </div>
+            <div class="images-gallery-body" role="region" aria-label="Generated images">
+                <div class="images-gallery-composer">
+                    <div class="images-composer-field">
+                        <textarea id="images-prompt-input" placeholder="Describe the image you want to create..." rows="2"></textarea>
+                    </div>
+                    <div class="images-composer-actions">
+                        <button type="button" class="images-insert-btn" id="images-insert-btn">
+                            <i class="fas fa-arrow-turn-down"></i>
+                            Use prompt
+                        </button>
+                    </div>
+                </div>
+                <div class="images-gallery-grid" id="images-gallery-grid">
+                    <!-- Cards injected dynamically -->
+                </div>
+                <div class="images-gallery-empty" id="images-gallery-empty">
+                    No images yet. Generate one to see it here.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="images-preview-modal" id="images-preview-modal" aria-hidden="true">
+        <div class="images-preview-backdrop" data-images-preview-close></div>
+        <div class="images-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="images-preview-title">
+            <header class="images-preview-dialog-header">
+                <div>
+                    <p class="images-preview-eyebrow">Preview</p>
+                    <h3 id="images-preview-title">Generated image</h3>
+                </div>
+                <div class="images-preview-dialog-actions">
+                    <a href="#" target="_blank" rel="noopener noreferrer" id="images-preview-link" class="images-preview-link">Open</a>
+                    <button type="button" class="images-preview-close" id="images-preview-close" data-images-preview-close aria-label="Close preview">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </header>
+            <div class="images-preview-canvas">
+                <img id="images-preview-img" alt="Generated image preview">
+            </div>
+            <div class="images-preview-meta">
+                <p class="images-preview-prompt" id="images-preview-prompt"></p>
+                <p class="images-preview-details" id="images-preview-meta"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts placed before closing body tag -->
+    <script src="{{ url_for('static', filename='js/speechSynthesisModule.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/dictationModule.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/voiceModeModule.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/filePreview.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/scrollState.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/recipeDetector.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=4"></script>
+    <script>
+    // Patch: intercept FormData append to inject image files for vision API
+    (function() {
+        const origFetch = window.fetch;
+        window.fetch = async function(url, options) {
+            if (url === '/chat' && options && options.body instanceof FormData) {
+                const fd = options.body;
+                const attachmentsJson = fd.get('attachments');
+                if (attachmentsJson && window.attachmentStore) {
+                    // Get pending files from attachmentStore before they're consumed
+                    // Files are already consumed, so use the stored ones from getPendingAttachmentsForSend
+                }
+                // Check if we have image files stashed on the FormData
+                if (window._pendingImageFiles && window._pendingImageFiles.length > 0) {
+                    for (const f of window._pendingImageFiles) {
+                        fd.append('image_files', f, f.name);
+                    }
+                    window._pendingImageFiles = [];
+                }
+            }
+            return origFetch.apply(this, arguments);
+        };
+
+        // Patch getPendingAttachmentsForSend to stash raw File objects
+        const origGetPending = window.getPendingAttachmentsForSend;
+        window.getPendingAttachmentsForSend = async function() {
+            const attachments = await origGetPending();
+            window._pendingImageFiles = [];
+            for (const att of attachments) {
+                if (att.isImage && att.file) {
+                    window._pendingImageFiles.push(att.file);
+                }
+            }
+            return attachments;
+        };
+    })();
+    </script>
+    <script src="{{ url_for('static', filename='js/deviceDetector.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sidebarHandler.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/weatherIcon.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/greeting.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/cryptoChartModule.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/unreadManager.js') }}?v=2"></script>
+    <script>
+        window.sharedSessionId = "{{ shared_session_id|default('', true) }}";
+    </script>
+    <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/typeTextWorker.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/modelSelect.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=23"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // --- Dropdown Menu Logic ---
+            try {
+                const profileHeader = document.querySelector('.sidebar-footer .profile-header');
+                const dropdownContainer = document.querySelector('.sidebar-footer .dropdown-container');
+                const dropdownMenu = document.querySelector('.sidebar-footer .dropdown-menu');
+
+                if (profileHeader && dropdownContainer && dropdownMenu) {
+                    profileHeader.addEventListener('click', (event) => {
+                        event.stopPropagation();
+                        dropdownContainer.classList.toggle('active');
+                        const isOpen = dropdownContainer.classList.contains('active');
+                        profileHeader.setAttribute('aria-expanded', isOpen.toString());
+                    });
+
+                    document.addEventListener('click', (event) => {
+                        if (dropdownContainer.classList.contains('active') &&
+                            !profileHeader.contains(event.target) &&
+                            !dropdownContainer.contains(event.target)) {
+                            dropdownContainer.classList.remove('active');
+                            profileHeader.setAttribute('aria-expanded', 'false');
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error("Error in dropdown menu logic:", e);
+            }
+
+            // Forward mobile quick actions to existing controls
+        });
+    </script>
+</body>
+</html>

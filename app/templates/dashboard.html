@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XelaSphere Dashboard</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="dashboard-page">
+
+<div class="ambient-orbs" aria-hidden="true">
+    <span class="orb orb-one"></span>
+    <span class="orb orb-two"></span>
+    <span class="orb orb-three"></span>
+</div>
+
+<div class="profile-modal" id="profile-modal" aria-hidden="true">
+    <div class="profile-modal-backdrop" data-profile-close></div>
+    <div class="profile-modal-dialog glass-panel" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+        <header class="profile-modal-header">
+            <div>
+                <p class="modal-eyebrow">Profile</p>
+                <h2 id="profile-modal-title">Customize your workspace identity</h2>
+                <p class="modal-subline">Update your display details, fine-tune visible badges, and jump into full settings without leaving the dashboard.</p>
+            </div>
+            <button class="profile-modal-close" type="button" data-profile-close aria-label="Close profile customization panel">
+                <i class="fas fa-times"></i>
+            </button>
+        </header>
+        <div class="profile-modal-body">
+            <section class="profile-summary">
+                <img src="{{ user_data['picture'] | default(url_for('static', filename='images/default-profile.png')) }}" alt="Profile picture of {{ user_data.name }}">
+                <div>
+                    <h3>{{ user_data.name }}</h3>
+                    <p>{{ user_data.email }}</p>
+                    {% if session.get('user', {}).get('show_status', True) %}
+                    <span class="profile-status-pill"><i class="fas fa-circle"></i> Active</span>
+                    {% endif %}
+                </div>
+            </section>
+            <form id="profile-modal-form">
+                <div class="modal-form-grid">
+                    <label>
+                        <span>Display name</span>
+                        <input type="text" name="display_name" value="{{ user_data.name }}" required>
+                    </label>
+                    <label>
+                        <span>Workspace tagline</span>
+                        <input type="text" name="tagline" placeholder="e.g., Building helpful copilots">
+                    </label>
+                    <label>
+                        <span>Preferred model</span>
+                        <select name="preferred_model">
+                            {% for key, label in model_labels.items() %}
+                            <option value="{{ key }}" {% if label == active_model_label %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>
+                        <span>Contact email</span>
+                        <input type="email" name="contact_email" value="{{ user_data.email }}" readonly>
+                    </label>
+                </div>
+                <div class="modal-toggle-row">
+                    <label class="toggle">
+                        <input type="checkbox" name="show_email" checked>
+                        <span class="toggle-indicator"></span>
+                        <span>Show email badge in dropdown</span>
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" name="enable_insights" checked>
+                        <span class="toggle-indicator"></span>
+                        <span>Surface session insights in hero</span>
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" name="dark_theme" checked>
+                        <span class="toggle-indicator"></span>
+                        <span>Stay in dark theme</span>
+                    </label>
+                </div>
+                <div class="modal-footer-actions">
+                    <button type="submit" class="hero-btn primary">Save quick preferences</button>
+                    <a href="/profile/edit" class="hero-btn ghost">Open full settings</a>
+                </div>
+                <p class="profile-modal-status" id="profile-modal-status" role="status" aria-live="polite"></p>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="dashboard-wrapper">
+    <!-- Top Navigation (Header) -->
+    <nav class="top-nav" role="navigation" aria-label="Main navigation">
+        <div class="logo">
+            <a href="/" aria-label="Go to Home - XelaSphere Chat" class="logo-link">XelaSphere</a>
+        </div>
+        <div class="user-menu">
+            {% if user_data %}
+            <div class="profile-header" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" aria-controls="user-dropdown-menu" aria-label="User menu for {{ user_data.name }}">
+                <img src="{{ user_data['picture'] | default(url_for('static', filename='images/default-profile.png')) }}" alt="Profile picture of {{ user_data.name }}" class="profile-image">
+                <span class="profile-name">{{ user_data.name }}</span>
+            </div>
+            <div class="dropdown-menu glass-panel" id="user-dropdown-menu" role="menu">
+                <div class="dropdown-profile">
+                    <img src="{{ user_data['picture'] | default(url_for('static', filename='images/default-profile.png')) }}" alt="Profile picture of {{ user_data.name }}" class="dropdown-profile-image">
+                    <div class="dropdown-profile-content">
+                        <div class="dropdown-profile-info">
+                            <span class="dropdown-name">{{ user_data.name }}</span>
+                            <span class="dropdown-email">{{ user_data.email }}</span>
+                        </div>
+                        <div class="profile-tags">
+                            <span class="profile-badge">Active</span>
+                            <span class="profile-tag"><i class="fas fa-shield-check"></i> Member</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="dropdown-section">
+                    <p class="dropdown-label">Quick actions</p>
+                    <div class="dropdown-quick-actions" role="group" aria-label="Quick actions">
+                        <a href="/" class="quick-action" role="menuitem"><i class="fas fa-bolt"></i> Resume Chat</a>
+                        <a href="/upgrade" class="quick-action" role="menuitem"><i class="fas fa-arrow-trend-up"></i> Upgrade</a>
+                    </div>
+                </div>
+                <div class="dropdown-section">
+                    <p class="dropdown-label">Workspace</p>
+                    <div class="dropdown-links">
+                        <a href="/dashboard" role="menuitem"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                        <a href="/profile/edit" role="menuitem"><i class="fas fa-user-edit"></i> Edit Profile</a>
+                        <a href="/account/manage" role="menuitem"><i class="fas fa-cog"></i> Settings</a>
+                        <a href="/help" role="menuitem"><i class="fas fa-question-circle"></i> Help</a>
+                    </div>
+                </div>
+                <button class="logout-button" type="button" onclick="document.getElementById('logout-form').submit();" role="menuitem">
+                    <i class="fas fa-sign-out-alt"></i> Log Out
+                </button>
+                <form id="logout-form" action="{{ url_for('auth_routes.logout') }}" method="post" style="display: none;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                </form>
+            </div>
+            {% else %}
+            <a href="{{ url_for('auth_routes.login') }}" class="login-btn" role="button">Log In</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Main Dashboard Content -->
+    <main class="dashboard-main" role="main">
+        <div class="dashboard-header">
+            <div class="dashboard-hero">
+                <div class="hero-content">
+                    <p class="hero-eyebrow">Intelligent workspace</p>
+                    <h1 class="dashboard-title">Welcome back, {{ user_data.name }}.</h1>
+                    <p class="dashboard-subtitle">
+                        Spin up new ideas, resume your threads, and monitor how your co-pilot is helping across every session.
+                    </p>
+                    <div class="hero-pills" role="list">
+                        <span class="pill" role="listitem">
+                            <i class="fas fa-clock"></i> {{ account_age }}
+                        </span>
+                        <span class="pill" role="listitem">
+                            <i class="fas fa-layer-group"></i> {{ total_chats }} chats
+                        </span>
+                        <span class="pill" role="listitem">
+                            <i class="fas fa-star"></i> {{ credits_used }} credits used
+                        </span>
+                    </div>
+                    <div class="hero-actions">
+                        <button type="button" class="hero-btn primary" id="open-profile-modal" aria-label="Open profile customization modal">
+                            <i class="fas fa-pen"></i> Customize Profile
+                        </button>
+                    </div>
+                </div>
+                <div class="hero-visual" aria-label="Current workspace summary">
+                    <div class="model-chip">
+                        <span class="chip-label">Active model</span>
+                        <strong>{{ active_model_label }}</strong>
+                    </div>
+                    <div class="hero-highlights">
+                        <div class="highlight-card">
+                            <p>Total Chats</p>
+                            <strong>{{ total_chats }}</strong>
+                            <span>Conversations across all sessions</span>
+                        </div>
+                        <div class="highlight-card">
+                            <p>Files Uploaded</p>
+                            <strong>{{ files_uploaded }}</strong>
+                            <span>Ready for retrieval &amp; context</span>
+                        </div>
+                    </div>
+                    <div class="hero-sparkline" aria-hidden="true">
+                        <span class="spark-dot"></span>
+                        <span class="spark-dot"></span>
+                        <span class="spark-dot"></span>
+                        <span class="spark-dot"></span>
+                        <span class="spark-dot"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <section class="dashboard-quick-actions">
+            {% for action in quick_actions %}
+                <a href="{{ action.href }}" class="quick-card">
+                    <div class="quick-icon"><i class="{{ action.icon }}"></i></div>
+                    <div>
+                        <p class="quick-title">{{ action.title }}</p>
+                        <p class="quick-desc">{{ action.description }}</p>
+                    </div>
+                </a>
+            {% endfor %}
+        </section>
+
+        <section class="dashboard-main-grid">
+            <div class="panel recent-sessions">
+                <div class="panel-header">
+                    <h3>Recent sessions</h3>
+                    <a href="{{ url_for('pages.index') }}#history">View all</a>
+                </div>
+                <ul>
+                    {% if recent_sessions %}
+                        {% for session_item in recent_sessions %}
+                        <li>
+                            <div class="session-meta">
+                                <h4>{{ session_item.name }}</h4>
+                                <span>{{ session_item.updated_at }}</span>
+                            </div>
+                            <p>{{ session_item.preview }}</p>
+                        </li>
+                        {% endfor %}
+                    {% else %}
+                        <li class="empty">No conversations yet.</li>
+                    {% endif %}
+                </ul>
+            </div>
+            <div class="panel files-feed">
+                <div class="panel-header">
+                    <h3>Recent files</h3>
+                </div>
+                <ul>
+                    {% if files_feed %}
+                        {% for file_item in files_feed %}
+                        <li>
+                            <div>
+                                <strong>{{ file_item.name }}</strong>
+                                <span>{{ file_item.session_name }}</span>
+                            </div>
+                            <div class="file-meta">
+                                <span>{{ file_item.size }}</span>
+                                <span>{{ file_item.uploaded_at }}</span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    {% else %}
+                        <li class="empty">Upload a file to get started.</li>
+                    {% endif %}
+                </ul>
+            </div>
+            <div class="panel notifications-feed">
+                <div class="panel-header">
+                    <h3>Notifications</h3>
+                </div>
+                <ul>
+                    {% if notifications %}
+                        {% for note in notifications %}
+                        <li>
+                            <i class="{{ note.icon }}"></i>
+                            <div>
+                                <p>{{ note.text }}</p>
+                                <span>{{ note.time }}</span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    {% else %}
+                        <li class="empty">No new notifications.</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // --- Dropdown Menu Logic ---
+    const profileHeader = document.querySelector('.profile-header');
+    const dropdownMenu = document.querySelector('.dropdown-menu');
+    const profileModal = document.getElementById('profile-modal');
+    const openProfileModalBtn = document.getElementById('open-profile-modal');
+    const profileModalForm = document.getElementById('profile-modal-form');
+    const profileModalStatus = document.getElementById('profile-modal-status');
+    const profileModalCloseEls = document.querySelectorAll('[data-profile-close]');
+    let lastFocusedElement = null;
+
+    if (profileHeader && dropdownMenu) {
+        profileHeader.addEventListener('click', (event) => {
+            event.stopPropagation();
+            dropdownMenu.classList.toggle('active');
+            profileHeader.setAttribute('aria-expanded', dropdownMenu.classList.contains('active'));
+        });
+
+        document.addEventListener('click', (event) => {
+            if (dropdownMenu.classList.contains('active') && 
+                !profileHeader.contains(event.target) && 
+                !dropdownMenu.contains(event.target)) {
+                dropdownMenu.classList.remove('active');
+                profileHeader.setAttribute('aria-expanded', 'false');
+            }
+        });
+        // Keyboard navigation for dropdown
+        profileHeader.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                profileHeader.click(); // Simulate click to toggle
+            } else if (event.key === 'Escape' && dropdownMenu.classList.contains('active')) {
+                dropdownMenu.classList.remove('active');
+                profileHeader.setAttribute('aria-expanded', 'false');
+                profileHeader.focus();
+            }
+        });
+
+        dropdownMenu.addEventListener('keydown', (event) => {
+            const focusableElements = dropdownMenu.querySelectorAll('a[role="menuitem"]');
+            if (focusableElements.length === 0) return;
+
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements[focusableElements.length - 1];
+
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                const focused = document.activeElement;
+                if (focused === lastElement) {
+                    firstElement.focus();
+                } else if (focused.closest('.dropdown-menu')) {
+                    const next = Array.from(focusableElements).indexOf(focused) + 1;
+                    focusableElements[next].focus();
+                } else {
+                    firstElement.focus();
+                }
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                const focused = document.activeElement;
+                if (focused === firstElement) {
+                    lastElement.focus();
+                } else if (focused.closest('.dropdown-menu')) {
+                    const prev = Array.from(focusableElements).indexOf(focused) - 1;
+                    focusableElements[prev].focus();
+                } else {
+                    lastElement.focus();
+                }
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                dropdownMenu.classList.remove('active');
+                profileHeader.setAttribute('aria-expanded', 'false');
+                profileHeader.focus();
+            }
+        });
+    }
+
+    const openProfileModal = () => {
+        if (!profileModal) return;
+        lastFocusedElement = document.activeElement;
+        profileModal.classList.add('open');
+        profileModal.setAttribute('aria-hidden', 'false');
+        const firstInput = profileModal.querySelector('input[name=\"display_name\"]');
+        if (firstInput) firstInput.focus();
+    };
+
+    const closeProfileModal = () => {
+        if (!profileModal) return;
+        profileModal.classList.remove('open');
+        profileModal.setAttribute('aria-hidden', 'true');
+        if (lastFocusedElement) {
+            lastFocusedElement.focus();
+        }
+    };
+
+    if (openProfileModalBtn) {
+        openProfileModalBtn.addEventListener('click', openProfileModal);
+    }
+
+    profileModalCloseEls.forEach((el) => {
+        el.addEventListener('click', closeProfileModal);
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && profileModal && profileModal.classList.contains('open')) {
+            closeProfileModal();
+        }
+    });
+
+    const loadStoredProfilePrefs = () => {
+        if (!profileModalForm) return;
+        try {
+            const stored = localStorage.getItem('xelaProfilePrefs');
+            if (!stored) return;
+            const prefs = JSON.parse(stored);
+            if (prefs.display_name && profileModalForm.elements['display_name']) {
+                profileModalForm.elements['display_name'].value = prefs.display_name;
+            }
+            if (prefs.tagline && profileModalForm.elements['tagline']) {
+                profileModalForm.elements['tagline'].value = prefs.tagline;
+            }
+            if (prefs.preferred_model && profileModalForm.elements['preferred_model']) {
+                profileModalForm.elements['preferred_model'].value = prefs.preferred_model;
+            }
+            if (typeof prefs.show_email === 'boolean') {
+                profileModalForm.querySelector('input[name=\"show_email\"]').checked = prefs.show_email;
+            }
+            if (typeof prefs.enable_insights === 'boolean') {
+                profileModalForm.querySelector('input[name=\"enable_insights\"]').checked = prefs.enable_insights;
+            }
+            if (typeof prefs.dark_theme === 'boolean') {
+                profileModalForm.querySelector('input[name=\"dark_theme\"]').checked = prefs.dark_theme;
+            }
+        } catch (err) {
+            console.warn('Failed to load stored profile preferences', err);
+        }
+    };
+
+    loadStoredProfilePrefs();
+
+    if (profileModalForm) {
+        profileModalForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const formData = new FormData(profileModalForm);
+            const payload = Object.fromEntries(formData.entries());
+            payload.show_email = profileModalForm.querySelector('input[name=\"show_email\"]').checked;
+            payload.enable_insights = profileModalForm.querySelector('input[name=\"enable_insights\"]').checked;
+            payload.dark_theme = profileModalForm.querySelector('input[name=\"dark_theme\"]').checked;
+            try {
+                localStorage.setItem('xelaProfilePrefs', JSON.stringify(payload));
+                if (profileModalStatus) {
+                    const stamp = new Date().toLocaleTimeString();
+                    profileModalStatus.textContent = `Preferences saved for this browser • ${stamp}`;
+                }
+            } catch (err) {
+                console.warn('Failed to store profile preferences', err);
+                if (profileModalStatus) {
+                    profileModalStatus.textContent = 'Unable to save preferences in this browser.';
+                }
+            }
+        });
+    }
+});
+</script>
+
+</body>
+</html>

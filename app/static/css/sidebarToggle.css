@@ -1,0 +1,90 @@
+/* --- Toggle Button --- */
+.toggle-button {
+    --button-size: 40px;
+    --line-width: 2.5px;
+    --line-height: 10px;
+    --line-color: rgb(110, 110, 110);
+    --line-color-hover: rgb(255, 255, 255);
+    --transition-timing: cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    
+    position: fixed;
+    top: 50%;
+    left: calc(var(--sidebar-width, 260px) + 0.5rem);
+    transform: translateY(-50%);
+    width: var(--button-size);
+    height: var(--button-size);
+    background-color: transparent;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    cursor: pointer;
+    transition: left 0.3s var(--transition-timing);
+    /* Add GPU acceleration */
+    will-change: transform;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+.toggle-button::before,
+.toggle-button::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--line-width);
+    height: var(--line-height);
+    background-color: var(--line-color);
+    transform-origin: 50% 50%;
+    transition: 
+        transform 0.3s var(--transition-timing),
+        background-color 0.2s ease;
+}
+
+.toggle-button::before {
+    transform: translate(-50%, calc(-1 * var(--line-height)));
+}
+
+.toggle-button::after {
+    transform: translate(-50%, 0);
+}
+
+/* Hover states */
+.toggle-button:hover::before,
+.toggle-button.closed-hover::before {
+    transform: translate(-50%, calc(-1 * var(--line-height))) rotate(-17deg);
+    background-color: var(--line-color-hover);
+}
+
+.toggle-button:hover::after,
+.toggle-button.closed-hover::after {
+    transform: translate(-50%, 0) rotate(17deg);
+    background-color: var(--line-color-hover);
+}
+
+/* Open state hover */
+.toggle-button.open:hover::before {
+    transform: translate(-50%, calc(-1 * var(--line-height))) rotate(17deg);
+}
+
+.toggle-button.open:hover::after {
+    transform: translate(-50%, 0) rotate(-17deg);
+}
+
+
+/* Add touch device optimizations */
+@media (hover: none) {
+    .toggle-button {
+        --button-size: 48px; /* Larger touch target */
+    }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+    .toggle-button,
+    .toggle-button::before,
+    .toggle-button::after {
+        transition-duration: 0.1s;
+    }
+}

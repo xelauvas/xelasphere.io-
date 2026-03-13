@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Animated Background -->
+<div class="login-page-background"></div>
+
+<div class="login-page-container">
+    <div class="login-card">
+        <!-- Brand Header -->
+        <div class="login-brand">
+            <a href="/" title="Go to Home">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="xelaSphere" class="brand-logo-img">
+            </a>
+        </div>
+
+        <!-- Page Header -->
+        <div class="login-header">
+            <h2 class="login-title">Welcome back</h2>
+            <p class="login-subtitle">Sign in to continue</p>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages-container">
+              {% for category, message in messages %}
+                <div class="flash-alert flash-alert-{{ category }}" role="alert" aria-live="polite">
+                    <span class="flash-icon">
+                        {% if category == 'danger' or category == 'error' %}
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M10 6V11M10 14H10.01M19 10C19 14.9706 14.9706 19 10 19C5.02944 19 1 14.9706 1 10C1 5.02944 5.02944 1 10 1C14.9706 1 19 5.02944 19 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        {% elif category == 'success' %}
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 10L8.5 12.5L14 7M19 10C19 14.9706 14.9706 19 10 19C5.02944 19 1 14.9706 1 10C1 5.02944 5.02944 1 10 1C14.9706 1 19 5.02944 19 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        {% else %}
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M10 6V11M10 14H10.01M19 10C19 14.9706 14.9706 19 10 19C5.02944 19 1 14.9706 1 10C1 5.02944 5.02944 1 10 1C14.9706 1 19 5.02944 19 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        {% endif %}
+                    </span>
+                    <span class="flash-message">{{ message|sanitize_flash }}</span>
+                    <button type="button" class="flash-close" aria-label="Close" data-dismiss="alert">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M13 1L1 13M1 1L13 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <!-- Social Login Options -->
+        <div class="social-login-section">
+            <div class="social-buttons">
+                <a href="#" class="social-btn" aria-label="Sign in with Apple" title="Sign in with Apple">
+                    <img src="{{ url_for('static', filename='images/apple.svg') }}" alt="" width="20" height="20">
+                </a>
+                <a href="{{ url_for('auth_routes.discord_login') }}" class="social-btn" aria-label="Sign in with Discord" title="Sign in with Discord">
+                    <img src="{{ url_for('static', filename='images/discord.svg') }}" alt="" width="20" height="20">
+                </a>
+                <a href="{{ url_for('auth_routes.google_login') }}" class="social-btn" aria-label="Sign in with Google" title="Sign in with Google">
+                    <img src="{{ url_for('static', filename='images/google.svg') }}" alt="" width="20" height="20">
+                </a>
+                <a href="{{ url_for('auth_routes.microsoft_login') }}" class="social-btn" aria-label="Sign in with Microsoft" title="Sign in with Microsoft">
+                    <img src="{{ url_for('static', filename='images/microsoft.svg') }}" alt="" width="20" height="20">
+                </a>
+            </div>
+        </div>
+
+        <!-- Separator -->
+        <div class="login-separator">
+            <span>or</span>
+        </div>
+
+        <!-- Login Form -->
+        <form action="{{ url_for('auth_routes.login') }}" method="post" class="login-form" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <!-- Email Field -->
+            <div class="form-group">
+                <label for="email" class="form-label visually-hidden">Email address</label>
+                <input
+                    type="email"
+                    class="form-input"
+                    id="email"
+                    name="email"
+                    placeholder="Email address"
+                    required
+                    autocomplete="email"
+                    spellcheck="false"
+                >
+            </div>
+
+            <!-- Password Field -->
+            <div class="form-group">
+                <label for="password" class="form-label visually-hidden">Password</label>
+                <input
+                    type="password"
+                    class="form-input"
+                    id="password"
+                    name="password"
+                    placeholder="Password"
+                    required
+                    autocomplete="current-password"
+                >
+                <a href="{{ url_for('auth_routes.reset_password') }}" class="forgot-password-link">Forgot password?</a>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" class="submit-btn">
+                <span class="submit-text">Continue</span>
+                <svg class="submit-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 3L11 8L6 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </form>
+
+        <!-- Footer Links -->
+        <div class="login-footer">
+            <p class="legal-text">
+                By continuing, you agree to our
+                <a href="#">Terms of Service</a> and
+                <a href="#">Privacy Policy</a>
+            </p>
+            <div class="register-link-container">
+                <span class="register-prompt">Don't have an account?</span>
+                <a href="{{ url_for('auth_routes.register') }}" class="register-link">Create account</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/closeAlert.js') }}"></script>
+<script>
+    // Enhanced form interaction
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('.login-form');
+        const inputs = document.querySelectorAll('.form-input');
+        const submitBtn = document.querySelector('.submit-btn');
+
+        // Add focus animation class to inputs
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                this.parentElement.classList.add('focused');
+            });
+
+            input.addEventListener('blur', function() {
+                this.parentElement.classList.remove('focused');
+            });
+        });
+
+        // Form submission with loading state
+        form.addEventListener('submit', function(e) {
+            if (!form.checkValidity()) {
+                e.preventDefault();
+                inputs.forEach(input => {
+                    if (!input.validity.valid) {
+                        input.classList.add('invalid');
+                    }
+                });
+                return;
+            }
+
+            submitBtn.classList.add('loading');
+            submitBtn.disabled = true;
+        });
+
+        // Remove invalid class on input
+        inputs.forEach(input => {
+            input.addEventListener('input', function() {
+                this.classList.remove('invalid');
+            });
+        });
+
+        // Flash message auto-dismiss
+        const flashAlerts = document.querySelectorAll('.flash-alert');
+        flashAlerts.forEach(alert => {
+            // Auto-dismiss after 5 seconds for success messages
+            if (alert.classList.contains('flash-alert-success')) {
+                setTimeout(() => {
+                    alert.style.animation = 'slideOut 300ms ease-out forwards';
+                    setTimeout(() => alert.remove(), 300);
+                }, 5000);
+            }
+        });
+
+        // Close button functionality
+        document.querySelectorAll('.flash-close').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const alert = this.closest('.flash-alert');
+                alert.style.animation = 'slideOut 300ms ease-out forwards';
+                setTimeout(() => alert.remove(), 300);
+            });
+        });
+    });
+</script>
+{% endblock %}

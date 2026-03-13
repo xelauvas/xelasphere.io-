@@ -1,0 +1,532 @@
+/* ==========================================================================
+   RESPONSIVE FOUNDATION - Mobile-First Design System
+   ==========================================================================
+
+   BREAKPOINT SYSTEM (Mobile-First):
+   - Base styles: 0px+ (mobile phones)
+   - sm: 480px+ (large phones)
+   - md: 600px+ (small tablets)
+   - lg: 768px+ (tablets)
+   - xl: 1024px+ (small desktops)
+   - 2xl: 1200px+ (large desktops)
+   - 3xl: 1440px+ (extra large screens)
+   - tv: 1920px+ (TV/large displays)
+
+   TOUCH TARGETS: Minimum 44x44px (WCAG 2.1 AA)
+   SAFE AREAS: env() for notched devices
+   ========================================================================== */
+
+:root {
+    /* ===== BREAKPOINT VARIABLES ===== */
+    --bp-sm: 480px;
+    --bp-md: 600px;
+    --bp-lg: 768px;
+    --bp-xl: 1024px;
+    --bp-2xl: 1200px;
+    --bp-3xl: 1440px;
+    --bp-tv: 1920px;
+
+    /* ===== SPACING SCALE (Mobile-First) ===== */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-7: 32px;
+    --space-8: 40px;
+    --space-9: 48px;
+    --space-10: 64px;
+
+    /* ===== TOUCH TARGETS ===== */
+    --touch-target-min: 44px;
+    --touch-target-comfortable: 48px;
+    --touch-target-large: 56px;
+
+    /* ===== FLUID TYPOGRAPHY ===== */
+    /* clamp(min, preferred, max) - scales smoothly between breakpoints */
+    --font-xs: clamp(0.6875rem, 0.625rem + 0.25vw, 0.75rem);      /* 11-12px */
+    --font-sm: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);          /* 12-14px */
+    --font-base: clamp(0.875rem, 0.8rem + 0.375vw, 1rem);          /* 14-16px */
+    --font-md: clamp(1rem, 0.9rem + 0.5vw, 1.125rem);              /* 16-18px */
+    --font-lg: clamp(1.125rem, 1rem + 0.625vw, 1.25rem);           /* 18-20px */
+    --font-xl: clamp(1.25rem, 1.1rem + 0.75vw, 1.5rem);            /* 20-24px */
+    --font-2xl: clamp(1.5rem, 1.3rem + 1vw, 1.875rem);             /* 24-30px */
+    --font-3xl: clamp(1.875rem, 1.5rem + 1.875vw, 2.5rem);         /* 30-40px */
+    --font-4xl: clamp(2.25rem, 1.75rem + 2.5vw, 3rem);             /* 36-48px */
+
+    /* ===== FLUID SPACING ===== */
+    --space-fluid-sm: clamp(8px, 1vw + 4px, 16px);
+    --space-fluid-md: clamp(12px, 2vw + 4px, 24px);
+    --space-fluid-lg: clamp(16px, 3vw + 4px, 32px);
+    --space-fluid-xl: clamp(24px, 4vw + 8px, 48px);
+
+    /* ===== CONTAINER WIDTHS ===== */
+    --container-sm: 540px;
+    --container-md: 720px;
+    --container-lg: 960px;
+    --container-xl: 1140px;
+    --container-2xl: 1320px;
+
+    /* ===== SAFE VIEWPORT WIDTH (accounts for scrollbar) ===== */
+    --viewport-width: calc(100vw - var(--scrollbar-width, 0px));
+
+    /* ===== SAFE AREAS (for notched devices) ===== */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+
+    /* ===== Z-INDEX SCALE (Organized) ===== */
+    --z-below: -1;
+    --z-base: 0;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-fixed: 300;
+    --z-sidebar: 400;
+    --z-header: 500;
+    --z-overlay: 600;
+    --z-modal: 700;
+    --z-popover: 800;
+    --z-tooltip: 900;
+    --z-toast: 1000;
+    --z-max: 9999;
+}
+
+/* ===== SCROLLBAR WIDTH DETECTION ===== */
+@supports (scrollbar-gutter: stable) {
+    :root {
+        --scrollbar-width: 0px;
+    }
+
+    html {
+        scrollbar-gutter: stable;
+    }
+}
+
+/* Fallback for browsers without scrollbar-gutter */
+@supports not (scrollbar-gutter: stable) {
+    :root {
+        /* Approximate scrollbar width - will be refined by JS if needed */
+        --scrollbar-width: 15px;
+    }
+}
+
+/* ===== BASE MOBILE STYLES (0px+) ===== */
+html {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    font-size: var(--font-base);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== TOUCH-FRIENDLY INTERACTIVE ELEMENTS ===== */
+button,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+.btn,
+.button {
+    min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+    padding: var(--space-2) var(--space-4);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+}
+
+/* Links and clickable areas */
+a,
+.clickable {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Form inputs */
+input,
+select,
+textarea {
+    min-height: var(--touch-target-min);
+    font-size: 16px; /* Prevents iOS zoom on focus */
+    touch-action: manipulation;
+}
+
+/* Checkbox and radio containers */
+input[type="checkbox"],
+input[type="radio"] {
+    min-width: 20px;
+    min-height: 20px;
+}
+
+/* Make checkbox/radio containers touch-friendly */
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]),
+.checkbox-label,
+.radio-label {
+    min-height: var(--touch-target-min);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    cursor: pointer;
+}
+
+/* ===== SAFE VIEWPORT HELPERS ===== */
+.full-width {
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Use this instead of 100vw to avoid horizontal scroll */
+.viewport-width {
+    width: var(--viewport-width);
+    max-width: 100%;
+}
+
+/* Safe full-screen container */
+.full-screen {
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile */
+}
+
+/* ===== SAFE AREA PADDING ===== */
+.safe-padding {
+    padding-top: max(var(--space-4), var(--safe-top));
+    padding-right: max(var(--space-4), var(--safe-right));
+    padding-bottom: max(var(--space-4), var(--safe-bottom));
+    padding-left: max(var(--space-4), var(--safe-left));
+}
+
+.safe-padding-top {
+    padding-top: max(var(--space-4), var(--safe-top));
+}
+
+.safe-padding-bottom {
+    padding-bottom: max(var(--space-4), var(--safe-bottom));
+}
+
+.safe-padding-horizontal {
+    padding-left: max(var(--space-4), var(--safe-left));
+    padding-right: max(var(--space-4), var(--safe-right));
+}
+
+/* ===== RESPONSIVE CONTAINERS ===== */
+.container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+}
+
+/* ===== RESPONSIVE VISIBILITY ===== */
+/* Hide on mobile (show on tablet+) */
+.hide-mobile {
+    display: none !important;
+}
+
+/* Show only on mobile */
+.show-mobile {
+    display: block !important;
+}
+
+.show-mobile-flex {
+    display: flex !important;
+}
+
+.show-mobile-inline {
+    display: inline !important;
+}
+
+/* ===== RESPONSIVE GRID ===== */
+.grid-responsive {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: 1fr;
+}
+
+/* ===== RESPONSIVE FLEX ===== */
+.flex-responsive {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+/* ===== DROPDOWN SAFETY ===== */
+.dropdown-menu,
+[class*="dropdown"],
+.menu,
+.popup {
+    max-width: calc(100vw - var(--space-4) * 2);
+    max-width: calc(var(--viewport-width) - var(--space-4) * 2);
+}
+
+/* ===== MODAL SAFETY ===== */
+.modal,
+.dialog,
+[role="dialog"] {
+    max-width: calc(100vw - var(--space-4) * 2);
+    max-height: calc(100vh - var(--space-4) * 2);
+    max-height: calc(100dvh - var(--space-4) * 2);
+    overflow: auto;
+}
+
+/* ==========================================================================
+   SMALL PHONES (480px+)
+   ========================================================================== */
+@media (min-width: 480px) {
+    :root {
+        --space-4: 16px;
+        --space-6: 28px;
+    }
+
+    .container {
+        max-width: var(--container-sm);
+    }
+
+    .grid-responsive {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* ==========================================================================
+   SMALL TABLETS (600px+)
+   ========================================================================== */
+@media (min-width: 600px) {
+    :root {
+        --space-4: 18px;
+        --space-6: 32px;
+    }
+
+    .container {
+        max-width: var(--container-md);
+        padding-left: var(--space-6);
+        padding-right: var(--space-6);
+    }
+
+    .hide-mobile {
+        display: block !important;
+    }
+
+    .hide-mobile-flex {
+        display: flex !important;
+    }
+
+    .show-mobile,
+    .show-mobile-flex,
+    .show-mobile-inline {
+        display: none !important;
+    }
+
+    /* Hide on tablet+ */
+    .hide-tablet {
+        display: none !important;
+    }
+}
+
+/* ==========================================================================
+   TABLETS (768px+)
+   ========================================================================== */
+@media (min-width: 768px) {
+    :root {
+        --touch-target-min: 40px; /* Slightly smaller on tablet with stylus/mouse */
+    }
+
+    .container {
+        max-width: var(--container-lg);
+    }
+
+    .grid-responsive {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .flex-responsive {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    /* Show elements hidden on tablet */
+    .hide-tablet {
+        display: block !important;
+    }
+
+    .hide-tablet-flex {
+        display: flex !important;
+    }
+
+    /* Hide on desktop+ */
+    .hide-desktop {
+        display: none !important;
+    }
+}
+
+/* ==========================================================================
+   SMALL DESKTOPS (1024px+)
+   ========================================================================== */
+@media (min-width: 1024px) {
+    :root {
+        --touch-target-min: 36px; /* Mouse users need less padding */
+    }
+
+    .container {
+        max-width: var(--container-xl);
+    }
+
+    .grid-responsive {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .hide-desktop {
+        display: block !important;
+    }
+
+    .hide-desktop-flex {
+        display: flex !important;
+    }
+}
+
+/* ==========================================================================
+   LARGE DESKTOPS (1200px+)
+   ========================================================================== */
+@media (min-width: 1200px) {
+    .container {
+        max-width: var(--container-2xl);
+    }
+
+    .grid-responsive {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* ==========================================================================
+   EXTRA LARGE (1440px+)
+   ========================================================================== */
+@media (min-width: 1440px) {
+    :root {
+        --space-4: 20px;
+        --space-6: 36px;
+    }
+}
+
+/* ==========================================================================
+   TV / LARGE DISPLAYS (1920px+)
+   ========================================================================== */
+@media (min-width: 1920px) {
+    :root {
+        /* Larger typography for 10-foot UI */
+        --font-base: clamp(1rem, 0.9rem + 0.5vw, 1.25rem);
+        --font-md: clamp(1.125rem, 1rem + 0.625vw, 1.5rem);
+        --font-lg: clamp(1.25rem, 1.1rem + 0.75vw, 1.75rem);
+
+        /* Larger touch targets for remote/gesture control */
+        --touch-target-min: 56px;
+        --touch-target-comfortable: 64px;
+
+        /* More generous spacing */
+        --space-4: 24px;
+        --space-6: 40px;
+        --space-8: 56px;
+    }
+
+    .container {
+        max-width: 1600px;
+    }
+
+    /* TV-optimized focus states */
+    button:focus,
+    a:focus,
+    [tabindex]:focus {
+        outline: 3px solid currentColor;
+        outline-offset: 4px;
+    }
+}
+
+/* ==========================================================================
+   4K DISPLAYS (2560px+)
+   ========================================================================== */
+@media (min-width: 2560px) {
+    :root {
+        --font-base: clamp(1.125rem, 1rem + 0.5vw, 1.5rem);
+        --touch-target-min: 64px;
+        --space-4: 28px;
+        --space-6: 48px;
+    }
+
+    .container {
+        max-width: 2000px;
+    }
+}
+
+/* ==========================================================================
+   LANDSCAPE PHONE (short height, wide)
+   ========================================================================== */
+@media (max-height: 500px) and (orientation: landscape) {
+    :root {
+        --touch-target-min: 40px;
+        --space-4: 12px;
+        --space-6: 20px;
+    }
+
+    /* Reduce vertical padding in landscape */
+    .safe-padding-top,
+    .safe-padding-bottom {
+        padding-top: var(--space-2);
+        padding-bottom: var(--space-2);
+    }
+}
+
+/* ==========================================================================
+   ACCESSIBILITY: REDUCED MOTION
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ==========================================================================
+   ACCESSIBILITY: HIGH CONTRAST
+   ========================================================================== */
+@media (prefers-contrast: high) {
+    :root {
+        --border-width: 2px;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+        border-width: 2px;
+    }
+}
+
+/* ==========================================================================
+   PRINT STYLES
+   ========================================================================== */
+@media print {
+    .hide-print {
+        display: none !important;
+    }
+
+    .container {
+        max-width: 100%;
+    }
+
+    body {
+        font-size: 12pt;
+    }
+}

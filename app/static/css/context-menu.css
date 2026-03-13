@@ -1,0 +1,19 @@
+/**
+ * Mobile Long-Press Visual Feedback
+ * Styles for the hold gesture before menu opens
+ */
+
+/* ===== Chat Tab Holding State ===== */
+.chat-tab.holding {
+    transform: scale(0.98);
+    opacity: 0.8;
+    transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+/* ===== Reduced Motion ===== */
+@media (prefers-reduced-motion: reduce) {
+    .chat-tab.holding {
+        transition: opacity 0.1s ease;
+        transform: none;
+    }
+}

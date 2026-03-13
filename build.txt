@@ -1,0 +1,350 @@
+🧠 FULL CODEX PROMPT
+Build a Universal “Claude-Style Artifacts” System (All Languages)
+
+You are working inside my existing chat application repository. Your task is to design and implement a Claude-style Artifacts system that allows the assistant to generate structured, multi-file outputs (artifacts) in any programming language, store them with version history, and render them in a dedicated side panel with previews when possible.
+
+This is a core product feature. Treat it as production software, not a demo.
+
+0) Primary Goal (read carefully)
+
+When a user asks the assistant to “build”, “create”, “generate”, or “write” code/projects/files, the assistant can respond with a single structured artifact block containing files (any language). The app must:
+
+Parse that artifact safely
+
+Persist it as a versioned project
+
+Display it in a Claude-like Artifacts panel
+
+Render previews when safe (HTML, Markdown, etc.)
+
+Support iteration (each new artifact output = new version)
+
+Work for ALL languages, not just HTML/CSS/JS
+
+No fragile hacks. No language assumptions.
+
+1) Repo inspection & constraints
+
+Before coding:
+
+Inspect the repo to determine:
+
+Frontend framework (Next.js / React / Vue / Svelte / plain)
+
+Backend (API routes, server, DB, auth)
+
+State management & data fetching patterns
+
+Styling system (Tailwind, CSS modules, etc.)
+
+Follow existing conventions:
+
+Component structure
+
+API patterns
+
+Database access patterns
+
+File naming
+
+Do NOT introduce large frameworks unless necessary.
+
+Keep all changes backward-compatible with existing chats.
+
+2) Core concepts & terminology
+
+Artifact
+A logical project created by the assistant (e.g., “Portfolio Website”, “Rust CLI Tool”).
+
+ArtifactVersion
+A snapshot of all files at a point in time (v1, v2, v3…).
+
+ArtifactFile
+One file inside a version (main.py, README.md, etc.).
+
+Each chat thread may have 0 or 1 active artifact, but many versions.
+
+3) Data model (language-agnostic)
+
+Implement persistent storage using the app’s existing DB (preferred).
+If none exists, implement a simple, replaceable storage layer.
+
+Artifact
+
+id (uuid)
+
+title (string)
+
+chatId (string)
+
+createdAt
+
+updatedAt
+
+entrypointPath (optional, e.g. README.md, index.html)
+
+meta (json, optional)
+
+example: { "language": "python", "run": "python main.py" }
+
+ArtifactVersion
+
+id
+
+artifactId
+
+versionNumber (int, starting at 1)
+
+createdAt
+
+sourceMessageId
+
+files: ArtifactFile[]
+
+ArtifactFile
+
+path (string, POSIX style)
+
+language (string: python, go, rust, markdown, etc.)
+
+content (string)
+
+isBinary (bool, default false)
+
+mime (optional)
+
+Add indexes where appropriate.
+
+4) Assistant → App contract (CRITICAL)
+
+The assistant must emit artifacts in one strict format.
+
+Artifact block format
+
+The assistant outputs exactly one fenced block:
+
+```artifact
+{
+  "title": "Project Name",
+  "entrypoint": "README.md",
+  "files": [
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "content": "# Project\n..."
+    },
+    {
+      "path": "src/main.py",
+      "language": "python",
+      "content": "print('hello')"
+    }
+  ],
+  "meta": {
+    "runtime": "python",
+    "run": "python src/main.py"
+  }
+}
+
+
+### Parsing rules
+- Artifact block **must be valid JSON**
+- No text before or after the block
+- Reject paths containing `..` or absolute paths
+- Enforce max size limits (files + total bytes)
+- Enforce unique file paths
+
+### Behavior
+- If an artifact exists for the chat → create a new version
+- If none exists → create artifact + version v1
+- Parsing failures must NOT break chat UI
+
+---
+
+## 5) Assistant system prompt update
+
+Update the system prompt used by the app:
+
+- When the user asks to build code/projects/files:
+  - Respond ONLY with one artifact block
+  - No prose, no explanations
+  - Always output full files (never diffs)
+- For edits:
+  - Output a full updated artifact block
+  - This creates a new version
+
+---
+
+## 6) Artifact panel UI (Claude-style)
+
+### Layout
+- Desktop:
+  - Left: chat
+  - Right: artifact panel (resizable if possible)
+- Mobile:
+  - Drawer or modal
+
+### Panel structure
+**Header**
+- Artifact title
+- Version selector (v1, v2, v3…)
+- “Download ZIP” button
+
+**Tabs**
+1. Preview
+2. Code
+3. Info
+
+---
+
+## 7) Code tab (universal)
+- File tree with folders
+- Syntax-highlighted viewer (Monaco or CodeMirror)
+- Read-only for MVP
+- Copy file / Copy all buttons
+
+---
+
+## 8) Preview system (pluggable renderers)
+
+Implement a renderer registry:
+
+### Renderer selection logic
+1. If entrypoint is `.html` OR `index.html` exists → HTML renderer
+2. Else if entrypoint is `.md` → Markdown renderer
+3. Else → Plain text renderer (README-style)
+
+### HTML renderer
+- Compose a single HTML document
+- Inline CSS + JS
+- Render in:
+  ```html
+  <iframe sandbox="allow-scripts">
+
+
+No same-origin, no navigation
+
+Markdown renderer
+
+Render markdown to HTML
+
+Sanitize output
+
+Support basic GitHub-style markdown
+
+Plain renderer
+
+Show entrypoint file in readable format
+
+⚠️ Do NOT execute non-web code (Python, Go, Rust, etc.) in MVP.
+
+9) ZIP export
+
+Download current version as ZIP
+
+Preserve folder structure
+
+Implement client-side or API-based
+
+10) Chat flow integration
+
+Detect artifact blocks in assistant messages
+
+Persist automatically
+
+Panel opens automatically when artifact exists
+
+Switching versions updates preview & code
+
+Optional:
+
+“Generate as Artifact” toggle in composer
+
+Suggestion chip when intent detected
+
+11) API layer (if applicable)
+
+Implement endpoints or equivalents:
+
+GET /api/artifacts?chatId=
+
+GET /api/artifacts/:id
+
+GET /api/artifacts/:id/versions
+
+POST /api/artifacts/from-message
+
+GET /api/artifacts/:id/versions/:versionId/zip
+
+12) Security & safety (mandatory)
+
+iframe sandboxing
+
+Markdown sanitization
+
+File path validation
+
+Size limits
+
+No code execution
+
+No filesystem access
+
+13) Testing
+
+Add tests for:
+
+Artifact parsing
+
+Versioning logic
+
+Renderer selection
+
+ZIP export
+
+UI rendering does not crash on malformed input
+
+14) Documentation
+
+Update README:
+
+What artifacts are
+
+How to trigger them
+
+Supported previews
+
+How to extend renderers
+
+15) Execution order
+
+Inspect repo
+
+Add models/storage
+
+Add parser
+
+Add assistant prompt rules
+
+Build artifact panel UI
+
+Add renderers
+
+Add ZIP export
+
+Tests + docs
+
+Final requirement
+
+This must feel Claude-quality:
+
+Clean UX
+
+Safe
+
+Deterministic
+
+Extensible
+
+Language-agnostic
+
+Proceed now.
