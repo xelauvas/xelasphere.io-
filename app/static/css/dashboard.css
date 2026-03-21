@@ -1017,21 +1017,25 @@
 
 /* Specific styling for sidebar footer profile */
 .sidebar-footer .profile-header {
-    padding: 0.5rem 0.75rem; /* Adjust padding for sidebar context */
-    border-radius: var(--border-radius-md); /* Match general card radius */
-    width: 100%; /* Make it take full width of footer */
-    justify-content: center; /* Center content horizontally */
-    box-sizing: border-box; /* Include padding in width */
-    position: relative; /* Ensure it's a positioning context for the dropdown-container */
+    padding: 0.5rem 0.5rem;
+    border-radius: 0.5rem;
+    width: 100%;
+    justify-content: flex-start;
+    box-sizing: border-box;
+    position: relative;
+    gap: 0.5rem;
 }
 
 .sidebar-footer .profile-image {
-    width: 28px; /* Slightly smaller for sidebar */
-    height: 28px;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
 }
 
 .sidebar-footer .profile-name {
-    font-size: 0.9rem; /* Smaller font for sidebar */
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.85);
 }
 
 /* Adjust dropdown position for sidebar footer */

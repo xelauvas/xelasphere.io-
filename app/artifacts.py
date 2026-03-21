@@ -1777,4 +1777,158 @@ __all__ = [
     "sanitize_code_artifact",
     # Constants
     "CODE_WINDOW_MAX_LINES",
+    # Helpers migrated from views.py
+    "ARTIFACT_UPDATE_PATTERNS",
+    "detect_artifact_update_intent",
+    "load_current_artifact_context",
+    "delete_local_attachments",
 ]
+
+
+# ==================== Artifact update detection (migrated from views.py) ====================
+
+ARTIFACT_UPDATE_PATTERNS = [
+    # Direct action on artifact/code
+    r"\b(?:fix|update|correct|change|modify|edit|revise|improve|refactor)\s+(?:the\s+)?(?:artifact|code|bug|error|issue|css|style|layout|design|app)\b",
+    # "fix this/that/it"
+    r"\b(?:fix|correct|resolve|update)\s+(?:this|that|it|the)\b",
+    # "update the artifact/code"
+    r"\bupdat\w*\s+(?:the\s+)?(?:artifact|code|version|my)\b",
+    # Polite requests
+    r"\b(?:can you|please|could you)\s+(?:fix|update|correct|change|modify)\b",
+    # Technical fixes
+    r"\bfix\s+(?:the\s+)?(?:syntax|babel|runtime|compile|css|style|render)\s*(?:error|issue)?\b",
+    # "make it work/better"
+    r"\bmake\s+(?:it|the\s+\w+)\s+(?:work|better|responsive|look)\b",
+    # Keywords that imply artifact modification
+    r"\b(?:still\s+(?:not|same|broken)|doesn.t\s+work|not\s+working|same\s+version)\b",
+    # "add/remove X to/from the code/app"
+    r"\b(?:add|remove|delete)\s+.{0,20}(?:to|from|in)\s+(?:the\s+)?(?:code|app|artifact|component)\b",
+    # References to updating version
+    r"\b(?:new|next|updated|fixed)\s+version\b",
+]
+
+
+def detect_artifact_update_intent(user_prompt: str) -> bool:
+    """Detect if user is asking to fix/update an artifact."""
+    if not user_prompt:
+        return False
+    prompt_lower = user_prompt.lower().strip()
+
+    update_keywords = {'fix', 'update', 'change', 'modify', 'edit', 'correct', 'improve', 'refactor', 'revise'}
+    words = set(prompt_lower.split())
+    if not words & update_keywords:
+        for word in words:
+            for kw in update_keywords:
+                if len(word) >= 3 and len(kw) >= 3:
+                    if word[:3] == kw[:3] or word[-3:] == kw[-3:]:
+                        break
+            else:
+                continue
+            break
+        else:
+            return False
+
+    for pattern in ARTIFACT_UPDATE_PATTERNS:
+        if re.search(pattern, prompt_lower):
+            return True
+
+    if len(prompt_lower.split()) <= 10 and words & update_keywords:
+        return True
+
+    return False
+
+
+def load_current_artifact_context(user_id: str, session_id: str) -> typing.Optional[str]:
+    """Load the current active artifact's code and format it as context."""
+    try:
+        store = ArtifactStore.__new__(ArtifactStore)
+        # Use lazy import to avoid circular dependency
+        from app.config import db as _db
+        store.db = _db
+        artifacts_data = store.list_artifacts(user_id, session_id)
+        artifacts = artifacts_data.get('artifacts', [])
+
+        active_artifact = None
+        for art in artifacts:
+            if art.get('isActive'):
+                active_artifact = art
+                break
+        if not active_artifact and artifacts:
+            active_artifact = artifacts[0]
+        if not active_artifact:
+            return None
+
+        artifact_id = active_artifact.get('artifactId')
+        if not artifact_id:
+            return None
+
+        full_artifact = store.get_artifact(user_id, session_id, artifact_id)
+        if not full_artifact:
+            return None
+
+        active_version = full_artifact.get('activeVersion')
+        if not active_version:
+            return None
+
+        files = active_version.get('files', [])
+        if not files:
+            return None
+
+        context_parts = [
+            "CURRENT ARTIFACT (for reference when fixing/updating)",
+            f"Title: {full_artifact.get('title', 'Untitled')}",
+            f"Type: {full_artifact.get('type', 'project')}",
+            f"Files: {len(files)}",
+        ]
+
+        for file in files:
+            path = file.get('path', 'unknown')
+            language = file.get('language', 'text')
+            content = file.get('content', '')
+            context_parts.append(f"\n{path} ({language}):")
+            context_parts.append(f"```{language}")
+            context_parts.append(content)
+            context_parts.append("```")
+
+        context_parts.append("\nWhen updating this artifact, regenerate ALL files with changes applied.")
+        context_parts.append("Output a complete ```artifact block with the fixed/updated code.\n")
+
+        return "\n".join(context_parts)
+
+    except Exception as e:
+        _logger = logging.getLogger(__name__)
+        _logger.warning(f"Failed to load artifact context: {e}")
+        return None
+
+
+def delete_local_attachments(messages: typing.List[typing.Dict[str, typing.Any]]) -> None:
+    """Remove any local files referenced in message attachments."""
+    if not messages:
+        return
+
+    from app.config import Config as _Config
+    base_upload_path = os.path.abspath(_Config.UPLOAD_FOLDER)
+    _logger = logging.getLogger(__name__)
+    for message in messages:
+        for field_name in ('attachments', 'user_attachments'):
+            attachments = message.get(field_name, [])
+            if not isinstance(attachments, list):
+                continue
+            for attachment in attachments:
+                local_path = attachment.get('local_path')
+                if not local_path:
+                    continue
+                try:
+                    if os.path.isabs(local_path):
+                        abs_path = os.path.abspath(local_path)
+                    else:
+                        abs_path = os.path.abspath(os.path.join(_Config.UPLOAD_FOLDER, local_path))
+                    if not abs_path.startswith(base_upload_path):
+                        _logger.warning(f"Skipping attachment outside upload dir: {abs_path}")
+                        continue
+                    if os.path.exists(abs_path):
+                        os.remove(abs_path)
+                        _logger.info(f"Deleted attachment file {abs_path}")
+                except Exception as e:
+                    _logger.warning(f"Failed to delete attachment {local_path}: {e}")

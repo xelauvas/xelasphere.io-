@@ -41,8 +41,7 @@ def generate_image_endpoint():
     Return a Pollinations image URL for the given prompt using a deterministic seed.
     Avoids local heavy pipelines/torch.
     """
-    # Import generate_image_result from views to avoid circular imports
-    from app.views import generate_image_result
+    from app.image_generator import generate_image_result
 
     user_id = session['user']['uid']
     data = request.get_json() or {}

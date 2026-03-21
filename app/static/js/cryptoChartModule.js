@@ -379,7 +379,11 @@ const CryptoChartModule = (function() {
                 throw new Error('Failed to fetch crypto details');
             }
 
-            return await response.json();
+            const data = await response.json();
+            if (data.success === false) {
+                return null;
+            }
+            return data;
         } catch (error) {
             console.error('[CryptoChart] Details fetch error:', error);
             throw error;

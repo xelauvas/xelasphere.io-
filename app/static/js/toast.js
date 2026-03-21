@@ -1,46 +1,23 @@
 /**
  * Toast Notification System
- * Based on XelaSphere Design Specifications
- *
- * Usage:
- * Toast.show('Message');
- * Toast.success('Success message');
- * Toast.error('Error message');
- * Toast.warning('Warning message');
- * Toast.info('Info message');
- *
- * Advanced:
- * Toast.show({
- *   title: 'Title',
- *   message: 'Message',
- *   type: 'success',
- *   duration: 5000,
- *   action: {
- *     label: 'Undo',
- *     onClick: () => console.log('Action clicked')
- *   }
- * });
+ * XelaSphere — liquid glass design
  */
 
 (function() {
   'use strict';
 
-  // Toast configuration
   const DEFAULTS = {
     duration: 5000,
-    type: 'default', // default, success, error, warning, info
-    position: 'top-right', // top-right, top-left, bottom-right, bottom-left
-    closable: true,
-    icon: true
+    type: 'default',
+    closable: true
   };
 
-  // Icon mapping
-  const ICONS = {
-    default: 'fa-circle-info',
-    success: 'fa-circle-check',
-    error: 'fa-circle-exclamation',
-    warning: 'fa-triangle-exclamation',
-    info: 'fa-circle-info'
+  const TYPE_ICONS = {
+    error:   'fa-solid fa-circle-xmark',
+    success: 'fa-solid fa-circle-check',
+    warning: 'fa-solid fa-triangle-exclamation',
+    info:    'fa-solid fa-circle-info',
+    default: 'fa-solid fa-circle-info'
   };
 
   class ToastManager {
@@ -51,209 +28,145 @@
     }
 
     init() {
-      // Create container if it doesn't exist
       if (!this.container) {
         this.container = document.createElement('div');
         this.container.className = 'toast-container';
         this.container.setAttribute('aria-live', 'polite');
-        this.container.setAttribute('aria-atomic', 'false');
-        document.body.appendChild(this.container);
+
+        const inputContainer = document.querySelector('.input-container');
+        if (inputContainer) {
+          inputContainer.insertBefore(this.container, inputContainer.firstChild);
+        } else {
+          document.body.appendChild(this.container);
+        }
       }
     }
 
-    /**
-     * Show a toast notification
-     * @param {string|object} options - Message string or options object
-     * @returns {string} Toast ID
-     */
     show(options) {
-      // Handle simple string message
       if (typeof options === 'string') {
         options = { message: options };
       }
 
-      // Merge with defaults
       const config = { ...DEFAULTS, ...options };
-
-      // Generate unique ID
       const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const toast = this._build(id, config);
 
-      // Create toast element
-      const toast = this.createToast(id, config);
-
-      // Add to container
       this.container.appendChild(toast);
-      this.toasts.set(id, { element: toast, config });
+      this.toasts.set(id, { element: toast, config, timer: null });
 
-      // Trigger entrance animation
-      requestAnimationFrame(() => {
-        toast.classList.add('toast-visible');
-      });
-
-      // Set auto-dismiss timer
+      // Auto-dismiss
       if (config.duration > 0) {
-        const progressBar = toast.querySelector('::before');
-        if (progressBar) {
-          toast.style.setProperty('--toast-duration', `${config.duration}ms`);
-        }
+        this._startTimer(id, config.duration);
 
-        const timer = setTimeout(() => {
-          this.dismiss(id);
-        }, config.duration);
-
-        // Store timer for pause/resume
-        this.toasts.get(id).timer = timer;
-
-        // Pause on hover
-        toast.addEventListener('mouseenter', () => {
-          clearTimeout(timer);
-        });
-
-        toast.addEventListener('mouseleave', () => {
-          const newTimer = setTimeout(() => {
-            this.dismiss(id);
-          }, 1000); // Give 1 second after mouse leave
-          this.toasts.get(id).timer = newTimer;
-        });
+        toast.addEventListener('mouseenter', () => this._clearTimer(id));
+        toast.addEventListener('mouseleave', () => this._startTimer(id, 1500));
       }
 
       return id;
     }
 
-    /**
-     * Create toast DOM element
-     */
-    createToast(id, config) {
+    _build(id, config) {
+      const type = config.type || 'default';
+
       const toast = document.createElement('div');
-      toast.className = `toast toast-${config.type}`;
+      toast.className = `toast toast--${type}`;
       toast.id = id;
-      toast.setAttribute('role', config.type === 'error' ? 'alert' : 'status');
-      toast.style.setProperty('--toast-duration', `${config.duration}ms`);
+      toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
 
-      // Icon
-      if (config.icon) {
-        const iconEl = document.createElement('div');
-        iconEl.className = 'toast__icon';
-        iconEl.setAttribute('aria-hidden', 'true');
-        iconEl.innerHTML = `<i class="fas ${ICONS[config.type] || ICONS.default}"></i>`;
-        toast.appendChild(iconEl);
-      }
+      // --- Icon ---
+      const icon = document.createElement('span');
+      icon.className = 'toast__icon';
+      icon.innerHTML = `<i class="${TYPE_ICONS[type] || TYPE_ICONS.default}"></i>`;
+      toast.appendChild(icon);
 
-      // Content
-      const content = document.createElement('div');
-      content.className = 'toast__content';
+      // --- Message ---
+      const msg = document.createElement('span');
+      msg.className = 'toast__msg';
+      msg.textContent = config.message || '';
+      toast.appendChild(msg);
 
-      if (config.title) {
-        const title = document.createElement('h4');
-        title.className = 'toast__title';
-        title.textContent = config.title;
-        content.appendChild(title);
-      }
+      // --- Actions (top-right) ---
+      const actions = document.createElement('span');
+      actions.className = 'toast__actions';
 
-      if (config.message) {
-        const message = document.createElement('p');
-        message.className = 'toast__message';
-        message.textContent = config.message;
-        content.appendChild(message);
-      }
+      // Copy
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'toast__btn';
+      copyBtn.setAttribute('aria-label', 'Copy');
+      copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i>';
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(msg.textContent.trim()).then(() => {
+          copyBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
+          copyBtn.classList.add('toast__btn--done');
+          setTimeout(() => {
+            copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i>';
+            copyBtn.classList.remove('toast__btn--done');
+          }, 1400);
+        }).catch(() => {});
+      });
+      actions.appendChild(copyBtn);
 
-      // Action button
-      if (config.action) {
-        const actionDiv = document.createElement('div');
-        actionDiv.className = 'toast__action';
-
-        const actionBtn = document.createElement('button');
-        actionBtn.className = 'toast__action-btn';
-        actionBtn.textContent = config.action.label || 'Action';
-        actionBtn.addEventListener('click', () => {
-          if (typeof config.action.onClick === 'function') {
-            config.action.onClick();
-          }
-          this.dismiss(id);
-        });
-
-        actionDiv.appendChild(actionBtn);
-        content.appendChild(actionDiv);
-      }
-
-      toast.appendChild(content);
-
-      // Close button
+      // Close
       if (config.closable) {
         const closeBtn = document.createElement('button');
-        closeBtn.className = 'toast__close';
-        closeBtn.setAttribute('aria-label', 'Close notification');
-        closeBtn.innerHTML = '<i class="fas fa-times"></i>';
-        closeBtn.addEventListener('click', () => {
+        closeBtn.className = 'toast__btn';
+        closeBtn.setAttribute('aria-label', 'Close');
+        closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
           this.dismiss(id);
         });
-        toast.appendChild(closeBtn);
+        actions.appendChild(closeBtn);
       }
+
+      toast.appendChild(actions);
+
+      // Click body to dismiss
+      toast.addEventListener('click', (e) => {
+        if (e.target.closest('.toast__btn')) return;
+        this.dismiss(id);
+      });
 
       return toast;
     }
 
-    /**
-     * Dismiss a toast
-     * @param {string} id - Toast ID
-     */
-    dismiss(id) {
-      const toastData = this.toasts.get(id);
-      if (!toastData) return;
+    _startTimer(id, ms) {
+      this._clearTimer(id);
+      const data = this.toasts.get(id);
+      if (!data) return;
+      data.timer = setTimeout(() => this.dismiss(id), ms);
+    }
 
-      const { element, timer } = toastData;
-
-      // Clear timer
-      if (timer) {
-        clearTimeout(timer);
+    _clearTimer(id) {
+      const data = this.toasts.get(id);
+      if (data && data.timer) {
+        clearTimeout(data.timer);
+        data.timer = null;
       }
+    }
 
-      // Add exit animation
-      element.classList.add('toast-exiting');
+    dismiss(id) {
+      const data = this.toasts.get(id);
+      if (!data) return;
+      this._clearTimer(id);
 
-      // Remove after animation
+      data.element.classList.add('toast--exit');
       setTimeout(() => {
-        if (element.parentNode) {
-          element.parentNode.removeChild(element);
-        }
+        if (data.element.parentNode) data.element.parentNode.removeChild(data.element);
         this.toasts.delete(id);
-      }, 300); // Match animation duration
+      }, 250);
     }
 
-    /**
-     * Dismiss all toasts
-     */
     dismissAll() {
-      this.toasts.forEach((_, id) => {
-        this.dismiss(id);
-      });
+      this.toasts.forEach((_, id) => this.dismiss(id));
     }
 
-    /**
-     * Shorthand methods
-     */
-    success(message, options = {}) {
-      return this.show({ ...options, message, type: 'success' });
-    }
-
-    error(message, options = {}) {
-      return this.show({ ...options, message, type: 'error' });
-    }
-
-    warning(message, options = {}) {
-      return this.show({ ...options, message, type: 'warning' });
-    }
-
-    info(message, options = {}) {
-      return this.show({ ...options, message, type: 'info' });
-    }
+    success(msg, opts = {}) { return this.show({ ...opts, message: msg, type: 'success' }); }
+    error(msg, opts = {})   { return this.show({ ...opts, message: msg, type: 'error' }); }
+    warning(msg, opts = {}) { return this.show({ ...opts, message: msg, type: 'warning' }); }
+    info(msg, opts = {})    { return this.show({ ...opts, message: msg, type: 'info' }); }
   }
 
-  // Create global instance
   window.Toast = new ToastManager();
-
-  // Export for modules
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = window.Toast;
-  }
 })();

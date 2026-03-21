@@ -180,6 +180,85 @@ def cleanup_executor():
 atexit.register(cleanup_executor)
 
 
+# ==================== Guest IP Tracking (Firebase) ====================
+def get_guest_ip_usage(ip_hash: str) -> dict:
+    """Get guest usage data from Firebase by IP hash."""
+    try:
+        doc_ref = db.collection('guest_usage').document(ip_hash)
+        doc = doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to get guest IP usage: {e}")
+        return None
+
+
+def increment_guest_ip_usage(ip_hash: str) -> int:
+    """Increment guest message count in Firebase. Returns new count."""
+    from google.cloud import firestore as gc_firestore
+    try:
+        doc_ref = db.collection('guest_usage').document(ip_hash)
+        doc = doc_ref.get()
+
+        now = datetime.utcnow()
+        today = now.strftime('%Y-%m-%d')
+
+        if doc.exists:
+            data = doc.to_dict()
+            # Reset count if it's a new day
+            if data.get('last_date') != today:
+                new_count = 1
+                doc_ref.update({
+                    'message_count': new_count,
+                    'last_date': today,
+                    'last_used': now.isoformat(),
+                    'total_messages': gc_firestore.Increment(1)
+                })
+            else:
+                new_count = data.get('message_count', 0) + 1
+                doc_ref.update({
+                    'message_count': new_count,
+                    'last_used': now.isoformat(),
+                    'total_messages': gc_firestore.Increment(1)
+                })
+            return new_count
+        else:
+            # First time seeing this IP
+            doc_ref.set({
+                'message_count': 1,
+                'last_date': today,
+                'first_seen': now.isoformat(),
+                'last_used': now.isoformat(),
+                'total_messages': 1
+            })
+            return 1
+    except Exception as e:
+        logger.warning(f"Failed to increment guest IP usage: {e}")
+        # Fallback to session-based tracking if Firebase fails
+        return -1
+
+
+def check_guest_ip_limit(ip_hash: str) -> tuple:
+    """Check if guest IP has exceeded daily limit. Returns (allowed, current_count)."""
+    try:
+        data = get_guest_ip_usage(ip_hash)
+        if not data:
+            return True, 0
+
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        # Reset count if it's a new day
+        if data.get('last_date') != today:
+            return True, 0
+
+        current_count = data.get('message_count', 0)
+        return current_count < GUEST_MESSAGE_LIMIT, current_count
+    except Exception as e:
+        logger.warning(f"Failed to check guest IP limit: {e}")
+        # Allow on error, fallback to session tracking
+        return True, 0
+
+
 # ==================== Firestore db reference ====================
 # Re-export db for convenience
 db = db

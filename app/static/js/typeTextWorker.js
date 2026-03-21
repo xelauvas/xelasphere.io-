@@ -353,7 +353,9 @@ document.addEventListener('DOMContentLoaded', () => {
         this.handleCursor();
         this.updateDisplay();
         this.toggleSourcesButton(false);
-  
+        // Track active typing animations for scroll arrow logic
+        window._activeTypingAnimations = (window._activeTypingAnimations || 0) + 1;
+
         try {
           if (typeof updateSendButton === 'function') {
             updateSendButton(true);
@@ -379,6 +381,11 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
           cleanupScroll();
           document.removeEventListener('visibilitychange', this.visibilityHandler);
+          window._activeTypingAnimations = Math.max(0, (window._activeTypingAnimations || 1) - 1);
+          // Update arrow visibility when typing ends
+          if (window._activeTypingAnimations === 0 && typeof window.scrollState?.setStreamingState === 'function') {
+              window.scrollState.setStreamingState(false);
+          }
         }
       }
     }

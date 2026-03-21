@@ -12,7 +12,7 @@ import re
 from contextlib import nullcontext
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import requests
@@ -411,3 +411,128 @@ class SearchClient:
         Return any stored conversation or query/response history.
         """
         return self.conversation_history
+
+
+# ----------------------------------------------------
+# Higher-level helpers
+# ----------------------------------------------------
+def perform_web_search(
+    user_id: str,
+    user_prompt: str,
+    backend: SearchBackend = SearchBackend.BRAVE
+) -> List[SearchResult]:
+    """
+    Perform a web search on behalf of a given user, handling any exceptions.
+    Returns a list of SearchResult objects.
+    """
+    resolved_backend = resolve_search_backend(backend.value if isinstance(backend, SearchBackend) else backend)
+    search_client = SearchClient(backend=resolved_backend)
+
+    try:
+        search_results = search_client.search(user_prompt)
+        logger.info(f"Search returned {len(search_results)} results for user {user_id}")
+        return search_results
+    except SearchException as e:
+        logger.error(f"Search failed for user {user_id}: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error during search for user {user_id}: {e}")
+        return []
+
+
+def should_auto_enable_search(user_prompt: str) -> Tuple[bool, str]:
+    """
+    Smart detector to determine if web search would benefit the response.
+    Returns (should_search, confidence) where confidence is 'high', 'medium', or 'low'.
+    """
+    if not user_prompt:
+        return False, 'low'
+
+    normalized = user_prompt.lower()
+
+    # === HIGH CONFIDENCE: Definitely needs search ===
+    explicit_search = [
+        r"\bsearch\b", r"\blook\s*up\b", r"\bfind\s+online\b",
+        r"\bweb\s*search\b", r"\bgoogle\b", r"\bbing\b",
+        r"\bsearch\s+(for|the|about)\b",
+    ]
+
+    time_sensitive = [
+        r"\btoday\b", r"\btonight\b", r"\bright\s+now\b",
+        r"\bcurrently\b", r"\bcurrent(ly)?\b", r"\blatest\b",
+        r"\brecent(ly)?\b", r"\bjust\s+(happened|announced|released)\b",
+        r"\bthis\s+(week|month|year|morning|afternoon|evening)\b",
+        r"\byesterday\b", r"\blast\s+(week|month|night|hour)\b",
+        r"\bbreaking\b", r"\blive\b", r"\bupdate[sd]?\b",
+        r"\bnow\s+playing\b", r"\bhappening\s+now\b",
+    ]
+
+    realtime_topics = [
+        r"\bweather\b", r"\bforecast\b", r"\btemperature\b",
+        r"\brain(ing|y)?\b", r"\bsnow(ing|y)?\b", r"\bstorm\b",
+        r"\bstock\s*(price|market|ticker)?\b", r"\bshare\s*price\b",
+        r"\bmarket\s*(cap|value|price)\b", r"\btrading\b",
+        r"\bexchange\s+rate\b", r"\bcrypto(currency)?\b",
+        r"\bbitcoin\b", r"\bethereum\b", r"\b(USD|EUR|GBP)\s*to\b",
+        r"\bnews\b", r"\bheadlines?\b", r"\bannouncement\b",
+        r"\belection\b", r"\bvot(e|ing|ed)\b", r"\bpoll(s|ing)?\b",
+        r"\bscore[sd]?\b", r"\bgame\s+result\b", r"\bwho\s+won\b",
+        r"\bmatch\s+result\b", r"\bstandings?\b", r"\bleague\s+table\b",
+        r"\bplayoff\b", r"\bchampionship\b", r"\btournament\b",
+        r"\btrending\b", r"\bviral\b", r"\bpopular\s+right\s+now\b",
+    ]
+
+    high_confidence_patterns = explicit_search + time_sensitive + realtime_topics
+    if any(re.search(p, normalized) for p in high_confidence_patterns):
+        return True, 'high'
+
+    # === MEDIUM CONFIDENCE: Likely needs search ===
+    medium_patterns = [
+        r"\bwhat('s|\s+is)\s+happening\b",
+        r"\bwhat('s|\s+is)\s+going\s+on\b",
+        r"\bwhat('s|\s+is)\s+the\s+(status|state)\b",
+        r"\bis\s+.+\s+(open|closed|available|working)\b",
+        r"\bwhen\s+(is|does|will|did)\b",
+        r"\bwhere\s+can\s+i\s+(buy|find|get|watch)\b",
+        r"\bhow\s+much\s+(does|is|are|do)\b",
+        r"\bprice\s+(of|for)\b", r"\bcost\s+(of|for)\b",
+        r"\bavailab(le|ility)\b",
+        r"\bwho\s+is\s+the\s+(current|new)?\s*(ceo|president|cto|leader|head|director)\b",
+        r"\bwho\s+(runs|leads|owns)\b",
+        r"\blatest\s+(version|release|update|model)\b",
+        r"\bnew(est)?\s+(iphone|android|mac|windows|ios|version)\b",
+        r"\brelease\s+date\b",
+        r"\bnear\s+me\b", r"\bin\s+my\s+area\b",
+        r"\brestaurants?\s+in\b", r"\bhotels?\s+in\b",
+        r"\b202[4-9]\b", r"\b203[0-5]\b",
+    ]
+
+    if any(re.search(p, normalized) for p in medium_patterns):
+        return True, 'medium'
+
+    # === NO SEARCH indicators (override) ===
+    no_search_patterns = [
+        r"\bwrite\s+(a|me|an|the)\b", r"\bgenerate\b", r"\bcreate\b",
+        r"\bcompose\b", r"\bdraft\b",
+        r"\bcode\b", r"\bprogram\b", r"\bscript\b", r"\bfunction\b",
+        r"\bdebug\b", r"\bfix\s+(this|the|my)\b", r"\brefactor\b",
+        r"\bimplement\b", r"\bbuild\s+(a|an|the)\b",
+        r"\bexplain\b", r"\bwhat\s+does\s+.+\s+mean\b",
+        r"\bhow\s+(do|does|to)\s+.+\s+work\b",
+        r"\bteach\s+me\b", r"\bhelp\s+me\s+understand\b",
+        r"\btranslate\b", r"\bconvert\b",
+        r"\bcalculate\b", r"\bsolve\b", r"\bcompute\b",
+        r"\bsummarize\b", r"\bsummary\b", r"\btl;?dr\b",
+        r"\banalyze\s+(this|the)\b", r"\breview\s+(this|the|my)\b",
+    ]
+
+    if any(re.search(p, normalized) for p in no_search_patterns):
+        return False, 'high'
+
+    return False, 'low'
+
+
+def should_auto_enable_search_simple(user_prompt: str) -> bool:
+    """Simple wrapper that returns just the boolean for backward compatibility."""
+    should_search, _ = should_auto_enable_search(user_prompt)
+    return should_search

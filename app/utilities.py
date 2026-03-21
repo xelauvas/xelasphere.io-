@@ -954,3 +954,56 @@ def generate_fallback_response():
     Generate a default fallback response if all models fail.
     """
     return "I'm sorry, I'm unable to generate a response at the moment. Please try again later."
+
+
+def strip_html_from_response(text: str) -> str:
+    """
+    Strip common HTML tags from AI response while preserving code blocks.
+    Some models (like Llama, Venice) may output HTML tags despite instructions.
+    """
+    if not text or not isinstance(text, str):
+        return text
+
+    original = text
+
+    # Don't strip if it looks like intentional HTML in code blocks or artifacts
+    if '```html' in text.lower() or '```htm' in text.lower():
+        return text
+    if '```artifact' in text.lower():
+        return text
+
+    # Check if response contains HTML tags
+    has_html = bool(re.search(r'<(?:p|div|span|br|h[1-6]|strong|b|em|i|ul|ol|li|a)\b[^>]*>', text, re.IGNORECASE))
+
+    if has_html:
+        logging.info(f"Stripping HTML tags from AI response (first 100 chars): {text[:100]}")
+
+    # Strip paragraph tags
+    text = re.sub(r'<p\s*[^>]*>(.*?)</p>', r'\1', text, flags=re.DOTALL | re.IGNORECASE)
+    # Strip div tags
+    text = re.sub(r'<div\s*[^>]*>(.*?)</div>', r'\1', text, flags=re.DOTALL | re.IGNORECASE)
+    # Strip span tags
+    text = re.sub(r'<span\s*[^>]*>(.*?)</span>', r'\1', text, flags=re.DOTALL | re.IGNORECASE)
+    # Strip br tags
+    text = re.sub(r'<br\s*/?\s*>', '\n', text, flags=re.IGNORECASE)
+    # Strip heading tags (h1-h6) - convert to markdown
+    for i in range(1, 7):
+        text = re.sub(rf'<h{i}\s*[^>]*>(.*?)</h{i}>', rf'{"#" * i} \1', text, flags=re.DOTALL | re.IGNORECASE)
+    # Strip strong/b tags - convert to markdown bold
+    text = re.sub(r'<(?:strong|b)\s*[^>]*>(.*?)</(?:strong|b)>', r'**\1**', text, flags=re.DOTALL | re.IGNORECASE)
+    # Strip em/i tags - convert to markdown italic
+    text = re.sub(r'<(?:em|i)\s*[^>]*>(.*?)</(?:em|i)>', r'*\1*', text, flags=re.DOTALL | re.IGNORECASE)
+    # Strip ul/ol/li tags - convert to markdown list
+    text = re.sub(r'<li\s*[^>]*>(.*?)</li>', r'- \1', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'</?(?:ul|ol)\s*[^>]*>', '', text, flags=re.IGNORECASE)
+    # Strip a tags - convert to markdown link
+    text = re.sub(r'<a\s+[^>]*href=["\']([^"\']*)["\'][^>]*>(.*?)</a>', r'[\2](\1)', text, flags=re.DOTALL | re.IGNORECASE)
+
+    # Final cleanup: strip any remaining simple HTML tags as a catch-all
+    # This catches tags that might not have closing tags or are malformed
+    text = re.sub(r'</?(?:p|div|span)(?:\s[^>]*)?\s*/?>', '', text, flags=re.IGNORECASE)
+
+    if has_html and text != original:
+        logging.info(f"HTML stripped successfully. Result (first 100 chars): {text[:100]}")
+
+    return text.strip()

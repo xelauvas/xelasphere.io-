@@ -5,6 +5,50 @@
 const DictationModule = (function() {
     'use strict';
 
+    /**
+     * Show toast notification to user
+     */
+    function showToast(message, type) {
+        if (window.Toast) {
+            if (type === 'error') window.Toast.error(message);
+            else if (type === 'warning') window.Toast.warning(message);
+            else window.Toast.success(message);
+        } else {
+            console.warn('DictationModule:', message);
+        }
+    }
+
+    /**
+     * Detect Whisper hallucinations produced from silent/near-silent audio.
+     * Whisper commonly generates these phantom phrases when given no real speech.
+     */
+    function isWhisperHallucination(text) {
+        const normalized = text.toLowerCase().replace(/[.,!?;:\s]+/g, ' ').trim();
+        const hallucinations = [
+            'thank you',
+            'thanks for watching',
+            'thanks for listening',
+            'subscribe',
+            'like and subscribe',
+            'see you next time',
+            'bye',
+            'goodbye',
+            'you',
+            'the end',
+            'subtitles by',
+            'translated by',
+            'amara org',
+            'thank you for watching',
+            'please subscribe',
+            'thanks',
+            'thank you very much',
+            'music',
+            'applause',
+            'silence'
+        ];
+        return hallucinations.includes(normalized);
+    }
+
     // State
     let mediaRecorder = null;
     let audioChunks = [];
@@ -13,6 +57,7 @@ const DictationModule = (function() {
     let audioContext = null;
     let analyser = null;
     let animationId = null;
+    let peakAudioLevel = 0; // Track max audio level during recording
 
     // DOM elements
     let micButton = null;
@@ -161,22 +206,73 @@ const DictationModule = (function() {
     /**
      * Start recording audio
      */
+    // Virtual/software audio devices that often produce silence
+    const VIRTUAL_DEVICE_KEYWORDS = [
+        'voicemod', 'virtual', 'vb-audio', 'cable input', 'cable output',
+        'stereo mix', 'what u hear', 'wave out', 'loopback',
+        'soundflower', 'blackhole', 'obs'
+    ];
+
+    /**
+     * Find the best hardware microphone, skipping virtual audio devices
+     */
+    async function findHardwareMic() {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioInputs = devices.filter(d => d.kind === 'audioinput');
+
+            // Find first non-virtual device (skip 'default' and 'communications' aliases)
+            const hardwareMic = audioInputs.find(d => {
+                const label = (d.label || '').toLowerCase();
+                const id = (d.deviceId || '').toLowerCase();
+                if (id === 'default' || id === 'communications') return false;
+                return !VIRTUAL_DEVICE_KEYWORDS.some(kw => label.includes(kw));
+            });
+
+            if (hardwareMic) {
+                console.log('DictationModule: Selected hardware mic:', hardwareMic.label);
+                return hardwareMic.deviceId;
+            }
+        } catch (e) {
+            console.warn('DictationModule: Could not enumerate devices:', e);
+        }
+        return null;
+    }
+
     async function startRecording() {
         try {
-            // Request microphone permission
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    sampleRate: 16000
+            // Try to find a real hardware microphone (skip virtual devices like Voicemod)
+            const hwDeviceId = await findHardwareMic();
+            const audioConstraints = hwDeviceId
+                ? { deviceId: { exact: hwDeviceId } }
+                : true;
+
+            stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+
+            // Log track info for diagnostics
+            const track = stream.getAudioTracks()[0];
+            if (track) {
+                const settings = track.getSettings();
+                console.log('DictationModule: Audio track info:', {
+                    label: track.label,
+                    enabled: track.enabled,
+                    muted: track.muted,
+                    readyState: track.readyState,
+                    sampleRate: settings.sampleRate,
+                    channelCount: settings.channelCount
+                });
+
+                if (track.muted) {
+                    console.warn('DictationModule: Audio track is muted by the system!');
                 }
-            });
+            }
 
             const mimeType = getSupportedMimeType();
             const options = mimeType ? { mimeType } : {};
 
             mediaRecorder = new MediaRecorder(stream, options);
             audioChunks = [];
+            peakAudioLevel = 0;
 
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -187,6 +283,7 @@ const DictationModule = (function() {
             mediaRecorder.onerror = (event) => {
                 console.error('MediaRecorder error:', event.error);
                 resetState();
+                showToast('Recording error. Please try again.', 'error');
             };
 
             // Start recording
@@ -203,8 +300,15 @@ const DictationModule = (function() {
 
         } catch (error) {
             console.error('Failed to start recording:', error);
-            // Silent fail - errors logged to console only
             resetState();
+            // Show user-friendly error
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                showToast('Microphone access denied. Please allow microphone permissions and try again.', 'error');
+            } else if (error.name === 'NotFoundError') {
+                showToast('No microphone found. Please connect a microphone and try again.', 'error');
+            } else {
+                showToast('Could not start recording. Please check your microphone.', 'error');
+            }
         }
     }
 
@@ -218,6 +322,14 @@ const DictationModule = (function() {
     function setupAudioAnalyzer() {
         try {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+            // Ensure AudioContext is running (may be suspended due to autoplay policy)
+            if (audioContext.state === 'suspended') {
+                console.log('DictationModule: AudioContext suspended, resuming...');
+                audioContext.resume();
+            }
+            console.log('DictationModule: AudioContext state:', audioContext.state, 'sampleRate:', audioContext.sampleRate);
+
             analyser = audioContext.createAnalyser();
             analyser.fftSize = 256;
             analyser.smoothingTimeConstant = 0.3;
@@ -293,9 +405,14 @@ const DictationModule = (function() {
             const rms = Math.sqrt(sumSquares / bufferLength);
             const currentLevel = Math.min(1, rms * 4); // Amplify more
 
+            // Track peak audio level for silence detection
+            if (currentLevel > peakAudioLevel) {
+                peakAudioLevel = currentLevel;
+            }
+
             // Log audio level occasionally
             if (frameCount % 60 === 0) {
-                console.log('Audio level:', currentLevel.toFixed(3), 'RMS:', rms.toFixed(3));
+                console.log('Audio level:', currentLevel.toFixed(3), 'RMS:', rms.toFixed(3), 'Peak:', peakAudioLevel.toFixed(3));
             }
 
             // Update history at fixed interval for scrolling effect
@@ -367,11 +484,10 @@ const DictationModule = (function() {
         const sendButton = textareaContainer.querySelector('.send-button');
         if (sendButton) sendButton.style.display = 'none';
 
-        // Show voice mode button in recording state
+        // Hide voice mode button during dictation (it has its own checkmark that conflicts)
         const voiceModeButton = document.getElementById('voice-mode-button');
         if (voiceModeButton) {
-            voiceModeButton.classList.remove('hidden');
-            voiceModeButton.classList.add('recording');
+            voiceModeButton.classList.add('hidden');
         }
 
         // Show overlay
@@ -391,12 +507,6 @@ const DictationModule = (function() {
         const sendButton = textareaContainer.querySelector('.send-button');
         if (sendButton) sendButton.style.display = '';
 
-        // Remove recording state from voice mode button
-        const voiceModeButton = document.getElementById('voice-mode-button');
-        if (voiceModeButton) {
-            voiceModeButton.classList.remove('recording');
-        }
-
         // Update button visibility based on input state
         if (typeof window.updateSendButtonState === 'function') {
             window.updateSendButtonState();
@@ -410,35 +520,48 @@ const DictationModule = (function() {
      * Stop recording audio
      */
     function stopRecording(shouldProcess = true) {
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-            if (shouldProcess) {
-                mediaRecorder.onstop = async () => {
-                    await processRecording();
-                };
-            }
-            mediaRecorder.stop();
-        }
-
         // Stop animation
         if (animationId) {
             cancelAnimationFrame(animationId);
             animationId = null;
         }
 
-        // Close audio context
+        // Close audio context (safe to close while MediaRecorder finishes)
         if (audioContext) {
             audioContext.close().catch(() => {});
             audioContext = null;
             analyser = null;
         }
 
-        // Stop all tracks
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-            stream = null;
-        }
-
         isRecording = false;
+
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            if (shouldProcess) {
+                // Wait for MediaRecorder to flush final data before cleaning up stream
+                mediaRecorder.onstop = async () => {
+                    // NOW safe to stop stream tracks after all data is collected
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                        stream = null;
+                    }
+                    await processRecording();
+                };
+            } else {
+                mediaRecorder.onstop = () => {
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                        stream = null;
+                    }
+                };
+            }
+            mediaRecorder.stop();
+        } else {
+            // MediaRecorder already inactive, clean up stream directly
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+        }
 
         if (shouldProcess) {
             // Show processing state briefly
@@ -470,6 +593,8 @@ const DictationModule = (function() {
      */
     async function processRecording() {
         if (audioChunks.length === 0) {
+            console.warn('DictationModule: No audio chunks captured');
+            showToast('No audio was captured. Please check your microphone.', 'error');
             resetState();
             return;
         }
@@ -479,23 +604,37 @@ const DictationModule = (function() {
 
         // Check if we have any audio data
         if (audioBlob.size < 100) {
+            console.warn('DictationModule: Audio too short:', audioBlob.size, 'bytes');
+            showToast('Recording was too short. Please try again.', 'error');
             resetState();
             return;
         }
 
-        console.log('Processing audio:', audioBlob.size, 'bytes,', mimeType);
+        const silentRecording = peakAudioLevel < 0.01;
+        if (silentRecording) {
+            console.warn('DictationModule: Waveform analyser saw no audio (peak:', peakAudioLevel, '). Sending to Whisper anyway — analyser may be wrong.');
+        }
+
+        console.log('Processing audio:', audioBlob.size, 'bytes,', mimeType, 'peak level:', peakAudioLevel.toFixed(3));
 
         try {
             const text = await transcribeAudio(audioBlob, mimeType);
 
             if (text && text.trim()) {
-                insertText(text.trim());
+                // Filter known Whisper hallucinations on silent/near-silent audio
+                if (isWhisperHallucination(text.trim())) {
+                    console.warn('DictationModule: Filtered Whisper hallucination:', text.trim());
+                    showToast('Microphone not picking up audio. Check your system sound input device.', 'error');
+                } else {
+                    insertText(text.trim());
+                }
+            } else {
+                showToast('No speech detected. Please try again.', 'error');
             }
-            // Silent fail for no speech detected
 
         } catch (error) {
             console.error('Transcription failed:', error);
-            // Silent fail - no toast notification
+            showToast('Transcription failed: ' + (error.message || 'Unknown error'), 'error');
         }
 
         resetState();

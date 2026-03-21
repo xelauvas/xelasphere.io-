@@ -161,18 +161,17 @@ def create_app():
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
     app.config['UPLOAD_EXTENSIONS'] = ['.jpg', '.png', '.pdf']  # Allowed extensions
 
-    # Import views and auth routes after app is created to avoid circular imports
-    from .views import app_routes
+    # Import blueprints after app is created to avoid circular imports
     from .auth import auth_routes
     from .crypto_api import crypto_bp
 
-    # Import modular blueprints (extracted from views.py)
+    # Import modular blueprints
     from .blueprints import (
         weather_bp, email_bp, account_bp, memory_bp, session_bp,
         pages_bp, artifacts_bp, media_bp, upload_bp, chat_bp
     )
 
-    # Register modular blueprints FIRST (they handle extracted routes)
+    # Register all blueprints
     app.register_blueprint(weather_bp)
     app.register_blueprint(email_bp)
     app.register_blueprint(account_bp)
@@ -183,10 +182,6 @@ def create_app():
     app.register_blueprint(media_bp)
     app.register_blueprint(upload_bp)
     app.register_blueprint(chat_bp)
-
-    # Register remaining blueprints
-    # app_routes now only contains: /chat (main), /chat/stream, /api/edit-text
-    app.register_blueprint(app_routes)
     app.register_blueprint(auth_routes)
     app.register_blueprint(crypto_bp)
 

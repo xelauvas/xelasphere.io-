@@ -324,5 +324,94 @@ class PersonalizedTaskGenerator:
             'Hard': 3,
             'Expert': 4
         }
-        return difficulty_map.get(difficulty, 1)  
+        return difficulty_map.get(difficulty, 1)
+
+
+# ==================== Simple preference/credit helpers ====================
+# (migrated from views.py)
+
+from .config import db as _db
+from .utilities import count_tokens as _count_tokens
+
+CREDITS_MIN_INCREMENT = 1
+
+
+def fetch_user_preferences(user_id: str) -> dict:
+    """Fetch user's category preferences from Firebase."""
+    try:
+        if not user_id:
+            return {}
+        user_doc = _db.collection('users').document(user_id).get()
+        if user_doc.exists:
+            data = user_doc.to_dict()
+            return data.get('preferences', {})
+        return {}
+    except Exception as e:
+        logger.error(f"Error fetching user preferences for {user_id}: {e}")
+        return {}
+
+
+def update_user_preferences(user_id: str, message: str) -> None:
+    """Update user's category preferences based on their message."""
+    try:
+        if not user_id or not message:
+            return
+        detected = TaskGenerator.detect_categories(message)
+        if not detected:
+            return
+        user_ref = _db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+        if user_doc.exists:
+            data = user_doc.to_dict()
+            preferences = data.get('preferences', {})
+            categories = preferences.get('categories', {})
+        else:
+            preferences = {}
+            categories = {}
+        for category in detected:
+            categories[category] = categories.get(category, 0) + 1
+        preferences['categories'] = categories
+        preferences['last_updated'] = datetime.datetime.utcnow().isoformat()
+        user_ref.set({'preferences': preferences}, merge=True)
+        logger.debug(f"Updated preferences for {user_id}: {categories}")
+    except Exception as e:
+        logger.error(f"Error updating user preferences for {user_id}: {e}")
+
+
+def _adjust_user_session_total(user_id: str, delta: int) -> None:
+    """Increment or decrement a user's stored session count."""
+    if not user_id or delta == 0:
+        return
+    try:
+        _db.collection('users').document(user_id).set(
+            {'total_sessions': firestore.Increment(delta)},
+            merge=True
+        )
+    except Exception as exc:
+        logger.warning(f"Failed to adjust total_sessions for {user_id}: {exc}")
+
+
+def _increment_user_credits(user_id: str, amount: int) -> None:
+    """Increment the stored credit usage for a user."""
+    if not user_id or amount <= 0:
+        return
+    try:
+        _db.collection('users').document(user_id).set(
+            {'credits_used': firestore.Increment(amount)},
+            merge=True
+        )
+    except Exception as exc:
+        logger.warning(f"Failed to increment credits for {user_id}: {exc}")
+
+
+def _calculate_credit_cost(user_prompt: str, response_text: str) -> int:
+    """Estimate credit cost based on prompt/response token counts."""
+    try:
+        prompt_tokens = _count_tokens(user_prompt or "")
+        response_tokens = _count_tokens(response_text or "")
+    except Exception as exc:
+        logger.debug(f"Token count failed, defaulting credit cost to 1: {exc}")
+        return CREDITS_MIN_INCREMENT
+    total_tokens = prompt_tokens + response_tokens
+    return max(total_tokens, CREDITS_MIN_INCREMENT)
 

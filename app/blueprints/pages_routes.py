@@ -221,7 +221,7 @@ def debug_code():
     """Debug code endpoint - analyzes and fixes code using AI."""
     try:
         # Import send_prompt here to avoid circular imports
-        from app.views import send_prompt
+        from app.utilities import send_prompt
 
         logger.info("Received a request to /debug")
         code = request.json.get('code', '').strip()

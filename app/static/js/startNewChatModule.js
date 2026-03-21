@@ -426,16 +426,20 @@ class ChatManager {
             return;
         }
 
+        // Create collapsible "Your chats" header
+        const yourChatsHeader = document.createElement('li');
+        yourChatsHeader.className = 'your-chats-header';
+        yourChatsHeader.innerHTML = `<span class="your-chats-text">Your chats</span><svg class="your-chats-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+        yourChatsHeader.addEventListener('click', () => {
+            const isCollapsed = tabList.classList.toggle('chats-collapsed');
+            yourChatsHeader.classList.toggle('collapsed', isCollapsed);
+        });
+        tabList.appendChild(yourChatsHeader);
+
+        // Append all sessions without date category headers
         Object.keys(categorizedSessions).forEach(category => {
             const sessions = categorizedSessions[category];
             if (sessions.length > 0) {
-                // Create and append category header
-                const header = document.createElement('li');
-                header.className = 'section-header';
-                header.textContent = `${category} (${sessions.length})`;
-                tabList.appendChild(header);
-    
-                // Append each session tab
                 sessions.forEach((session, index) => {
                     const tabElement = this.createTabElement(session, index);
                     tabList.appendChild(tabElement);
@@ -2883,6 +2887,9 @@ async loadChatHistory(pageToken = null, limit = 10) {
         const session = this.ensureSessionPages(sessionId);
         if (!session) return;
 
+        // Reset chart stagger counter for new page render
+        this._chartHistoryIndex = 0;
+
         if (typeof window !== 'undefined' && typeof window.clearChat === 'function') {
             window.clearChat({ force: true });
         } else if (this.elements.chatDisplay) {
@@ -3336,6 +3343,9 @@ async loadChatHistory(pageToken = null, limit = 10) {
         }
         if (typeof update.reasoning === 'string') {
             entry.reasoning = update.reasoning;
+        }
+        if (update.responseId) {
+            entry.response_id = update.responseId;
         }
 
         this.markSessionDirty(this.activeSessionId);
@@ -3958,7 +3968,9 @@ async loadChatHistory(pageToken = null, limit = 10) {
             return;
         }
 
-        // Use setTimeout to ensure DOM is ready
+        // Stagger history chart renders to avoid CoinGecko rate limits
+        this._chartHistoryIndex = (this._chartHistoryIndex || 0) + 1;
+        const staggerDelay = (this._chartHistoryIndex - 1) * 2000; // 2s between charts
         setTimeout(() => {
             const targetEl = document.getElementById(`ai-${messageId}`);
             if (!targetEl) {
@@ -4009,9 +4021,9 @@ async loadChatHistory(pageToken = null, limit = 10) {
             } else {
                 console.warn('[Chart History] No asset found in chart data');
             }
-        }, 100);
+        }, 100 + staggerDelay);
     }
-    
+
     /**
      * Render a message in the chat display.
      * @param {Object} options - Options for rendering the message.
@@ -4084,7 +4096,17 @@ async loadChatHistory(pageToken = null, limit = 10) {
             handleComplexMessage(messageContent, safeContent, messageType, id, showButtons, isHistory);
         }
         // Render attachments - CSS order property ensures they appear after text
-        this.renderAttachments(messageContent, attachments);
+        // AI-generated images render full-size (matching initial display), not as file cards
+        const aiGeneratedImages = attachments.filter(att =>
+            att && att.isImage && (att.provider || att.name === 'AI generated image')
+        );
+        const otherAttachments = attachments.filter(att =>
+            !att || !att.isImage || (!att.provider && att.name !== 'AI generated image')
+        );
+        if (aiGeneratedImages.length > 0) {
+            this._renderFullSizeImages(messageContent, aiGeneratedImages, originalPrompt);
+        }
+        this.renderAttachments(messageContent, otherAttachments);
         if (typeof window !== 'undefined' && typeof window.updateEphemeralOptionsVisibility === 'function') {
             window.updateEphemeralOptionsVisibility();
             if (!isHistory && typeof window.dismissEphemeralOptions === 'function') {
@@ -4157,6 +4179,51 @@ async loadChatHistory(pageToken = null, limit = 10) {
             }
         }
         return footer;
+    }
+
+    /**
+     * Render AI-generated images full-size, matching the initial display style.
+     */
+    _renderFullSizeImages(container, images, promptText) {
+        images.forEach(att => {
+            const url = (typeof FilePreview !== 'undefined' && FilePreview.resolveUrl)
+                ? FilePreview.resolveUrl(att)
+                : att.url || att.dataUrl;
+            if (!url) return;
+
+            const layer = document.createElement('div');
+            layer.className = 'image-layer';
+
+            const img = document.createElement('img');
+            img.className = 'chat-image chat-image--reveal';
+            img.src = url;
+            img.alt = promptText || att.original_filename || 'Generated image';
+            img.style.cursor = 'pointer';
+            img.loading = 'lazy';
+            img.onload = () => {
+                img.classList.add('loaded');
+                layer.classList.add('loaded', 'revealed');
+            };
+            img.onerror = () => {
+                layer.textContent = 'Image failed to load.';
+            };
+            if (img.complete && img.naturalHeight !== 0) {
+                img.classList.add('loaded');
+                layer.classList.add('loaded', 'revealed');
+            }
+            img.addEventListener('click', () => {
+                if (typeof openAttachmentLightbox === 'function') {
+                    openAttachmentLightbox({
+                        src: url,
+                        title: promptText || 'Generated image',
+                        isImage: true
+                    });
+                }
+            });
+
+            layer.appendChild(img);
+            container.appendChild(layer);
+        });
     }
 
     renderAttachments(container, attachments = []) {

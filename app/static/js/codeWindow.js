@@ -2637,9 +2637,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             }
         }
 
-        // Scroll user message to top (ChatGPT-style) - works on both mobile and desktop
-        // Set flag IMMEDIATELY (before ThinkingIndicator) to prevent any auto-scrolling
-        if (primaryUserMessage) {
+        // Scroll user message to top (ChatGPT-style) - only for existing conversations
+        // For first message in new chat, let normal scroll behavior handle it
+        if (primaryUserMessage && hasExistingHistory) {
             window._keepMessageAtTop = true;
         }
 
@@ -2656,9 +2656,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             showSimplePulsingDot();
         }
 
-        // Scroll user message to top SYNCHRONOUSLY after indicator is added
-        // This must complete before fetch starts to avoid race conditions with fast responses
-        if (primaryUserMessage && typeof window.scrollUserMessageToTop === 'function') {
+        // Scroll user message to top (ChatGPT-style) - only if there's prior chat history
+        // For the first message in a new chat, don't scroll - message is already visible
+        if (primaryUserMessage && typeof window.scrollUserMessageToTop === 'function' && hasExistingHistory) {
             window.scrollUserMessageToTop(primaryUserMessage);
         }
 
@@ -3185,7 +3185,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     attachments: attachmentList,
                     messageType: 'image',
                     suppressText: true,
-                    messageId: aiMsgId
+                    messageId: aiMsgId,
+                    responseId: data.message_id
                 });
             }
             if (manager?.recordGeneratedImage && data.image_url) {

@@ -643,7 +643,13 @@ def get_crypto_details():
                 return jsonify(result)
 
         print(f'[CryptoAPI] Details error: status={response.status_code}, body={response.text[:500]}')
-        return jsonify({'error': f'CoinGecko API error: {response.status_code}', 'rate_limited': response.status_code == 429}), 500
+        # Return 200 with error info so frontend doesn't throw — details are non-critical
+        return jsonify({
+            'success': False,
+            'error': f'CoinGecko API error: {response.status_code}',
+            'rate_limited': response.status_code == 429,
+            'coin_id': coin_id
+        })
 
     except Exception as e:
         print(f'[CryptoAPI] Details error: {e}')
@@ -658,12 +664,120 @@ def get_crypto_details():
         return jsonify({'error': str(e)}), 500
 
 
-# CryptoCompare API for news
-CRYPTOCOMPARE_BASE = 'https://min-api.cryptocompare.com/data/v2'
+# Crypto news via free RSS feeds (no API key needed)
+_CRYPTO_NEWS_RSS_FEEDS = [
+    'https://www.coindesk.com/arc/outboundfeeds/rss/',
+    'https://cointelegraph.com/rss',
+]
 
 # Cache for news data
 _news_cache = {}
 _NEWS_CACHE_DURATION = 300  # 5 minutes cache for news
+
+
+def _fetch_rss_news(coin_symbol: str = '', limit: int = 5) -> list:
+    """Fetch crypto news from RSS feeds and optionally filter by coin symbol."""
+    import xml.etree.ElementTree as ET
+    from html import unescape
+
+    all_articles = []
+    coin_upper = coin_symbol.upper() if coin_symbol else ''
+    coin_lower = coin_symbol.lower() if coin_symbol else ''
+
+    # Map symbols to searchable names
+    _SYMBOL_NAMES = {
+        'BTC': ['bitcoin', 'btc'],
+        'ETH': ['ethereum', 'eth', 'ether'],
+        'SOL': ['solana', 'sol'],
+        'ADA': ['cardano', 'ada'],
+        'DOGE': ['dogecoin', 'doge'],
+        'XRP': ['xrp', 'ripple'],
+        'DOT': ['polkadot', 'dot'],
+        'LINK': ['chainlink', 'link'],
+        'LTC': ['litecoin', 'ltc'],
+        'AVAX': ['avalanche', 'avax'],
+        'MATIC': ['polygon', 'matic'],
+        'UNI': ['uniswap', 'uni'],
+        'ATOM': ['cosmos', 'atom'],
+        'BNB': ['binance', 'bnb'],
+    }
+    search_terms = _SYMBOL_NAMES.get(coin_upper, [coin_lower] if coin_lower else [])
+
+    import re as _re
+
+    for feed_url in _CRYPTO_NEWS_RSS_FEEDS:
+        try:
+            resp = requests.get(feed_url, timeout=8, headers={
+                'User-Agent': 'Mozilla/5.0 (compatible; XelaSphere/1.0)'
+            })
+            if resp.status_code != 200:
+                continue
+
+            root = ET.fromstring(resp.content)
+            items = root.findall('.//item')
+
+            for item in items:
+                title = ''
+                link = ''
+                desc = ''
+                pub_date = ''
+
+                title_el = item.find('title')
+                if title_el is not None and title_el.text:
+                    title = title_el.text
+
+                link_el = item.find('link')
+                if link_el is not None:
+                    link = link_el.text or ''
+
+                desc_el = item.find('description')
+                if desc_el is not None and desc_el.text:
+                    desc = unescape(desc_el.text)
+                    desc = _re.sub(r'<[^>]+>', '', desc).strip()
+
+                pub_el = item.find('pubDate')
+                if pub_el is not None and pub_el.text:
+                    pub_date = pub_el.text
+
+                source_name = 'CoinDesk' if 'coindesk' in feed_url else 'CoinTelegraph' if 'cointelegraph' in feed_url else 'Crypto News'
+
+                article = {
+                    'title': title.strip(),
+                    'body': desc[:200] + '...' if len(desc) > 200 else desc,
+                    'url': link.strip(),
+                    'source': source_name,
+                    'image': '',
+                    'published_on': pub_date,
+                    'categories': [coin_upper] if coin_upper else []
+                }
+
+                if not title.strip():
+                    continue
+
+                # Filter by coin if specified
+                if search_terms:
+                    combined = (title + ' ' + desc).lower()
+                    if not any(term in combined for term in search_terms):
+                        continue
+
+                all_articles.append(article)
+
+        except Exception as e:
+            import traceback
+            print(f'[CryptoAPI] RSS feed error ({feed_url}): {e}')
+            traceback.print_exc()
+            continue
+
+    # Deduplicate by title
+    seen_titles = set()
+    unique = []
+    for a in all_articles:
+        t = a['title'].lower().strip()
+        if t and t not in seen_titles:
+            seen_titles.add(t)
+            unique.append(a)
+
+    return unique[:limit]
 
 # ==================== AI CONTEXT CACHE ==================== #
 # Unified cache for AI context injection - consolidates price, details, and news
@@ -685,68 +799,35 @@ def _fetch_news_internal(coin_symbol: str, limit: int = 5) -> dict | None:
     """
     global _news_cache
 
-    # Normalize symbol
     symbol_upper = coin_symbol.upper()
-    # Map name to ticker if needed
     news_symbol = NEWS_SYMBOL_MAP.get(symbol_upper, symbol_upper)
 
     cache_key = f"news_{news_symbol}_{limit}"
     now = time.time()
 
-    # Check cache first
     if cache_key in _news_cache:
         cached = _news_cache[cache_key]
         if now - cached['timestamp'] < _NEWS_CACHE_DURATION:
-            print(f'[CryptoAPI] _fetch_news_internal: returning cached news for {cache_key}')
             return cached['data']
 
-    # Fetch fresh news
-    print(f'[CryptoAPI] _fetch_news_internal: fetching fresh news for {news_symbol}')
+    print(f'[CryptoAPI] _fetch_news_internal: fetching RSS news for {news_symbol}')
     try:
-        url = f'{CRYPTOCOMPARE_BASE}/news/?categories={news_symbol}&excludeCategories=Sponsored'
-        response = requests.get(
-            url,
-            headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'application/json'
-            },
-            timeout=10
-        )
+        news_items = _fetch_rss_news(news_symbol, limit)
 
-        if response.status_code == 200:
-            data = response.json()
-            articles = data.get('Data', [])[:limit]
+        result = {
+            'success': True,
+            'coin': news_symbol,
+            'count': len(news_items),
+            'articles': news_items
+        }
 
-            news_items = []
-            for article in articles:
-                news_items.append({
-                    'title': article.get('title', ''),
-                    'body': article.get('body', '')[:200] + '...' if len(article.get('body', '')) > 200 else article.get('body', ''),
-                    'url': article.get('url', ''),
-                    'source': article.get('source_info', {}).get('name', article.get('source', '')),
-                    'image': article.get('imageurl', ''),
-                    'published_on': article.get('published_on', 0),
-                    'categories': article.get('categories', '').split('|') if article.get('categories') else []
-                })
+        _news_cache[cache_key] = {
+            'data': result,
+            'timestamp': time.time()
+        }
 
-            result = {
-                'success': True,
-                'coin': news_symbol,
-                'count': len(news_items),
-                'articles': news_items
-            }
-
-            # Cache the result
-            _news_cache[cache_key] = {
-                'data': result,
-                'timestamp': time.time()
-            }
-
-            print(f'[CryptoAPI] _fetch_news_internal: fetched {len(news_items)} articles for {news_symbol}')
-            return result
-
-        print(f'[CryptoAPI] _fetch_news_internal: API error {response.status_code}')
-        return None
+        print(f'[CryptoAPI] _fetch_news_internal: fetched {len(news_items)} articles for {news_symbol}')
+        return result
 
     except Exception as e:
         print(f'[CryptoAPI] _fetch_news_internal error: {e}')
@@ -1096,10 +1177,10 @@ def format_crypto_context_for_ai(context: dict) -> str:
 @crypto_bp.route('/api/crypto/news', methods=['GET'])
 def get_crypto_news():
     """
-    Get latest crypto news from CryptoCompare API.
+    Get latest crypto news from RSS feeds (CoinDesk, CoinTelegraph).
 
     Query params:
-        - coin: Coin symbol (btc, eth) - optional, filters news by coin
+        - coin: Coin symbol (btc, eth) or name (bitcoin, ethereum) - optional
         - limit: Number of articles (default: 5, max: 10)
     """
     global _news_cache
@@ -1107,88 +1188,41 @@ def get_crypto_news():
     coin_query = request.args.get('coin', '').strip().upper()
     limit = min(int(request.args.get('limit', '5')), 10)
 
-    # Map common names to symbols for CryptoCompare
+    # Map common names to symbols
     symbol_map = {
-        'BITCOIN': 'BTC',
-        'ETHEREUM': 'ETH',
-        'SOLANA': 'SOL',
-        'CARDANO': 'ADA',
-        'DOGECOIN': 'DOGE',
-        'RIPPLE': 'XRP',
-        'POLKADOT': 'DOT',
-        'CHAINLINK': 'LINK',
-        'LITECOIN': 'LTC',
-        'AVALANCHE': 'AVAX',
-        'POLYGON': 'MATIC',
-        'UNISWAP': 'UNI',
-        'COSMOS': 'ATOM',
+        'BITCOIN': 'BTC', 'ETHEREUM': 'ETH', 'SOLANA': 'SOL',
+        'CARDANO': 'ADA', 'DOGECOIN': 'DOGE', 'RIPPLE': 'XRP',
+        'POLKADOT': 'DOT', 'CHAINLINK': 'LINK', 'LITECOIN': 'LTC',
+        'AVALANCHE': 'AVAX', 'POLYGON': 'MATIC', 'UNISWAP': 'UNI',
+        'COSMOS': 'ATOM', 'BINANCE': 'BNB',
     }
 
-    # Convert coin name to symbol if needed
     if coin_query in symbol_map:
         coin_query = symbol_map[coin_query]
 
-    # Check cache first
     cache_key = f"news_{coin_query}_{limit}"
     now = time.time()
     if cache_key in _news_cache:
         cached = _news_cache[cache_key]
         if now - cached['timestamp'] < _NEWS_CACHE_DURATION:
-            print(f'[CryptoAPI] Returning cached news for {cache_key}')
             return jsonify(cached['data'])
 
     try:
-        # Build API URL
-        if coin_query:
-            # Get news for specific coin
-            url = f'{CRYPTOCOMPARE_BASE}/news/?categories={coin_query}&excludeCategories=Sponsored'
-        else:
-            # Get general crypto news
-            url = f'{CRYPTOCOMPARE_BASE}/news/?excludeCategories=Sponsored'
+        news_items = _fetch_rss_news(coin_query, limit)
 
-        response = requests.get(
-            url,
-            headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'application/json'
-            },
-            timeout=10
-        )
+        result = {
+            'success': True,
+            'coin': coin_query or 'ALL',
+            'count': len(news_items),
+            'articles': news_items
+        }
 
-        if response.status_code == 200:
-            data = response.json()
-            articles = data.get('Data', [])[:limit]
+        _news_cache[cache_key] = {
+            'data': result,
+            'timestamp': time.time()
+        }
 
-            # Format the response
-            news_items = []
-            for article in articles:
-                news_items.append({
-                    'title': article.get('title', ''),
-                    'body': article.get('body', '')[:200] + '...' if len(article.get('body', '')) > 200 else article.get('body', ''),
-                    'url': article.get('url', ''),
-                    'source': article.get('source_info', {}).get('name', article.get('source', '')),
-                    'image': article.get('imageurl', ''),
-                    'published_on': article.get('published_on', 0),
-                    'categories': article.get('categories', '').split('|') if article.get('categories') else []
-                })
-
-            result = {
-                'success': True,
-                'coin': coin_query or 'ALL',
-                'count': len(news_items),
-                'articles': news_items
-            }
-
-            # Cache the result
-            _news_cache[cache_key] = {
-                'data': result,
-                'timestamp': time.time()
-            }
-
-            return jsonify(result)
-
-        print(f'[CryptoAPI] News error: status={response.status_code}')
-        return jsonify({'error': f'CryptoCompare API error: {response.status_code}'}), 500
+        return jsonify(result)
 
     except Exception as e:
         print(f'[CryptoAPI] News error: {e}')

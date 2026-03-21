@@ -3433,7 +3433,7 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
 
 /* Dynamic padding added via JS when scrolling user message to top */
 #chat-display.scroll-padding-active {
-    padding-bottom: 70vh;
+    padding-bottom: 40vh;
 }
 
 /* Mobile conversation-panel styles moved to mobile.css */
@@ -3720,7 +3720,8 @@ body.sidebar-collapsed .left-sidebar .profile-header {
     gap: 0.35rem;
 }
 
-body.sidebar-collapsed .section-header {
+body.sidebar-collapsed .section-header,
+body.sidebar-collapsed .your-chats-header {
     display: none;
 }
 
@@ -4152,18 +4153,18 @@ body.sidebar-collapsed .sidebar-empty-state {
 
 .guest-sidebar-empty {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    height: 100%;
+    padding-top: 1rem;
     text-align: center;
 }
 
 .guest-sidebar-empty p {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.35);
     margin: 0;
     line-height: 1.5;
-    max-width: 180px;
+    max-width: 200px;
 }
 
 /* Guest auth buttons in sidebar footer */

@@ -134,7 +134,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/email-composer.css') }}">
 
     <!-- Toast Notifications -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/toast.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/toast.css') }}?v=16">
 
     <!-- Text Selection Quote -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/text-selection-quote.css') }}">
@@ -367,7 +367,7 @@
                                 <path d="M21 21l-4.35-4.35"></path>
                             </svg>
                         </span>
-                        <span class="sidebar-action-text">Search</span>
+                        <span class="sidebar-action-text">Search Chats</span>
                         <span class="shortcut-hint"></span>
                     </button>
                     <button class="sidebar-action-btn has-shortcut" id="action-images" aria-label="Images" data-shortcut-win="Ctrl+Shift+I" data-shortcut-mac="⌘+Shift+I">
@@ -734,7 +734,7 @@
                                 </div>
                             </div>
 
-                            <div class="arrow-down at-bottom" id="downArrow">
+                            <div class="arrow-down" id="downArrow" style="display: none;">
                                 <i class="fas fa-arrow-down"></i>
                             </div>
                         </div>
@@ -1004,7 +1004,7 @@
 
     <!-- Scripts placed before closing body tag -->
     <script src="{{ url_for('static', filename='js/speechSynthesisModule.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='js/dictationModule.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dictationModule.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/voiceModeModule.js') }}"></script>
     <script src="{{ url_for('static', filename='js/filePreview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/scrollState.js') }}"></script>
@@ -1057,7 +1057,7 @@
     <script>
         window.sharedSessionId = "{{ shared_session_id|default('', true) }}";
     </script>
-    <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/toast.js') }}?v=6"></script>
     <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=4"></script>
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}"></script>
     <script src="{{ url_for('static', filename='js/typeTextWorker.js') }}"></script>
