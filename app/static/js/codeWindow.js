@@ -3392,6 +3392,20 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             }, 3000);
         }
 
+        // Dream consolidation notification
+        if (data.dream_notification) {
+            const dn = data.dream_notification;
+            const parts = [];
+            if (dn.pruned) parts.push(`${dn.pruned} pruned`);
+            if (dn.merged) parts.push(`${dn.merged} merged`);
+            if (dn.promoted) parts.push(`${dn.promoted} promoted`);
+            if (dn.synthesized) parts.push(`${dn.synthesized} new insight${dn.synthesized > 1 ? 's' : ''}`);
+            if (dn.superseded) parts.push(`${dn.superseded} resolved`);
+            if (parts.length > 0 && window.Toast) {
+                window.Toast.info(`Memory improved: ${parts.join(', ')}`, { duration: 5000 });
+            }
+        }
+
         // Handle guest mode response data
         if (data.guest_mode) {
             // Update guest message count on frontend
