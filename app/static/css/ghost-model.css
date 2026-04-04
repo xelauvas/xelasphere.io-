@@ -1,51 +1,58 @@
 /* ============================================
-   GHOST MODEL SELECTOR
+   GHOST MODEL SELECTOR — Header Style
    ============================================ */
 
-/* Ghost label pinned inside bottom-right of input pill */
+/* Wrapper sits in chat-shell__header */
+.ghost-model-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-self: flex-start;
+}
+
+.ghost-model-wrapper.guest-disabled {
+    pointer-events: none;
+    opacity: 0.4;
+}
+
+/* Clickable label — like ChatGPT's model selector */
 .ghost-model {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
     gap: 0.3rem;
-    position: absolute;
-    bottom: 0.2rem;
-    right: calc(var(--composer-side-pad, 0.75rem) + 0.75rem);
-    padding: 0;
+    padding: 0.35rem 0.6rem;
+    border-radius: 8px;
     cursor: pointer;
     user-select: none;
-    z-index: 2;
-    pointer-events: auto;
+    transition: background 0.15s ease;
+}
+
+.ghost-model:hover {
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .ghost-model__label {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.35);
-    transition: opacity 0.3s ease, color 0.3s ease;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
     white-space: nowrap;
+    transition: color 0.2s ease;
 }
 
-.ghost-model:hover .ghost-model__label {
+.ghost-model__chevron {
+    color: rgba(255, 255, 255, 0.4);
+    transition: transform 0.2s ease, color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.ghost-model[aria-expanded="true"] .ghost-model__chevron {
+    transform: rotate(180deg);
+}
+
+.ghost-model:hover .ghost-model__chevron {
     color: rgba(255, 255, 255, 0.6);
 }
 
-.ghost-model__icon {
-    font-size: 0.7rem;
-    transition: opacity 0.3s ease;
-}
-
-.ghost-model__hint {
-    font-size: 0.6rem;
-    color: rgba(255, 255, 255, 0.2);
-    animation: ghost-pulse 2s ease-in-out 1;
-}
-
-@keyframes ghost-pulse {
-    0%, 100% { opacity: 0.2; }
-    50% { opacity: 0.6; }
-}
-
-/* Crossfade transition */
+/* Crossfade transition on label text */
 .ghost-model__label.fade-out {
     opacity: 0;
     transition: opacity 0.15s ease;
@@ -56,45 +63,61 @@
     transition: opacity 0.15s ease 0.15s;
 }
 
+/* Clear override button (x) */
+.ghost-model__clear {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    margin-left: 0.1rem;
+    line-height: 1;
+    transition: color 0.15s ease;
+}
+
+.ghost-model__clear:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
 /* ============================================
-   PILL PICKER (Desktop override)
+   PILL DROPDOWN (opens below the label)
    ============================================ */
 
 .ghost-pills {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
     position: absolute;
-    bottom: -1.8rem;
-    right: calc(var(--composer-side-pad, 0.75rem) + 0.75rem);
-    padding: 0.35rem 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    max-height: 0;
-    opacity: 0;
-    transition: max-height 0.2s ease, opacity 0.2s ease;
-    z-index: 2;
-}
+    top: 100%;
+    left: 0;
+    margin-top: 0.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.5rem;
+    background: rgba(40, 40, 40, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    min-width: 200px;
+    max-width: 320px;
+    z-index: 1000;
 
-.ghost-pills::-webkit-scrollbar {
-    display: none;
+    /* Hidden by default */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
 }
 
 .ghost-pills.active {
-    max-height: 3rem;
     opacity: 1;
-    padding-top: 0.35rem;
-    padding-bottom: 0.35rem;
+    visibility: visible;
+    transform: translateY(0);
 }
 
 .ghost-pill {
     flex-shrink: 0;
-    padding: 0.25rem 0.6rem;
+    padding: 0.35rem 0.65rem;
     border-radius: 999px;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.7);
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.08);
     cursor: pointer;
@@ -103,9 +126,9 @@
 }
 
 .ghost-pill:hover {
-    color: rgba(255, 255, 255, 0.9);
+    color: #fff;
     background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.18);
 }
 
 .ghost-pill.active {
@@ -118,19 +141,6 @@
     color: #fff;
     background: rgba(99, 102, 241, 0.25);
     border-color: rgba(99, 102, 241, 0.4);
-}
-
-/* Clear override button */
-.ghost-model__clear {
-    font-size: 0.65rem;
-    color: rgba(255, 255, 255, 0.3);
-    cursor: pointer;
-    margin-left: 0.2rem;
-    transition: color 0.15s ease;
-}
-
-.ghost-model__clear:hover {
-    color: rgba(255, 255, 255, 0.7);
 }
 
 /* ============================================
@@ -146,7 +156,7 @@
 }
 
 /* ============================================
-   BOTTOM SHEET (Mobile override)
+   BOTTOM SHEET (Mobile)
    ============================================ */
 
 .ghost-bottom-sheet {
@@ -214,8 +224,12 @@
     margin: 0 auto 0.75rem;
 }
 
-/* Guest disabled state */
-.ghost-model.guest-disabled {
-    pointer-events: none;
-    opacity: 0.3;
+/* ============================================
+   MOBILE: hide header ghost, use bottom sheet
+   ============================================ */
+
+@media (max-width: 768px) {
+    .ghost-model-wrapper {
+        display: none !important;
+    }
 }

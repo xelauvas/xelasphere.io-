@@ -101,8 +101,6 @@
             // DOM refs
             this.ghostEl = document.getElementById('ghost-model');
             this.labelEl = document.getElementById('ghost-model-label');
-            this.iconEl = document.getElementById('ghost-model-icon');
-            this.hintEl = document.getElementById('ghost-model-hint');
             this.clearEl = document.getElementById('ghost-model-clear');
             this.pillsEl = document.getElementById('ghost-pills');
             this.inputEl = document.getElementById('prompt');
@@ -214,21 +212,12 @@
         updateGhostDisplay() {
             const modelId = this.getDisplayModel();
             const info = this.getModelInfo(modelId);
-            const icon = this.lockedModel
-                ? TASK_ICON_MAP[this.currentTask] || '⚡'
-                : (TASK_ICON_MAP[this.currentTask] || '⚡');
 
-            this.labelEl.textContent = `via ${info.label}`;
-            this.iconEl.textContent = icon;
+            this.labelEl.textContent = info.label;
 
             // Show/hide clear button
             if (this.clearEl) {
                 this.clearEl.style.display = this.lockedModel ? 'inline' : 'none';
-            }
-
-            // Show/hide hint
-            if (this.hintEl) {
-                this.hintEl.style.display = this.lockedModel ? 'none' : '';
             }
 
             // Update active pill
@@ -290,18 +279,29 @@
 
             this.pillsOpen = !this.pillsOpen;
             this.pillsEl.classList.toggle('active', this.pillsOpen);
+            this.ghostEl.setAttribute('aria-expanded', this.pillsOpen);
 
             if (this.pillsOpen) {
                 this.updateGhostDisplay();
                 // Focus first pill for keyboard nav
                 const firstPill = this.pillsEl.querySelector('.ghost-pill');
                 if (firstPill) firstPill.focus();
+
+                // Close on outside click
+                const closeOnOutside = (e) => {
+                    if (!this.ghostEl.contains(e.target) && !this.pillsEl.contains(e.target)) {
+                        this.closePills();
+                        document.removeEventListener('click', closeOnOutside);
+                    }
+                };
+                setTimeout(() => document.addEventListener('click', closeOnOutside), 0);
             }
         }
 
         closePills() {
             this.pillsOpen = false;
             this.pillsEl?.classList.remove('active');
+            this.ghostEl?.setAttribute('aria-expanded', 'false');
         }
 
         // ---- Bottom Sheet (Mobile) ----

@@ -464,7 +464,17 @@
                 <div class="chat-stage">
                 <div class="chat-shell" role="region" aria-label="Chat workspace">
                     <header class="chat-shell__header">
-                        <!-- Model selector removed — handled by ghost label below input -->
+                        <!-- Ghost Model Selector -->
+                        <div class="ghost-model-wrapper{% if is_guest %} guest-disabled{% endif %}">
+                            <div class="ghost-model" id="ghost-model" role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false" aria-label="Current AI model">
+                                <span class="ghost-model__label" id="ghost-model-label">Auto</span>
+                                <svg class="ghost-model__chevron" width="10" height="10" viewBox="0 0 12 12" fill="none">
+                                    <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <span class="ghost-model__clear" id="ghost-model-clear" style="display:none" title="Clear model override">&times;</span>
+                            </div>
+                            <div class="ghost-pills" id="ghost-pills" role="listbox" aria-label="Override model selection"></div>
+                        </div>
 
                         <div id="loading-indicator" style="display:none;"></div>
                         <div id="error-message" style="display:none;"></div>
@@ -653,15 +663,6 @@
                                     </button>
                                 </div>
                             </div>
-                            <!-- Ghost Model Selector (below input pill) -->
-                            <div class="ghost-model{% if is_guest %} guest-disabled{% endif %}" id="ghost-model" role="status" aria-live="polite" aria-label="Current AI model">
-                                <span class="ghost-model__label" id="ghost-model-label">via Auto</span>
-                                <span class="ghost-model__icon" id="ghost-model-icon">⚡</span>
-                                <span class="ghost-model__hint" id="ghost-model-hint">✦</span>
-                                <span class="ghost-model__clear" id="ghost-model-clear" style="display:none" title="Clear model override">×</span>
-                            </div>
-                            <div class="ghost-pills" id="ghost-pills" role="listbox" aria-label="Override model selection"></div>
-
                             <div class="arrow-down" id="downArrow" style="display: none;">
                                 <i class="fas fa-arrow-down"></i>
                             </div>
