@@ -7,6 +7,99 @@
     <title>API Keys · XelaSphere</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/api-keys.css') }}">
+    <style>
+        /* Dream Toggle Row */
+        .dream-toggle-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.85rem 1.1rem; margin-bottom: 0.75rem;
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+        }
+        .dream-toggle-info { display: flex; flex-direction: column; gap: 2px; }
+        .dream-toggle-label { font-size: 0.85rem; font-weight: 600; color: #f5f6fb; }
+        .dream-toggle-desc { font-size: 0.72rem; color: #888; }
+        .dream-switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+        .dream-switch input { opacity: 0; width: 0; height: 0; }
+        .dream-switch-slider {
+            position: absolute; inset: 0; cursor: pointer; border-radius: 999px;
+            background: rgba(255,255,255,0.12); transition: background 0.2s;
+        }
+        .dream-switch-slider::before {
+            content: ''; position: absolute; left: 3px; top: 3px;
+            width: 16px; height: 16px; border-radius: 50%;
+            background: #fff; transition: transform 0.2s;
+        }
+        .dream-switch input:checked + .dream-switch-slider { background: #4b6bff; }
+        .dream-switch input:checked + .dream-switch-slider::before { transform: translateX(18px); }
+
+        /* Memory Tab Toggle */
+        .memory-tab-toggle {
+            display: flex; gap: 2px; padding: 3px;
+            background: rgba(255,255,255,0.04); border-radius: 10px;
+            margin-bottom: 0.75rem;
+        }
+        .memory-tab-btn {
+            flex: 1; padding: 0.5rem 0.75rem; border: none; background: transparent;
+            color: #888; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+            border-radius: 8px; transition: all 0.2s;
+        }
+        .memory-tab-btn.active { background: rgba(255,255,255,0.08); color: #f5f6fb; }
+        .memory-tab-btn:hover:not(.active) { color: #bbb; }
+
+        /* Tab Panels */
+        .memory-tab-panel { display: none; }
+        .memory-tab-panel.active { display: block; }
+
+        /* Dream Activity */
+        .dream-activity-container { max-height: 400px; overflow-y: auto; }
+        .dream-activity-loading, .dream-activity-empty {
+            display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+            padding: 2rem 1rem; color: #666;
+        }
+        .dream-activity-empty i { font-size: 1.5rem; color: #555; }
+        .dream-activity-error { padding: 1rem; text-align: center; color: #888; }
+        .dream-activity-error a { color: #7ba0ff; }
+
+        .dream-activity-entry {
+            padding: 0.85rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);
+            animation: fadeIn 0.2s ease;
+        }
+        .dream-activity-entry:last-child { border-bottom: none; }
+        .dream-activity-entry.undone { opacity: 0.45; }
+
+        .dream-entry-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 0.4rem;
+        }
+        .dream-entry-time { font-size: 0.72rem; color: #888; font-weight: 500; }
+        .dream-entry-badge {
+            font-size: 0.65rem; padding: 2px 8px; border-radius: 999px;
+            background: rgba(255,255,255,0.06); color: #888;
+        }
+
+        .dream-entry-actions-list {
+            list-style: none; padding: 0; margin: 0 0 0.5rem 0;
+            display: flex; flex-direction: column; gap: 3px;
+        }
+        .dream-entry-actions-list li {
+            font-size: 0.78rem; color: #b4b6c4; padding-left: 0.75rem;
+            position: relative;
+        }
+        .dream-entry-actions-list li::before {
+            content: ''; position: absolute; left: 0; top: 0.55em;
+            width: 4px; height: 4px; border-radius: 50%; background: #555;
+        }
+
+        .dream-undo-btn {
+            border: none; background: rgba(255,255,255,0.06); color: #b4b6c4;
+            font-size: 0.72rem; font-weight: 600; padding: 4px 12px;
+            border-radius: 6px; cursor: pointer; transition: all 0.2s;
+        }
+        .dream-undo-btn:hover { background: rgba(255,255,255,0.1); color: #f5f6fb; }
+        .dream-undo-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
 <body class="api-keys-page">
     <div class="api-keys-wrapper">
@@ -230,16 +323,55 @@
                 </div>
             </div>
 
-            <div class="memory-list-container">
-                <div class="memory-loading" id="memory-loading">
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <span>Loading memories...</span>
+            <!-- Dream Toggle -->
+            <div class="dream-toggle-row" id="dream-toggle-row">
+                <div class="dream-toggle-info">
+                    <span class="dream-toggle-label">Memory Consolidation</span>
+                    <span class="dream-toggle-desc">Automatically organize, merge duplicates, and remove stale memories</span>
                 </div>
-                <div class="memory-empty" id="memory-empty" style="display: none;">
-                    <i class="fas fa-sparkles"></i>
-                    <p>No memories yet. As you chat, the AI will learn your preferences and remember important details.</p>
+                <label class="dream-switch">
+                    <input type="checkbox" id="dream-enabled-toggle" checked>
+                    <span class="dream-switch-slider"></span>
+                </label>
+            </div>
+
+            <!-- Tab Toggle -->
+            <div class="memory-tab-toggle">
+                <button type="button" class="memory-tab-btn active" data-memory-tab="memories">Memories</button>
+                <button type="button" class="memory-tab-btn" data-memory-tab="activity">Activity</button>
+            </div>
+
+            <!-- Memories Tab -->
+            <div class="memory-tab-panel active" data-memory-panel="memories">
+                <div class="memory-list-container">
+                    <div class="memory-loading" id="memory-loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Loading memories...</span>
+                    </div>
+                    <div class="memory-empty" id="memory-empty" style="display: none;">
+                        <i class="fas fa-sparkles"></i>
+                        <p>No memories yet. As you chat, the AI will learn your preferences and remember important details.</p>
+                    </div>
+                    <div class="memory-buckets" id="memory-buckets"></div>
                 </div>
-                <div class="memory-buckets" id="memory-buckets"></div>
+            </div>
+
+            <!-- Activity Tab -->
+            <div class="memory-tab-panel" data-memory-panel="activity">
+                <div class="dream-activity-container">
+                    <div class="dream-activity-loading" id="dream-activity-loading" style="display: none;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Loading activity...</span>
+                    </div>
+                    <div class="dream-activity-empty" id="dream-activity-empty" style="display: none;">
+                        <i class="fas fa-moon"></i>
+                        <p>No consolidation activity yet</p>
+                    </div>
+                    <div class="dream-activity-error" id="dream-activity-error" style="display: none;">
+                        <p>Failed to load activity. <a href="#" id="dream-activity-retry">Retry</a></p>
+                    </div>
+                    <div class="dream-activity-list" id="dream-activity-list"></div>
+                </div>
             </div>
 
             <div class="memory-modal-footer">
@@ -453,6 +585,7 @@
             memoryModal.classList.add('open');
             memoryModal.setAttribute('aria-hidden', 'false');
             loadMemories();
+            if (typeof loadDreamToggle === 'function') loadDreamToggle();
         }
 
         function closeMemoryModal() {
@@ -750,6 +883,209 @@
             clearMemoryConfirmModal.addEventListener('click', (e) => {
                 if (e.target === clearMemoryConfirmModal) closeClearMemoryModal();
             });
+        }
+
+        // =====================================================================
+        // Dream Consolidation — Toggle + Activity Log
+        // =====================================================================
+        const dreamToggle = document.getElementById('dream-enabled-toggle');
+        const memoryTabBtns = document.querySelectorAll('.memory-tab-btn');
+        const memoryTabPanels = document.querySelectorAll('.memory-tab-panel');
+        let dreamActivityLoaded = false;
+
+        // Tab switching
+        memoryTabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.dataset.memoryTab;
+                memoryTabBtns.forEach(b => b.classList.toggle('active', b === btn));
+                memoryTabPanels.forEach(p => p.classList.toggle('active', p.dataset.memoryPanel === target));
+                if (target === 'activity' && !dreamActivityLoaded) {
+                    loadDreamActivity();
+                }
+            });
+        });
+
+        async function loadDreamToggle() {
+            try {
+                const res = await fetch('/user/dream-settings', { headers: { 'X-CSRFToken': csrfToken } });
+                const data = await res.json();
+                if (dreamToggle) dreamToggle.checked = data.dream_enabled !== false;
+            } catch (e) {
+                console.warn('Failed to load dream settings:', e);
+            }
+        }
+
+        if (dreamToggle) {
+            dreamToggle.addEventListener('change', async () => {
+                try {
+                    await fetch('/user/dream-settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ dream_enabled: dreamToggle.checked })
+                    });
+                } catch (e) {
+                    console.error('Failed to save dream setting:', e);
+                    dreamToggle.checked = !dreamToggle.checked; // revert
+                }
+            });
+        }
+
+        async function loadDreamActivity() {
+            const loading = document.getElementById('dream-activity-loading');
+            const empty = document.getElementById('dream-activity-empty');
+            const error = document.getElementById('dream-activity-error');
+            const list = document.getElementById('dream-activity-list');
+            if (!list) return;
+
+            loading.style.display = 'flex';
+            empty.style.display = 'none';
+            error.style.display = 'none';
+            list.innerHTML = '';
+
+            try {
+                const res = await fetch('/user/memory-activity', { headers: { 'X-CSRFToken': csrfToken } });
+                if (!res.ok) throw new Error('Failed');
+                const data = await res.json();
+                loading.style.display = 'none';
+
+                if (!data.logs || data.logs.length === 0) {
+                    empty.style.display = 'flex';
+                    dreamActivityLoaded = true;
+                    return;
+                }
+
+                data.logs.forEach(log => {
+                    list.appendChild(renderDreamEntry(log));
+                });
+                dreamActivityLoaded = true;
+            } catch (e) {
+                console.error('Failed to load dream activity:', e);
+                loading.style.display = 'none';
+                error.style.display = 'block';
+            }
+        }
+
+        function renderDreamEntry(log) {
+            const entry = document.createElement('div');
+            entry.className = 'dream-activity-entry' + (log.undone ? ' undone' : '');
+
+            const header = document.createElement('div');
+            header.className = 'dream-entry-header';
+
+            const time = document.createElement('span');
+            time.className = 'dream-entry-time';
+            time.textContent = formatDreamDate(log.started_at);
+
+            header.appendChild(time);
+            if (log.undone) {
+                const badge = document.createElement('span');
+                badge.className = 'dream-entry-badge';
+                badge.textContent = 'Undone';
+                header.appendChild(badge);
+            }
+
+            const actionsList = document.createElement('ul');
+            actionsList.className = 'dream-entry-actions-list';
+
+            const summary = log.summary || buildSummary(log);
+            const lines = [];
+            if (summary.merged > 0) lines.push(`Merged ${summary.merged} duplicate memories`);
+            if (summary.pruned > 0) lines.push(`Pruned ${summary.pruned} memories`);
+            if (summary.superseded > 0) lines.push(`Resolved ${summary.superseded} conflicts`);
+            if (summary.promoted > 0) lines.push(`Promoted ${summary.promoted} memories`);
+
+            // Show synthesis insights individually
+            const allActions = [...(log.phase1_actions || []), ...(log.phase2_actions || [])];
+            allActions.filter(a => a.action_type === 'synthesize').forEach(a => {
+                lines.push(`New insight: "${a.reason}"`);
+            });
+
+            if (lines.length === 0) lines.push('Consolidation cycle completed');
+
+            lines.forEach(text => {
+                const li = document.createElement('li');
+                li.textContent = text;
+                actionsList.appendChild(li);
+            });
+
+            entry.appendChild(header);
+            entry.appendChild(actionsList);
+
+            // Undo button (only if within 7 days and not already undone)
+            if (!log.undone && isWithin7Days(log.started_at)) {
+                const undoBtn = document.createElement('button');
+                undoBtn.type = 'button';
+                undoBtn.className = 'dream-undo-btn';
+                undoBtn.textContent = 'Undo';
+                undoBtn.addEventListener('click', () => undoDream(log.id, undoBtn, entry));
+                entry.appendChild(undoBtn);
+            }
+
+            return entry;
+        }
+
+        function buildSummary(log) {
+            const counts = { pruned: 0, merged: 0, superseded: 0, promoted: 0, synthesized: 0 };
+            const all = [...(log.phase1_actions || []), ...(log.phase2_actions || [])];
+            all.forEach(a => {
+                if (a.action_type === 'prune') counts.pruned++;
+                else if (a.action_type === 'merge') counts.merged++;
+                else if (a.action_type === 'supersede') counts.superseded++;
+                else if (a.action_type === 'promote') counts.promoted++;
+                else if (a.action_type === 'synthesize') counts.synthesized++;
+            });
+            return counts;
+        }
+
+        function formatDreamDate(isoStr) {
+            if (!isoStr) return 'Unknown date';
+            try {
+                const d = new Date(isoStr);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    + ' — '
+                    + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            } catch { return isoStr; }
+        }
+
+        function isWithin7Days(isoStr) {
+            if (!isoStr) return false;
+            try {
+                const d = new Date(isoStr);
+                return (Date.now() - d.getTime()) < 7 * 24 * 60 * 60 * 1000;
+            } catch { return false; }
+        }
+
+        async function undoDream(logId, btn, entry) {
+            btn.disabled = true;
+            btn.textContent = 'Undoing...';
+            try {
+                const res = await fetch(`/user/memory-activity/${logId}/undo`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    entry.classList.add('undone');
+                    btn.remove();
+                    const badge = document.createElement('span');
+                    badge.className = 'dream-entry-badge';
+                    badge.textContent = 'Undone';
+                    entry.querySelector('.dream-entry-header').appendChild(badge);
+                } else {
+                    btn.textContent = data.error || 'Failed';
+                    setTimeout(() => { btn.textContent = 'Undo'; btn.disabled = false; }, 2000);
+                }
+            } catch (e) {
+                console.error('Undo failed:', e);
+                btn.textContent = 'Failed';
+                setTimeout(() => { btn.textContent = 'Undo'; btn.disabled = false; }, 2000);
+            }
+        }
+
+        // Retry link
+        const retryLink = document.getElementById('dream-activity-retry');
+        if (retryLink) {
+            retryLink.addEventListener('click', (e) => { e.preventDefault(); loadDreamActivity(); });
         }
     });
     </script>

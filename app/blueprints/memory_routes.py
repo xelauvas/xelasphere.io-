@@ -5,6 +5,9 @@ Routes:
 - DELETE /user/memories - Clear all memories
 - DELETE /user/memories/item - Remove specific memory
 - POST /user/memories/pin - Toggle pin status
+- GET/POST /user/dream-settings - Get or update dream consolidation settings
+- GET /user/memory-activity - Get dream consolidation activity log
+- POST /user/memory-activity/<log_id>/undo - Undo a consolidation
 """
 
 import logging
@@ -233,6 +236,45 @@ def toggle_memory_pin():
     except Exception as e:
         logger.error(f"Error toggling pin for user {user_id}: {e}")
         return jsonify({'error': 'Failed to update pin status.'}), 500
+
+
+@memory_bp.route('/user/dream-settings', methods=['GET'])
+@error_handler
+@login_required
+def get_dream_settings():
+    """Get dream consolidation settings."""
+    from app.config import db
+
+    user_id = session['user']['uid']
+    try:
+        doc = db.collection('users').document(user_id).get()
+        data = doc.to_dict() if doc.exists else {}
+        prefs = data.get('preferences', {})
+        return jsonify({'dream_enabled': prefs.get('dream_enabled', True)})
+    except Exception as e:
+        logger.error(f"Failed to get dream settings for {user_id}: {e}")
+        return jsonify({'dream_enabled': True})  # Default on
+
+
+@memory_bp.route('/user/dream-settings', methods=['POST'])
+@csrf_required
+@error_handler
+@login_required
+def update_dream_settings():
+    """Update dream consolidation settings."""
+    from app.config import db
+
+    user_id = session['user']['uid']
+    try:
+        body = request.get_json(force=True)
+        enabled = bool(body.get('dream_enabled', True))
+        db.collection('users').document(user_id).set(
+            {'preferences': {'dream_enabled': enabled}}, merge=True
+        )
+        return jsonify({'success': True, 'dream_enabled': enabled})
+    except Exception as e:
+        logger.error(f"Failed to update dream settings for {user_id}: {e}")
+        return jsonify({'error': 'Failed to update settings'}), 500
 
 
 @memory_bp.route('/user/memory-activity', methods=['GET'])
