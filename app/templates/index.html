@@ -116,7 +116,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/prism.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/options-btn.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/model-select.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
@@ -229,18 +229,7 @@
                 <span></span>
             </button>
 
-            <!-- Center: Model Selector -->
-            <div class="mobile-model-select{% if is_guest %} guest-disabled{% endif %}" id="mobile-model-select">
-                <div class="mobile-model-header">
-                    <span class="mobile-model-name">{% if is_guest %}Llama3.3 70B{% else %}Llama3.1 70B{% endif %}</span>
-                    <svg class="mobile-model-arrow" width="10" height="10" viewBox="0 0 12 12" fill="none">
-                        <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </div>
-                <div class="mobile-model-options" id="mobile-model-options">
-                    <!-- Populated dynamically from model-list -->
-                </div>
-            </div>
+            <!-- Center: Model selector removed — handled by ghost label below input -->
 
             <!-- Right: Ghost button -->
             {% if not is_guest %}
@@ -475,76 +464,7 @@
                 <div class="chat-stage">
                 <div class="chat-shell" role="region" aria-label="Chat workspace">
                     <header class="chat-shell__header">
-                        <div class="model-select-wrapper{% if is_guest %} guest-disabled{% endif %}">
-                            <div class="model-select{% if is_guest %} disabled{% endif %}" id="model" tabindex="{% if is_guest %}-1{% else %}0{% endif %}" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="model-list" aria-label="Select AI Model"{% if is_guest %} aria-disabled="true" title="Sign up to use different models"{% endif %}>
-                                Auto (Recommended)
-                            </div>
-                            <div class="model-select-content" id="model-list" role="listbox" aria-label="Available AI Models">
-                                <div role="option" class="model-option selected" data-value="auto" data-label="Auto (Recommended)" tabindex="-1" aria-selected="true">
-                                    <div class="model-meta">
-                                        <span class="model-name">Auto (Recommended)</span>
-                                        <span class="model-note">smart routing</span>
-                                    </div>
-                                    <span class="model-badge">Smart</span>
-                                </div>
-                                <div role="option" class="model-option" data-value="llama-3.3-70b-versatile" data-label="Llama 3.3 70B" tabindex="-1">
-                                    <div class="model-meta">
-                                        <span class="model-name">Llama 3.3 70B</span>
-                                        <span class="model-note">fast all-rounder</span>
-                                    </div>
-                                    <span class="model-badge">Groq</span>
-                                </div>
-                                <div role="option" class="model-option" data-value="qwen/qwen3-32b" data-label="Qwen 3 32B" tabindex="-1">
-                                    <div class="model-meta">
-                                        <span class="model-name">Qwen 3 32B</span>
-                                        <span class="model-note">coding & math</span>
-                                    </div>
-                                    <span class="model-badge">Groq</span>
-                                </div>
-                                <div role="option" class="model-option" data-value="qwen-3-235b-a22b-instruct-2507" data-label="Qwen 235B" tabindex="-1">
-                                    <div class="model-meta">
-                                        <span class="model-name">Qwen 235B</span>
-                                        <span class="model-note">complex reasoning</span>
-                                    </div>
-                                    <span class="model-badge">Cerebras</span>
-                                </div>
-                                <div role="option" class="model-option" data-value="deepseek-chat" data-label="DeepSeek V3" tabindex="-1">
-                                    <div class="model-meta">
-                                        <span class="model-name">DeepSeek V3</span>
-                                        <span class="model-note">top-tier coding</span>
-                                    </div>
-                                    <span class="model-badge">DeepSeek</span>
-                                </div>
-                                <div role="option" class="model-option" data-value="deepseek-reasoner" data-label="DeepSeek R1" tabindex="-1">
-                                    <div class="model-meta">
-                                        <span class="model-name">DeepSeek R1</span>
-                                        <span class="model-note">reasoning</span>
-                                    </div>
-                                    <span class="model-badge">DeepSeek</span>
-                                </div>
-                                <div role="option" class="model-option" data-value="cognitivecomputations/dolphin-mistral-24b-venice-edition:free" data-label="Venice" tabindex="-1">
-                                    <div class="model-meta">
-                                        <span class="model-name">Venice</span>
-                                        <span class="model-note">uncensored</span>
-                                    </div>
-                                    <span class="model-badge">OpenRouter</span>
-                                </div>
-                                <div role="option" class="model-option" data-value="kimi-k2.5" data-label="Kimi K2.5" tabindex="-1">
-                                    <div class="model-meta">
-                                        <span class="model-name">Kimi K2.5</span>
-                                        <span class="model-note">reasoning</span>
-                                    </div>
-                                    <span class="model-badge">Moonshot</span>
-                                </div>
-                                <div role="option" class="model-option" data-value="kimi-latest" data-label="Kimi Latest" tabindex="-1">
-                                    <div class="model-meta">
-                                        <span class="model-name">Kimi Latest</span>
-                                        <span class="model-note">long context</span>
-                                    </div>
-                                    <span class="model-badge">Moonshot</span>
-                                </div>
-                            </div>
-                        </div>
+                        <!-- Model selector removed — handled by ghost label below input -->
 
                         <div id="loading-indicator" style="display:none;"></div>
                         <div id="error-message" style="display:none;"></div>
@@ -732,6 +652,14 @@
                                         <i class="fas fa-stop"></i>
                                     </button>
                                 </div>
+                                <!-- Ghost Model Selector -->
+                                <div class="ghost-model{% if is_guest %} guest-disabled{% endif %}" id="ghost-model" role="status" aria-live="polite" aria-label="Current AI model">
+                                    <span class="ghost-model__label" id="ghost-model-label">via Auto</span>
+                                    <span class="ghost-model__icon" id="ghost-model-icon">⚡</span>
+                                    <span class="ghost-model__hint" id="ghost-model-hint">✦</span>
+                                    <span class="ghost-model__clear" id="ghost-model-clear" style="display:none" title="Clear model override">×</span>
+                                </div>
+                                <div class="ghost-pills" id="ghost-pills" role="listbox" aria-label="Override model selection"></div>
                             </div>
 
                             <div class="arrow-down" id="downArrow" style="display: none;">
@@ -1062,7 +990,7 @@
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}"></script>
     <script src="{{ url_for('static', filename='js/typeTextWorker.js') }}"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/modelSelect.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ghostModel.js') }}"></script>
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=23"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -1096,5 +1024,12 @@
             // Forward mobile quick actions to existing controls
         });
     </script>
+
+    <!-- Ghost Model Bottom Sheet (Mobile) -->
+    <div class="ghost-bottom-sheet__backdrop" id="ghost-bottom-sheet-backdrop"></div>
+    <div class="ghost-bottom-sheet" id="ghost-bottom-sheet" role="dialog" aria-label="Select AI model">
+        <div class="ghost-bottom-sheet__handle"></div>
+        <div class="ghost-bottom-sheet__grid" id="ghost-bottom-sheet-grid"></div>
+    </div>
 </body>
 </html>
