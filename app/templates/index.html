@@ -652,15 +652,16 @@
                                         <i class="fas fa-stop"></i>
                                     </button>
                                 </div>
-                                <!-- Ghost Model Selector -->
-                                <div class="ghost-model{% if is_guest %} guest-disabled{% endif %}" id="ghost-model" role="status" aria-live="polite" aria-label="Current AI model">
-                                    <span class="ghost-model__label" id="ghost-model-label">via Auto</span>
-                                    <span class="ghost-model__icon" id="ghost-model-icon">⚡</span>
-                                    <span class="ghost-model__hint" id="ghost-model-hint">✦</span>
-                                    <span class="ghost-model__clear" id="ghost-model-clear" style="display:none" title="Clear model override">×</span>
-                                </div>
-                                <div class="ghost-pills" id="ghost-pills" role="listbox" aria-label="Override model selection"></div>
                             </div>
+
+                            <!-- Ghost Model Selector (below input) -->
+                            <div class="ghost-model{% if is_guest %} guest-disabled{% endif %}" id="ghost-model" role="status" aria-live="polite" aria-label="Current AI model">
+                                <span class="ghost-model__label" id="ghost-model-label">via Auto</span>
+                                <span class="ghost-model__icon" id="ghost-model-icon">⚡</span>
+                                <span class="ghost-model__hint" id="ghost-model-hint">✦</span>
+                                <span class="ghost-model__clear" id="ghost-model-clear" style="display:none" title="Clear model override">×</span>
+                            </div>
+                            <div class="ghost-pills" id="ghost-pills" role="listbox" aria-label="Override model selection"></div>
 
                             <div class="arrow-down" id="downArrow" style="display: none;">
                                 <i class="fas fa-arrow-down"></i>
