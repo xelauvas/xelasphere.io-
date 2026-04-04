@@ -5,9 +5,9 @@
 /* Fixed position top-left, same as old model-select-wrapper */
 .ghost-model-wrapper {
     position: fixed;
-    top: 1rem;
-    left: calc(var(--left-sidebar-width, 260px) + 2.25rem);
-    z-index: 350;
+    top: 1.2rem;
+    left: calc(var(--left-sidebar-width, 260px) + 1rem);
+    z-index: 500;
     pointer-events: auto;
     transition: left 0.25s ease;
 }
