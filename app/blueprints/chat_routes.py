@@ -89,6 +89,8 @@ from app.system_rules import get_system_rules, should_skip_memory, should_skip_r
 from app.list_registry import process_ai_response_for_lists, resolve_user_pointer
 from app.smart_guard import smart_check_input, smart_tag_response, smart_validate_response
 from app.memory_v2 import MemoryOrchestrator, SessionContext, ConversationState, MemoryFeatureFlags
+from app.memory_v2.dream import maybe_consolidate as dream_maybe_consolidate
+from app.memory_v2.dream.gates import get_dream_state, update_dream_state
 from app.memory_v3 import (
     get_v3_context, V3_ENABLED, reset_v3_state,
     should_inject_v3, get_v3_cohort, get_rollout_manager,
@@ -1941,6 +1943,20 @@ def chat():
                     except Exception as e:
                         logger.error(f"🧠 Memory V2 post_turn FAILED: {e}", exc_info=True)
 
+                # Dream: background memory consolidation (fire-and-forget)
+                if not guest_mode:
+                    try:
+                        user_prefs_for_dream = session.get('user', {}).get('preferences', {})
+                        import threading
+                        dream_thread = threading.Thread(
+                            target=dream_maybe_consolidate,
+                            args=(db, user_id, user_prefs_for_dream),
+                            daemon=True,
+                        )
+                        dream_thread.start()
+                    except Exception as e:
+                        logger.debug(f"Dream trigger skipped: {e}")
+
                 # Process reflection results
                 if reflection_result and reflection_result.has_actionable_items():
                     # NOTE: Reflection memory candidates are now handled by Memory V2's
@@ -1979,6 +1995,17 @@ def chat():
             email_data = parse_email_from_response(response_text)
             logger.info(f"Email detected, parsed: subject='{email_data.get('subject', '')[:30]}...'")
 
+        # Check for pending dream notification
+        dream_notification = None
+        if not guest_mode and firestore_available:
+            try:
+                ds = get_dream_state(db, user_id)
+                if ds.get('pending_notification'):
+                    dream_notification = ds['pending_notification']
+                    update_dream_state(db, user_id, {'pending_notification': None})
+            except Exception:
+                pass
+
         response_data = {
             'response': response_text,
             'is_code': is_code_response,
@@ -2000,6 +2027,7 @@ def chat():
             'offline_reason': offline_reason if offline_active else None,
             'offline_cached_messages': cached_unsynced,
             'memory_updated': memory_updated,
+            'dream_notification': dream_notification,
             'next_steps': next_steps if next_steps else None,
             # Guest mode info
             'guest_mode': guest_mode,
