@@ -151,6 +151,7 @@ body.right-sidebar-open {
     max-width: 582px;
     height: 0px;
     padding: 0px;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1235,7 +1236,7 @@ img.composer-attachment-thumb--empty {
     align-items: center;
     justify-content: center;
     padding: 1.25rem;
-    z-index: 9999;
+    z-index: 10001;
     backdrop-filter: blur(2px);
 }
 
@@ -1961,7 +1962,7 @@ img.composer-attachment-thumb--empty {
 }
 
 #prompt:disabled {
-    caret-color: black;
+    caret-color: transparent;
 }
 
 /* General Spinner Container Styles */
@@ -1983,8 +1984,6 @@ img.composer-attachment-thumb--empty {
 
 /* Default Spinner */
 .load-more-spinner.default {
-    border: 4px solid transparent;
-    border-top-color: #ffffff;
     width: 20px; /* Set the size of the spinner */
     height: 20px;
     border: 2px solid rgba(255, 255, 255, 0.2); /* Light, translucent border */
@@ -2004,11 +2003,11 @@ img.composer-attachment-thumb--empty {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    animation: spin 0.9s linear infinite; /* Faster rotation for a smooth effect */
+    animation: spin-centered 0.9s linear infinite; /* Faster rotation for a smooth effect */
 }
 
-/* Keyframes for Spin Animation */
-@keyframes spin {
+/* Keyframes for centered Spin Animation */
+@keyframes spin-centered {
     0% {
         transform: translate(-50%, -50%) rotate(0deg);
     }
@@ -2025,7 +2024,7 @@ img.composer-attachment-thumb--empty {
     position: sticky;
     top: 0;
     z-index: 10;
-    background: #fff;
+    background: #1a1a2e;
 }
 
 /* Standard Bottom Spinner */
@@ -2033,15 +2032,7 @@ img.composer-attachment-thumb--empty {
     margin-top: 10px;
 }
 
-/* Spinner Animations */
-@keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-    100% {
-        transform: rotate(360deg);
-    }
-}
+/* Duplicate @keyframes spin removed — defined earlier (~line 1594) */
 
 
 /* --- Edit & Copy Buttons --- */

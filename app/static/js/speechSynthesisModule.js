@@ -697,7 +697,7 @@ function attachSourcesToMessage(messageId, searchResults) {
 
     const primaryRow = messageElement.querySelector('.action-buttons-row');
     if (primaryRow) {
-        renderSourcesButton(primaryRow, messageElement, messageId, messageSources);
+        renderSourcesButton(primaryRow, messageElement, messageId, searchResults);
     }
 }
 
@@ -813,10 +813,10 @@ function retryAnswer(originalPrompt, messageId) {
 // Mock implementation of hideOriginalInput function (you may already have this)
 function hideOriginalInput(messageId) {
     const messageElement = document.getElementById(messageId);
-    if (messageElement) {
-        messageElement.style.display = 'none'; // Hide the message element
-    }
-    
+    if (!messageElement) return;
+
+    messageElement.style.display = 'none'; // Hide the message element
+
     const originalPrompt = messageElement.dataset.originalPrompt;
     if (originalPrompt) {
         const promptElements = document.querySelectorAll(`[data-original-prompt="${originalPrompt}"]`);

@@ -53,22 +53,27 @@
         {% endwith %}
 
         <!-- Social Login Options -->
+        {% if oauth_status and (oauth_status.google or oauth_status.microsoft or oauth_status.discord) %}
         <div class="social-login-section">
             <div class="social-buttons">
-                <a href="#" class="social-btn" aria-label="Sign in with Apple" title="Sign in with Apple">
-                    <img src="{{ url_for('static', filename='images/apple.svg') }}" alt="" width="20" height="20">
-                </a>
+                {% if oauth_status.discord %}
                 <a href="{{ url_for('auth_routes.discord_login') }}" class="social-btn" aria-label="Sign in with Discord" title="Sign in with Discord">
                     <img src="{{ url_for('static', filename='images/discord.svg') }}" alt="" width="20" height="20">
                 </a>
+                {% endif %}
+                {% if oauth_status.google %}
                 <a href="{{ url_for('auth_routes.google_login') }}" class="social-btn" aria-label="Sign in with Google" title="Sign in with Google">
                     <img src="{{ url_for('static', filename='images/google.svg') }}" alt="" width="20" height="20">
                 </a>
+                {% endif %}
+                {% if oauth_status.microsoft %}
                 <a href="{{ url_for('auth_routes.microsoft_login') }}" class="social-btn" aria-label="Sign in with Microsoft" title="Sign in with Microsoft">
                     <img src="{{ url_for('static', filename='images/microsoft.svg') }}" alt="" width="20" height="20">
                 </a>
+                {% endif %}
             </div>
         </div>
+        {% endif %}
 
         <!-- Separator -->
         <div class="login-separator">

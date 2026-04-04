@@ -204,8 +204,11 @@
         cardsContainer.innerHTML = activeUrls.map(createLoadingCard).join('');
         el.classList.add('visible');
 
-        // Add remove handlers
-        cardsContainer.addEventListener('click', handleRemove);
+        // Add remove handlers (only once)
+        if (!cardsContainer._removeListenerAdded) {
+            cardsContainer.addEventListener('click', handleRemove);
+            cardsContainer._removeListenerAdded = true;
+        }
 
         // Fetch metadata for each URL
         for (const url of activeUrls) {

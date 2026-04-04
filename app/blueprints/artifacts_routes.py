@@ -268,7 +268,7 @@ def view_shared_artifact(share_token: str):
 
         if not (uuid_pattern.match(share_token) or urlsafe_pattern.match(share_token)):
             logger.warning(f"Invalid share token format attempted: {share_token[:20]}...")
-            return "Share link not found or has expired.", 404
+            return render_template('404.html'), 404
 
         # Fetch share data from Firestore
         share_ref = db.collection('shared_artifacts').document(share_token)
@@ -277,7 +277,7 @@ def view_shared_artifact(share_token: str):
         if not share_doc.exists:
             # Log failed attempts to detect enumeration attacks
             logger.info(f"Share token not found: {share_token[:8]}... (IP: {request.remote_addr})")
-            return "Share link not found or has expired.", 404
+            return render_template('404.html'), 404
 
         share_data = share_doc.to_dict()
 
@@ -285,7 +285,7 @@ def view_shared_artifact(share_token: str):
         if share_data.get('expiresAt'):
             expires_at = share_data['expiresAt']
             if datetime.now() > expires_at:
-                return "This share link has expired.", 410
+                return render_template('404.html'), 410
 
         # Fetch artifact data
         artifact = artifact_store.get_artifact(
@@ -295,7 +295,7 @@ def view_shared_artifact(share_token: str):
         )
 
         if not artifact:
-            return "Artifact not found.", 404
+            return render_template('404.html'), 404
 
         # Format shared date
         shared_at = None
@@ -319,7 +319,7 @@ def view_shared_artifact(share_token: str):
 
     except Exception as exc:
         logger.error("Failed to load shared artifact %s: %s", share_token, exc)
-        return "Failed to load shared artifact.", 500
+        return render_template('500.html'), 500
 
 
 @artifacts_bp.route('/chat/<session_id>/artifacts/<artifact_id>/comments', methods=['GET'])

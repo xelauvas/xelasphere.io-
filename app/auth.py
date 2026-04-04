@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from flask import Blueprint, request, session, redirect, url_for, flash, render_template, current_app
 from firebase_admin import auth  # Firebase is initialized in config.py
+from firebase_admin.exceptions import FirebaseError
 from urllib.parse import urlencode
 from app.config import Config, db  # Import Config class and db
 from .grog_api import TaskGenerator
@@ -499,17 +500,10 @@ def google_callback():
 
     # Fetch options for the index page (if needed)
     try:
-        options = fetch_options_from_grog_api()
-        if not options:
-            flash('Error fetching options. Please try again later.', 'danger')
-            return redirect(url_for('pages.index'))  # Redirect to the index page after login
-
-        
-        return redirect(url_for('pages.index'))  # Redirect to the index page after login
-
-    except Exception as e:
-        flash(f'Error occurred: {str(e)}', 'danger')
-        return redirect(url_for('pages.index'))  # Redirect to the index page even on error
+        fetch_options_from_grog_api()  # Non-critical, fail silently
+        return redirect(url_for('pages.index'))
+    except Exception:
+        return redirect(url_for('pages.index'))  # Options fetch failed, proceed anyway
 
 
 
@@ -776,7 +770,12 @@ def register():
         except Exception as e:
             flash(f'Registration failed. Error: {str(e)}', 'danger')
             return redirect(url_for('auth_routes.register'))
-    return render_template('register.html')
+    oauth_status = {
+        'google': GOOGLE_OAUTH_CONFIGURED,
+        'microsoft': MICROSOFT_OAUTH_CONFIGURED,
+        'discord': DISCORD_OAUTH_CONFIGURED
+    }
+    return render_template('register.html', oauth_status=oauth_status)
 
 @auth_routes.route('/auth/logout', methods=['POST'])
 def logout():
@@ -858,8 +857,12 @@ def edit_profile():
         return redirect(url_for('auth_routes.login'))
 
     user_data = session['user']
-    profile_snapshot = db.collection('users').document(user_data['uid']).get()
-    profile_doc = profile_snapshot.to_dict() if profile_snapshot.exists else {}
+    try:
+        profile_snapshot = db.collection('users').document(user_data['uid']).get()
+        profile_doc = profile_snapshot.to_dict() if profile_snapshot.exists else {}
+    except Exception as e:
+        current_app.logger.error(f"Failed to load profile for {user_data.get('uid')}: {e}")
+        profile_doc = {}
     form_defaults = _build_profile_defaults(user_data, profile_doc or {})
 
     timezones = [

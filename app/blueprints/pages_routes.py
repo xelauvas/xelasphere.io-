@@ -106,7 +106,8 @@ def index():
             is_guest=guest_mode,
             guest_message_count=guest_count,
             guest_message_limit=GUEST_MESSAGE_LIMIT,
-            guest_banner_threshold=GUEST_BANNER_THRESHOLD
+            guest_banner_threshold=GUEST_BANNER_THRESHOLD,
+            session_has_messages=False
         )
     except Exception as e:
         logger.error(f"Failed to load the index page: {e}")

@@ -514,6 +514,12 @@ const DictationModule = (function() {
 
         // Hide overlay
         recordingOverlay.classList.remove('active');
+
+        // Restore voice mode button (hidden in showRecordingUI)
+        const voiceModeButton = document.getElementById('voice-mode-button');
+        if (voiceModeButton) {
+            voiceModeButton.classList.remove('hidden');
+        }
     }
 
     /**

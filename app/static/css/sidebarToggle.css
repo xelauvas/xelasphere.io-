@@ -18,7 +18,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1100;
+    z-index: var(--z-sticky, 1100);
     cursor: pointer;
     transition: left 0.3s var(--transition-timing);
     /* Add GPU acceleration */
