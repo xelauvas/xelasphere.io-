@@ -2,19 +2,20 @@
    GHOST MODEL SELECTOR
    ============================================ */
 
-/* Ghost label overlapping bottom of input pill */
+/* Ghost label pinned inside bottom-right of input pill */
 .ghost-model {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 0.3rem;
-    margin-top: -0.6rem;
-    padding: 0 1rem 0;
-    min-height: 1.25rem;
+    position: absolute;
+    bottom: 0.2rem;
+    right: calc(var(--composer-side-pad, 0.75rem) + 0.75rem);
+    padding: 0;
     cursor: pointer;
     user-select: none;
-    position: relative;
-    z-index: 1;
+    z-index: 2;
+    pointer-events: auto;
 }
 
 .ghost-model__label {
@@ -63,15 +64,17 @@
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.35rem 0.75rem;
+    position: absolute;
+    bottom: -1.8rem;
+    right: calc(var(--composer-side-pad, 0.75rem) + 0.75rem);
+    padding: 0.35rem 0;
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
     max-height: 0;
     opacity: 0;
-    transition: max-height 0.2s ease, opacity 0.2s ease, padding 0.2s ease;
-    padding-top: 0;
-    padding-bottom: 0;
+    transition: max-height 0.2s ease, opacity 0.2s ease;
+    z-index: 2;
 }
 
 .ghost-pills::-webkit-scrollbar {
