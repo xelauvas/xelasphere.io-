@@ -394,9 +394,9 @@
         }
 
         resetAfterSend() {
-            if (!this.lockedModel) {
-                this.overrideModel = null;
-                this.currentTask = 'chat';
+            // Keep the selected model — only reset intent detection
+            this.currentTask = 'chat';
+            if (!this.overrideModel && !this.lockedModel) {
                 this.suggestedModel = 'auto';
                 this.updateGhostDisplay();
             }
