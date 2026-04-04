@@ -464,17 +464,6 @@
                 <div class="chat-stage">
                 <div class="chat-shell" role="region" aria-label="Chat workspace">
                     <header class="chat-shell__header">
-                        <!-- Ghost Model Selector -->
-                        <div class="ghost-model-wrapper{% if is_guest %} guest-disabled{% endif %}">
-                            <div class="ghost-model" id="ghost-model" role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false" aria-label="Current AI model">
-                                <span class="ghost-model__label" id="ghost-model-label">Auto</span>
-                                <svg class="ghost-model__chevron" width="10" height="10" viewBox="0 0 12 12" fill="none">
-                                    <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                                <span class="ghost-model__clear" id="ghost-model-clear" style="display:none" title="Clear model override">&times;</span>
-                            </div>
-                            <div class="ghost-pills" id="ghost-pills" role="listbox" aria-label="Override model selection"></div>
-                        </div>
 
                         <div id="loading-indicator" style="display:none;"></div>
                         <div id="error-message" style="display:none;"></div>
@@ -1027,6 +1016,18 @@
     </script>
 
     <!-- Ghost Model Bottom Sheet (Mobile) -->
+    <!-- Ghost Model Selector (fixed position, top-left) -->
+    <div class="ghost-model-wrapper{% if is_guest %} guest-disabled{% endif %}" id="ghost-model-wrapper">
+        <div class="ghost-model" id="ghost-model" role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false" aria-label="Current AI model">
+            <span class="ghost-model__label" id="ghost-model-label">Auto</span>
+            <svg class="ghost-model__chevron" width="10" height="10" viewBox="0 0 12 12" fill="none">
+                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="ghost-model__clear" id="ghost-model-clear" style="display:none" title="Clear model override">&times;</span>
+        </div>
+        <div class="ghost-pills" id="ghost-pills" role="listbox" aria-label="Override model selection"></div>
+    </div>
+
     <div class="ghost-bottom-sheet__backdrop" id="ghost-bottom-sheet-backdrop"></div>
     <div class="ghost-bottom-sheet" id="ghost-bottom-sheet" role="dialog" aria-label="Select AI model">
         <div class="ghost-bottom-sheet__handle"></div>
