@@ -123,9 +123,6 @@ body.page-ready:not(.has-messages) .chatbox {
 
 /* Hide desktop elements on mobile IMMEDIATELY (before JS) */
 @media (max-width: 768px) {
-    .model-select-wrapper {
-        display: none !important;
-    }
     .toggle-button {
         display: none !important;
     }
@@ -366,116 +363,6 @@ body.is-ios .mobile-header-bar {
     display: none;
 }
 
-/* Model selector - centered */
-body.device-phone .mobile-model-select,
-body.device-tablet .mobile-model-select,
-body.is-mobile .mobile-model-select,
-body.is-ios .mobile-model-select {
-    position: relative;
-    top: auto;
-    left: auto;
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 44px;
-    max-height: 44px;
-    padding: 0;
-    
-    background: transparent;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    overflow: visible;
-    transition: background 0.15s ease;
-    z-index: 1;
-}
-
-body.device-phone .mobile-model-select:active,
-body.device-tablet .mobile-model-select:active,
-body.is-mobile .mobile-model-select:active,
-body.is-ios .mobile-model-select:active {
-    background: rgba(255, 255, 255, 0.08);
-}
-
-body.device-phone .mobile-model-select.expanded,
-body.device-tablet .mobile-model-select.expanded,
-body.is-mobile .mobile-model-select.expanded,
-body.is-ios .mobile-model-select.expanded {
-    position: relative;
-    background: rgba(40, 40, 40, 0.98);
-    border-radius: 12px;
-    z-index: 9999;
-}
-
-/* Dropdown options container */
-body.device-phone .mobile-model-select .mobile-model-options,
-body.device-tablet .mobile-model-select .mobile-model-options,
-body.is-mobile .mobile-model-select .mobile-model-options,
-body.is-ios .mobile-model-select .mobile-model-options {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    min-width: 180px;
-    max-height: 50vh;
-    overflow-y: auto;
-    background: rgba(40, 40, 40, 0.98);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    margin-top: 8px;
-    padding: 8px 0;
-    flex-direction: column;
-}
-
-body.device-phone .mobile-model-select.expanded .mobile-model-options,
-body.device-tablet .mobile-model-select.expanded .mobile-model-options,
-body.is-mobile .mobile-model-select.expanded .mobile-model-options,
-body.is-ios .mobile-model-select.expanded .mobile-model-options {
-    display: flex;
-}
-
-/* Model header */
-body.device-phone .mobile-model-header,
-body.device-tablet .mobile-model-header,
-body.is-mobile .mobile-model-header,
-body.is-ios .mobile-model-header {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 0 12px;
-    height: 36px;
-    min-height: 36px;
-    white-space: nowrap;
-}
-
-body.device-phone .mobile-model-name,
-body.device-tablet .mobile-model-name,
-body.is-mobile .mobile-model-name,
-body.is-ios .mobile-model-name {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-}
-
-body.device-phone .mobile-model-arrow,
-body.device-tablet .mobile-model-arrow,
-body.is-mobile .mobile-model-arrow,
-body.is-ios .mobile-model-arrow {
-    color: rgba(255, 255, 255, 0.5);
-    transition: transform 0.2s ease;
-}
-
-body.device-phone .mobile-model-select.expanded .mobile-model-arrow,
-body.device-tablet .mobile-model-select.expanded .mobile-model-arrow,
-body.is-mobile .mobile-model-select.expanded .mobile-model-arrow,
-body.is-ios .mobile-model-select.expanded .mobile-model-arrow {
-    transform: rotate(180deg);
-}
-
 /* Ghost button */
 .mobile-header-ghost {
     display: flex;
@@ -566,14 +453,6 @@ body.device-tablet #chat-display,
 body.is-mobile #chat-display,
 body.is-ios #chat-display {
     padding-top: 0 !important;
-}
-
-/* Hide desktop model selector on mobile */
-body.device-phone .model-select-wrapper,
-body.device-tablet .model-select-wrapper,
-body.is-mobile .model-select-wrapper,
-body.is-ios .model-select-wrapper {
-    display: none !important;
 }
 
 /* === Standalone/PWA Mode === */
@@ -1066,10 +945,6 @@ body.is-ios .arrow-down {
     z-index: var(--z-header-controls, 500) !important;
 }
 
-.model-select-wrapper {
-    z-index: var(--z-header-controls, 500) !important;
-}
-
 .temp-chat-launcher {
     z-index: var(--z-header-controls, 500) !important;
 }
@@ -1090,8 +965,7 @@ body.is-ios .arrow-down {
     .sidebar-toggle-button,
     .submit-btn,
     .social-btn,
-    .toggle-button,
-    .model-select {
+    .toggle-button {
         touch-action: manipulation;
         -webkit-tap-highlight-color: transparent;
     }
@@ -1216,9 +1090,7 @@ body.is-ios .arrow-down {
         pointer-events: none;
     }
 
-    /* Hide model selector and temp chat when sidebar is open */
-    body.mobile-sidebar-open .model-select-wrapper,
-    body.mobile-sidebar-open .mobile-model-select,
+    /* Hide temp chat when sidebar is open */
     body.mobile-sidebar-open .temp-chat-launcher {
         opacity: 0;
         pointer-events: none;
@@ -1390,12 +1262,6 @@ body.is-ios .arrow-down {
         font-size: 1.35rem;
     }
 
-    /* --- Model Select Position --- */
-    .model-select-wrapper {
-        left: 60px !important;
-        right: auto !important;
-    }
-
     /* --- Chat Area Adjustments --- */
     .container.chat-area {
         padding-top: calc(var(--mobile-header-height) + env(safe-area-inset-top, 0px));
@@ -1460,10 +1326,6 @@ body.is-ios .arrow-down {
         left: 8px;
         width: 40px;
         height: 40px;
-    }
-
-    .model-select-wrapper {
-        left: 52px !important;
     }
 
     .mobile-close-sidebar {
@@ -1603,9 +1465,7 @@ body.is-ios .arrow-down {
     /* Header area */
     .chat-shell__header,
     .temp-composer-header,
-    .toggle-button,
-    .model-select-wrapper,
-    .model-select-wrapper .model-select {
+    .toggle-button {
         background: transparent;
         background-color: transparent;
     }
@@ -1972,11 +1832,6 @@ body.is-ios .arrow-down {
         z-index: 1100 !important;
     }
 
-    body.has-messages .model-select-wrapper {
-        position: fixed !important;
-        z-index: 1000 !important;
-    }
-
     body.has-messages .temp-chat-launcher {
         position: fixed !important;
         z-index: 1000 !important;
@@ -2186,11 +2041,6 @@ body.is-ios .arrow-down {
         pointer-events: auto;
     }
 
-    /* Adjust model select position in temp mode */
-    body.temporary-chat-mode .model-select-wrapper {
-        left: 12px !important;
-        top: 12px !important;
-    }
 }
 
 @media (max-width: 480px) {
@@ -2392,59 +2242,6 @@ body.is-ios .arrow-down {
         padding: 0.75rem 1rem;
     }
 
-    /* === Model Select Dropdown - ChatGPT Style === */
-    .model-select-wrapper {
-        position: fixed !important;
-        top: 12px !important;
-        left: 60px !important;
-        right: auto !important;
-        z-index: 1000 !important;
-    }
-
-    .model-select {
-        font-size: 0.8rem !important;
-        padding: 0.4rem 0.5rem !important;
-        background: transparent !important;
-        border: none !important;
-        color: rgba(255, 255, 255, 0.7) !important;
-    }
-
-    .model-select:hover,
-    .model-select:active {
-        background: rgba(255, 255, 255, 0.08) !important;
-        color: #fff !important;
-    }
-
-    .model-select-content {
-        position: fixed !important;
-        top: 50px !important;
-        bottom: auto !important;
-        left: 12px !important;
-        right: 12px !important;
-        transform: none !important;
-        width: auto !important;
-        max-width: none !important;
-        max-height: 60vh !important;
-        overflow-y: auto !important;
-        background: #2f2f2f !important;
-        border: none !important;
-        border-radius: 12px !important;
-    }
-
-    .model-select-content.active {
-        transform: none !important;
-    }
-
-    .model-option {
-        padding: 14px 16px !important;
-        font-size: 0.9rem !important;
-        min-height: 48px !important;
-    }
-
-    .model-meta {
-        padding-left: 0 !important;
-    }
-
     /* === Profile Dropdown in Sidebar === */
     .sidebar-footer .dropdown-container {
         position: fixed;
@@ -2573,10 +2370,6 @@ body.is-ios .arrow-down {
         padding: 1rem;
     }
 
-    .model-select-content {
-        max-width: 260px;
-    }
-
     .images-gallery-grid {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -2592,66 +2385,6 @@ body.is-ios .arrow-down {
     .toast {
         bottom: 5rem;
         font-size: 0.75rem;
-    }
-}
-
-/* ============================================
-   Mobile Model Selector - Options dropdown
-   (Header bar handles main positioning)
-   ============================================ */
-
-/* Hidden on desktop */
-.mobile-model-select {
-    display: none;
-}
-
-/* Model options list styling */
-@media (max-width: 768px) {
-    .mobile-model-select.guest-disabled {
-        display: none !important;
-    }
-
-    /* Option items styling */
-    .mobile-model-option {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        padding: 12px 16px;
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 0.9rem;
-        font-weight: 500;
-        transition: background 0.1s ease;
-        cursor: pointer;
-        white-space: nowrap;
-        min-height: 44px;
-    }
-
-    .mobile-model-option:active {
-        background: rgba(255, 255, 255, 0.1);
-    }
-
-    .mobile-model-option.selected {
-        color: rgba(255, 255, 255, 0.9);
-    }
-
-    .mobile-model-option.selected::after {
-        content: '✓';
-        font-size: 0.8rem;
-        color: rgba(255, 255, 255, 0.6);
-    }
-
-    .mobile-model-option-note {
-        display: none;
-    }
-}
-
-@media (max-width: 480px) {
-    /* Smaller phones: adjust model options */
-    .mobile-model-option {
-        padding: 10px 12px;
-        font-size: 0.85rem;
-        min-height: 40px;
     }
 }
 
@@ -4497,11 +4230,6 @@ body.viewport-mobile .toggle-button {
     display: none !important;
 }
 
-/* Hide desktop model selector */
-body.viewport-mobile .model-select-wrapper {
-    display: none !important;
-}
-
 /* Hide desktop temp-chat-launcher */
 body.viewport-mobile .temp-chat-launcher.desktop-only {
     display: none !important;
@@ -4528,105 +4256,6 @@ body.viewport-mobile .mobile-header-bar {
     border-bottom: none !important;
     z-index: 9999 !important;
     box-sizing: content-box !important;
-}
-
-/* Show mobile model selector */
-body.viewport-mobile .mobile-model-select:not(.guest-disabled) {
-    display: inline-flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    min-height: 44px !important;
-    max-height: 44px !important;
-    padding: 0 !important;
-}
-
-body.viewport-mobile .mobile-model-header {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 6px !important;
-    padding: 0 12px !important;
-    height: 36px !important;
-    min-height: 36px !important;
-    white-space: nowrap !important;
-}
-
-body.viewport-mobile .mobile-model-name {
-    font-size: 14px !important;
-    font-weight: 500 !important;
-    color: rgba(255, 255, 255, 0.9) !important;
-}
-
-body.viewport-mobile .mobile-model-arrow {
-    width: 10px !important;
-    height: 10px !important;
-    color: rgba(255, 255, 255, 0.5) !important;
-    transition: transform 0.2s ease !important;
-}
-
-/* Dropdown options - HIDDEN by default */
-body.viewport-mobile .mobile-model-options {
-    display: none !important;
-    position: absolute !important;
-    top: 100% !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    min-width: 180px !important;
-    max-height: 50vh !important;
-    overflow-y: auto !important;
-    background: rgba(40, 40, 40, 0.98) !important;
-    border: none !important;
-    border-radius: 12px !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
-    margin-top: 8px !important;
-    padding: 8px 0 !important;
-    flex-direction: column !important;
-    z-index: 10000 !important;
-}
-
-/* Show dropdown when expanded */
-body.viewport-mobile .mobile-model-select.expanded .mobile-model-options {
-    display: flex !important;
-}
-
-/* Expanded state styling */
-body.viewport-mobile .mobile-model-select.expanded {
-    position: relative !important;
-    background: rgba(40, 40, 40, 0.98) !important;
-    border-radius: 12px !important;
-    z-index: 9999 !important;
-}
-
-body.viewport-mobile .mobile-model-select.expanded .mobile-model-arrow {
-    transform: rotate(180deg) !important;
-}
-
-/* Individual model options */
-body.viewport-mobile .mobile-model-option {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    padding: 12px 16px !important;
-    color: rgba(255, 255, 255, 0.9) !important;
-    font-size: 14px !important;
-    cursor: pointer !important;
-    transition: background 0.15s ease !important;
-    white-space: nowrap !important;
-}
-
-body.viewport-mobile .mobile-model-option:hover {
-    background: rgba(255, 255, 255, 0.08) !important;
-}
-
-body.viewport-mobile .mobile-model-option.selected {
-    background: rgba(255, 255, 255, 0.05) !important;
-}
-
-body.viewport-mobile .mobile-model-option.selected::after {
-    content: '✓' !important;
-    color: #4CAF50 !important;
-    font-size: 14px !important;
 }
 
 /* Ghost/incognito button in header */
