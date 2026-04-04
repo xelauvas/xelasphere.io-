@@ -200,16 +200,6 @@ MODEL_CATALOG = {
         "context": 32000,
     },
 
-    # ============================================
-    # OPENROUTER MODELS (Uncensored / Images)
-    # ============================================
-
-    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {
-        "label": "Venice (Uncensored)",
-        "provider": "openrouter",
-        "selectable": True,
-        "uncensored": True,
-    },
 }
 
 # ============================================
@@ -222,7 +212,7 @@ FALLBACK_MODELS = {
     "qwen/qwen3-32b": "qwen-3-32b",
     "openai/gpt-oss-120b": "gpt-oss-120b",
     "gemma4:e2b": "llama-3.3-70b-versatile",  # Ollama -> Groq fallback
-    "dolphin3": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",  # Ollama -> OpenRouter fallback
+    "dolphin3": "llama-3.3-70b-versatile",  # Ollama -> Groq fallback
 }
 
 # ============================================
@@ -277,9 +267,7 @@ MODEL_ALIASES = {
     "gemma": "gemma4:e2b",
     "dolphin": "dolphin3",
     "uncensored": "dolphin3",
-    "venice-uncensored": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-    "openrouter/venice-uncensored": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-    "venice": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+    "venice": "dolphin3",
     "deepseek-v3": "deepseek-chat",
     "deepseek-r1": "deepseek-reasoner",
     "kimi": "kimi-latest",

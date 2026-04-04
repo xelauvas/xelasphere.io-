@@ -20,7 +20,6 @@
         { id: 'deepseek-chat', label: 'DeepSeek V3', icon: '💻', note: 'top-tier coding' },
         { id: 'deepseek-reasoner', label: 'DeepSeek R1', icon: '💻', note: 'reasoning' },
         { id: 'dolphin3', label: 'Dolphin 3', icon: '🔓', note: 'uncensored local' },
-        { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', label: 'Venice', icon: '🔓', note: 'uncensored cloud' },
         { id: 'kimi-k2.5', label: 'Kimi K2.5', icon: '📚', note: 'reasoning' },
         { id: 'kimi-latest', label: 'Kimi Latest', icon: '📚', note: 'long context' },
         { id: 'gemma4:e2b', label: 'Gemma 4', icon: '🏠', note: 'local model' },
