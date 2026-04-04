@@ -2323,6 +2323,11 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
         }
     }
 
+    // Ghost Model: add "via ModelName" attribution to AI messages
+    if (normalizedSender === 'ai' && modelMeta && typeof window.addModelAttribution === 'function') {
+        window.addModelAttribution(messageDiv, modelMeta);
+    }
+
     // Scroll is handled by scrollState.js (MutationObserver + scrollUserMessageToTop)
     // Don't call scrollToBottom here - it uses smooth scroll that overrides instant scroll
     resetInputIfNecessary(sender);
@@ -2644,8 +2649,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         }
 
         // Show indicator AFTER user message (so it appears below, where response will be)
-        const modelSelectEarly = document.getElementById('model');
-        const currentModelEarly = modelSelectEarly?.dataset.value || 'llama-3.3-70b-versatile';
+        const currentModelEarly = (window.ghostModel && window.ghostModel.getSelectedModel()) || 'auto';
         const isDeepSeekEarly = currentModelEarly === 'deepseek-reasoner';
 
         // Only show full ThinkingIndicator for DeepSeek, simple pulsing dot for others
@@ -2693,10 +2697,15 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             }
         }
 
-        // Get model selection
-        const modelSelect = document.getElementById('model');
-        const model = modelSelect?.dataset.value || 'llama-3.3-70b-versatile';
+        // Get model selection from Ghost Model selector
+        const model = (window.ghostModel && window.ghostModel.getSelectedModel()) || 'auto';
         formData.append('model', model);
+
+        // Reset ghost model for next message
+        if (window.ghostModel) {
+            window.ghostModel.resetAfterSend();
+        }
+        document.dispatchEvent(new CustomEvent('messageSent'));
         const pageId = forcePageId ||
             (typeof window !== 'undefined' &&
                 window.chatManager &&
