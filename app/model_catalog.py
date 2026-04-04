@@ -180,6 +180,18 @@ MODEL_CATALOG = {
     },
 
     # ============================================
+    # OLLAMA MODELS (Local)
+    # ============================================
+
+    "gemma4:e2b": {
+        "label": "Gemma 4 E2B (Local)",
+        "provider": "ollama",
+        "selectable": True,
+        "speed": "fast",
+        "context": 32000,
+    },
+
+    # ============================================
     # OPENROUTER MODELS (Uncensored / Images)
     # ============================================
 
@@ -200,6 +212,7 @@ FALLBACK_MODELS = {
     "llama-3.1-8b-instant": "llama3.1-8b",
     "qwen/qwen3-32b": "qwen-3-32b",
     "openai/gpt-oss-120b": "gpt-oss-120b",
+    "gemma4:e2b": "llama-3.3-70b-versatile",  # Ollama -> Groq fallback
 }
 
 # ============================================
@@ -250,6 +263,8 @@ def get_selectable_models():
 # ============================================
 
 MODEL_ALIASES = {
+    "gemma4": "gemma4:e2b",
+    "gemma": "gemma4:e2b",
     "venice-uncensored": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
     "openrouter/venice-uncensored": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
     "venice": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",

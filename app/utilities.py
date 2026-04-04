@@ -431,10 +431,16 @@ def _get_provider_config(provider: str, resolved_model: str, api_overrides: Dict
     Get API configuration for a provider.
     Returns (url, headers, timeout, provider_label) or raises ValueError if not configured.
     """
-    provider_labels = {"openrouter": "OpenRouter", "deepseek": "DeepSeek", "groq": "Groq", "cerebras": "Cerebras", "moonshot": "Moonshot"}
+    provider_labels = {"openrouter": "OpenRouter", "deepseek": "DeepSeek", "groq": "Groq", "cerebras": "Cerebras", "moonshot": "Moonshot", "ollama": "Ollama"}
     provider_label = provider_labels.get(provider, "Groq")
 
-    if provider == "openrouter":
+    if provider == "ollama":
+        url = Config.OLLAMA_API_URL
+        headers = {
+            "Content-Type": "application/json"
+        }
+        timeout = 120  # Local models can be slower on first request
+    elif provider == "openrouter":
         effective_key = (api_overrides.get('openrouter') if api_overrides else None) or Config.OPENROUTER_API_KEY
         if not effective_key:
             raise ValueError(f'{provider_label} API key is not configured.')
@@ -609,8 +615,24 @@ def send_prompt(prompt, model="llama-3.1-70b-versatile"):
     if error_payload is None:
         return response_content, is_code_flag
 
+    # Ollama fallback: any error triggers fallback to cloud model
+    if provider == "ollama" and resolved_model in FALLBACK_MODELS:
+        fallback_model = FALLBACK_MODELS[resolved_model]
+        fallback_provider = MODEL_PROVIDERS.get(fallback_model, "groq")
+        logger.info(f"Ollama failed, falling back to {fallback_provider} model: {fallback_model}")
+
+        response_content, is_code_flag, error_payload, _ = _execute_prompt_request(
+            prompt, fallback_model, fallback_provider, api_overrides
+        )
+
+        if error_payload is None:
+            logger.info(f"{fallback_provider} fallback successful")
+            return response_content, is_code_flag
+        else:
+            logger.warning(f"{fallback_provider} fallback also failed: {error_payload}")
+
     # If rate limited and we have a Cerebras fallback, try it
-    if status_code == 429 and provider == "groq" and resolved_model in FALLBACK_MODELS:
+    elif status_code == 429 and provider == "groq" and resolved_model in FALLBACK_MODELS:
         fallback_model = FALLBACK_MODELS[resolved_model]
         logger.info(f"Groq rate limited, falling back to Cerebras model: {fallback_model}")
 

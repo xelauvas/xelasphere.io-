@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 def _has_provider_key(provider: str) -> bool:
     """Return True if the provider has an API key configured."""
     provider = (provider or "").lower()
+    if provider == "ollama":
+        return bool(getattr(Config, "OLLAMA_API_URL", None))
     if provider == "deepseek":
         return bool(getattr(Config, "DEEPSEEK_API_KEY", None))
     if provider == "moonshot":

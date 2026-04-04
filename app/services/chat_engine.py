@@ -1418,6 +1418,7 @@ def save_interaction(
             "groq": "Groq",
             "cerebras": "Cerebras",
             "moonshot": "Moonshot",
+            "ollama": "Ollama",
         }
         provider = MODEL_PROVIDERS.get(model_id, "groq")
         chat_data['model_id'] = model_id
