@@ -1,0 +1,215 @@
+/* ============================================
+   GHOST MODEL SELECTOR
+   ============================================ */
+
+/* Ghost label below chat input */
+.ghost-model {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.3rem;
+    padding: 0.25rem 0.75rem 0;
+    min-height: 1.25rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ghost-model__label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.35);
+    transition: opacity 0.3s ease, color 0.3s ease;
+    white-space: nowrap;
+}
+
+.ghost-model:hover .ghost-model__label {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.ghost-model__icon {
+    font-size: 0.7rem;
+    transition: opacity 0.3s ease;
+}
+
+.ghost-model__hint {
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.2);
+    animation: ghost-pulse 2s ease-in-out 1;
+}
+
+@keyframes ghost-pulse {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.6; }
+}
+
+/* Crossfade transition */
+.ghost-model__label.fade-out {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.ghost-model__label.fade-in {
+    opacity: 1;
+    transition: opacity 0.15s ease 0.15s;
+}
+
+/* ============================================
+   PILL PICKER (Desktop override)
+   ============================================ */
+
+.ghost-pills {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.2s ease, opacity 0.2s ease, padding 0.2s ease;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.ghost-pills::-webkit-scrollbar {
+    display: none;
+}
+
+.ghost-pills.active {
+    max-height: 3rem;
+    opacity: 1;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+}
+
+.ghost-pill {
+    flex-shrink: 0;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.ghost-pill:hover {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.ghost-pill.active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+.ghost-pill.locked {
+    color: #fff;
+    background: rgba(99, 102, 241, 0.25);
+    border-color: rgba(99, 102, 241, 0.4);
+}
+
+/* Clear override button */
+.ghost-model__clear {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    margin-left: 0.2rem;
+    transition: color 0.15s ease;
+}
+
+.ghost-model__clear:hover {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* ============================================
+   RESPONSE ATTRIBUTION
+   ============================================ */
+
+.message-model-attribution {
+    text-align: right;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.3);
+    padding: 0.25rem 0 0 0;
+    user-select: none;
+}
+
+/* ============================================
+   BOTTOM SHEET (Mobile override)
+   ============================================ */
+
+.ghost-bottom-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #2a2a2a;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px 16px 0 0;
+    padding: 1rem;
+    z-index: 2000;
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+}
+
+.ghost-bottom-sheet.active {
+    transform: translateY(0);
+}
+
+.ghost-bottom-sheet__backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+
+.ghost-bottom-sheet__backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.ghost-bottom-sheet__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.ghost-bottom-sheet__option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.ghost-bottom-sheet__option:hover,
+.ghost-bottom-sheet__option.active {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.ghost-bottom-sheet__handle {
+    width: 2rem;
+    height: 0.2rem;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    margin: 0 auto 0.75rem;
+}
+
+/* Guest disabled state */
+.ghost-model.guest-disabled {
+    pointer-events: none;
+    opacity: 0.3;
+}
