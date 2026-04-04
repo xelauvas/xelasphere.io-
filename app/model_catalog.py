@@ -191,6 +191,15 @@ MODEL_CATALOG = {
         "context": 32000,
     },
 
+    "dolphin3": {
+        "label": "Dolphin 3 (Uncensored)",
+        "provider": "ollama",
+        "selectable": True,
+        "uncensored": True,
+        "speed": "fast",
+        "context": 32000,
+    },
+
     # ============================================
     # OPENROUTER MODELS (Uncensored / Images)
     # ============================================
@@ -213,6 +222,7 @@ FALLBACK_MODELS = {
     "qwen/qwen3-32b": "qwen-3-32b",
     "openai/gpt-oss-120b": "gpt-oss-120b",
     "gemma4:e2b": "llama-3.3-70b-versatile",  # Ollama -> Groq fallback
+    "dolphin3": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",  # Ollama -> OpenRouter fallback
 }
 
 # ============================================
@@ -240,7 +250,7 @@ TASK_ROUTES = {
     "vision": "meta-llama/llama-4-maverick-17b-128e-instruct",
     "coding": "deepseek-chat",
     "reasoning": "qwen/qwen3-32b",
-    "uncensored": "nousresearch/hermes-3-llama-3.1-405b:free",
+    "uncensored": "dolphin3",
     "long_context": "kimi-latest",
 
     # Default chat
@@ -265,6 +275,8 @@ def get_selectable_models():
 MODEL_ALIASES = {
     "gemma4": "gemma4:e2b",
     "gemma": "gemma4:e2b",
+    "dolphin": "dolphin3",
+    "uncensored": "dolphin3",
     "venice-uncensored": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
     "openrouter/venice-uncensored": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
     "venice": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",

@@ -19,7 +19,8 @@
         { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', icon: '🤖', note: 'large model' },
         { id: 'deepseek-chat', label: 'DeepSeek V3', icon: '💻', note: 'top-tier coding' },
         { id: 'deepseek-reasoner', label: 'DeepSeek R1', icon: '💻', note: 'reasoning' },
-        { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', label: 'Venice', icon: '🔓', note: 'uncensored' },
+        { id: 'dolphin3', label: 'Dolphin 3', icon: '🔓', note: 'uncensored local' },
+        { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', label: 'Venice', icon: '🔓', note: 'uncensored cloud' },
         { id: 'kimi-k2.5', label: 'Kimi K2.5', icon: '📚', note: 'reasoning' },
         { id: 'kimi-latest', label: 'Kimi Latest', icon: '📚', note: 'long context' },
         { id: 'gemma4:e2b', label: 'Gemma 4', icon: '🏠', note: 'local model' },
@@ -38,7 +39,7 @@
     const TASK_MODEL_MAP = {
         coding: 'deepseek-chat',
         reasoning: 'qwen/qwen3-32b',
-        uncensored: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+        uncensored: 'dolphin3',
         long_context: 'kimi-latest',
         vision: 'meta-llama/llama-4-maverick-17b-128e-instruct',
     };
