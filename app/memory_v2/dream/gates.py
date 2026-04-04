@@ -71,7 +71,11 @@ def release_lock(db, user_id: str) -> None:
 def get_dream_state(db, user_id: str) -> dict:
     """Read the dream state document for a user."""
     try:
-        snapshot = db.collection('users').document(user_id).document('dream_state').get()
+        snapshot = (
+            db.collection('users').document(user_id)
+            .collection('dream_state').document('current')
+            .get()
+        )
         if snapshot.exists:
             return snapshot.to_dict()
         return {}
@@ -83,6 +87,10 @@ def get_dream_state(db, user_id: str) -> dict:
 def update_dream_state(db, user_id: str, updates: dict) -> None:
     """Update the dream state document for a user."""
     try:
-        db.collection('users').document(user_id).document('dream_state').set(updates, merge=True)
+        (
+            db.collection('users').document(user_id)
+            .collection('dream_state').document('current')
+            .set(updates, merge=True)
+        )
     except Exception as e:
         logger.warning(f"[dream] Failed to update dream state: {e}")
