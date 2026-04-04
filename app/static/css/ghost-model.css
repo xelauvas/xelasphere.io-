@@ -2,14 +2,20 @@
    GHOST MODEL SELECTOR
    ============================================ */
 
-/* Ghost label below chat input */
+/* Allow input-row to wrap so ghost sits on its own line inside the pill */
+.input-row {
+    flex-wrap: wrap;
+}
+
+/* Ghost label inside input pill */
 .ghost-model {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 0.3rem;
-    padding: 0.25rem 0.75rem 0;
-    min-height: 1.25rem;
+    width: 100%;
+    padding: 0 0.25rem 0.15rem;
+    min-height: 1.1rem;
     cursor: pointer;
     user-select: none;
 }
@@ -60,7 +66,8 @@
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.35rem 0.75rem;
+    width: 100%;
+    padding: 0.35rem 0.25rem;
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
