@@ -1853,14 +1853,11 @@ def chat():
                 except Exception as exc:
                     logger.warning(f"Failed to update active page for session {session_id}: {exc}")
 
-            # Update rolling session summary when Firestore is reachable
+            # Update rolling session summary when Firestore is reachable (non-critical)
             if firestore_available:
                 try:
                     _update_session_summary(user_id, session_id, session_data, user_prompt, response_text)
                 except Exception as e:
-                    firestore_available = False
-                    if not offline_reason:
-                        offline_reason = 'summary_update_failed'
                     logger.warning(f"Failed to update session summary for user {user_id}: {e}")
 
             # Track credit usage only when persistence succeeded
@@ -1881,7 +1878,14 @@ def chat():
         logger.info(f"🧠 Memory V2: skip_reflection={skip_reflection}, skip_memory_write={skip_memory_write}, guest={guest_mode}, firestore={firestore_available}")
 
         if not guest_mode and firestore_available and not (skip_reflection and skip_memory_write):
-            from .reflection import reflect_on_response, get_memory_candidates, get_next_steps_for_session
+            try:
+                from .reflection import reflect_on_response, get_memory_candidates, get_next_steps_for_session
+            except ImportError:
+                reflect_on_response = None
+                get_memory_candidates = None
+                get_next_steps_for_session = None
+                logger.warning("Reflection module not available, skipping reflection")
+                skip_reflection = True
 
             try:
                 # Run reflection and memory V2 post_turn in parallel (conditionally)

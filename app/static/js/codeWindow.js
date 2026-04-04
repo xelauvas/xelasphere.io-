@@ -2770,6 +2770,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let streamIsEmail = false;
                 let streamEmailData = null;
                 let streamCryptoChart = null;
+                let streamMemoryUpdated = false;
+                let streamDreamNotification = null;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
 
                 const processLine = (line) => {
@@ -2814,6 +2816,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             streamIsEmail = chunk.is_email || false;
                             streamEmailData = chunk.email || null;
                             streamCryptoChart = chunk.crypto_chart || null;
+                            streamMemoryUpdated = chunk.memory_updated || false;
+                            streamDreamNotification = chunk.dream_notification || null;
                             // Use backend's response_id if available for consistency
                             if (chunk.response_id) {
                                 streamResponseId = chunk.response_id;
@@ -3037,6 +3041,31 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     window.artifactPanel.attachPreview(messageContainer, artifactRef, {
                         payload: streamArtifact
                     });
+                }
+
+                // Show memory updated notice (streaming path)
+                if (streamMemoryUpdated && messageContainer) {
+                    const memoryNotice = document.createElement('div');
+                    memoryNotice.className = 'memory-updated-notice';
+                    memoryNotice.innerHTML = '<span class="memory-notice-icon">✓</span> Memory updated';
+                    messageContainer.before(memoryNotice);
+                    setTimeout(() => {
+                        memoryNotice.classList.add('fade-out');
+                        setTimeout(() => memoryNotice.remove(), 500);
+                    }, 3000);
+                }
+
+                // Dream consolidation notification (streaming path)
+                if (streamDreamNotification && typeof Toast !== 'undefined') {
+                    const dn = streamDreamNotification;
+                    const parts = [];
+                    if (dn.pruned) parts.push(`${dn.pruned} pruned`);
+                    if (dn.merged) parts.push(`${dn.merged} merged`);
+                    if (dn.promoted) parts.push(`${dn.promoted} promoted`);
+                    if (dn.synthesized) parts.push(`${dn.synthesized} new insight${dn.synthesized > 1 ? 's' : ''}`);
+                    if (parts.length > 0) {
+                        Toast.show({ message: `Memory improved: ${parts.join(', ')}`, type: 'info', duration: 5000 });
+                    }
                 }
 
                 await scrollManager.scrollToBottom(true);

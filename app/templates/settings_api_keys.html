@@ -371,6 +371,11 @@
                         <p>Failed to load activity. <a href="#" id="dream-activity-retry">Retry</a></p>
                     </div>
                     <div class="dream-activity-list" id="dream-activity-list"></div>
+                    <div style="padding: 0.75rem 1rem; border-top: 1px solid rgba(255,255,255,0.05); text-align: center;">
+                        <button type="button" class="btn btn-ghost" id="dream-test-btn" style="font-size: 0.75rem;">
+                            <i class="fas fa-flask"></i> Run consolidation now (test)
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -1080,6 +1085,37 @@
                 btn.textContent = 'Failed';
                 setTimeout(() => { btn.textContent = 'Undo'; btn.disabled = false; }, 2000);
             }
+        }
+
+        // Test consolidation button
+        const dreamTestBtn = document.getElementById('dream-test-btn');
+        if (dreamTestBtn) {
+            dreamTestBtn.addEventListener('click', async () => {
+                dreamTestBtn.disabled = true;
+                dreamTestBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+                try {
+                    const res = await fetch('/user/dream-test', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
+                    });
+                    const data = await res.json();
+                    dreamTestBtn.innerHTML = '<i class="fas fa-check"></i> ' + (data.message || data.error || 'Done');
+                    if (data.success) {
+                        dreamActivityLoaded = false;
+                        loadDreamActivity();
+                    }
+                    setTimeout(() => {
+                        dreamTestBtn.innerHTML = '<i class="fas fa-flask"></i> Run consolidation now (test)';
+                        dreamTestBtn.disabled = false;
+                    }, 3000);
+                } catch (e) {
+                    dreamTestBtn.innerHTML = '<i class="fas fa-times"></i> Failed';
+                    setTimeout(() => {
+                        dreamTestBtn.innerHTML = '<i class="fas fa-flask"></i> Run consolidation now (test)';
+                        dreamTestBtn.disabled = false;
+                    }, 2000);
+                }
+            });
         }
 
         // Retry link

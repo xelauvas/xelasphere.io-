@@ -277,6 +277,30 @@ def update_dream_settings():
         return jsonify({'error': 'Failed to update settings'}), 500
 
 
+@memory_bp.route('/user/dream-test', methods=['POST'])
+@csrf_required
+@error_handler
+@login_required
+def test_dream_consolidation():
+    """TEMPORARY: Force a dream consolidation cycle, bypassing gates. Remove after testing."""
+    from app.config import db
+    from app.memory_v2.dream import _run_consolidation
+    from app.memory_v2.dream.config import DreamConfig
+
+    user_id = session['user']['uid']
+    try:
+        config = DreamConfig()
+        config.min_active_memories = 1  # Lower threshold for testing
+        ran = _run_consolidation(db, user_id, config)
+        if ran:
+            return jsonify({'success': True, 'message': 'Dream consolidation completed. Check the Activity tab.'})
+        else:
+            return jsonify({'success': False, 'message': 'Not enough memories to consolidate (need at least 1 active memory).'})
+    except Exception as e:
+        logger.error(f"Test dream failed for {user_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @memory_bp.route('/user/memory-activity', methods=['GET'])
 @error_handler
 @login_required
