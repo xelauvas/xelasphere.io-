@@ -2850,7 +2850,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             const errorText = chunk.text || 'Streaming error';
                             // If streaming isn't available for this model, fall back silently
                             if (errorText.includes('Streaming only available')) {
-                                throw new Error(errorText);
+                                return 'fallback';
                             }
                             // API key or other configuration error - show to user
                             if (bgRequest) {
@@ -2882,7 +2882,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     buffer = lines.pop() || '';
 
                     for (const line of lines) {
-                        if (processLine(line) === 'error') return null;
+                        const result = processLine(line);
+                        if (result === 'error') return null;
+                        if (result === 'fallback') throw new Error('Stream fallback');
                     }
 
                     if (done) {
