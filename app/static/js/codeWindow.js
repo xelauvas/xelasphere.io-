@@ -2830,9 +2830,22 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                             // --- Live artifact streaming detection ---
                             if (!artifactStreamActive && window.artifactPanel) {
-                                // Check if accumulated content contains ```artifact fence
-                                // Match ```artifact but NOT ```artifact_patch
-                                const fenceIdx = streamedContent.search(/```artifact(?!_patch)\b/i);
+                                // Check for ```artifact fence but NOT ```artifact_patch
+                                // Guard against chunk boundary splitting "artifact_patch":
+                                // Wait for at least 6 chars after "artifact" to confirm it's not "_patch"
+                                const fenceMatch = streamedContent.match(/```artifact/i);
+                                let fenceIdx = -1;
+                                if (fenceMatch) {
+                                    const afterArtifact = streamedContent.slice(fenceMatch.index + 12); // length of "```artifact"
+                                    if (afterArtifact.startsWith('_patch')) {
+                                        // It's artifact_patch — skip streaming
+                                        fenceIdx = -1;
+                                    } else if (afterArtifact.length >= 6 || afterArtifact.match(/^[\s\n{]/)) {
+                                        // Enough context to confirm it's NOT _patch
+                                        fenceIdx = fenceMatch.index;
+                                    }
+                                    // else: not enough context yet — wait for more chunks
+                                }
                                 if (fenceIdx !== -1) {
                                     artifactStreamActive = true;
                                     artifactFencePosition = fenceIdx;
@@ -3097,21 +3110,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     }
                 }
 
-                // Finalize streaming artifact panel if it was active
-                if (artifactStreamActive && window.artifactPanel) {
-                    const artifactRef = streamArtifactRef || (streamArtifact ? {
-                        artifactId: streamArtifact.artifactId,
-                        title: streamArtifact.title,
-                        type: streamArtifact.type,
-                        primaryLanguage: streamArtifact.primaryLanguage,
-                        summary: displayContent
-                    } : null);
-                    window.artifactPanel.finalizeStreaming(streamArtifact, {
-                        sessionId: requestSessionId,
-                        reference: artifactRef
-                    });
-                } else if (!artifactStreamActive && streamArtifact && window.artifactPanel) {
-                    // Auto-open for non-streaming artifacts (patches, fast responses)
+                // Handle artifact panel update — check for patches first, then streaming, then normal
+                if (streamArtifact && window.artifactPanel) {
                     const artifactRef = streamArtifactRef || {
                         artifactId: streamArtifact.artifactId,
                         title: streamArtifact.title,
@@ -3119,16 +3119,28 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         primaryLanguage: streamArtifact.primaryLanguage,
                         summary: displayContent
                     };
-                    // If patches are available, show visual diff animation first
-                    console.log('[PATCH] Check:', { hasPatches: !!streamArtifactPatches, patches: streamArtifactPatches, hasMethod: !!window.artifactPanel.applyPatchesVisually });
+
                     if (streamArtifactPatches && streamArtifactPatches.patches && window.artifactPanel.applyPatchesVisually) {
+                        // Patches available — show visual diff animation
+                        // Cancel streaming view if it was active
+                        if (artifactStreamActive) {
+                            window.artifactPanel.isStreaming = false;
+                            window.artifactPanel.panel?.classList.remove('is-streaming');
+                        }
                         window.artifactPanel.applyPatchesVisually(
                             streamArtifactPatches.patches,
                             streamArtifactPatches.patch_results,
                             streamArtifact,
                             { sessionId: requestSessionId, reference: artifactRef }
                         );
+                    } else if (artifactStreamActive) {
+                        // Regular streaming finalize — switch from code to preview
+                        window.artifactPanel.finalizeStreaming(streamArtifact, {
+                            sessionId: requestSessionId,
+                            reference: artifactRef
+                        });
                     } else {
+                        // Non-streaming — just open the artifact
                         window.artifactPanel.openArtifact(streamArtifact, {
                             sessionId: requestSessionId,
                             reference: artifactRef
