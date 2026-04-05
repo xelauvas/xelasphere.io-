@@ -1427,7 +1427,7 @@ ${escapeHtml(entry.content || '')}
                 } else {
                     container.querySelector('code').textContent = '';
                 }
-                container.style.display = '';
+                container.style.display = 'block';
                 this.streamingCodeContainer = container.querySelector('code');
             }
 
