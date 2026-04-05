@@ -526,7 +526,7 @@ def _execute_prompt_request(prompt: str, resolved_model: str, provider: str, api
             {"role": "user", "content": prompt}
         ],
         "model": resolved_model,
-        "max_tokens": 2048,
+        "max_tokens": 8192,
         "temperature": temperature
     }
 

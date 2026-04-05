@@ -417,6 +417,8 @@
         // --- 4b. FIX MALFORMED JSX ---
         // Self-closing + closing tag: <button .../></button> -> <button ...></button>
         code = code.replace(/\\/>\\s*<\\/([a-zA-Z][a-zA-Z0-9]*?)>/g, '></$1>');
+        // Void elements (input, br, hr, img) missing self-close: <input ... > -> <input ... />
+        code = code.replace(/<(input|br|hr|img|meta|link|area|col|embed|source|track|wbr)(\\s[^>]*?)\\s*>/g, '<$1$2 />');
 
         // --- 5. DETECT MAIN COMPONENT ---
         // Collect ALL PascalCase identifiers from functions, classes, and const/let/var assignments
