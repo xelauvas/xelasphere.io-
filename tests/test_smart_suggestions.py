@@ -1264,3 +1264,67 @@ class TestShouldRefreshPool:
             "pool_size": 5,
         }
         assert should_refresh_pool(metadata) is True
+
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+
+class TestIntegration:
+    """Integration tests for the full suggestion pipeline."""
+
+    def test_full_flow_new_user(self):
+        """New user gets signal-based suggestions, then pool is generated."""
+        from app.services.smart_suggestions import (
+            get_signal_based_suggestions,
+            save_pool,
+            select_display_slots,
+            record_click,
+            build_suggestion_profile,
+        )
+        # Step 1: New user arrives, gets signal-based suggestions
+        suggestions = get_signal_based_suggestions(hour=9, day_of_week="Monday")
+        assert len(suggestions) == 3
+
+        # Step 2: Simulate pool being saved (as if LLM generated it)
+        mock_db = MagicMock()
+        mock_doc = MagicMock()
+        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_doc
+
+        pool = [
+            Suggestion("Continue Flask", "Cost tracking", "prompt", "continue", "coding", "code", "test"),
+            Suggestion("Plan morning", "Be productive", "prompt", "today", "planning", "calendar", "test"),
+            Suggestion("Try Go lang", "New language", "prompt", "discover", "learning", "book", "test"),
+        ]
+        save_pool(mock_db, "user123", pool, "first_conversation")
+        assert mock_doc.set.called
+
+        # Step 3: Select from the pool
+        selected = select_display_slots(pool, hour=9)
+        assert len(selected) == 3
+
+        # Step 4: Record a click
+        record_click(mock_db, "user123", {"title": "Continue Flask", "category": "coding"})
+
+        # Step 5: Build suggestion profile from click history
+        click_history = [{"title": "Continue Flask", "category": "coding", "slot_type": "continue"}]
+        profile = build_suggestion_profile(click_history)
+        assert isinstance(profile, dict)
+
+    def test_suggestion_to_task_option_renders_correctly(self):
+        """Suggestions convert to TaskOption format that the existing frontend expects."""
+        s = Suggestion(
+            title="Build an API",
+            subtitle="Flask REST starter",
+            prompt="Build me a Flask REST API with auth",
+            slot_type="continue",
+            category="coding",
+            icon="code",
+            reasoning="test",
+        )
+        opt = s.to_task_option()
+        d = opt.to_dict()
+        assert d["title"] == "Build an API"
+        assert d["subtitle"] == "Flask REST starter"
+        assert "sendMessage" in d["action"]
+        assert d["icon"] == "code"
