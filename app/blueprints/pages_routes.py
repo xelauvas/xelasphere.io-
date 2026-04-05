@@ -101,6 +101,7 @@ def index():
                     get_pool_metadata, should_refresh_pool, refresh_pool_background,
                     increment_shown_counts,
                 )
+                from app.grog_api import TaskOption as _TaskOption
                 pool = load_pool(db, user_id)
                 if pool:
                     selected = select_display_slots(pool)
@@ -127,6 +128,11 @@ def index():
                         args=(db, user_id, "first_conversation"),
                         daemon=True,
                     ).start()
+                # Append "More" button to match grid layout
+                options.append(_TaskOption(
+                    title="More", subtitle="Load new ideas",
+                    action="fetchMoreOptions()", icon="more",
+                ))
             except Exception as e:
                 logger.warning(f"Smart suggestions failed, using fallback: {e}")
                 user_preferences = fetch_user_preferences(user_id)
@@ -182,6 +188,7 @@ def open_shared_session(session_id):
                     get_pool_metadata, should_refresh_pool, refresh_pool_background,
                     increment_shown_counts,
                 )
+                from app.grog_api import TaskOption as _TaskOption
                 pool = load_pool(db, user_id)
                 if pool:
                     selected = select_display_slots(pool)
@@ -208,6 +215,10 @@ def open_shared_session(session_id):
                         args=(db, user_id, "first_conversation"),
                         daemon=True,
                     ).start()
+                options.append(_TaskOption(
+                    title="More", subtitle="Load new ideas",
+                    action="fetchMoreOptions()", icon="more",
+                ))
             except Exception as e:
                 logger.warning(f"Smart suggestions failed, using fallback: {e}")
                 user_preferences = fetch_user_preferences(user_id)

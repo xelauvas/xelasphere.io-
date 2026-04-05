@@ -208,9 +208,12 @@ def _score_today_slot(suggestion: Suggestion, hour: int) -> int:
 def select_display_slots(
     pool: List[Suggestion],
     hour: Optional[int] = None,
+    per_slot: int = 2,
 ) -> List[Suggestion]:
     """
-    Pick up to 3 suggestions from the pool: 1 continue + 1 today + 1 discover.
+    Pick up to per_slot suggestions per slot type (continue/today/discover).
+
+    Default is 2 per slot = 6 total (matching the 2-column grid layout).
 
     Selection rules:
     - continue: lowest shown_count, random tiebreaker
@@ -218,7 +221,7 @@ def select_display_slots(
     - discover: lowest shown_count, random tiebreaker
     - If a slot type has no candidates in the pool it is skipped.
 
-    Returns fewer than 3 items when slot types are missing from the pool.
+    Returns fewer items when slot types are missing or have fewer candidates.
     """
     if not pool:
         return []
@@ -235,25 +238,19 @@ def select_display_slots(
 
     # --- continue slot ---
     if "continue" in by_slot:
-        candidates = by_slot["continue"]
-        min_count = min(s.shown_count for s in candidates)
-        tied = [s for s in candidates if s.shown_count == min_count]
-        selected.append(random.choice(tied))
+        candidates = sorted(by_slot["continue"], key=lambda s: (s.shown_count, random.random()))
+        selected.extend(candidates[:per_slot])
 
     # --- today slot ---
     if "today" in by_slot:
         candidates = by_slot["today"]
-        scores = [(s, _score_today_slot(s, hour)) for s in candidates]
-        max_score = max(sc for _, sc in scores)
-        top = [s for s, sc in scores if sc == max_score]
-        selected.append(random.choice(top))
+        scored = sorted(candidates, key=lambda s: (-_score_today_slot(s, hour), s.shown_count, random.random()))
+        selected.extend(scored[:per_slot])
 
     # --- discover slot ---
     if "discover" in by_slot:
-        candidates = by_slot["discover"]
-        min_count = min(s.shown_count for s in candidates)
-        tied = [s for s in candidates if s.shown_count == min_count]
-        selected.append(random.choice(tied))
+        candidates = sorted(by_slot["discover"], key=lambda s: (s.shown_count, random.random()))
+        selected.extend(candidates[:per_slot])
 
     return selected
 
@@ -818,15 +815,15 @@ def get_signal_based_suggestions(
     hour: int = 12,
     day_of_week: str = "",
     user_agent: str = "",
+    per_slot: int = 2,
 ) -> List[Suggestion]:
     """
-    Pick 3 curated suggestions for a new user based on contextual signals.
+    Pick curated suggestions for a new user based on contextual signals.
 
     Scores all _CURATED_NEW_USER suggestions against signals and returns the
-    best one per slot type: today (most signal-dependent), continue, discover.
+    top per_slot per slot type: today (most signal-dependent), continue, discover.
 
-    Returns a list of exactly 3 Suggestions (one per slot type), provided the
-    curated pool contains entries for all three slot types.
+    Default is 2 per slot = 6 total (matching the grid layout).
     """
     signals = infer_signals(hour=hour, day_of_week=day_of_week, user_agent=user_agent)
 
@@ -840,18 +837,18 @@ def get_signal_based_suggestions(
 
     # today slot first — most signal-dependent
     if "today" in by_slot:
-        best = max(by_slot["today"], key=lambda x: x[0])
-        selected.append(best[1])
+        top = sorted(by_slot["today"], key=lambda x: x[0], reverse=True)[:per_slot]
+        selected.extend(s for _, s in top)
 
     # continue slot
     if "continue" in by_slot:
-        best = max(by_slot["continue"], key=lambda x: x[0])
-        selected.append(best[1])
+        top = sorted(by_slot["continue"], key=lambda x: x[0], reverse=True)[:per_slot]
+        selected.extend(s for _, s in top)
 
     # discover slot
     if "discover" in by_slot:
-        best = max(by_slot["discover"], key=lambda x: x[0])
-        selected.append(best[1])
+        top = sorted(by_slot["discover"], key=lambda x: x[0], reverse=True)[:per_slot]
+        selected.extend(s for _, s in top)
 
     return selected
 

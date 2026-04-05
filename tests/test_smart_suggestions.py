@@ -447,16 +447,17 @@ class TestSelectDisplaySlots:
         slot_types = {s.slot_type for s in result}
         assert slot_types == {"continue", "today", "discover"}
 
-    def test_at_most_one_per_slot_type(self):
+    def test_at_most_per_slot_per_slot_type(self):
         pool = [
             make_suggestion(title="C1", slot_type="continue"),
             make_suggestion(title="C2", slot_type="continue"),
+            make_suggestion(title="C3", slot_type="continue"),
             make_suggestion(title="T1", slot_type="today"),
             make_suggestion(title="D1", slot_type="discover"),
         ]
         result = select_display_slots(pool, hour=10)
         continue_slots = [s for s in result if s.slot_type == "continue"]
-        assert len(continue_slots) == 1
+        assert len(continue_slots) == 2  # per_slot=2 default
 
     def test_missing_slot_type_returns_fewer_than_3(self):
         """Pool with no 'discover' suggestions yields only 2 results."""
@@ -1155,25 +1156,32 @@ from app.services.smart_suggestions import get_signal_based_suggestions
 
 
 class TestGetSignalBasedSuggestions:
-    def test_returns_three_suggestions(self):
+    def test_returns_six_suggestions(self):
         result = get_signal_based_suggestions()
+        assert len(result) == 6  # 2 per slot type
+
+    def test_returns_three_with_per_slot_1(self):
+        result = get_signal_based_suggestions(per_slot=1)
         assert len(result) == 3
 
     def test_all_are_suggestion_instances(self):
         result = get_signal_based_suggestions()
         assert all(isinstance(s, Suggestion) for s in result)
 
-    def test_one_per_slot_type(self):
+    def test_all_slot_types_present(self):
         result = get_signal_based_suggestions()
-        slot_types = [s.slot_type for s in result]
+        slot_types = {s.slot_type for s in result}
         assert "today" in slot_types
         assert "continue" in slot_types
         assert "discover" in slot_types
 
-    def test_no_duplicate_slot_types(self):
+    def test_two_per_slot_type(self):
         result = get_signal_based_suggestions()
-        slot_types = [s.slot_type for s in result]
-        assert len(slot_types) == len(set(slot_types))
+        from collections import Counter
+        counts = Counter(s.slot_type for s in result)
+        assert counts["today"] == 2
+        assert counts["continue"] == 2
+        assert counts["discover"] == 2
 
     def test_morning_weekday_returns_morning_today(self):
         """Morning weekday should favour a morning-keyed today suggestion."""
@@ -1297,7 +1305,7 @@ class TestIntegration:
         )
         # Step 1: New user arrives, gets signal-based suggestions
         suggestions = get_signal_based_suggestions(hour=9, day_of_week="Monday")
-        assert len(suggestions) == 3
+        assert len(suggestions) == 6  # 2 per slot type
 
         # Step 2: Simulate pool being saved (as if LLM generated it)
         mock_db = MagicMock()
