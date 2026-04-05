@@ -493,6 +493,70 @@ def _repair_incomplete_artifact_json(raw_json: str, brace_count: int, in_string:
     return result
 
 
+def _recover_truncated_files_array(raw_json: str) -> Optional[str]:
+    """Last-resort recovery: find the last complete file object in the files array.
+
+    When AI output is truncated mid-file (e.g. CSS cut off), this finds the
+    last valid '},{ boundary in the files array and discards everything after.
+    Then closes the array and root object.
+    """
+    # Find "files" key and the opening bracket
+    files_match = re.search(r'"files"\s*:\s*\[', raw_json)
+    if not files_match:
+        return None
+
+    files_start = files_match.end()
+
+    # Find complete file objects by looking for },...{ patterns
+    # Each file object ends with } and the next starts with {
+    # We want the position of the last complete } before the truncation
+    last_complete_end = -1
+    in_string = False
+    escape_next = False
+    brace_depth = 0
+    i = files_start
+
+    while i < len(raw_json):
+        char = raw_json[i]
+        if escape_next:
+            escape_next = False
+            i += 1
+            continue
+        if char == '\\' and in_string:
+            escape_next = True
+            i += 1
+            continue
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            i += 1
+            continue
+        if in_string:
+            i += 1
+            continue
+
+        if char == '{':
+            brace_depth += 1
+        elif char == '}':
+            brace_depth -= 1
+            if brace_depth == 0:
+                # This is a complete file object
+                last_complete_end = i + 1
+        elif char == ']' and brace_depth == 0:
+            # Files array is actually complete — nothing to recover
+            return None
+
+        i += 1
+
+    if last_complete_end <= files_start:
+        return None
+
+    # Build the repaired JSON: everything up to last complete file + close array + close object
+    prefix = raw_json[:files_match.start()]
+    files_content = raw_json[files_start:last_complete_end]
+    result = prefix + '"files":[' + files_content + ']}'
+    return result
+
+
 def extract_artifact_block(text: str) -> Optional[Dict[str, Any]]:
     """Return a normalized artifact payload if a ```artifact block is present."""
     if not text:
@@ -571,14 +635,32 @@ def extract_artifact_block(text: str) -> Optional[Dict[str, Any]]:
         logger.info("Artifact JSON parsed successfully after aggressive cleanup")
         return normalize_artifact_payload(payload)
     except json.JSONDecodeError as exc:
-        # Log context around the error position for debugging
-        error_pos = exc.pos
-        start = max(0, error_pos - 50)
-        end = min(len(raw_json), error_pos + 50)
-        context = raw_json[start:end]
-        logger.warning(f"Artifact JSON parse error at position {error_pos}: {exc.msg}")
-        logger.warning(f"Context around error: ...{repr(context)}...")
-        raise ArtifactParseError("Artifact block must contain valid JSON.") from exc
+        logger.debug(f"Third JSON parse attempt failed at position {exc.pos}: {exc.msg}")
+
+    # Fourth attempt: truncation recovery — find last complete file object
+    # When AI output is cut off mid-file content, discard the truncated file
+    # and keep everything before it
+    try:
+        truncated = _recover_truncated_files_array(raw_json)
+        if truncated and truncated != raw_json:
+            payload = json.loads(truncated)
+            logger.info("Artifact JSON parsed after truncation recovery (dropped incomplete file)")
+            return normalize_artifact_payload(payload)
+    except json.JSONDecodeError:
+        pass
+
+    # All attempts failed
+    error_pos = 0
+    try:
+        json.loads(raw_json)
+    except json.JSONDecodeError as final_exc:
+        error_pos = final_exc.pos
+    start = max(0, error_pos - 50)
+    end = min(len(raw_json), error_pos + 50)
+    context = raw_json[start:end]
+    logger.warning(f"Artifact JSON parse error at position {error_pos}")
+    logger.warning(f"Context around error: ...{repr(context)}...")
+    raise ArtifactParseError("Artifact block must contain valid JSON.")
 
 
 def normalize_artifact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:

@@ -3312,6 +3312,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             artifactPanel_exists: !!window.artifactPanel
         });
 
+        // Show toast if artifact parsing failed
+        if (data.artifact_error && window.Toast) {
+            window.Toast.warning('Artifact update failed: ' + data.artifact_error + '. Try asking again.', 6000);
+        }
+
         // Show artifact pill only for artifact modes, NOT for code_window or inline
         // code_window = small snippets displayed inline without artifact panel
         const showArtifactPill = data.render_mode &&
