@@ -55,9 +55,10 @@ from app.services.chat_engine import (
     build_artifact_reference_payload, build_draft_artifact,
 )
 from app.artifacts import (
-    ArtifactPreference, parse_structured_response,
+    ArtifactPreference, ArtifactDecision, parse_structured_response,
     detect_artifact_update_intent, load_current_artifact_context,
     delete_local_attachments, ARTIFACT_UPDATE_PATTERNS,
+    apply_patches,
 )
 from app.file_processor import (
     get_file_type, generate_unique_filename, extract_text_concurrently,
@@ -639,6 +640,26 @@ def chat_stream():
             stream_model = "deepseek-chat"
             logger.info(f"🔀 [Stream] Overriding non-streaming model to deepseek-chat")
 
+    def _load_current_artifact_files(uid, sid):
+        """Load current artifact files for patching."""
+        try:
+            store = artifact_store
+            artifacts_data = store.list_artifacts(uid, sid)
+            artifacts = artifacts_data.get('artifacts', [])
+            active = next((a for a in artifacts if a.get('isActive')), artifacts[0] if artifacts else None)
+            if not active:
+                return None, None
+            full = store.get_artifact(uid, sid, active['artifactId'])
+            if not full:
+                return None, None
+            version = full.get('activeVersion')
+            if not version:
+                return None, None
+            return version.get('files', []), full
+        except Exception as e:
+            logger.warning(f"Failed to load artifact files for patching: {e}")
+            return None, None
+
     def generate():
         import json
         reasoning_buffer = []
@@ -666,6 +687,7 @@ def chat_stream():
 
                     # Process content for artifacts
                     artifact_data = None
+                    artifact_error = None
                     render_mode = 'inline'
                     chat_summary = full_content
                     routing = None
@@ -682,6 +704,35 @@ def chat_stream():
                             render_mode = routing.render_mode
                             chat_summary = routing.chat_payload or structured.remainder or ''
                             logger.info(f"Stream chat_summary set to: {repr(chat_summary[:200])}")
+
+                            # Handle artifact_patch — apply patches to current artifact
+                            if routing.render_mode == 'artifact_patch' and routing.artifact_payload:
+                                patch_data = routing.artifact_payload
+                                current_files, full_artifact = _load_current_artifact_files(user_id, session_id)
+                                if current_files:
+                                    patched_files, patch_results = apply_patches(current_files, patch_data.get('patches', []))
+                                    applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
+                                    failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
+                                    logger.info(f"🩹 Patch results: {applied_count} applied, {failed_count} failed")
+
+                                    if applied_count > 0:
+                                        primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
+                                        routing.artifact_payload = {
+                                            'title': full_artifact.get('title', 'Patched Artifact') if full_artifact else 'Patched Artifact',
+                                            'type': full_artifact.get('type', 'project') if full_artifact else 'project',
+                                            'primaryLanguage': primary_lang,
+                                            'files': patched_files,
+                                        }
+                                        render_mode = 'artifact'
+                                    else:
+                                        render_mode = 'inline'
+
+                                    if failed_count > 0:
+                                        failed_msgs = [r['reason'] for r in patch_results if r['status'] == 'failed']
+                                        artifact_error = f"{failed_count} patch(es) failed: {'; '.join(failed_msgs)}"
+                                else:
+                                    logger.warning("No active artifact found to patch")
+                                    render_mode = 'inline'
 
                             if routing.artifact_payload:
                                 files = routing.artifact_payload.get('files', [])
@@ -728,6 +779,17 @@ def chat_stream():
                         asset = crypto_chart.get('symbol') if asset_type == 'stock' else crypto_chart.get('coin')
                         logger.info(f"Stream: {asset_type.upper()} chart detected for {asset}")
 
+                    # Update session title before building done payload so we can include it
+                    stream_session_name = None
+                    if session_id and user_id and not guest_mode:
+                        try:
+                            session_ref = db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
+                            session_doc = session_ref.get()
+                            session_data = session_doc.to_dict() if session_doc.exists else {}
+                            stream_session_name = update_session_title_if_missing(user_id, session_id, session_data, chat_summary, prompt)
+                        except Exception as title_err:
+                            logger.warning(f"Failed to update session title in streaming: {title_err}")
+
                     done_payload = {
                         'type': 'done',
                         'reasoning': full_reasoning,
@@ -735,24 +797,18 @@ def chat_stream():
                         'chat_summary': chat_summary,
                         'render_mode': render_mode,
                         'artifact': artifact_data,
+                        'artifact_error': artifact_error,
                         'response_id': response_msg_id,
                         'is_email': is_email,
                         'email': email_data,
-                        'crypto_chart': crypto_chart
+                        'crypto_chart': crypto_chart,
+                        'session_name': stream_session_name
                     }
                     logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, crypto_chart={crypto_chart is not None}")
 
                     # Save to history and persist artifact
                     if session_id and user_id and not guest_mode:
                         try:
-                            # Update session title if missing
-                            try:
-                                session_ref = db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
-                                session_doc = session_ref.get()
-                                session_data = session_doc.to_dict() if session_doc.exists else {}
-                                update_session_title_if_missing(user_id, session_id, session_data, chat_summary, prompt)
-                            except Exception as title_err:
-                                logger.warning(f"Failed to update session title in streaming: {title_err}")
 
                             artifact_ref = None
 
@@ -1744,6 +1800,49 @@ def chat():
         artifact_payload = None
         artifact_reference = None
         artifact_status = None
+
+        # Handle artifact_patch — apply patches to current artifact
+        if routing_decision.render_mode == 'artifact_patch' and routing_decision.artifact_payload:
+            patch_data = routing_decision.artifact_payload
+            current_files = None
+            full_artifact_data = None
+            try:
+                store = artifact_store
+                artifacts_data = store.list_artifacts(user_id, session_id)
+                artifacts = artifacts_data.get('artifacts', [])
+                active = next((a for a in artifacts if a.get('isActive')), artifacts[0] if artifacts else None)
+                if active:
+                    full_artifact_data = store.get_artifact(user_id, session_id, active['artifactId'])
+                    if full_artifact_data and full_artifact_data.get('activeVersion'):
+                        current_files = full_artifact_data['activeVersion'].get('files', [])
+            except Exception as e:
+                logger.warning(f"Failed to load artifact for patching: {e}")
+
+            if current_files:
+                patched_files, patch_results = apply_patches(current_files, patch_data.get('patches', []))
+                applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
+                failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
+                logger.info(f"🩹 [NonStream] Patch results: {applied_count} applied, {failed_count} failed")
+
+                if applied_count > 0:
+                    primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
+                    routing_decision = ArtifactDecision(
+                        render_mode='artifact',
+                        chat_payload=routing_decision.chat_payload,
+                        artifact_payload={
+                            'title': full_artifact_data.get('title', 'Patched Artifact') if full_artifact_data else 'Patched Artifact',
+                            'type': full_artifact_data.get('type', 'project') if full_artifact_data else 'project',
+                            'primaryLanguage': primary_lang,
+                            'files': patched_files,
+                        },
+                        contains_code=True,
+                        desired_action=ArtifactPreference.UPDATE,
+                    )
+
+                if failed_count > 0:
+                    failed_msgs = [r['reason'] for r in patch_results if r['status'] == 'failed']
+                    routing_decision.error_message = f"{failed_count} patch(es) failed: {'; '.join(failed_msgs)}"
+
         if routing_decision.render_mode != "inline" and routing_decision.artifact_payload:
             draft_payload = routing_decision.artifact_payload.copy()
             persisted_artifact = None
