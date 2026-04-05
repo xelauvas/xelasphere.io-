@@ -482,8 +482,8 @@ const ProgressiveTextDisplay = (() => {
 
                     // Auto-scroll (only if user is pinned to bottom)
                     if (window.scrollState?.isPinnedToBottom) {
-                        if (typeof scrollManager !== 'undefined' && scrollManager.scrollToBottom) {
-                            scrollManager.scrollToBottom(false); // Don't force - respect user scroll
+                        if (typeof window.scrollToBottom === 'function') {
+                            window.scrollToBottom(false);
                         }
                     }
                 }
@@ -849,8 +849,8 @@ const ThinkingIndicator = (() => {
 
         // Auto-scroll only if user is pinned to bottom
         if (window.scrollState?.isPinnedToBottom) {
-            if (typeof scrollManager !== 'undefined' && scrollManager.scrollToBottom) {
-                scrollManager.scrollToBottom(false);
+            if (typeof window.scrollToBottom === 'function') {
+                window.scrollToBottom(false);
             }
         }
     }
@@ -2252,6 +2252,7 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
         messageDiv.dataset.messageKey = messageId;
     }
     messageDiv.dataset.sender = normalizedSender;
+    messageDiv.dataset.timestamp = new Date().toISOString();
 
     if (Array.isArray(searchResults) && searchResults.length) {
         try {
@@ -2642,10 +2643,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             }
         }
 
-        // Scroll user message to top (ChatGPT-style) - only for existing conversations
-        // For first message in new chat, let normal scroll behavior handle it
-        if (primaryUserMessage && hasExistingHistory) {
-            window._keepMessageAtTop = true;
+        // Claude-style: keep view pinned to bottom, new messages appear below.
+        // No scroll-to-top — just ensure we're at the bottom showing the user's message.
+        if (primaryUserMessage) {
+            if (typeof window.scrollToBottom === 'function') {
+                window.scrollToBottom(true, true);
+            }
         }
 
         // Show indicator AFTER user message (so it appears below, where response will be)
@@ -2658,12 +2661,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         } else {
             // Show simple pulsing dot for non-DeepSeek models
             showSimplePulsingDot();
-        }
-
-        // Scroll user message to top (ChatGPT-style) - only if there's prior chat history
-        // For the first message in a new chat, don't scroll - message is already visible
-        if (primaryUserMessage && typeof window.scrollUserMessageToTop === 'function' && hasExistingHistory) {
-            window.scrollUserMessageToTop(primaryUserMessage);
         }
 
         // Bump session to top of sidebar (most recently active)
@@ -3068,7 +3065,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     }
                 }
 
-                await scrollManager.scrollToBottom(true);
+                if (typeof window.scrollToBottom === 'function') {
+                    window.scrollToBottom(true, true);
+                }
 
                 // Clear request from BackgroundRequestManager (successfully displayed)
                 if (bgRequest) {
@@ -3471,7 +3470,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             }
         }
 
-        await scrollManager.scrollToBottom(true);
+        if (typeof window.scrollToBottom === 'function') {
+            window.scrollToBottom(true, true);
+        }
 
         // Clear request from BackgroundRequestManager (response was displayed successfully)
         // Don't call completeRequest here - that's only for buffered responses
@@ -3505,8 +3506,24 @@ async function sendMessage(promptText, messageId = null, options = {}) {
     } finally {
         const stillActive = isSessionActive();
 
-        // ChatGPT-style: mark streaming ended
+        // ChatGPT-style: mark streaming ended and ensure scroll is at bottom
         window.scrollState?.setStreamingState?.(false);
+
+        // Reset scroll lock flags — response is done, scroll should be at bottom
+        if (window._keepMessageAtTop) {
+            window._keepMessageAtTop = false;
+            const chatDisplayEl = document.getElementById('chat-display');
+            if (chatDisplayEl) {
+                chatDisplayEl.classList.remove('scroll-padding-active');
+            }
+        }
+        if (window.scrollState) {
+            window.scrollState.isPinnedToBottom = true;
+        }
+        // Ensure we're at the bottom after response completes
+        if (typeof window.scrollToBottom === 'function') {
+            window.scrollToBottom(true, true);
+        }
 
         // Hide thinking indicator if session is still active
         if (stillActive) {

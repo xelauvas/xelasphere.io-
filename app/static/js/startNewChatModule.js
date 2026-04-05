@@ -774,8 +774,17 @@ class ChatManager {
 
     handleTemporaryPromptSent() {
         if (!this.temporarySessionId || !this.temporaryCentered) return;
-        this.temporaryCentered = false;
-        this.updateTemporaryUiState();
+
+        // Animate the input from center to bottom (like ChatGPT)
+        // Step 1: Add animation class while still in centered state
+        document.body.classList.add('composer-animating-to-bottom');
+
+        // Step 2: After animation completes, switch to normal state
+        setTimeout(() => {
+            document.body.classList.remove('composer-animating-to-bottom');
+            this.temporaryCentered = false;
+            this.updateTemporaryUiState();
+        }, 420); // Match the 0.4s CSS transition
     }
     
     manageLoadMoreSpinner(show, type = 'default', position = 'bottom') {

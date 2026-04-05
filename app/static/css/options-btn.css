@@ -57,14 +57,10 @@
     width: 100%;
     transform: none;
     position: relative;
+    min-height: var(--options-lock-height, auto);
   }
 
-  /* Hide extra options on desktop (show only 3 + More) */
-  .options button:nth-child(4):not(.more-button),
-  .options button:nth-child(5):not(.more-button),
-  .options button:nth-child(6):not(.more-button) {
-    display: none;
-  }
+  /* All 4 buttons (3 suggestions + More) are always visible */
 
   /* Mobile responsive styles moved to mobile.css */
 

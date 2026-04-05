@@ -187,10 +187,8 @@ def more_options():
             user_id = session['user']['uid']
             user_preferences = fetch_user_preferences(user_id)
 
-        # Detect mobile devices to return more options
-        user_agent = request.headers.get('User-Agent', '').lower()
-        is_mobile = any(x in user_agent for x in ['mobile', 'android', 'iphone', 'ipad', 'ipod'])
-        num_tasks = 7 if is_mobile else 6
+        # Always return 3 suggestions + "More" button = 4 total in grid
+        num_tasks = 3
 
         # Use AI model to generate dynamic options (falls back to hardcoded if API fails)
         options = task_generator.generate_task_options(

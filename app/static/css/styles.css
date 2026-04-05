@@ -856,7 +856,7 @@ body.temporary-chat-mode .arrow-down {
     display: none !important;
 }
 
-body.temporary-chat-mode .input-container,
+body.temporary-chat-mode:not(.composer-animating-to-bottom) .input-container,
 body.temporary-chat-mode .chat-shell__composer,
 body.temporary-chat-mode .chatbox,
 body.temporary-chat-mode .content-wrapper,
@@ -893,6 +893,29 @@ body.temporary-chat-centered .input-container {
     border: none;
     box-shadow: none;
     z-index: 1300;
+}
+
+/* Smooth transition when input moves from center to bottom (first message sent) */
+body.composer-animating-to-bottom .input-container {
+    position: fixed !important;
+    top: auto !important;
+    bottom: calc(var(--composer-safe-area-bottom, 0px) + 16px) !important;
+    left: calc(
+        var(--left-sidebar-width, 0px) +
+        (100% - var(--left-sidebar-width, 0px) - var(--right-sidebar-width, 0px)) / 2
+    ) !important;
+    transform: translate(-50%, 0) !important;
+    transition: top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    z-index: 1300;
+}
+
+/* Hide the greeting/logo header during animation — only the input pill moves down */
+body.composer-animating-to-bottom .temp-composer-header {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important;
+    pointer-events: none;
 }
 
 body.temporary-chat-centered .input-row,
@@ -2182,16 +2205,16 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     display: none;
 }
 
-/* --- Action Buttons --- */
+/* --- Action Buttons (minimal, airy) --- */
 .action-buttons {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
+    justify-content: flex-start;
+    align-items: center;
     width: 100%;
-    padding: 0.25rem 0;
-    margin-top: 0.15rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    gap: 0.35rem;
+    padding: 0.35rem 0 0;
+    margin-top: 0.1rem;
+    border: none;
+    gap: 0.4rem;
 }
 
 .action-buttons-row {
@@ -2201,29 +2224,34 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
 }
 
 .action-btn {
-    background: transparent;
-    border: none;
+    background: none;
+    border: 1px solid transparent;
     box-shadow: none;
     appearance: none;
     -webkit-appearance: none;
-    color: var(--text-color-secondary);
-    font-size: 0.85rem;
-    padding: 0.25rem;
-    border-radius: 0.35rem;
+    color: var(--text-color-light);
+    font-size: 0.8rem;
+    padding: 0.35rem 0.45rem;
+    border-radius: 0.5rem;
     cursor: pointer;
     outline: none;
-    transition: color 0.2s ease;
+    transition: none;
     position: relative;
+    line-height: 1;
 }
 
 .action-btn:hover,
-.action-btn:focus-visible {
-    color: var(--primary-text-color);
+.action-btn:focus-visible,
+.action-btn:active {
+    color: var(--text-color-light);
+    background: none;
+    border-color: transparent;
 }
 
 .action-btn i {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     pointer-events: none;
+    display: block;
 }
 
 .action-more-wrapper {
@@ -2232,23 +2260,24 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
 }
 
 .action-more-button {
-    background: transparent;
-    border: none;
+    background: none;
+    border: 1px solid transparent;
     box-shadow: none;
     appearance: none;
     -webkit-appearance: none;
-    color: var(--text-color-secondary);
-    font-size: 1rem;
+    color: var(--text-color-light);
+    font-size: 0.8rem;
     line-height: 1;
-    padding: 0.15rem 0.3rem;
-    border-radius: 0.35rem;
+    padding: 0.35rem 0.45rem;
+    border-radius: 0.5rem;
     cursor: pointer;
-    transition: color 0.2s ease;
+    transition: none;
 }
 
-.action-more-button:hover,
-.action-more-button:focus-visible {
-    color: var(--primary-text-color);
+.action-more-button:hover {
+    color: var(--text-color-light);
+    background: none;
+    border-color: transparent;
 }
 
 .action-more-menu {
@@ -2268,6 +2297,16 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
 
 .action-more-menu.open {
     display: flex;
+}
+
+.action-more-time-header {
+    padding: 0.45rem 0.9rem 0.35rem;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.4);
+    letter-spacing: 0.02em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    user-select: none;
+    white-space: nowrap;
 }
 
 .action-more-menu button {

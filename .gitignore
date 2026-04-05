@@ -22,3 +22,4 @@ model_cache/
 uploads/
 nltk_data/
 gcloud init/
+.gstack/

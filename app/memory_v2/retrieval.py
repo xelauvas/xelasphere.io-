@@ -667,11 +667,13 @@ class MemoryRetriever:
 
         # Format each type with priority order:
         # 1. Constraints (always keep - safety critical)
-        # 2. Profile (keep - identity)
-        # 3. Preferences (keep high-score, drop low-score first)
-        # 4. Projects (keep if budget allows)
-        # 5. Temporary (lowest priority)
-        type_order = ['constraint', 'profile', 'preference', 'project', 'temporary']
+        # 2. Feedback (high priority - user corrections guide behavior)
+        # 3. Profile (keep - identity)
+        # 4. Preferences (keep high-score, drop low-score first)
+        # 5. Projects (keep if budget allows)
+        # 6. References (contextual pointers)
+        # 7. Temporary (lowest priority)
+        type_order = ['constraint', 'feedback', 'profile', 'preference', 'project', 'reference', 'temporary']
         current_tokens = self._estimate_tokens("\n".join(lines))
 
         for type_key in type_order:
@@ -700,7 +702,7 @@ class MemoryRetriever:
                 # - Constraints: always include
                 # - Profile: include up to 3
                 # - Others: include if budget allows, drop low-score first
-                is_priority = type_key in ['constraint', 'profile']
+                is_priority = type_key in ['constraint', 'feedback', 'profile']
                 at_limit = items_added >= 3 and type_key == 'profile'
 
                 if not is_priority and current_tokens + line_tokens > max_tokens:

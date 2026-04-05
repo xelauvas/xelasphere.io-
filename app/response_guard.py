@@ -45,8 +45,9 @@ logger = logging.getLogger(__name__)
 # Ambiguity Detection Patterns
 # =============================================================================
 
-# Vague affirmations that need context
-VAGUE_AFFIRMATIONS = [
+# ACTION CONFIRMATIONS — these are NOT vague. They mean "do it."
+# These should NEVER be intercepted. The user is telling us to proceed.
+ACTION_CONFIRMATIONS = [
     r"^yes\s*(?:please)?\.?$",
     r"^yeah?\s*(?:please)?\.?$",
     r"^sure\.?$",
@@ -55,15 +56,19 @@ VAGUE_AFFIRMATIONS = [
     r"^do\s*it\.?$",
     r"^please\s*do\.?$",
     r"^that\s*(?:would\s+be\s+)?(?:great|nice|helpful)\.?$",
+    r"^just\s*do\s*it\.?$",
+    r"^skip\.?$",
+    r"^proceed\.?$",
+    r"^continue\.?$",
+    r"^definitely\.?$",
+    r"^absolutely\.?$",
 ]
 
-# Vague references that need clarification
+# Vague references — only intercept "more"/"elaborate" when there are
+# 3+ distinct items to expand on. Otherwise let the LLM handle it.
 VAGUE_REFERENCES = [
-    r"^(?:the|that)\s+(?:first|second|third|last|other)\s+(?:one|option|thing)\.?$",
     r"^(?:more|elaborate|expand|explain)\.?$",
     r"^(?:more|tell\s+me\s+more)(?:\s+(?:about|on)\s+(?:that|it|this))?\.?$",
-    r"^what\s+(?:about|was)\s+(?:that|it|the\s+other)\.?$",
-    r"^(?:and|also)\s+(?:that|the\s+other)\.?$",
 ]
 
 
@@ -143,12 +148,14 @@ class ResponseGuard:
         user_input = user_input.strip()
         input_lower = user_input.lower()
 
-        # Check for vague affirmations
-        for pattern in VAGUE_AFFIRMATIONS:
+        # Action confirmations ("yes", "go ahead", "do it") are NEVER intercepted.
+        # The user is telling us to proceed — let the LLM act on it.
+        for pattern in ACTION_CONFIRMATIONS:
             if re.match(pattern, input_lower):
-                return self._handle_vague_affirmation(user_input, previous_messages)
+                return None
 
-        # Check for vague references
+        # Only intercept truly vague expansion requests ("more", "elaborate")
+        # when there are multiple distinct items that could be expanded.
         for pattern in VAGUE_REFERENCES:
             if re.match(pattern, input_lower):
                 return self._handle_vague_reference(user_input, previous_messages)
@@ -236,13 +243,10 @@ class ResponseGuard:
         # Extract topics from last response
         topics = self._extract_topics(last_response)
 
-        if len(topics) == 0:
-            return None  # Can't determine topics, let LLM handle
+        if len(topics) <= 2:
+            return None  # LLM can infer with 0-2 topics
 
-        if len(topics) == 1:
-            return None  # Single topic, LLM can infer
-
-        # Multiple topics - need clarification
+        # 3+ distinct topics - "more" is genuinely ambiguous
         topics_text = "\n".join(f"- {topic}" for topic in topics[:5])
         return InterceptResult(
             should_intercept=True,
