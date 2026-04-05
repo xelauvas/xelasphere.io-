@@ -1295,6 +1295,23 @@ class ArtifactRouter:
         artifact_block = None
         artifact_block_error = None
         artifact_block_user_error = None
+
+        # Check for artifact_patch block first (surgical updates)
+        search_text_early = structured.remainder or structured.chat or ""
+        patch_block = extract_artifact_patch_block(search_text_early)
+        if patch_block:
+            logger.info(f"🩹 Found artifact_patch block with {len(patch_block.get('patches', []))} patches")
+            chat_text = structured.chat.strip() or structured.remainder or ""
+            # Strip the patch fence from chat text
+            chat_text = ARTIFACT_PATCH_FENCE_PATTERN.sub("", chat_text).strip()
+            return ArtifactDecision(
+                render_mode="artifact_patch",
+                chat_payload=chat_text or "Applied code patches",
+                artifact_payload=patch_block,
+                contains_code=True,
+                desired_action=ArtifactPreference.UPDATE,
+            )
+
         try:
             search_text = structured.remainder or structured.chat or ""
             logger.info(f"🔍 Searching for artifact block in text (length={len(search_text)}): {search_text[:500]}...")
