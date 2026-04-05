@@ -1375,6 +1375,8 @@ ${escapeHtml(entry.content || '')}
                 if (streamingContainer) streamingContainer.style.display = 'none';
                 const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
                 if (iframeWrapper) iframeWrapper.style.display = '';
+                const iframe = document.getElementById('artifact-preview-frame');
+                if (iframe) iframe.style.display = '';
             }
 
             this.panel.classList.remove('is-open');
@@ -1405,8 +1407,11 @@ ${escapeHtml(entry.content || '')}
 
             const previewSection = document.getElementById('artifact-preview-panel');
             if (previewSection) {
+                // Hide iframe and its wrapper completely
                 const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
                 if (iframeWrapper) iframeWrapper.style.display = 'none';
+                const iframe = document.getElementById('artifact-preview-frame');
+                if (iframe) iframe.style.display = 'none';
 
                 let container = previewSection.querySelector('.artifact-streaming-code');
                 if (!container) {
@@ -1489,6 +1494,8 @@ ${escapeHtml(entry.content || '')}
                 if (streamingContainer) streamingContainer.style.display = 'none';
                 const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
                 if (iframeWrapper) iframeWrapper.style.display = '';
+                const iframe = document.getElementById('artifact-preview-frame');
+                if (iframe) iframe.style.display = '';
             }
 
             if (artifactData) {
