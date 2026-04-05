@@ -2847,8 +2847,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             console.log('Parsed email from done:', streamIsEmail, streamEmailData);
                             if (streamCryptoChart) console.log('Parsed crypto chart:', streamCryptoChart);
                         } else if (chunk.type === 'error') {
-                            // API key or other configuration error - show to user
                             const errorText = chunk.text || 'Streaming error';
+                            // If streaming isn't available for this model, fall back silently
+                            if (errorText.includes('Streaming only available')) {
+                                throw new Error(errorText);
+                            }
+                            // API key or other configuration error - show to user
                             if (bgRequest) {
                                 BackgroundRequestManager.errorRequest(requestSessionId, errorText);
                             }
