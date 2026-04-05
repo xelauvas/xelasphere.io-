@@ -297,41 +297,54 @@
                     return path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.tsx') || path.endsWith('.ts');
                 }) || [];
 
-                // Nuclear markdown cleanup for DeepSeek (embeds markdown in JSX)
+                // Markdown cleanup for DeepSeek (embeds markdown in JSX)
+                // Only runs if code actually contains markdown patterns to avoid
+                // corrupting valid code (e.g. stripping * multiply operators)
                 const cleanMd = (code) => {
                     if (!code) return '';
                     code = normalizeContent(code);
 
+                    // Detect if this code actually has markdown contamination
+                    // Look for ** at word boundaries (bold), or # at line starts (headings)
+                    const hasBoldMarkdown = /(?:^|[^\\*\w])\*\*\w/.test(code);
+                    const hasHeadingMarkdown = /^\s*#{1,6}\s+\w/m.test(code);
+                    const hasBulletMarkers = /^\s*[•·‣]\s+/m.test(code);
+
+                    if (!hasBoldMarkdown && !hasHeadingMarkdown && !hasBulletMarkers) {
+                        return code; // No markdown detected, return as-is
+                    }
+
                     // 1. Loop paired **bold** removal until stable (handles ****nested****)
-                    let prev, iter = 0;
-                    do {
-                        prev = code;
-                        code = code.replace(/\*\*(.+?)\*\*/g, '$1');
-                        iter++;
-                    } while (code !== prev && iter < 10);
+                    if (hasBoldMarkdown) {
+                        let prev, iter = 0;
+                        do {
+                            prev = code;
+                            code = code.replace(/\*\*(.+?)\*\*/g, '$1');
+                            iter++;
+                        } while (code !== prev && iter < 10);
 
-                    // 2. Strip remaining unpaired ** (broken markdown)
-                    // Keep ** only if it's between two word chars (exponentiation: a**b)
-                    code = code.replace(/\*{2,}/g, (match, offset, str) => {
-                        const before = offset > 0 ? str[offset - 1] : '';
-                        const after = offset + match.length < str.length ? str[offset + match.length] : '';
-                        if (/\w/.test(before) && /\w/.test(after)) return match;
-                        return '';
-                    });
+                        // 2. Strip remaining unpaired ** (broken markdown)
+                        code = code.replace(/\*{2,}/g, (match, offset, str) => {
+                            const before = offset > 0 ? str[offset - 1] : '';
+                            const after = offset + match.length < str.length ? str[offset + match.length] : '';
+                            if (/\w/.test(before) && /\w/.test(after)) return match;
+                            return '';
+                        });
+                    }
 
-                    // 3. Strip remaining single * that look like italic (not multiply/deref)
-                    // *text* where text doesn't contain * or newlines
-                    code = code.replace(/(?<![*\w/])\*([^*\n]{1,50}?)\*(?![*\w])/g, '$1');
+                    // 3. Convert markdown headings to JSX (skip comment lines)
+                    if (hasHeadingMarkdown) {
+                        code = code.replace(/^(\s*)#{1,6}\s+(.+)$/gm, (match, indent, text) => {
+                            if (match.trim().startsWith('//') || match.trim().startsWith('/*')) return match;
+                            const level = match.trim().match(/^#+/)[0].length;
+                            return `${indent}<h${level}>${text}</h${level}>`;
+                        });
+                    }
 
-                    // 4. Convert markdown headings to JSX (skip comment lines)
-                    code = code.replace(/^(\s*)#{1,6}\s+(.+)$/gm, (match, indent, text) => {
-                        if (match.trim().startsWith('//') || match.trim().startsWith('/*')) return match;
-                        const level = match.trim().match(/^#+/)[0].length;
-                        return `${indent}<h${level}>${text}</h${level}>`;
-                    });
-
-                    // 5. Strip bullet markers (•, ·, ‣)
-                    code = code.replace(/^\s*[•·‣]\s+/gm, '');
+                    // 4. Strip bullet markers (•, ·, ‣)
+                    if (hasBulletMarkers) {
+                        code = code.replace(/^\s*[•·‣]\s+/gm, '');
+                    }
 
                     return code;
                 };
@@ -400,6 +413,10 @@
         code = code.replace(/export\\s+default\\s+class\\s+/g, 'class ');
         code = code.replace(/export\\s+default\\s+/g, 'var __defaultExport = ');
         code = code.replace(/export\\s+(const|let|var|function|class)\\s+/g, '$1 ');
+
+        // --- 4b. FIX MALFORMED JSX ---
+        // Self-closing + closing tag: <button .../></button> -> <button ...></button>
+        code = code.replace(/\\/>\\s*<\\/([a-zA-Z][a-zA-Z0-9]*?)>/g, '></$1>');
 
         // --- 5. DETECT MAIN COMPONENT ---
         // Collect ALL PascalCase identifiers from functions, classes, and const/let/var assignments
