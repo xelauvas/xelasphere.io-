@@ -2722,3 +2722,44 @@ button.artifact-chat-pill,
 .artifact-panel__composer-submit:hover {
   background: #6b5ec7;
 }
+
+/* ==================== */
+/* STREAMING CODE VIEW */
+/* ==================== */
+
+.artifact-streaming-code {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #1a1a2e;
+  padding: 0;
+  display: none;
+}
+
+.artifact-streaming-code pre {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  min-height: 100%;
+}
+
+.artifact-streaming-code code {
+  font-family: inherit;
+  color: inherit;
+}
+
+.artifact-panel.is-streaming .artifact-streaming-code {
+  border-left: 2px solid var(--artifact-accent, #7c6fe0);
+  animation: streaming-pulse 2s ease-in-out infinite;
+}
+
+@keyframes streaming-pulse {
+  0%, 100% { border-left-color: var(--artifact-accent, #7c6fe0); }
+  50% { border-left-color: rgba(124, 111, 224, 0.3); }
+}
