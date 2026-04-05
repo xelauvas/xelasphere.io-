@@ -618,7 +618,7 @@ def chat_stream():
                     logger.info(f"📈 [Stream] Injected stock context for chart query: {symbol}")
                     enhanced_prompt = f"{context_str}\n\nUser question: {enhanced_prompt}"
 
-    # Smart-route 'auto' model to the appropriate streaming model
+    # Smart-route 'auto' model, but force a streaming-capable model
     stream_model = model
     if model == 'auto' or not model:
         routed_model, task_type = smart_route(
@@ -631,6 +631,13 @@ def chat_stream():
         )
         stream_model = routed_model
         logger.info(f"🔀 [Stream] Smart routing: {task_type} -> {stream_model}")
+        # Stream endpoint only supports DeepSeek/Moonshot — force deepseek-chat if needed
+        from app.model_catalog import resolve_model_id, MODEL_PROVIDERS
+        resolved = resolve_model_id(stream_model)
+        provider = MODEL_PROVIDERS.get(resolved, "")
+        if provider not in ("deepseek", "moonshot"):
+            stream_model = "deepseek-chat"
+            logger.info(f"🔀 [Stream] Overriding non-streaming model to deepseek-chat")
 
     def generate():
         import json

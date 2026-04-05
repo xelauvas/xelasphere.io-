@@ -781,7 +781,8 @@ ${escapeHtml(entry.content || '')}
             this.isStreaming = false;
             this.streamingCodeContainer = null;
             this.streamingAutoScroll = true;
-            this.streamingContentExtractor = null;
+            this._streamBuffer = '';
+            this._contentFound = false;
 
             // Edit state
             this.editingFile = null;
@@ -1364,7 +1365,8 @@ ${escapeHtml(entry.content || '')}
             // Clean up streaming state if active
             if (this.isStreaming) {
                 this.isStreaming = false;
-                this.streamingContentExtractor = null;
+                this._streamBuffer = '';
+            this._contentFound = false;
                 this.panel.classList.remove('is-streaming');
             }
 
@@ -1390,7 +1392,8 @@ ${escapeHtml(entry.content || '')}
             this.isStreaming = true;
             this.streamingStartTime = Date.now();
             this.streamingAutoScroll = true;
-            this.streamingContentExtractor = { started: false, quoteChar: null, depth: 0 };
+            this._streamBuffer = '';
+            this._contentFound = false;
 
             if (this.titleEl) {
                 this.titleEl.textContent = 'Generating...';
@@ -1447,9 +1450,30 @@ ${escapeHtml(entry.content || '')}
         appendStreamingCode(text) {
             if (!this.isStreaming || !this.streamingCodeContainer) return;
 
-            // Show all text immediately — unescape JSON string escapes for display
-            const displayText = this._unescapeJsonString(text);
-            this.streamingCodeContainer.textContent += displayText;
+            // The streaming text is raw artifact JSON: {"title":"...","files":[{"content":"CODE HERE"}]}
+            // We want to display just the file content, not the JSON wrapper.
+            // Buffer text until we find the first "content":" key, then display from there.
+            if (!this._streamBuffer) this._streamBuffer = '';
+            this._streamBuffer += text;
+
+            if (!this._contentFound) {
+                // Look for the first "content":" pattern in the accumulated buffer
+                const match = this._streamBuffer.match(/"content"\s*:\s*"/);
+                if (match) {
+                    this._contentFound = true;
+                    // Extract everything after the match — this is the start of the code
+                    const codeStart = this._streamBuffer.slice(match.index + match[0].length);
+                    if (codeStart) {
+                        const displayText = this._unescapeJsonString(codeStart);
+                        this.streamingCodeContainer.textContent += displayText;
+                    }
+                }
+                // Don't display anything until we find content
+            } else {
+                // We're inside the content string — unescape and display the new text directly
+                const displayText = this._unescapeJsonString(text);
+                this.streamingCodeContainer.textContent += displayText;
+            }
 
             if (this.streamingAutoScroll) {
                 const scrollParent = this.streamingCodeContainer.closest('.artifact-streaming-code');
@@ -1472,7 +1496,8 @@ ${escapeHtml(entry.content || '')}
             const doFinalize = () => {
                 this.isStreaming = false;
                 this.panel.classList.remove('is-streaming');
-                this.streamingContentExtractor = null;
+                this._streamBuffer = '';
+            this._contentFound = false;
 
                 // Hide streaming container, restore code viewer
                 const codeSection = document.getElementById('artifact-code-panel');
