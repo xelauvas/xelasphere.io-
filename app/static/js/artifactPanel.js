@@ -439,6 +439,7 @@
         // --- 6. TRANSFORM & RENDER ---
         function escErr(s) { var d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
         function showError(msg) { document.getElementById('root').innerHTML = '<pre style="padding:1rem;color:#ff6b6b;font-family:monospace;font-size:12px;white-space:pre-wrap;">' + escErr(msg) + '</pre>'; }
+        var lastRenderError = '';
 
         function tryRender(src, label) {
             try {
@@ -479,18 +480,18 @@
                     }, 500);
                     return true;
                 }
-                console.warn('[Artifact] ' + label + ': Component is', typeof Component);
+                lastRenderError = label + ': Component is ' + (typeof Component);
+                console.warn('[Artifact] ' + lastRenderError);
                 return false;
             } catch(e) {
+                lastRenderError = e.message;
                 console.warn('[Artifact] ' + label + ':', e.message);
                 return false;
             }
         }
 
-        // Try raw code first (already cleaned by outer cleanMd)
         if (!tryRender(code, 'direct')) {
             // Adjacent JSX error — wrap return(...) bodies in <> ... </>
-            // Uses paren-depth tracking to find the correct closing )
             var fragCode = code;
             var returnRe = /\\breturn\\s*\\(/g;
             var match;
@@ -517,7 +518,7 @@
             fragCode = parts.join('');
             console.log('[Artifact] Fragment-wrapped code (first 400):', fragCode.substring(0, 400));
             if (!tryRender(fragCode, 'fragment-wrapped')) {
-                showError('React Error: Could not render component. Check console for details.');
+                showError(lastRenderError || 'Could not render component');
             }
         }
     })();
