@@ -1381,7 +1381,7 @@ def chat():
                     logger.debug(f"Overriding stateless - has {len(previous_messages)} messages of history")
 
             # Increase token budget when there's file content to analyze
-            prompt_max_tokens = 16000 if extracted_text else 4096
+            prompt_max_tokens = 16000 if extracted_text else MAX_TOKENS
             is_recipe_request = False  # Default, updated below if recipe intent detected
 
             # Claude-inspired: Inject current artifact context when user asks to fix/update

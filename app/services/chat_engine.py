@@ -1053,8 +1053,8 @@ def build_prompt(
     pending_steps: Optional[List[str]] = None,
     canonical_context: Optional[str] = None,
     encoding_name: str = "cl100k_base",
-    max_tokens: int = 4096,
-    response_token_buffer: int = 512
+    max_tokens: int = MAX_TOKENS,
+    response_token_buffer: int = RESPONSE_TOKEN_BUFFER
 ) -> str:
     """
     Build prompt using strict priority-based dynamic packing.
