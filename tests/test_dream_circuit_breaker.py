@@ -115,3 +115,139 @@ class TestRecordSuccess:
             'disabled_until': None,
             'last_failure_at': None,
         })
+
+
+class TestRecordFailure:
+    def test_increments_without_tripping(self):
+        from app.memory_v2.dream.circuit_breaker import record_failure
+        from app.memory_v2.dream.config import DreamConfig
+        mock_db = MagicMock()
+
+        mock_global_snap = MagicMock()
+        mock_global_snap.exists = True
+        mock_global_snap.to_dict.return_value = {'consecutive_failures': 1}
+
+        mock_user_snap = MagicMock()
+        mock_user_snap.exists = True
+        mock_user_snap.to_dict.return_value = {'consecutive_failures': 1}
+
+        mock_global_doc = MagicMock()
+        mock_global_doc.get.return_value = mock_global_snap
+        mock_user_doc = MagicMock()
+        mock_user_doc.get.return_value = mock_user_snap
+
+        def mock_document(doc_id):
+            if doc_id == 'global':
+                return mock_global_doc
+            return mock_user_doc
+
+        mock_db.collection.return_value.document.side_effect = mock_document
+
+        config = DreamConfig()
+        tripped = record_failure(mock_db, 'user_123', config)
+
+        assert tripped is False
+        assert mock_global_doc.set.called
+        assert mock_user_doc.set.called
+        global_data = mock_global_doc.set.call_args[0][0]
+        user_data = mock_user_doc.set.call_args[0][0]
+        assert global_data['consecutive_failures'] == 2
+        assert user_data['consecutive_failures'] == 2
+        assert global_data['disabled_until'] is None
+        assert user_data['disabled_until'] is None
+
+    def test_trips_per_user_breaker_at_threshold(self):
+        from app.memory_v2.dream.circuit_breaker import record_failure
+        from app.memory_v2.dream.config import DreamConfig
+        mock_db = MagicMock()
+
+        mock_global_snap = MagicMock()
+        mock_global_snap.exists = True
+        mock_global_snap.to_dict.return_value = {'consecutive_failures': 1}
+
+        mock_user_snap = MagicMock()
+        mock_user_snap.exists = True
+        mock_user_snap.to_dict.return_value = {'consecutive_failures': 2}  # will become 3
+
+        mock_global_doc = MagicMock()
+        mock_global_doc.get.return_value = mock_global_snap
+        mock_user_doc = MagicMock()
+        mock_user_doc.get.return_value = mock_user_snap
+
+        def mock_document(doc_id):
+            if doc_id == 'global':
+                return mock_global_doc
+            return mock_user_doc
+
+        mock_db.collection.return_value.document.side_effect = mock_document
+
+        config = DreamConfig(circuit_breaker_max_failures=3)
+        tripped = record_failure(mock_db, 'user_123', config)
+
+        assert tripped is True
+        user_data = mock_user_doc.set.call_args[0][0]
+        assert user_data['consecutive_failures'] == 3
+        assert user_data['disabled_until'] is not None
+
+    def test_trips_global_breaker_at_threshold(self):
+        from app.memory_v2.dream.circuit_breaker import record_failure
+        from app.memory_v2.dream.config import DreamConfig
+        mock_db = MagicMock()
+
+        mock_global_snap = MagicMock()
+        mock_global_snap.exists = True
+        mock_global_snap.to_dict.return_value = {'consecutive_failures': 4}  # will become 5
+
+        mock_user_snap = MagicMock()
+        mock_user_snap.exists = True
+        mock_user_snap.to_dict.return_value = {'consecutive_failures': 0}
+
+        mock_global_doc = MagicMock()
+        mock_global_doc.get.return_value = mock_global_snap
+        mock_user_doc = MagicMock()
+        mock_user_doc.get.return_value = mock_user_snap
+
+        def mock_document(doc_id):
+            if doc_id == 'global':
+                return mock_global_doc
+            return mock_user_doc
+
+        mock_db.collection.return_value.document.side_effect = mock_document
+
+        config = DreamConfig(circuit_breaker_global_max_failures=5)
+        tripped = record_failure(mock_db, 'user_123', config)
+
+        assert tripped is True
+        global_data = mock_global_doc.set.call_args[0][0]
+        assert global_data['consecutive_failures'] == 5
+        assert global_data['disabled_until'] is not None
+
+    def test_handles_missing_documents(self):
+        from app.memory_v2.dream.circuit_breaker import record_failure
+        from app.memory_v2.dream.config import DreamConfig
+        mock_db = MagicMock()
+
+        mock_global_snap = MagicMock()
+        mock_global_snap.exists = False
+
+        mock_user_snap = MagicMock()
+        mock_user_snap.exists = False
+
+        mock_global_doc = MagicMock()
+        mock_global_doc.get.return_value = mock_global_snap
+        mock_user_doc = MagicMock()
+        mock_user_doc.get.return_value = mock_user_snap
+
+        def mock_document(doc_id):
+            if doc_id == 'global':
+                return mock_global_doc
+            return mock_user_doc
+
+        mock_db.collection.return_value.document.side_effect = mock_document
+
+        config = DreamConfig()
+        tripped = record_failure(mock_db, 'user_123', config)
+
+        assert tripped is False
+        global_data = mock_global_doc.set.call_args[0][0]
+        assert global_data['consecutive_failures'] == 1

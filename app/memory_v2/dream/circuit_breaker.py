@@ -65,6 +65,67 @@ def check_breaker(db, user_id: str) -> bool:
         return True
 
 
+def record_failure(db, user_id: str, config: DreamConfig) -> bool:
+    """Record a Kimi failure and trip breaker if threshold reached.
+
+    Returns True if any breaker was tripped by this failure.
+    """
+    try:
+        now = datetime.utcnow()
+        cooldown = timedelta(hours=config.circuit_breaker_cooldown_hours)
+        tripped = False
+
+        # Update global counter
+        global_ref = db.collection(COLLECTION).document(GLOBAL_DOC_ID)
+        global_snap = global_ref.get()
+        global_count = 0
+        if global_snap.exists:
+            global_count = global_snap.to_dict().get('consecutive_failures', 0)
+        global_count += 1
+
+        global_data = {
+            'consecutive_failures': global_count,
+            'last_failure_at': now,
+            'disabled_until': None,
+        }
+        if global_count >= config.circuit_breaker_global_max_failures:
+            global_data['disabled_until'] = now + cooldown
+            tripped = True
+            logger.warning(
+                "[dream] Global circuit breaker tripped: %d consecutive failures",
+                global_count,
+            )
+        global_ref.set(global_data)
+
+        # Update per-user counter
+        user_ref = db.collection(COLLECTION).document(_user_doc_id(user_id))
+        user_snap = user_ref.get()
+        user_count = 0
+        if user_snap.exists:
+            user_count = user_snap.to_dict().get('consecutive_failures', 0)
+        user_count += 1
+
+        user_data = {
+            'consecutive_failures': user_count,
+            'last_failure_at': now,
+            'disabled_until': None,
+        }
+        if user_count >= config.circuit_breaker_max_failures:
+            user_data['disabled_until'] = now + cooldown
+            tripped = True
+            logger.warning(
+                "[dream] Per-user circuit breaker tripped for %s: %d consecutive failures",
+                user_id, user_count,
+            )
+        user_ref.set(user_data)
+
+        return tripped
+
+    except Exception as exc:
+        logger.warning("[dream] Failed to record circuit breaker failure: %s", exc)
+        return False
+
+
 def record_success(db, user_id: str) -> None:
     """Reset both circuit breaker counters after a successful Kimi call."""
     try:
