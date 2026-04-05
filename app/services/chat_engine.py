@@ -648,13 +648,19 @@ DEVELOPER_INSTRUCTIONS = (
     "- Ask user to make the change themselves\n"
     "- Output partial code with 'rest remains the same'\n\n"
 
-    "ALWAYS:\n"
-    "- Output the COMPLETE updated artifact with fix applied\n"
-    "- Preserve file structure and unchanged code\n"
-    "- Use output_mode='artifact' in META block\n\n"
+    "ALWAYS use the ```artifact_patch format for updates (NEVER regenerate the full artifact):\n"
+    "```artifact_patch\n"
+    "{\"patches\":[{\"file\":\"App.jsx\",\"old_string\":\"exact text to find\",\"new_string\":\"replacement text\"}]}\n"
+    "```\n\n"
+    "Rules for patches:\n"
+    "- old_string must be EXACT text from the current code (include 2-4 surrounding lines for uniqueness)\n"
+    "- new_string is the replacement (empty string for deletions)\n"
+    "- Multiple patches allowed in one block\n"
+    "- Write a brief summary of what you changed before the patch block\n"
+    "- Use output_mode='artifact_patch' in META block\n\n"
 
     "Triggers: 'fix', 'update', 'correct', 'change', 'modify', 'edit', 'revise', 'improve'\n"
-    "Response: <META>{\"output_mode\":\"artifact\",...}</META> + full ```artifact block\n"
+    "Response: <META>{\"output_mode\":\"artifact_patch\",...}</META> + ```artifact_patch block\n"
 )
 
 
