@@ -543,3 +543,70 @@ class TestExtractArtifactPatchBlock:
         text = '```Artifact_Patch\n{"patches":[{"file":"a.js","old_string":"x","new_string":"y"}]}\n```'
         result = extract_artifact_patch_block(text)
         assert result is not None
+
+
+class TestApplyPatches:
+    """Tests for apply_patches function."""
+
+    def test_single_patch_applied(self):
+        from app.artifacts import apply_patches
+        files = [{'path': 'App.jsx', 'content': 'const color = "red";', 'language': 'jsx'}]
+        patches = [{'file': 'App.jsx', 'old_string': '"red"', 'new_string': '"blue"'}]
+        patched, results = apply_patches(files, patches)
+        assert patched[0]['content'] == 'const color = "blue";'
+        assert results[0]['status'] == 'applied'
+
+    def test_patch_file_not_found(self):
+        from app.artifacts import apply_patches
+        files = [{'path': 'App.jsx', 'content': 'hello', 'language': 'jsx'}]
+        patches = [{'file': 'missing.js', 'old_string': 'hello', 'new_string': 'world'}]
+        patched, results = apply_patches(files, patches)
+        assert results[0]['status'] == 'failed'
+        assert 'not found' in results[0]['reason']
+
+    def test_old_string_not_found(self):
+        from app.artifacts import apply_patches
+        files = [{'path': 'App.jsx', 'content': 'const x = 1;', 'language': 'jsx'}]
+        patches = [{'file': 'App.jsx', 'old_string': 'const y = 2;', 'new_string': 'const y = 3;'}]
+        patched, results = apply_patches(files, patches)
+        assert results[0]['status'] == 'failed'
+        assert 'not found' in results[0]['reason']
+
+    def test_ambiguous_match(self):
+        from app.artifacts import apply_patches
+        files = [{'path': 'App.jsx', 'content': 'aaa bbb aaa', 'language': 'jsx'}]
+        patches = [{'file': 'App.jsx', 'old_string': 'aaa', 'new_string': 'ccc'}]
+        patched, results = apply_patches(files, patches)
+        assert results[0]['status'] == 'failed'
+        assert 'multiple' in results[0]['reason'].lower()
+
+    def test_multiple_patches_same_file(self):
+        from app.artifacts import apply_patches
+        files = [{'path': 'App.jsx', 'content': 'line1\nline2\nline3', 'language': 'jsx'}]
+        patches = [
+            {'file': 'App.jsx', 'old_string': 'line1', 'new_string': 'LINE1'},
+            {'file': 'App.jsx', 'old_string': 'line3', 'new_string': 'LINE3'},
+        ]
+        patched, results = apply_patches(files, patches)
+        assert patched[0]['content'] == 'LINE1\nline2\nLINE3'
+        assert all(r['status'] == 'applied' for r in results)
+
+    def test_deletion_with_empty_new_string(self):
+        from app.artifacts import apply_patches
+        files = [{'path': 'App.jsx', 'content': 'keep\ndelete_me\nkeep', 'language': 'jsx'}]
+        patches = [{'file': 'App.jsx', 'old_string': '\ndelete_me', 'new_string': ''}]
+        patched, results = apply_patches(files, patches)
+        assert patched[0]['content'] == 'keep\nkeep'
+        assert results[0]['status'] == 'applied'
+
+    def test_partial_success(self):
+        from app.artifacts import apply_patches
+        files = [{'path': 'App.jsx', 'content': 'const x = 1;', 'language': 'jsx'}]
+        patches = [
+            {'file': 'App.jsx', 'old_string': 'const x = 1;', 'new_string': 'const x = 2;'},
+            {'file': 'App.jsx', 'old_string': 'nonexistent', 'new_string': 'whatever'},
+        ]
+        patched, results = apply_patches(files, patches)
+        assert patched[0]['content'] == 'const x = 2;'
+        assert results[0]['status'] == 'applied'
+        assert results[1]['status'] == 'failed'
