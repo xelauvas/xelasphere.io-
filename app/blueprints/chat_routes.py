@@ -1961,6 +1961,34 @@ def chat():
                     except Exception as e:
                         logger.debug(f"Dream trigger skipped: {e}")
 
+                # Smart suggestions: trigger refresh after enough new conversations
+                if not guest_mode:
+                    try:
+                        from app.services.smart_suggestions import (
+                            get_pool_metadata, should_refresh_pool, refresh_pool_background,
+                        )
+                        metadata = get_pool_metadata(db, user_id)
+                        convos_since = 0
+                        last_refresh = metadata.get("last_refresh")
+                        if last_refresh:
+                            sessions_ref = db.collection("users").document(user_id).collection("chat_sessions")
+                            from google.cloud.firestore_v1 import FieldFilter
+                            try:
+                                recent = sessions_ref.where(filter=FieldFilter("updated_at", ">", last_refresh)).count().get()
+                                convos_since = recent[0][0].value if recent else 0
+                            except Exception:
+                                convos_since = 0
+
+                        if should_refresh_pool(metadata, conversations_since=convos_since):
+                            import threading
+                            threading.Thread(
+                                target=refresh_pool_background,
+                                args=(db, user_id, "conversations"),
+                                daemon=True,
+                            ).start()
+                    except Exception as e:
+                        logger.debug(f"Smart suggestions refresh check skipped: {e}")
+
                 # Process reflection results
                 if reflection_result and reflection_result.has_actionable_items():
                     # NOTE: Reflection memory candidates are now handled by Memory V2's
