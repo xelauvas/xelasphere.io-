@@ -21,6 +21,8 @@ from app.services.smart_suggestions import (
     save_pool,
     load_pool,
     get_pool_metadata,
+    select_display_slots,
+    _score_today_slot,
     POOL_SIZE,
     DISPLAY_SIZE,
     SLOT_TYPES,
@@ -370,3 +372,160 @@ class TestGetPoolMetadata:
         get_pool_metadata(mock_db, "meta_user")
         mock_db.collection.assert_called_with("users")
         mock_db.collection.return_value.document.assert_called_with("meta_user")
+
+
+# ---------------------------------------------------------------------------
+# _score_today_slot()
+# ---------------------------------------------------------------------------
+
+class TestScoreTodaySlot:
+    def test_morning_keyword_scores_high_in_morning(self):
+        s = make_suggestion(title="Morning meditation", subtitle="Start your day", slot_type="today")
+        score_morning = _score_today_slot(s, hour=8)
+        score_evening = _score_today_slot(s, hour=19)
+        assert score_morning > score_evening
+
+    def test_afternoon_keyword_scores_high_in_afternoon(self):
+        s = make_suggestion(title="Afternoon review", subtitle="Check progress", slot_type="today")
+        score_afternoon = _score_today_slot(s, hour=14)
+        score_night = _score_today_slot(s, hour=23)
+        assert score_afternoon > score_night
+
+    def test_evening_keyword_scores_high_in_evening(self):
+        s = make_suggestion(title="Evening wind-down", subtitle="Relax", slot_type="today")
+        score_evening = _score_today_slot(s, hour=19)
+        score_morning = _score_today_slot(s, hour=8)
+        assert score_evening > score_morning
+
+    def test_night_keyword_scores_high_at_night(self):
+        s = make_suggestion(title="Night reflection", subtitle="Review the day", slot_type="today")
+        score_night = _score_today_slot(s, hour=23)
+        score_afternoon = _score_today_slot(s, hour=14)
+        assert score_night > score_afternoon
+
+    def test_no_keyword_returns_zero(self):
+        s = make_suggestion(title="Generic task", subtitle="Do something", slot_type="today")
+        score = _score_today_slot(s, hour=10)
+        assert score == 0
+
+    def test_subtitle_keywords_also_matched(self):
+        s = make_suggestion(title="Daily task", subtitle="Do your morning routine", slot_type="today")
+        score_morning = _score_today_slot(s, hour=7)
+        score_evening = _score_today_slot(s, hour=20)
+        assert score_morning > score_evening
+
+    def test_night_hours_wrap_around(self):
+        """Night = hours 22-4; hour=2 should match 'night' keyword."""
+        s = make_suggestion(title="Night owl session", subtitle="Late work", slot_type="today")
+        score_night_late = _score_today_slot(s, hour=2)
+        score_midday = _score_today_slot(s, hour=12)
+        assert score_night_late > score_midday
+
+
+# ---------------------------------------------------------------------------
+# select_display_slots()
+# ---------------------------------------------------------------------------
+
+class TestSelectDisplaySlots:
+    def test_empty_pool_returns_empty(self):
+        result = select_display_slots([], hour=10)
+        assert result == []
+
+    def test_picks_one_per_slot_type(self):
+        pool = [
+            make_suggestion(title="C1", slot_type="continue"),
+            make_suggestion(title="T1", slot_type="today"),
+            make_suggestion(title="D1", slot_type="discover"),
+        ]
+        result = select_display_slots(pool, hour=10)
+        assert len(result) == 3
+        slot_types = {s.slot_type for s in result}
+        assert slot_types == {"continue", "today", "discover"}
+
+    def test_at_most_one_per_slot_type(self):
+        pool = [
+            make_suggestion(title="C1", slot_type="continue"),
+            make_suggestion(title="C2", slot_type="continue"),
+            make_suggestion(title="T1", slot_type="today"),
+            make_suggestion(title="D1", slot_type="discover"),
+        ]
+        result = select_display_slots(pool, hour=10)
+        continue_slots = [s for s in result if s.slot_type == "continue"]
+        assert len(continue_slots) == 1
+
+    def test_missing_slot_type_returns_fewer_than_3(self):
+        """Pool with no 'discover' suggestions yields only 2 results."""
+        pool = [
+            make_suggestion(title="C1", slot_type="continue"),
+            make_suggestion(title="T1", slot_type="today"),
+        ]
+        result = select_display_slots(pool, hour=10)
+        assert len(result) == 2
+        slot_types = {s.slot_type for s in result}
+        assert "discover" not in slot_types
+
+    def test_continue_slot_prefers_lowest_shown_count(self):
+        pool = [
+            make_suggestion(title="C_high", slot_type="continue", shown_count=10),
+            make_suggestion(title="C_low", slot_type="continue", shown_count=1),
+            make_suggestion(title="C_mid", slot_type="continue", shown_count=5),
+        ]
+        # Run multiple times to ensure it's deterministic (not just lucky)
+        for _ in range(10):
+            result = select_display_slots(pool, hour=10)
+            chosen = next(s for s in result if s.slot_type == "continue")
+            assert chosen.title == "C_low"
+
+    def test_discover_slot_prefers_lowest_shown_count(self):
+        pool = [
+            make_suggestion(title="D_high", slot_type="discover", shown_count=8),
+            make_suggestion(title="D_low", slot_type="discover", shown_count=0),
+            make_suggestion(title="D_mid", slot_type="discover", shown_count=4),
+        ]
+        for _ in range(10):
+            result = select_display_slots(pool, hour=10)
+            chosen = next(s for s in result if s.slot_type == "discover")
+            assert chosen.title == "D_low"
+
+    def test_today_slot_prefers_time_matching_suggestion(self):
+        """A 'morning' suggestion should win at hour=8 over a generic one."""
+        pool = [
+            make_suggestion(title="Morning yoga", slot_type="today"),
+            make_suggestion(title="Generic daily task", slot_type="today"),
+        ]
+        result = select_display_slots(pool, hour=8)
+        chosen = next(s for s in result if s.slot_type == "today")
+        assert chosen.title == "Morning yoga"
+
+    def test_today_slot_picks_highest_scorer(self):
+        """Evening suggestion wins in the evening."""
+        pool = [
+            make_suggestion(title="Morning run", slot_type="today"),
+            make_suggestion(title="Evening walk", slot_type="today"),
+            make_suggestion(title="Afternoon snack", slot_type="today"),
+        ]
+        result = select_display_slots(pool, hour=19)
+        chosen = next(s for s in result if s.slot_type == "today")
+        assert chosen.title == "Evening walk"
+
+    def test_default_hour_is_current_utc(self):
+        """Calling without hour= should not raise an error."""
+        pool = [make_suggestion(title="T1", slot_type="today")]
+        result = select_display_slots(pool)
+        assert len(result) == 1
+
+    def test_only_continue_suggestions(self):
+        pool = [make_suggestion(title="C1", slot_type="continue")]
+        result = select_display_slots(pool, hour=10)
+        assert len(result) == 1
+        assert result[0].slot_type == "continue"
+
+    def test_returns_suggestion_objects(self):
+        pool = [
+            make_suggestion(title="C1", slot_type="continue"),
+            make_suggestion(title="T1", slot_type="today"),
+            make_suggestion(title="D1", slot_type="discover"),
+        ]
+        result = select_display_slots(pool, hour=10)
+        for item in result:
+            assert isinstance(item, Suggestion)

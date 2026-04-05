@@ -5,6 +5,7 @@ Manages a pool of AI-generated personalized suggestions for users.
 The pool is stored in Firestore and refreshed as needed.
 """
 
+import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -163,3 +164,87 @@ def get_pool_metadata(db, user_id: str) -> Dict[str, Any]:
         "refresh_reason": data.get("refresh_reason"),
         "pool_size": data.get("pool_size", 0),
     }
+
+
+# Time-of-day keyword ranges (inclusive on both ends, except night which wraps).
+_TIME_KEYWORDS: Dict[str, tuple] = {
+    "morning": (5, 11),
+    "afternoon": (12, 16),
+    "evening": (17, 21),
+    "night": (22, 4),  # wraps midnight
+}
+
+
+def _score_today_slot(suggestion: Suggestion, hour: int) -> int:
+    """
+    Score a today-slot suggestion based on time-of-day keywords in its
+    title and subtitle.
+
+    Returns 1 if a keyword matches the given hour, 0 otherwise.
+    Multiple keyword matches still return 1 (presence, not frequency).
+    """
+    text = (suggestion.title + " " + suggestion.subtitle).lower()
+    for keyword, (start, end) in _TIME_KEYWORDS.items():
+        if keyword not in text:
+            continue
+        if start <= end:
+            if start <= hour <= end:
+                return 1
+        else:
+            # Wraps midnight (e.g. night: 22-4)
+            if hour >= start or hour <= end:
+                return 1
+    return 0
+
+
+def select_display_slots(
+    pool: List[Suggestion],
+    hour: Optional[int] = None,
+) -> List[Suggestion]:
+    """
+    Pick up to 3 suggestions from the pool: 1 continue + 1 today + 1 discover.
+
+    Selection rules:
+    - continue: lowest shown_count, random tiebreaker
+    - today: highest _score_today_slot(), random tiebreaker among top scorers
+    - discover: lowest shown_count, random tiebreaker
+    - If a slot type has no candidates in the pool it is skipped.
+
+    Returns fewer than 3 items when slot types are missing from the pool.
+    """
+    if not pool:
+        return []
+
+    if hour is None:
+        hour = datetime.now(timezone.utc).hour
+
+    # Group suggestions by slot_type
+    by_slot: Dict[str, List[Suggestion]] = {}
+    for s in pool:
+        by_slot.setdefault(s.slot_type, []).append(s)
+
+    selected: List[Suggestion] = []
+
+    # --- continue slot ---
+    if "continue" in by_slot:
+        candidates = by_slot["continue"]
+        min_count = min(s.shown_count for s in candidates)
+        tied = [s for s in candidates if s.shown_count == min_count]
+        selected.append(random.choice(tied))
+
+    # --- today slot ---
+    if "today" in by_slot:
+        candidates = by_slot["today"]
+        scores = [(s, _score_today_slot(s, hour)) for s in candidates]
+        max_score = max(sc for _, sc in scores)
+        top = [s for s, sc in scores if sc == max_score]
+        selected.append(random.choice(top))
+
+    # --- discover slot ---
+    if "discover" in by_slot:
+        candidates = by_slot["discover"]
+        min_count = min(s.shown_count for s in candidates)
+        tied = [s for s in candidates if s.shown_count == min_count]
+        selected.append(random.choice(tied))
+
+    return selected
