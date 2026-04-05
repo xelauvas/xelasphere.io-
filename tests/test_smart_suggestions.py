@@ -716,3 +716,303 @@ class TestParseLlmSuggestions:
         assert len(result) == 1
         assert result[0].icon == "star"  # default from from_dict
         assert result[0].shown_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Helpers for click tracking tests
+# ---------------------------------------------------------------------------
+
+def make_mock_db_with_profile(snapshot_exists=False, snapshot_data=None):
+    """Build a Firestore mock that supports both pool and profile documents."""
+    mock_db = MagicMock()
+    mock_collection = MagicMock()
+    mock_subcollection = MagicMock()
+    mock_document = MagicMock()
+    mock_profile_doc = MagicMock()
+    mock_snapshot = MagicMock()
+
+    mock_db.collection.return_value = mock_collection
+    mock_collection.document.return_value = mock_document
+    mock_document.collection.return_value = mock_subcollection
+    mock_subcollection.document.return_value = mock_profile_doc
+    mock_profile_doc.get.return_value = mock_snapshot
+    mock_profile_doc.set.return_value = None
+    mock_profile_doc.update.return_value = None
+    mock_snapshot.exists = snapshot_exists
+    mock_snapshot.to_dict.return_value = snapshot_data or {}
+
+    return mock_db, mock_profile_doc, mock_snapshot
+
+
+# ---------------------------------------------------------------------------
+# record_click()
+# ---------------------------------------------------------------------------
+
+from app.services.smart_suggestions import record_click
+
+
+class TestRecordClick:
+    def test_calls_firestore_set_with_merge(self):
+        mock_db, mock_profile_doc, _ = make_mock_db_with_profile()
+        click_data = {"category": "work", "slot_type": "continue", "title": "Finish report"}
+        record_click(mock_db, "user123", click_data)
+        mock_profile_doc.set.assert_called_once()
+        _, kwargs = mock_profile_doc.set.call_args
+        assert kwargs.get("merge") is True
+
+    def test_click_entry_has_required_fields(self):
+        from google.cloud.firestore_v1.transforms import ArrayUnion
+        mock_db, mock_profile_doc, _ = make_mock_db_with_profile()
+        click_data = {"category": "learning", "slot_type": "discover", "title": "Learn Rust"}
+        record_click(mock_db, "user123", click_data)
+        call_args = mock_profile_doc.set.call_args[0][0]
+        assert "click_history" in call_args
+        entry = call_args["click_history"]
+        assert isinstance(entry, ArrayUnion)
+
+    def test_click_entry_contains_click_data_fields(self):
+        mock_db, mock_profile_doc, _ = make_mock_db_with_profile()
+        click_data = {"category": "health", "slot_type": "today", "title": "Morning run"}
+        record_click(mock_db, "user123", click_data)
+        call_args = mock_profile_doc.set.call_args[0][0]
+        # The click_history should use ArrayUnion — check the value passed
+        # We check the underlying entry in the ArrayUnion wrapper
+        import google.cloud.firestore
+        array_union_val = call_args["click_history"]
+        # ArrayUnion wraps values; access internal values list
+        entry = array_union_val.values[0]
+        assert entry["category"] == "health"
+        assert entry["slot_type"] == "today"
+        assert entry["title"] == "Morning run"
+        assert "clicked_at" in entry
+
+    def test_firestore_path_uses_profile_document(self):
+        mock_db, _, _ = make_mock_db_with_profile()
+        click_data = {"category": "work", "slot_type": "continue", "title": "T"}
+        record_click(mock_db, "user_abc", click_data)
+        mock_db.collection.assert_called_with("users")
+        mock_db.collection.return_value.document.assert_called_with("user_abc")
+        mock_db.collection.return_value.document.return_value.collection.assert_called_with("smart_suggestions")
+        (mock_db.collection.return_value.document.return_value
+         .collection.return_value.document.assert_called_with("profile"))
+
+    def test_handles_firestore_error_gracefully(self):
+        mock_db, mock_profile_doc, _ = make_mock_db_with_profile()
+        mock_profile_doc.set.side_effect = Exception("Firestore unavailable")
+        click_data = {"category": "work", "slot_type": "continue", "title": "T"}
+        # Should not raise
+        record_click(mock_db, "user123", click_data)
+
+
+# ---------------------------------------------------------------------------
+# increment_shown_counts()
+# ---------------------------------------------------------------------------
+
+from app.services.smart_suggestions import increment_shown_counts
+
+
+class TestIncrementShownCounts:
+    def _make_pool_db(self, pool_suggestions):
+        """Build a mock that returns pool suggestions from Firestore."""
+        mock_db = MagicMock()
+        mock_collection = MagicMock()
+        mock_subcollection = MagicMock()
+        mock_document = MagicMock()
+        mock_pool_doc = MagicMock()
+        mock_snapshot = MagicMock()
+
+        mock_db.collection.return_value = mock_collection
+        mock_collection.document.return_value = mock_document
+        mock_document.collection.return_value = mock_subcollection
+        mock_subcollection.document.return_value = mock_pool_doc
+        mock_pool_doc.get.return_value = mock_snapshot
+        mock_snapshot.exists = True
+        mock_snapshot.to_dict.return_value = {
+            "suggestions": [s.to_dict() for s in pool_suggestions]
+        }
+        return mock_db, mock_pool_doc
+
+    def test_increments_shown_count_for_matching_titles(self):
+        s1 = make_suggestion(title="Alpha", shown_count=2)
+        s2 = make_suggestion(title="Beta", shown_count=0)
+        mock_db, mock_pool_doc = self._make_pool_db([s1, s2])
+        increment_shown_counts(mock_db, "user123", ["Alpha"])
+        mock_pool_doc.update.assert_called_once()
+        updated_pool = mock_pool_doc.update.call_args[0][0]["pool"]
+        alpha = next(s for s in updated_pool if s["title"] == "Alpha")
+        beta = next(s for s in updated_pool if s["title"] == "Beta")
+        assert alpha["shown_count"] == 3
+        assert beta["shown_count"] == 0
+
+    def test_increments_multiple_titles(self):
+        s1 = make_suggestion(title="Alpha", shown_count=1)
+        s2 = make_suggestion(title="Beta", shown_count=1)
+        s3 = make_suggestion(title="Gamma", shown_count=0)
+        mock_db, mock_pool_doc = self._make_pool_db([s1, s2, s3])
+        increment_shown_counts(mock_db, "user123", ["Alpha", "Beta"])
+        updated_pool = mock_pool_doc.update.call_args[0][0]["pool"]
+        alpha = next(s for s in updated_pool if s["title"] == "Alpha")
+        beta = next(s for s in updated_pool if s["title"] == "Beta")
+        gamma = next(s for s in updated_pool if s["title"] == "Gamma")
+        assert alpha["shown_count"] == 2
+        assert beta["shown_count"] == 2
+        assert gamma["shown_count"] == 0
+
+    def test_does_nothing_when_no_titles_match(self):
+        s1 = make_suggestion(title="Alpha", shown_count=1)
+        mock_db, mock_pool_doc = self._make_pool_db([s1])
+        increment_shown_counts(mock_db, "user123", ["Nonexistent"])
+        # update is still called (we write back the pool even without changes)
+        updated_pool = mock_pool_doc.update.call_args[0][0]["pool"]
+        alpha = next(s for s in updated_pool if s["title"] == "Alpha")
+        assert alpha["shown_count"] == 1
+
+    def test_handles_firestore_error_gracefully(self):
+        mock_db = MagicMock()
+        mock_db.collection.side_effect = Exception("Firestore error")
+        # Should not raise
+        increment_shown_counts(mock_db, "user123", ["Alpha"])
+
+    def test_handles_empty_pool_gracefully(self):
+        mock_db = MagicMock()
+        mock_collection = MagicMock()
+        mock_subcollection = MagicMock()
+        mock_document = MagicMock()
+        mock_pool_doc = MagicMock()
+        mock_snapshot = MagicMock()
+        mock_db.collection.return_value = mock_collection
+        mock_collection.document.return_value = mock_document
+        mock_document.collection.return_value = mock_subcollection
+        mock_subcollection.document.return_value = mock_pool_doc
+        mock_pool_doc.get.return_value = mock_snapshot
+        mock_snapshot.exists = False
+        increment_shown_counts(mock_db, "user123", ["Alpha"])
+        mock_pool_doc.update.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# build_suggestion_profile()
+# ---------------------------------------------------------------------------
+
+from app.services.smart_suggestions import build_suggestion_profile
+
+
+class TestBuildSuggestionProfile:
+    def test_empty_history_returns_empty_profile(self):
+        profile = build_suggestion_profile([])
+        assert profile["top_categories"] == []
+        assert profile["avoided_categories"] == []
+        assert profile["preferred_slot"] is None
+        assert profile["engagement_by_category"] == {}
+
+    def test_top_categories_most_clicked_first(self):
+        history = [
+            {"category": "work", "slot_type": "continue", "title": "T1"},
+            {"category": "work", "slot_type": "continue", "title": "T2"},
+            {"category": "work", "slot_type": "continue", "title": "T3"},
+            {"category": "learning", "slot_type": "discover", "title": "T4"},
+            {"category": "learning", "slot_type": "discover", "title": "T5"},
+            {"category": "health", "slot_type": "today", "title": "T6"},
+        ]
+        profile = build_suggestion_profile(history)
+        assert profile["top_categories"][0] == "work"
+        assert profile["top_categories"][1] == "learning"
+        assert "health" in profile["top_categories"]
+
+    def test_preferred_slot_most_clicked(self):
+        history = [
+            {"category": "work", "slot_type": "continue", "title": "T1"},
+            {"category": "work", "slot_type": "continue", "title": "T2"},
+            {"category": "learning", "slot_type": "discover", "title": "T3"},
+        ]
+        profile = build_suggestion_profile(history)
+        assert profile["preferred_slot"] == "continue"
+
+    def test_engagement_by_category_sums_to_one(self):
+        history = [
+            {"category": "work", "slot_type": "continue", "title": "T1"},
+            {"category": "work", "slot_type": "continue", "title": "T2"},
+            {"category": "learning", "slot_type": "discover", "title": "T3"},
+            {"category": "health", "slot_type": "today", "title": "T4"},
+        ]
+        profile = build_suggestion_profile(history)
+        total = sum(profile["engagement_by_category"].values())
+        assert abs(total - 1.0) < 1e-9
+
+    def test_engagement_by_category_correct_fractions(self):
+        history = [
+            {"category": "work", "slot_type": "continue", "title": "T1"},
+            {"category": "work", "slot_type": "continue", "title": "T2"},
+            {"category": "learning", "slot_type": "discover", "title": "T3"},
+            {"category": "learning", "slot_type": "discover", "title": "T4"},
+        ]
+        profile = build_suggestion_profile(history)
+        assert profile["engagement_by_category"]["work"] == 0.5
+        assert profile["engagement_by_category"]["learning"] == 0.5
+
+    def test_avoided_categories_is_empty_list(self):
+        history = [{"category": "work", "slot_type": "continue", "title": "T"}]
+        profile = build_suggestion_profile(history)
+        assert profile["avoided_categories"] == []
+
+    def test_single_click_history(self):
+        history = [{"category": "health", "slot_type": "today", "title": "Morning run"}]
+        profile = build_suggestion_profile(history)
+        assert profile["top_categories"] == ["health"]
+        assert profile["preferred_slot"] == "today"
+        assert profile["engagement_by_category"]["health"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# load_suggestion_profile()
+# ---------------------------------------------------------------------------
+
+from app.services.smart_suggestions import load_suggestion_profile
+
+
+class TestLoadSuggestionProfile:
+    def test_returns_empty_profile_when_doc_missing(self):
+        mock_db, _, _ = make_mock_db_with_profile(snapshot_exists=False)
+        profile = load_suggestion_profile(mock_db, "user123")
+        assert profile["top_categories"] == []
+        assert profile["avoided_categories"] == []
+        assert profile["preferred_slot"] is None
+        assert profile["engagement_by_category"] == {}
+
+    def test_returns_built_profile_from_click_history(self):
+        click_history = [
+            {"category": "work", "slot_type": "continue", "title": "T1"},
+            {"category": "work", "slot_type": "continue", "title": "T2"},
+            {"category": "learning", "slot_type": "discover", "title": "T3"},
+        ]
+        mock_db, _, _ = make_mock_db_with_profile(
+            snapshot_exists=True,
+            snapshot_data={"click_history": click_history}
+        )
+        profile = load_suggestion_profile(mock_db, "user123")
+        assert profile["top_categories"][0] == "work"
+        assert profile["preferred_slot"] == "continue"
+
+    def test_firestore_path_uses_profile_document(self):
+        mock_db, _, _ = make_mock_db_with_profile(snapshot_exists=False)
+        load_suggestion_profile(mock_db, "user_xyz")
+        mock_db.collection.assert_called_with("users")
+        mock_db.collection.return_value.document.assert_called_with("user_xyz")
+        mock_db.collection.return_value.document.return_value.collection.assert_called_with("smart_suggestions")
+        (mock_db.collection.return_value.document.return_value
+         .collection.return_value.document.assert_called_with("profile"))
+
+    def test_returns_empty_profile_when_click_history_missing(self):
+        mock_db, _, _ = make_mock_db_with_profile(
+            snapshot_exists=True,
+            snapshot_data={}
+        )
+        profile = load_suggestion_profile(mock_db, "user123")
+        assert profile["top_categories"] == []
+
+    def test_handles_firestore_error_gracefully(self):
+        mock_db = MagicMock()
+        mock_db.collection.side_effect = Exception("Firestore error")
+        profile = load_suggestion_profile(mock_db, "user123")
+        assert profile["top_categories"] == []
+        assert profile["preferred_slot"] is None

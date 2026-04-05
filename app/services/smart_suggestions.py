@@ -10,6 +10,7 @@ import logging
 import random
 import re
 import requests
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -463,3 +464,163 @@ def generate_pool_from_llm(context: Dict[str, Any]) -> List[Suggestion]:
             logger.warning("generate_pool_from_llm: model %s failed: %s", model, exc)
 
     return []
+
+
+# ---------------------------------------------------------------------------
+# Click Tracking & Suggestion Profile
+# ---------------------------------------------------------------------------
+
+def _profile_ref(db, user_id: str):
+    """Return the Firestore document reference for a user's suggestion profile."""
+    return (
+        db.collection("users")
+        .document(user_id)
+        .collection("smart_suggestions")
+        .document("profile")
+    )
+
+
+def record_click(db, user_id: str, click_data: Dict[str, Any]) -> None:
+    """
+    Record a suggestion click to the user's suggestion profile in Firestore.
+
+    click_data must contain: category, slot_type, title.
+    Appends an entry with a clicked_at timestamp to the click_history array.
+    Uses set(..., merge=True) so the document is created if it does not exist.
+    """
+    try:
+        from google.cloud.firestore import ArrayUnion
+
+        entry = {
+            "category": click_data.get("category", ""),
+            "slot_type": click_data.get("slot_type", ""),
+            "title": click_data.get("title", ""),
+            "clicked_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _profile_ref(db, user_id).set(
+            {"click_history": ArrayUnion([entry])},
+            merge=True,
+        )
+    except Exception as exc:
+        logger.warning("record_click: failed to record click for user %s: %s", user_id, exc)
+
+
+def increment_shown_counts(db, user_id: str, shown_titles: List[str]) -> None:
+    """
+    Increment shown_count for each suggestion in the pool whose title appears
+    in shown_titles.
+
+    Reads the pool from Firestore, updates shown_count in-memory, and writes
+    back with update({"pool": ...}).
+    """
+    try:
+        snapshot = (
+            db.collection("users")
+            .document(user_id)
+            .collection("smart_suggestions")
+            .document("pool")
+            .get()
+        )
+        if not snapshot.exists:
+            return
+
+        data = snapshot.to_dict() or {}
+        raw_suggestions = data.get("suggestions", [])
+
+        title_set = set(shown_titles)
+        for s in raw_suggestions:
+            if s.get("title") in title_set:
+                s["shown_count"] = s.get("shown_count", 0) + 1
+
+        (
+            db.collection("users")
+            .document(user_id)
+            .collection("smart_suggestions")
+            .document("pool")
+            .update({"pool": raw_suggestions})
+        )
+    except Exception as exc:
+        logger.warning(
+            "increment_shown_counts: failed to update shown counts for user %s: %s",
+            user_id,
+            exc,
+        )
+
+
+def build_suggestion_profile(click_history: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Analyze click history to build a suggestion profile.
+
+    Args:
+        click_history: list of dicts with keys category, slot_type, title.
+
+    Returns:
+        dict with:
+            top_categories: list of categories sorted by click count (most first)
+            avoided_categories: empty list (reserved for future use)
+            preferred_slot: most-clicked slot type, or None if no history
+            engagement_by_category: dict mapping category -> fraction of total clicks
+    """
+    if not click_history:
+        return {
+            "top_categories": [],
+            "avoided_categories": [],
+            "preferred_slot": None,
+            "engagement_by_category": {},
+        }
+
+    category_counts: Counter = Counter()
+    slot_counts: Counter = Counter()
+
+    for entry in click_history:
+        cat = entry.get("category", "")
+        slot = entry.get("slot_type", "")
+        if cat:
+            category_counts[cat] += 1
+        if slot:
+            slot_counts[slot] += 1
+
+    total = sum(category_counts.values())
+    top_categories = [cat for cat, _ in category_counts.most_common()]
+    preferred_slot = slot_counts.most_common(1)[0][0] if slot_counts else None
+    engagement_by_category = {
+        cat: count / total for cat, count in category_counts.items()
+    }
+
+    return {
+        "top_categories": top_categories,
+        "avoided_categories": [],
+        "preferred_slot": preferred_slot,
+        "engagement_by_category": engagement_by_category,
+    }
+
+
+def load_suggestion_profile(db, user_id: str) -> Dict[str, Any]:
+    """
+    Load the suggestion profile for a user from Firestore.
+
+    Reads click_history from users/{uid}/smart_suggestions/profile,
+    passes it to build_suggestion_profile, and returns the result.
+    Returns an empty profile on any error or if the document does not exist.
+    """
+    empty_profile: Dict[str, Any] = {
+        "top_categories": [],
+        "avoided_categories": [],
+        "preferred_slot": None,
+        "engagement_by_category": {},
+    }
+    try:
+        snapshot = _profile_ref(db, user_id).get()
+        if not snapshot.exists:
+            return empty_profile
+
+        data = snapshot.to_dict() or {}
+        click_history = data.get("click_history", [])
+        return build_suggestion_profile(click_history)
+    except Exception as exc:
+        logger.warning(
+            "load_suggestion_profile: failed to load profile for user %s: %s",
+            user_id,
+            exc,
+        )
+        return empty_profile
