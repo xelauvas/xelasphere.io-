@@ -1397,8 +1397,9 @@ ${escapeHtml(entry.content || '')}
             // Use the existing code block for streaming — no custom container needed
             if (this.codeBlock) {
                 this.codeBlock.textContent = '';
-                this.codeBlock.className = '';
+                this.codeBlock.className = 'language-jsx'; // Default; updated when language detected
             }
+            this._detectedLang = null;
             // Update the file name display
             if (this.currentFileName) {
                 this.currentFileName.textContent = 'Streaming...';
@@ -1425,6 +1426,16 @@ ${escapeHtml(entry.content || '')}
             this._streamBuffer += text;
 
             if (!this._contentFound) {
+                // Try to detect language from the JSON before "content"
+                if (!this._detectedLang) {
+                    const langMatch = this._streamBuffer.match(/"language"\s*:\s*"(\w+)"/);
+                    if (langMatch) {
+                        this._detectedLang = langMatch[1];
+                        const prismLang = this._detectedLang === 'jsx' ? 'javascript' : this._detectedLang;
+                        this.codeBlock.className = `language-${prismLang}`;
+                    }
+                }
+
                 const match = this._streamBuffer.match(/"content"\s*:\s*"/);
                 if (match) {
                     this._contentFound = true;
@@ -1459,6 +1470,11 @@ ${escapeHtml(entry.content || '')}
                 this.panel.classList.remove('is-streaming');
                 this._streamBuffer = '';
                 this._contentFound = false;
+
+                // Final syntax highlight on the streamed code before switching
+                if (this.codeBlock && typeof Prism !== 'undefined') {
+                    try { Prism.highlightElement(this.codeBlock); } catch (e) {}
+                }
 
                 if (artifactData) {
                     // openArtifact will render preview + populate code tab properly
