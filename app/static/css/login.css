@@ -455,6 +455,12 @@ html {
   filter: brightness(1.1);
 }
 
+.social-btn.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
 /* ==================== */
 /* SEPARATOR */
 /* ==================== */

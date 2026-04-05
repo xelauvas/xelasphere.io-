@@ -71,11 +71,9 @@
                     <img src="{{ url_for('static', filename='images/microsoft.svg') }}" alt="" width="20" height="20">
                 </a>
                 {% endif %}
-                {% if oauth_status.facebook %}
-                <a href="{{ url_for('auth_routes.facebook_login') }}" class="social-btn" aria-label="Sign up with Facebook" title="Sign up with Facebook">
+                <a href="{{ url_for('auth_routes.facebook_login') }}" class="social-btn{% if not oauth_status.facebook %} disabled{% endif %}" aria-label="Sign up with Facebook" title="Sign up with Facebook">
                     <img src="{{ url_for('static', filename='images/facebook.svg') }}" alt="" width="20" height="20">
                 </a>
-                {% endif %}
             </div>
         </div>
         {% endif %}
