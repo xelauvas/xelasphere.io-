@@ -1655,7 +1655,7 @@ ${escapeHtml(entry.content || '')}
                         this._escapeHtml(workingCode.slice(idx + oldStr.length));
 
                     const removeEl = this.codeBlock.querySelector('.patch-remove');
-                    if (removeEl) removeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    if (removeEl) this._scrollToElement(removeEl);
                     await delay(1200);
 
                     // Replace with new_string in green
@@ -1666,7 +1666,7 @@ ${escapeHtml(entry.content || '')}
                         this._escapeHtml(workingCode.slice(idx + newStr.length));
 
                     const addEl = this.codeBlock.querySelector('.patch-add');
-                    if (addEl) addEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    if (addEl) this._scrollToElement(addEl);
                     await delay(1200);
                 }
 
@@ -1679,6 +1679,17 @@ ${escapeHtml(entry.content || '')}
             if (finalArtifact) {
                 this.openArtifact(finalArtifact, { sessionId, reference });
             }
+        }
+
+        _scrollToElement(el) {
+            // Scroll within the code section only — don't use scrollIntoView
+            // which scrolls ALL ancestor containers including the panel
+            const codeSection = document.getElementById('artifact-code-panel');
+            if (!codeSection || !el) return;
+            const sectionRect = codeSection.getBoundingClientRect();
+            const elRect = el.getBoundingClientRect();
+            const offset = elRect.top - sectionRect.top - (sectionRect.height / 2) + (elRect.height / 2);
+            codeSection.scrollBy({ top: offset, behavior: 'smooth' });
         }
 
         _escapeHtml(str) {
