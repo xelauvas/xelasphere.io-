@@ -109,5 +109,18 @@ def _run_consolidation(db, user_id: str, config: DreamConfig) -> bool:
     })
 
     gates.release_lock(db, user_id)
+
+    # Trigger smart suggestions refresh (fire-and-forget, non-blocking)
+    try:
+        from app.services.smart_suggestions import refresh_pool_background
+        import threading
+        threading.Thread(
+            target=refresh_pool_background,
+            args=(db, user_id, "dream"),
+            daemon=True,
+        ).start()
+    except Exception as e:
+        logger.debug(f"[dream] Smart suggestions refresh skipped: {e}")
+
     logger.info(f"[dream] Consolidation complete for {user_id}: {summary}")
     return True
