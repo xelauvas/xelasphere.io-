@@ -1650,7 +1650,7 @@ class ArtifactStore:
             "meta": payload.get("meta") or {},
             "createdAt": gc_firestore.SERVER_TIMESTAMP,
             "updatedAt": gc_firestore.SERVER_TIMESTAMP,
-            "versionCount": 0,
+            "versionCount": 1,
             "activeVersionId": version_id,
             "createdBy": created_by,
             "isActive": True,
