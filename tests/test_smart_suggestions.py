@@ -1016,3 +1016,180 @@ class TestLoadSuggestionProfile:
         profile = load_suggestion_profile(mock_db, "user123")
         assert profile["top_categories"] == []
         assert profile["preferred_slot"] is None
+
+
+# ---------------------------------------------------------------------------
+# infer_signals()
+# ---------------------------------------------------------------------------
+
+from app.services.smart_suggestions import infer_signals
+
+
+class TestInferSignals:
+    def test_morning_weekday_desktop(self):
+        signals = infer_signals(hour=8, day_of_week="Monday", user_agent="Mozilla/5.0 (Windows NT 10.0)")
+        assert signals["time_period"] == "morning"
+        assert signals["is_weekend"] is False
+        assert signals["is_mobile"] is False
+        assert signals["hour"] == 8
+
+    def test_evening_weekend_mobile(self):
+        signals = infer_signals(
+            hour=19,
+            day_of_week="Saturday",
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)",
+        )
+        assert signals["time_period"] == "evening"
+        assert signals["is_weekend"] is True
+        assert signals["is_mobile"] is True
+
+    def test_afternoon_time_period(self):
+        signals = infer_signals(hour=14)
+        assert signals["time_period"] == "afternoon"
+
+    def test_night_time_period_late(self):
+        signals = infer_signals(hour=23)
+        assert signals["time_period"] == "night"
+
+    def test_night_time_period_early(self):
+        signals = infer_signals(hour=3)
+        assert signals["time_period"] == "night"
+
+    def test_morning_boundary_5(self):
+        signals = infer_signals(hour=5)
+        assert signals["time_period"] == "morning"
+
+    def test_morning_boundary_11(self):
+        signals = infer_signals(hour=11)
+        assert signals["time_period"] == "morning"
+
+    def test_afternoon_boundary_12(self):
+        signals = infer_signals(hour=12)
+        assert signals["time_period"] == "afternoon"
+
+    def test_afternoon_boundary_16(self):
+        signals = infer_signals(hour=16)
+        assert signals["time_period"] == "afternoon"
+
+    def test_evening_boundary_17(self):
+        signals = infer_signals(hour=17)
+        assert signals["time_period"] == "evening"
+
+    def test_evening_boundary_21(self):
+        signals = infer_signals(hour=21)
+        assert signals["time_period"] == "evening"
+
+    def test_night_boundary_22(self):
+        signals = infer_signals(hour=22)
+        assert signals["time_period"] == "night"
+
+    def test_sunday_is_weekend(self):
+        signals = infer_signals(day_of_week="Sunday")
+        assert signals["is_weekend"] is True
+
+    def test_saturday_is_weekend(self):
+        signals = infer_signals(day_of_week="Saturday")
+        assert signals["is_weekend"] is True
+
+    def test_saturday_case_insensitive(self):
+        signals = infer_signals(day_of_week="saturday")
+        assert signals["is_weekend"] is True
+
+    def test_friday_is_not_weekend(self):
+        signals = infer_signals(day_of_week="Friday")
+        assert signals["is_weekend"] is False
+
+    def test_android_is_mobile(self):
+        signals = infer_signals(user_agent="Mozilla/5.0 (Android 13; Mobile)")
+        assert signals["is_mobile"] is True
+
+    def test_mobile_keyword_is_mobile(self):
+        signals = infer_signals(user_agent="SomeCustom Mobile Browser")
+        assert signals["is_mobile"] is True
+
+    def test_desktop_agent_not_mobile(self):
+        signals = infer_signals(user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X)")
+        assert signals["is_mobile"] is False
+
+    def test_language_and_referrer_passed_through(self):
+        signals = infer_signals(language="fr", referrer="https://example.com")
+        assert signals["language"] == "fr"
+        assert signals["referrer"] == "https://example.com"
+
+    def test_defaults(self):
+        signals = infer_signals()
+        assert signals["time_period"] == "afternoon"  # hour=12
+        assert signals["is_weekend"] is False
+        assert signals["is_mobile"] is False
+        assert signals["language"] == "en"
+        assert signals["referrer"] == ""
+        assert signals["hour"] == 12
+
+    def test_returns_dict_with_all_keys(self):
+        signals = infer_signals()
+        for key in ("time_period", "is_weekend", "is_mobile", "language", "referrer", "hour"):
+            assert key in signals
+
+
+# ---------------------------------------------------------------------------
+# get_signal_based_suggestions()
+# ---------------------------------------------------------------------------
+
+from app.services.smart_suggestions import get_signal_based_suggestions
+
+
+class TestGetSignalBasedSuggestions:
+    def test_returns_three_suggestions(self):
+        result = get_signal_based_suggestions()
+        assert len(result) == 3
+
+    def test_all_are_suggestion_instances(self):
+        result = get_signal_based_suggestions()
+        assert all(isinstance(s, Suggestion) for s in result)
+
+    def test_one_per_slot_type(self):
+        result = get_signal_based_suggestions()
+        slot_types = [s.slot_type for s in result]
+        assert "today" in slot_types
+        assert "continue" in slot_types
+        assert "discover" in slot_types
+
+    def test_no_duplicate_slot_types(self):
+        result = get_signal_based_suggestions()
+        slot_types = [s.slot_type for s in result]
+        assert len(slot_types) == len(set(slot_types))
+
+    def test_morning_weekday_returns_morning_today(self):
+        """Morning weekday should favour a morning-keyed today suggestion."""
+        result = get_signal_based_suggestions(hour=8, day_of_week="Monday")
+        today_slot = next(s for s in result if s.slot_type == "today")
+        # The morning routine suggestion has "morning" in its title
+        assert "morning" in today_slot.title.lower() or "morning" in today_slot.subtitle.lower()
+
+    def test_evening_returns_evening_today(self):
+        """Evening should favour the evening-keyed today suggestion."""
+        result = get_signal_based_suggestions(hour=19, day_of_week="Wednesday")
+        today_slot = next(s for s in result if s.slot_type == "today")
+        assert "evening" in today_slot.title.lower() or "evening" in today_slot.subtitle.lower()
+
+    def test_weekend_returns_weekend_today(self):
+        """Weekend should favour the weekend-keyed today suggestion.
+        Use hour=14 (afternoon) so no time-period keyword (+2.0) competes with the
+        weekend bonus (+1.5), ensuring the weekend suggestion wins.
+        """
+        result = get_signal_based_suggestions(hour=14, day_of_week="Saturday")
+        today_slot = next(s for s in result if s.slot_type == "today")
+        assert "weekend" in today_slot.title.lower() or "weekend" in today_slot.subtitle.lower()
+
+    def test_mobile_quick_task_scores_higher(self):
+        """Mobile user agent should score the '5-minute' task higher."""
+        iphone_ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"
+        # Use afternoon so "morning"/"evening"/"weekend" don't override
+        result = get_signal_based_suggestions(hour=14, day_of_week="Tuesday", user_agent=iphone_ua)
+        today_slot = next(s for s in result if s.slot_type == "today")
+        assert "quick" in today_slot.title.lower() or "5-minute" in today_slot.subtitle.lower()
+
+    def test_today_slot_is_first(self):
+        """today slot should be returned first (most signal-dependent)."""
+        result = get_signal_based_suggestions()
+        assert result[0].slot_type == "today"

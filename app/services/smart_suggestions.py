@@ -624,3 +624,223 @@ def load_suggestion_profile(db, user_id: str) -> Dict[str, Any]:
             exc,
         )
         return empty_profile
+
+
+# ---------------------------------------------------------------------------
+# Signal-Based New User Suggestions
+# ---------------------------------------------------------------------------
+
+def infer_signals(
+    hour: int = 12,
+    day_of_week: str = "",
+    user_agent: str = "",
+    language: str = "en",
+    referrer: str = "",
+) -> Dict[str, Any]:
+    """
+    Extract contextual signals from request metadata.
+
+    Returns a dict with:
+        time_period: "morning" | "afternoon" | "evening" | "night"
+        is_weekend: bool
+        is_mobile: bool
+        language: str
+        referrer: str
+        hour: int
+    """
+    # Determine time period
+    if 5 <= hour <= 11:
+        time_period = "morning"
+    elif 12 <= hour <= 16:
+        time_period = "afternoon"
+    elif 17 <= hour <= 21:
+        time_period = "evening"
+    else:
+        time_period = "night"
+
+    # Detect weekend
+    is_weekend = day_of_week.lower() in ("saturday", "sunday")
+
+    # Detect mobile
+    ua_lower = user_agent.lower()
+    is_mobile = any(kw in ua_lower for kw in ("iphone", "android", "mobile"))
+
+    return {
+        "time_period": time_period,
+        "is_weekend": is_weekend,
+        "is_mobile": is_mobile,
+        "language": language,
+        "referrer": referrer,
+        "hour": hour,
+    }
+
+
+# Curated fallback suggestions for new users (no personalization data yet).
+# Mix of slot types: continue (demo quality), today (time-variant), discover.
+_CURATED_NEW_USER: List[Suggestion] = [
+    # --- continue slot ---
+    Suggestion(
+        title="Build a landing page",
+        subtitle="HTML, CSS, responsive design",
+        prompt="Build me a modern responsive landing page for a SaaS product with a hero section, features grid, and pricing table.",
+        slot_type="continue",
+        category="coding",
+        icon="code",
+        reasoning="Demo-quality coding task to show AI capability",
+    ),
+    Suggestion(
+        title="Write a cold email",
+        subtitle="Compelling outreach that gets replies",
+        prompt="Write me a cold outreach email for a B2B SaaS product that gets replies. Short, specific, no fluff.",
+        slot_type="continue",
+        category="writing",
+        icon="edit",
+        reasoning="High-value writing task for new users",
+    ),
+    Suggestion(
+        title="Explain a concept simply",
+        subtitle="Any topic, made clear",
+        prompt="Explain how compound interest works like I'm 10 years old.",
+        slot_type="continue",
+        category="learning",
+        icon="school",
+        reasoning="Approachable learning task that shows AI value",
+    ),
+    # --- today slot (time-variant) ---
+    Suggestion(
+        title="Plan my morning routine",
+        subtitle="Start the day with intention",
+        prompt="Design me a productive morning routine I can complete in 45 minutes before work.",
+        slot_type="today",
+        category="wellness",
+        icon="wb_sunny",
+        reasoning="Morning-relevant planning suggestion",
+    ),
+    Suggestion(
+        title="Evening wind-down plan",
+        subtitle="Relax and recharge tonight",
+        prompt="Create a calming evening routine to help me decompress after work and sleep better.",
+        slot_type="today",
+        category="wellness",
+        icon="nights_stay",
+        reasoning="Evening-relevant wellness suggestion",
+    ),
+    Suggestion(
+        title="Weekend project ideas",
+        subtitle="Make the most of your weekend",
+        prompt="Give me 5 meaningful weekend project ideas I can start and finish in a single day.",
+        slot_type="today",
+        category="creativity",
+        icon="weekend",
+        reasoning="Weekend-relevant creativity suggestion",
+    ),
+    Suggestion(
+        title="Quick 5-minute task",
+        subtitle="Fast win for a busy day",
+        prompt="Give me a productive task I can complete in 5 minutes right now to feel accomplished.",
+        slot_type="today",
+        category="productivity",
+        icon="bolt",
+        reasoning="Mobile-friendly quick task suggestion",
+    ),
+    # --- discover slot ---
+    Suggestion(
+        title="Name my startup",
+        subtitle="10 creative options",
+        prompt="Give me 10 creative startup name ideas for an AI-powered personal assistant app. Include available .com domain suggestions.",
+        slot_type="discover",
+        category="creativity",
+        icon="lightbulb",
+        reasoning="Creative discovery task for new users",
+    ),
+    Suggestion(
+        title="Plan a 7-day trip",
+        subtitle="Day-by-day itinerary",
+        prompt="Plan a 7-day trip to Japan for a first-time visitor. Include must-see spots, food recommendations, and a rough daily schedule.",
+        slot_type="discover",
+        category="lifestyle",
+        icon="flight",
+        reasoning="Aspirational lifestyle discovery suggestion",
+    ),
+    Suggestion(
+        title="Learn something new",
+        subtitle="30-day study plan",
+        prompt="Create a 30-day study plan to learn Python from scratch. Include daily goals, resources, and mini-projects.",
+        slot_type="discover",
+        category="learning",
+        icon="book",
+        reasoning="Learning path discovery for curious new users",
+    ),
+]
+
+
+def _score_curated(suggestion: Suggestion, signals: Dict[str, Any]) -> float:
+    """
+    Score a curated suggestion against contextual signals.
+
+    Scoring:
+        +2.0 if time_period keyword matches in title/subtitle
+        +1.5 if is_weekend and "weekend" in title/subtitle
+        +1.0 if is_mobile and ("quick" or "5-minute") in title/subtitle
+        + small random tiebreaker (random.random() * 0.05)
+
+    Returns a float score (higher = better match).
+    """
+    text = (suggestion.title + " " + suggestion.subtitle).lower()
+    score = 0.0
+
+    time_period = signals.get("time_period", "")
+    if time_period and time_period in text:
+        score += 2.0
+
+    if signals.get("is_weekend") and "weekend" in text:
+        score += 1.5
+
+    if signals.get("is_mobile") and ("quick" in text or "5-minute" in text):
+        score += 1.0
+
+    score += random.random() * 0.05
+
+    return score
+
+
+def get_signal_based_suggestions(
+    hour: int = 12,
+    day_of_week: str = "",
+    user_agent: str = "",
+) -> List[Suggestion]:
+    """
+    Pick 3 curated suggestions for a new user based on contextual signals.
+
+    Scores all _CURATED_NEW_USER suggestions against signals and returns the
+    best one per slot type: today (most signal-dependent), continue, discover.
+
+    Returns a list of exactly 3 Suggestions (one per slot type), provided the
+    curated pool contains entries for all three slot types.
+    """
+    signals = infer_signals(hour=hour, day_of_week=day_of_week, user_agent=user_agent)
+
+    # Group and score by slot type
+    by_slot: Dict[str, List[tuple]] = {}
+    for s in _CURATED_NEW_USER:
+        score = _score_curated(s, signals)
+        by_slot.setdefault(s.slot_type, []).append((score, s))
+
+    selected: List[Suggestion] = []
+
+    # today slot first — most signal-dependent
+    if "today" in by_slot:
+        best = max(by_slot["today"], key=lambda x: x[0])
+        selected.append(best[1])
+
+    # continue slot
+    if "continue" in by_slot:
+        best = max(by_slot["continue"], key=lambda x: x[0])
+        selected.append(best[1])
+
+    # discover slot
+    if "discover" in by_slot:
+        best = max(by_slot["discover"], key=lambda x: x[0])
+        selected.append(best[1])
+
+    return selected
