@@ -714,7 +714,7 @@ def chat_stream():
                             chat_summary = routing.chat_payload or structured.remainder or ''
                             logger.info(f"Stream chat_summary set to: {repr(chat_summary[:200])}")
 
-                            # Handle artifact_patch — apply patches to current artifact
+                            # Handle artifact_patch — apply patches and send both patches + result to frontend
                             if routing.render_mode == 'artifact_patch' and routing.artifact_payload:
                                 patch_data = routing.artifact_payload
                                 current_files, full_artifact = _load_current_artifact_files(user_id, session_id)
@@ -726,6 +726,11 @@ def chat_stream():
 
                                     if applied_count > 0:
                                         primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
+                                        # Store patches for frontend visual application
+                                        routing._patch_visual_data = {
+                                            'patches': patch_data.get('patches', []),
+                                            'patch_results': patch_results,
+                                        }
                                         routing.artifact_payload = {
                                             'title': full_artifact.get('title', 'Patched Artifact') if full_artifact else 'Patched Artifact',
                                             'type': full_artifact.get('type', 'project') if full_artifact else 'project',
@@ -807,6 +812,7 @@ def chat_stream():
                         'render_mode': render_mode,
                         'artifact': artifact_data,
                         'artifact_error': artifact_error,
+                        'artifact_patches': getattr(routing, '_patch_visual_data', None) if routing else None,
                         'response_id': response_msg_id,
                         'is_email': is_email,
                         'email': email_data,

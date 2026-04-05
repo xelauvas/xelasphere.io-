@@ -2790,6 +2790,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let streamCryptoChart = null;
                 let streamMemoryUpdated = false;
                 let streamDreamNotification = null;
+                let streamArtifactPatches = null;
                 let artifactStreamActive = false;
                 let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
@@ -2861,6 +2862,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             streamCryptoChart = chunk.crypto_chart || null;
                             streamMemoryUpdated = chunk.memory_updated || false;
                             streamDreamNotification = chunk.dream_notification || null;
+                            streamArtifactPatches = chunk.artifact_patches || null;
                             // Use backend's response_id if available for consistency
                             if (chunk.response_id) {
                                 streamResponseId = chunk.response_id;
@@ -3117,10 +3119,20 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         primaryLanguage: streamArtifact.primaryLanguage,
                         summary: displayContent
                     };
-                    window.artifactPanel.openArtifact(streamArtifact, {
-                        sessionId: requestSessionId,
-                        reference: artifactRef
-                    });
+                    // If patches are available, show visual diff animation first
+                    if (streamArtifactPatches && streamArtifactPatches.patches && window.artifactPanel.applyPatchesVisually) {
+                        window.artifactPanel.applyPatchesVisually(
+                            streamArtifactPatches.patches,
+                            streamArtifactPatches.patch_results,
+                            streamArtifact,
+                            { sessionId: requestSessionId, reference: artifactRef }
+                        );
+                    } else {
+                        window.artifactPanel.openArtifact(streamArtifact, {
+                            sessionId: requestSessionId,
+                            reference: artifactRef
+                        });
+                    }
                 }
 
                 // Attach artifact preview if present
