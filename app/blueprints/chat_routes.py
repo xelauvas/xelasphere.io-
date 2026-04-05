@@ -739,6 +739,8 @@ def chat_stream():
                                         }
                                         render_mode = 'artifact'
                                     else:
+                                        # All patches failed — don't create a broken empty artifact
+                                        routing.artifact_payload = None
                                         render_mode = 'inline'
 
                                     if failed_count > 0:
@@ -746,6 +748,7 @@ def chat_stream():
                                         artifact_error = f"{failed_count} patch(es) failed: {'; '.join(failed_msgs)}"
                                 else:
                                     logger.warning("No active artifact found to patch")
+                                    routing.artifact_payload = None
                                     render_mode = 'inline'
 
                             if routing.artifact_payload:
@@ -1853,6 +1856,15 @@ def chat():
                         },
                         contains_code=True,
                         desired_action=ArtifactPreference.UPDATE,
+                    )
+                else:
+                    # All patches failed — clear payload so no broken artifact gets created
+                    routing_decision = ArtifactDecision(
+                        render_mode='inline',
+                        chat_payload=routing_decision.chat_payload,
+                        artifact_payload=None,
+                        contains_code=False,
+                        desired_action=ArtifactPreference.NONE,
                     )
 
                 if failed_count > 0:
