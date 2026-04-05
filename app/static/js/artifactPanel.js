@@ -1382,6 +1382,8 @@ ${escapeHtml(entry.content || '')}
             this.streamingStartTime = Date.now();
             this._streamBuffer = '';
             this._contentFound = false;
+            this._contentStart = 0;
+            this._detectedLang = null;
 
             if (this.titleEl) {
                 this.titleEl.textContent = 'Generating...';
@@ -1394,12 +1396,11 @@ ${escapeHtml(entry.content || '')}
                 this.versionSelect.disabled = true;
             }
 
-            // Use the existing code block for streaming — no custom container needed
+            // Use the existing code block for streaming
             if (this.codeBlock) {
                 this.codeBlock.textContent = '';
                 this.codeBlock.className = 'language-jsx'; // Default; updated when language detected
             }
-            this._detectedLang = null;
             // Update the file name display
             if (this.currentFileName) {
                 this.currentFileName.textContent = 'Streaming...';
@@ -1421,8 +1422,8 @@ ${escapeHtml(entry.content || '')}
         appendStreamingCode(text) {
             if (!this.isStreaming || !this.codeBlock) return;
 
-            // Buffer text until we find the first "content":" in the artifact JSON,
-            // then display just the file content (not the JSON metadata wrapper).
+            // Buffer ALL text — we process and display from the full buffer each time
+            // This avoids issues with escape sequences split across chunks
             this._streamBuffer += text;
 
             if (!this._contentFound) {
@@ -1439,13 +1440,14 @@ ${escapeHtml(entry.content || '')}
                 const match = this._streamBuffer.match(/"content"\s*:\s*"/);
                 if (match) {
                     this._contentFound = true;
-                    const codeStart = this._streamBuffer.slice(match.index + match[0].length);
-                    if (codeStart) {
-                        this.codeBlock.textContent += this._unescapeJsonString(codeStart);
-                    }
+                    this._contentStart = match.index + match[0].length;
                 }
-            } else {
-                this.codeBlock.textContent += this._unescapeJsonString(text);
+            }
+
+            // Re-render the full content from buffer each time (handles split escapes)
+            if (this._contentFound) {
+                const rawContent = this._streamBuffer.slice(this._contentStart);
+                this.codeBlock.textContent = this._unescapeJsonString(rawContent);
             }
 
             // Auto-scroll the code section
@@ -1456,12 +1458,18 @@ ${escapeHtml(entry.content || '')}
         }
 
         _unescapeJsonString(str) {
-            return str
-                .replace(/\\n/g, '\n')
-                .replace(/\\t/g, '\t')
-                .replace(/\\r/g, '\r')
-                .replace(/\\"/g, '"')
-                .replace(/\\\\/g, '\\');
+            // Process all JSON string escapes in one pass
+            return str.replace(/\\(n|t|r|"|\\|\/)/g, (match, ch) => {
+                switch (ch) {
+                    case 'n': return '\n';
+                    case 't': return '\t';
+                    case 'r': return '\r';
+                    case '"': return '"';
+                    case '\\': return '\\';
+                    case '/': return '/';
+                    default: return match;
+                }
+            });
         }
 
         finalizeStreaming(artifactData, { sessionId = null, reference = null } = {}) {
