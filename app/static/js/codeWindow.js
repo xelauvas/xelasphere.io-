@@ -2809,7 +2809,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             // --- Live artifact streaming detection ---
                             if (!artifactStreamActive && window.artifactPanel) {
                                 // Check if accumulated content contains ```artifact fence
-                                const fenceIdx = streamedContent.search(/```artifact\b/i);
+                                // Match ```artifact but NOT ```artifact_patch
+                                const fenceIdx = streamedContent.search(/```artifact(?!_patch)\b/i);
                                 if (fenceIdx !== -1) {
                                     artifactStreamActive = true;
                                     artifactFencePosition = fenceIdx;
