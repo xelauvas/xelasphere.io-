@@ -2769,6 +2769,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let streamCryptoChart = null;
                 let streamMemoryUpdated = false;
                 let streamDreamNotification = null;
+                let artifactStreamActive = false;
+                let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
 
                 const processLine = (line) => {
@@ -2803,6 +2805,28 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             }
                             // ALWAYS try to update
                             ThinkingIndicator.setContentMode();
+
+                            // --- Live artifact streaming detection ---
+                            if (!artifactStreamActive && window.artifactPanel) {
+                                // Check if accumulated content contains ```artifact fence
+                                const fenceIdx = streamedContent.search(/```artifact\b/i);
+                                if (fenceIdx !== -1) {
+                                    artifactStreamActive = true;
+                                    artifactFencePosition = fenceIdx;
+                                    window.artifactPanel.openStreaming();
+                                    // Send the portion after the fence marker to the panel
+                                    const fenceEnd = streamedContent.indexOf('\n', fenceIdx);
+                                    if (fenceEnd !== -1) {
+                                        const afterFence = streamedContent.slice(fenceEnd + 1);
+                                        if (afterFence) {
+                                            window.artifactPanel.appendStreamingCode(afterFence);
+                                        }
+                                    }
+                                }
+                            } else if (artifactStreamActive && window.artifactPanel) {
+                                // Route new chunks to the artifact panel
+                                window.artifactPanel.appendStreamingCode(chunk.text || '');
+                            }
                         } else if (chunk.type === 'done') {
                             console.log('Received done chunk:', chunk);
                             streamedReasoning = chunk.reasoning || streamedReasoning;
