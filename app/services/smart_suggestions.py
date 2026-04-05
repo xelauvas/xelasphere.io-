@@ -12,7 +12,7 @@ import re
 import requests
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 
 from app.config import Config
@@ -844,3 +844,150 @@ def get_signal_based_suggestions(
         selected.append(best[1])
 
     return selected
+
+
+# ---------------------------------------------------------------------------
+# Background Refresh Orchestrator
+# ---------------------------------------------------------------------------
+
+POOL_EXPIRY_HOURS = 6
+CONVERSATION_THRESHOLD = 3
+
+
+def should_refresh_pool(metadata: Dict[str, Any], conversations_since: int = 0) -> bool:
+    """
+    Determine whether the suggestion pool needs refreshing.
+
+    Returns True if:
+    - metadata is None or empty
+    - no last_refresh in metadata
+    - pool_size is 0
+    - time since last_refresh exceeds POOL_EXPIRY_HOURS
+    - conversations_since >= CONVERSATION_THRESHOLD
+
+    Returns False otherwise.
+    """
+    if not metadata:
+        return True
+
+    last_refresh = metadata.get("last_refresh")
+    if not last_refresh:
+        return True
+
+    pool_size = metadata.get("pool_size", 0)
+    if pool_size == 0:
+        return True
+
+    if conversations_since >= CONVERSATION_THRESHOLD:
+        return True
+
+    # last_refresh may already be a datetime object
+    if isinstance(last_refresh, datetime):
+        refresh_dt = last_refresh
+    else:
+        try:
+            refresh_dt = datetime.fromisoformat(last_refresh)
+        except (ValueError, TypeError):
+            return True
+
+    # Ensure timezone-aware for comparison
+    if refresh_dt.tzinfo is None:
+        refresh_dt = refresh_dt.replace(tzinfo=timezone.utc)
+
+    age = datetime.now(timezone.utc) - refresh_dt
+    if age > timedelta(hours=POOL_EXPIRY_HOURS):
+        return True
+
+    return False
+
+
+def _get_user_memory_context(db, user_id: str) -> Dict[str, Any]:
+    """
+    Gather context for LLM suggestion generation.
+
+    Returns a dict with:
+        memories (list), recent_topics (list), suggestion_profile (dict),
+        exclusion_titles (list), hour (int), day_of_week (str)
+    """
+    now = datetime.now(timezone.utc)
+
+    # Load memories
+    memories: list = []
+    try:
+        from app.memory_v2.store import MemoryStoreV2
+        store = MemoryStoreV2(user_id)
+        raw_memories = store.get_all(include_expired=False)
+        memories = raw_memories[:20]
+    except Exception as exc:
+        logger.warning("_get_user_memory_context: failed to load memories for %s: %s", user_id, exc)
+
+    # Load recent session titles
+    recent_topics: list = []
+    try:
+        sessions_ref = (
+            db.collection("users")
+            .document(user_id)
+            .collection("chat_sessions")
+            .order_by("updated_at", direction="DESCENDING")
+            .limit(5)
+        )
+        for doc in sessions_ref.stream():
+            data = doc.to_dict() or {}
+            title = data.get("title", "")
+            if title:
+                recent_topics.append(title)
+    except Exception as exc:
+        logger.warning("_get_user_memory_context: failed to load sessions for %s: %s", user_id, exc)
+
+    # Load suggestion profile
+    suggestion_profile: Dict[str, Any] = {}
+    try:
+        suggestion_profile = load_suggestion_profile(db, user_id)
+    except Exception as exc:
+        logger.warning("_get_user_memory_context: failed to load profile for %s: %s", user_id, exc)
+
+    # Load current pool titles as exclusions
+    exclusion_titles: list = []
+    try:
+        pool = load_pool(db, user_id)
+        exclusion_titles = [s.title for s in pool]
+    except Exception as exc:
+        logger.warning("_get_user_memory_context: failed to load pool for %s: %s", user_id, exc)
+
+    return {
+        "memories": memories,
+        "recent_topics": recent_topics,
+        "suggestion_profile": suggestion_profile,
+        "exclusion_titles": exclusion_titles,
+        "hour": now.hour,
+        "day_of_week": now.strftime("%A"),
+    }
+
+
+def refresh_pool_background(db, user_id: str, reason: str) -> bool:
+    """
+    Generate a new suggestion pool in the background and save it.
+
+    Returns True if suggestions were generated and saved, False otherwise.
+    """
+    try:
+        context = _get_user_memory_context(db, user_id)
+        suggestions = generate_pool_from_llm(context)
+        if suggestions:
+            save_pool(db, user_id, suggestions, reason)
+            logger.info(
+                "refresh_pool_background: saved %d suggestions for user %s (reason: %s)",
+                len(suggestions),
+                user_id,
+                reason,
+            )
+            return True
+        logger.warning(
+            "refresh_pool_background: no suggestions generated for user %s", user_id
+        )
+        return False
+    except Exception as exc:
+        logger.warning(
+            "refresh_pool_background: failed for user %s: %s", user_id, exc
+        )
+        return False

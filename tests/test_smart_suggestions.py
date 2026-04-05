@@ -13,7 +13,7 @@ Covers:
 """
 
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, call
 
 from app.services.smart_suggestions import (
@@ -25,9 +25,12 @@ from app.services.smart_suggestions import (
     _score_today_slot,
     build_generation_prompt,
     parse_llm_suggestions,
+    should_refresh_pool,
     POOL_SIZE,
     DISPLAY_SIZE,
     SLOT_TYPES,
+    POOL_EXPIRY_HOURS,
+    CONVERSATION_THRESHOLD,
 )
 from app.grog_api import TaskOption
 
@@ -1193,3 +1196,71 @@ class TestGetSignalBasedSuggestions:
         """today slot should be returned first (most signal-dependent)."""
         result = get_signal_based_suggestions()
         assert result[0].slot_type == "today"
+
+
+# ---------------------------------------------------------------------------
+# should_refresh_pool
+# ---------------------------------------------------------------------------
+
+class TestShouldRefreshPool:
+    """Tests for the should_refresh_pool orchestrator helper."""
+
+    def _recent_metadata(self, pool_size=5):
+        """Return metadata whose last_refresh is well within the expiry window."""
+        return {
+            "last_refresh": datetime.now(timezone.utc) - timedelta(hours=1),
+            "refresh_reason": "test",
+            "pool_size": pool_size,
+        }
+
+    # --- True cases ---
+
+    def test_expired_pool_returns_true(self):
+        metadata = {
+            "last_refresh": datetime.now(timezone.utc) - timedelta(hours=POOL_EXPIRY_HOURS + 1),
+            "refresh_reason": "init",
+            "pool_size": 5,
+        }
+        assert should_refresh_pool(metadata) is True
+
+    def test_enough_conversations_returns_true(self):
+        assert should_refresh_pool(self._recent_metadata(), conversations_since=CONVERSATION_THRESHOLD) is True
+
+    def test_empty_metadata_returns_true(self):
+        assert should_refresh_pool({}) is True
+
+    def test_none_metadata_returns_true(self):
+        assert should_refresh_pool(None) is True
+
+    def test_exhausted_pool_returns_true(self):
+        metadata = self._recent_metadata(pool_size=0)
+        assert should_refresh_pool(metadata) is True
+
+    def test_missing_last_refresh_returns_true(self):
+        metadata = {"last_refresh": None, "refresh_reason": "init", "pool_size": 5}
+        assert should_refresh_pool(metadata) is True
+
+    # --- False cases ---
+
+    def test_recent_pool_returns_false(self):
+        assert should_refresh_pool(self._recent_metadata()) is False
+
+    def test_below_conversation_threshold_returns_false(self):
+        assert should_refresh_pool(self._recent_metadata(), conversations_since=CONVERSATION_THRESHOLD - 1) is False
+
+    def test_string_iso_last_refresh_recent_returns_false(self):
+        """last_refresh stored as ISO string should also be parsed correctly."""
+        metadata = {
+            "last_refresh": (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(),
+            "refresh_reason": "init",
+            "pool_size": 5,
+        }
+        assert should_refresh_pool(metadata) is False
+
+    def test_string_iso_last_refresh_expired_returns_true(self):
+        metadata = {
+            "last_refresh": (datetime.now(timezone.utc) - timedelta(hours=POOL_EXPIRY_HOURS + 2)).isoformat(),
+            "refresh_reason": "init",
+            "pool_size": 5,
+        }
+        assert should_refresh_pool(metadata) is True
