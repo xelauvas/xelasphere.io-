@@ -71,7 +71,7 @@ class Config:
     MICROSOFT_REDIRECT_URI = os.getenv('MICROSOFT_REDIRECT_URI', f'{APP_BASE_URL}/auth/microsoft/callback')
 
     # Microsoft OAuth URIs
-    MICROSOFT_AUTH_URI = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize"
+    MICROSOFT_AUTH_URI = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
     MICROSOFT_TOKEN_URI = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
     MICROSOFT_USER_INFO_URI = "https://graph.microsoft.com/v1.0/me"
 
