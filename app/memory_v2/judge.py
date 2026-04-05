@@ -262,8 +262,17 @@ class MemoryJudge:
                 existing_memory_id=existing.id
             )
 
-        # Profile type: newer overwrites (singular facts)
+        # Profile type: newer overwrites, but only if confidence is sufficient
         if candidate.type == MemoryType.PROFILE:
+            # Guard: don't let low-confidence extractions overwrite high-confidence facts
+            # e.g. prevents "Ada Price" (0.7) from overwriting "Xela Uvas" (0.95)
+            if existing.confidence >= 0.85 and candidate.confidence < existing.confidence - 0.1:
+                return JudgmentResult(
+                    decision=JudgmentDecision.STORE_PROVISIONAL,
+                    reason=f"New value confidence ({candidate.confidence:.2f}) too low to supersede existing ({existing.confidence:.2f})",
+                    existing_memory_id=existing.id,
+                    adjusted_confidence=candidate.confidence
+                )
             return JudgmentResult(
                 decision=JudgmentDecision.SUPERSEDE,
                 reason="Profile fact updated - superseding old value",
