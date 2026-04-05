@@ -491,3 +491,55 @@ class TestContainsCodeBlock:
         text = "Use `print()` to output text"
         # Inline code (single backticks) should not count
         assert contains_code_block(text) is False
+
+
+class TestExtractArtifactPatchBlock:
+    """Tests for extract_artifact_patch_block function."""
+
+    def test_parse_valid_patch_block(self):
+        from app.artifacts import extract_artifact_patch_block
+        text = '''Here's the fix.
+```artifact_patch
+{"patches":[{"file":"App.jsx","old_string":"color: red","new_string":"color: blue"}]}
+```'''
+        result = extract_artifact_patch_block(text)
+        assert result is not None
+        assert len(result['patches']) == 1
+        assert result['patches'][0]['file'] == 'App.jsx'
+        assert result['patches'][0]['old_string'] == 'color: red'
+        assert result['patches'][0]['new_string'] == 'color: blue'
+
+    def test_no_patch_block_returns_none(self):
+        from app.artifacts import extract_artifact_patch_block
+        result = extract_artifact_patch_block('Just some text without a patch block')
+        assert result is None
+
+    def test_empty_old_string_rejected(self):
+        from app.artifacts import extract_artifact_patch_block
+        text = '```artifact_patch\n{"patches":[{"file":"App.jsx","old_string":"","new_string":"hi"}]}\n```'
+        result = extract_artifact_patch_block(text)
+        assert result is None
+
+    def test_missing_file_field_rejected(self):
+        from app.artifacts import extract_artifact_patch_block
+        text = '```artifact_patch\n{"patches":[{"old_string":"a","new_string":"b"}]}\n```'
+        result = extract_artifact_patch_block(text)
+        assert result is None
+
+    def test_multiple_patches(self):
+        from app.artifacts import extract_artifact_patch_block
+        text = '''```artifact_patch
+{"patches":[
+  {"file":"App.jsx","old_string":"const a = 1","new_string":"const a = 2"},
+  {"file":"style.css","old_string":".red{color:red}","new_string":".red{color:blue}"}
+]}
+```'''
+        result = extract_artifact_patch_block(text)
+        assert result is not None
+        assert len(result['patches']) == 2
+
+    def test_case_insensitive_fence(self):
+        from app.artifacts import extract_artifact_patch_block
+        text = '```Artifact_Patch\n{"patches":[{"file":"a.js","old_string":"x","new_string":"y"}]}\n```'
+        result = extract_artifact_patch_block(text)
+        assert result is not None

@@ -39,6 +39,7 @@ SECRET_PATTERNS = [
 ARTIFACT_FENCE_PATTERN = re.compile(r"```artifact\s*([\s\S]*?)\s*```", re.IGNORECASE)
 # Fallback pattern for unclosed artifact blocks (some models don't close with ```)
 ARTIFACT_UNCLOSED_PATTERN = re.compile(r"```artifact\s*([\s\S]+)", re.IGNORECASE)
+ARTIFACT_PATCH_FENCE_PATTERN = re.compile(r"```artifact_patch\s*([\s\S]*?)\s*```", re.IGNORECASE)
 MAX_ARTIFACT_FILES = 40
 MAX_ARTIFACT_TOTAL_BYTES = 800_000
 MAX_ARTIFACT_FILE_BYTES = 200_000
@@ -661,6 +662,81 @@ def extract_artifact_block(text: str) -> Optional[Dict[str, Any]]:
     logger.warning(f"Artifact JSON parse error at position {error_pos}")
     logger.warning(f"Context around error: ...{repr(context)}...")
     raise ArtifactParseError("Artifact block must contain valid JSON.")
+
+
+def extract_artifact_patch_block(text: str) -> Optional[Dict[str, Any]]:
+    """Return parsed patch data if a ```artifact_patch block is present."""
+    if not text:
+        return None
+    match = ARTIFACT_PATCH_FENCE_PATTERN.search(text)
+    if not match:
+        return None
+    raw_json = match.group(1).strip()
+    if not raw_json:
+        return None
+    try:
+        payload = json.loads(raw_json)
+    except json.JSONDecodeError:
+        logger.warning("artifact_patch block contains invalid JSON")
+        return None
+    if not isinstance(payload, dict):
+        return None
+    patches = payload.get('patches')
+    if not isinstance(patches, list) or not patches:
+        return None
+    for patch in patches:
+        if not isinstance(patch, dict):
+            return None
+        if not patch.get('file') or not isinstance(patch.get('file'), str):
+            return None
+        if not isinstance(patch.get('old_string'), str) or not patch['old_string']:
+            return None
+        if not isinstance(patch.get('new_string'), str):
+            return None
+    return payload
+
+
+def apply_patches(
+    current_files: List[Dict[str, Any]],
+    patches: List[Dict[str, str]],
+) -> tuple:
+    """
+    Apply old_string/new_string patches to artifact files.
+
+    Returns:
+        (patched_files, results) where results is a list of
+        {"file": str, "status": "applied"|"failed", "reason": str}
+    """
+    import copy
+    patched_files = copy.deepcopy(current_files)
+    results = []
+
+    file_map = {f['path']: f for f in patched_files}
+
+    for patch in patches:
+        target_file = patch['file']
+        old_string = patch['old_string']
+        new_string = patch['new_string']
+
+        if target_file not in file_map:
+            results.append({'file': target_file, 'status': 'failed', 'reason': f'File "{target_file}" not found'})
+            continue
+
+        file_entry = file_map[target_file]
+        content = file_entry.get('content', '')
+
+        count = content.count(old_string)
+        if count == 0:
+            results.append({'file': target_file, 'status': 'failed', 'reason': f'old_string not found in {target_file}'})
+            continue
+        if count > 1:
+            results.append({'file': target_file, 'status': 'failed', 'reason': f'old_string matches multiple locations in {target_file}'})
+            continue
+
+        file_entry['content'] = content.replace(old_string, new_string, 1)
+        results.append({'file': target_file, 'status': 'applied'})
+
+    return patched_files, results
 
 
 def normalize_artifact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
