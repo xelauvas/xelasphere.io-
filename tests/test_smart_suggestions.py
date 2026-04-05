@@ -23,6 +23,8 @@ from app.services.smart_suggestions import (
     get_pool_metadata,
     select_display_slots,
     _score_today_slot,
+    build_generation_prompt,
+    parse_llm_suggestions,
     POOL_SIZE,
     DISPLAY_SIZE,
     SLOT_TYPES,
@@ -529,3 +531,188 @@ class TestSelectDisplaySlots:
         result = select_display_slots(pool, hour=10)
         for item in result:
             assert isinstance(item, Suggestion)
+
+
+# ---------------------------------------------------------------------------
+# build_generation_prompt()
+# ---------------------------------------------------------------------------
+
+def make_context(**kwargs):
+    defaults = dict(
+        memories=[
+            {"type": "preference", "key": "language", "value": "Python"},
+            {"type": "fact", "key": "job", "value": "Software engineer"},
+        ],
+        recent_topics=["machine learning", "productivity"],
+        suggestion_profile={
+            "top_categories": ["work", "learning"],
+            "avoided_categories": ["gaming"],
+        },
+        hour=14,
+        day_of_week="Tuesday",
+        exclusion_titles=["Write a poem"],
+    )
+    defaults.update(kwargs)
+    return defaults
+
+
+class TestBuildGenerationPrompt:
+    def test_returns_string(self):
+        prompt = build_generation_prompt(make_context())
+        assert isinstance(prompt, str)
+        assert len(prompt) > 0
+
+    def test_includes_memories_section(self):
+        prompt = build_generation_prompt(make_context())
+        assert "## User Memories" in prompt
+
+    def test_includes_memory_values(self):
+        prompt = build_generation_prompt(make_context())
+        assert "Python" in prompt
+        assert "Software engineer" in prompt
+
+    def test_includes_recent_topics_section(self):
+        prompt = build_generation_prompt(make_context())
+        assert "## Recent Topics" in prompt
+        assert "machine learning" in prompt
+        assert "productivity" in prompt
+
+    def test_includes_suggestion_profile_section(self):
+        prompt = build_generation_prompt(make_context())
+        assert "## Suggestion Profile" in prompt
+        assert "work" in prompt
+        assert "learning" in prompt
+
+    def test_includes_avoided_categories(self):
+        prompt = build_generation_prompt(make_context())
+        assert "gaming" in prompt
+
+    def test_includes_current_context_section(self):
+        prompt = build_generation_prompt(make_context())
+        assert "## Current Context" in prompt
+        assert "14" in prompt
+        assert "Tuesday" in prompt
+
+    def test_includes_exclusion_section(self):
+        prompt = build_generation_prompt(make_context())
+        assert "## Do NOT Suggest" in prompt
+        assert "Write a poem" in prompt
+
+    def test_caps_memories_at_20(self):
+        many_memories = [{"type": "fact", "key": f"k{i}", "value": f"v{i}"} for i in range(30)]
+        ctx = make_context(memories=many_memories)
+        prompt = build_generation_prompt(ctx)
+        # v20 and beyond should not appear (capped at first 20)
+        assert "v20" not in prompt
+        assert "v19" in prompt
+
+    def test_caps_topics_at_5(self):
+        many_topics = [f"topic{i}" for i in range(10)]
+        ctx = make_context(recent_topics=many_topics)
+        prompt = build_generation_prompt(ctx)
+        assert "topic5" not in prompt
+        assert "topic4" in prompt
+
+    def test_caps_exclusions_at_20(self):
+        many_exclusions = [f"Title {i}" for i in range(25)]
+        ctx = make_context(exclusion_titles=many_exclusions)
+        prompt = build_generation_prompt(ctx)
+        assert "Title 20" not in prompt
+        assert "Title 19" in prompt
+
+    def test_empty_memories_graceful(self):
+        ctx = make_context(memories=[])
+        prompt = build_generation_prompt(ctx)
+        assert "## User Memories" in prompt
+
+    def test_empty_exclusions_graceful(self):
+        ctx = make_context(exclusion_titles=[])
+        prompt = build_generation_prompt(ctx)
+        assert "## Do NOT Suggest" in prompt
+
+
+# ---------------------------------------------------------------------------
+# parse_llm_suggestions()
+# ---------------------------------------------------------------------------
+
+VALID_JSON_ARRAY = """[
+  {
+    "title": "Learn Python decorators",
+    "subtitle": "Deepen your Python skills",
+    "prompt": "Explain Python decorators with examples",
+    "slot_type": "discover",
+    "category": "learning",
+    "icon": "book",
+    "reasoning": "User is interested in Python"
+  },
+  {
+    "title": "Morning productivity plan",
+    "subtitle": "Plan your day",
+    "prompt": "Help me plan my morning for maximum productivity",
+    "slot_type": "today",
+    "category": "work",
+    "icon": "sun",
+    "reasoning": "It is morning"
+  }
+]"""
+
+MARKDOWN_WRAPPED = f"```json\n{VALID_JSON_ARRAY}\n```"
+
+
+class TestParseLlmSuggestions:
+    def test_parses_valid_json_array(self):
+        result = parse_llm_suggestions(VALID_JSON_ARRAY)
+        assert len(result) == 2
+        assert all(isinstance(s, Suggestion) for s in result)
+
+    def test_returns_suggestion_with_correct_fields(self):
+        result = parse_llm_suggestions(VALID_JSON_ARRAY)
+        titles = [s.title for s in result]
+        assert "Learn Python decorators" in titles
+        assert "Morning productivity plan" in titles
+
+    def test_parses_markdown_wrapped_json(self):
+        result = parse_llm_suggestions(MARKDOWN_WRAPPED)
+        assert len(result) == 2
+
+    def test_returns_empty_on_none(self):
+        result = parse_llm_suggestions(None)
+        assert result == []
+
+    def test_returns_empty_on_empty_string(self):
+        result = parse_llm_suggestions("")
+        assert result == []
+
+    def test_returns_empty_on_malformed_json(self):
+        result = parse_llm_suggestions("{ this is not valid json [[[")
+        assert result == []
+
+    def test_skips_items_missing_title(self):
+        raw = '[{"subtitle": "sub", "prompt": "p", "slot_type": "today", "category": "c", "icon": "i", "reasoning": "r"}]'
+        result = parse_llm_suggestions(raw)
+        assert result == []
+
+    def test_skips_items_missing_prompt(self):
+        raw = '[{"title": "T", "subtitle": "sub", "slot_type": "today", "category": "c", "icon": "i", "reasoning": "r"}]'
+        result = parse_llm_suggestions(raw)
+        assert result == []
+
+    def test_returns_empty_on_json_object_not_array(self):
+        raw = '{"title": "T", "prompt": "p"}'
+        result = parse_llm_suggestions(raw)
+        assert result == []
+
+    def test_partial_valid_items_returned(self):
+        """Items with both title and prompt are kept; incomplete items are skipped."""
+        raw = '[{"title": "Good", "prompt": "do it", "subtitle": "", "slot_type": "discover", "category": "c", "icon": "star", "reasoning": ""}, {"subtitle": "no title or prompt"}]'
+        result = parse_llm_suggestions(raw)
+        assert len(result) == 1
+        assert result[0].title == "Good"
+
+    def test_suggestion_defaults_applied(self):
+        """Missing optional fields use defaults from Suggestion.from_dict."""
+        raw = '[{"title": "Minimal", "prompt": "do minimal"}]'
+        result = parse_llm_suggestions(raw)
+        assert len(result) == 1
+        assert result[0].icon == "star"  # default from from_dict
+        assert result[0].shown_count == 0

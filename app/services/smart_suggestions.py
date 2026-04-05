@@ -5,12 +5,19 @@ Manages a pool of AI-generated personalized suggestions for users.
 The pool is stored in Firestore and refreshed as needed.
 """
 
+import json
+import logging
 import random
+import re
+import requests
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
+from app.config import Config
 from app.grog_api import TaskOption
+
+logger = logging.getLogger(__name__)
 
 # Pool configuration constants
 POOL_SIZE = 10
@@ -248,3 +255,211 @@ def select_display_slots(
         selected.append(random.choice(tied))
 
     return selected
+
+
+# ---------------------------------------------------------------------------
+# LLM Pool Generation
+# ---------------------------------------------------------------------------
+
+_GENERATION_SYSTEM_PROMPT = (
+    "You are a personalization engine for an AI assistant app. "
+    "Generate exactly {pool_size} smart suggestions tailored to the user based on the context provided.\n\n"
+    "Return ONLY a valid JSON array with no additional text. Each item must have these fields:\n"
+    "- title: short action phrase (max 6 words)\n"
+    "- subtitle: one-line description (max 10 words)\n"
+    "- prompt: the full message to send to the AI on behalf of the user\n"
+    "- slot_type: one of 'continue', 'today', or 'discover'\n"
+    "- category: a short category label (e.g. 'work', 'learning', 'health', 'creative')\n"
+    "- icon: a single Material Icons name (e.g. 'star', 'bolt', 'book', 'fitness_center')\n"
+    "- reasoning: brief internal note explaining why this suggestion fits the user (not shown to user)\n\n"
+    "Rules:\n"
+    "- Do NOT suggest titles in the exclusion list.\n"
+    "- Distribute slot_types: include both 'continue', 'today', and 'discover' entries.\n"
+    "- Make prompts specific and actionable, not generic.\n"
+    "- Tailor suggestions to the user's memories, recent topics, and time of day."
+)
+
+_GENERATION_MODELS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+]
+
+
+def build_generation_prompt(context: Dict[str, Any]) -> str:
+    """
+    Build a user prompt for LLM suggestion generation.
+
+    Args:
+        context: dict with keys:
+            memories (list of dicts with type/key/value),
+            recent_topics (list of strings),
+            suggestion_profile (dict with top_categories, avoided_categories),
+            hour (int),
+            day_of_week (str),
+            exclusion_titles (list of strings)
+
+    Returns:
+        A single prompt string.
+    """
+    memories = (context.get("memories") or [])[:20]
+    recent_topics = (context.get("recent_topics") or [])[:5]
+    profile = context.get("suggestion_profile") or {}
+    hour = context.get("hour", 12)
+    day_of_week = context.get("day_of_week", "")
+    exclusion_titles = (context.get("exclusion_titles") or [])[:20]
+
+    lines = []
+
+    # Memories section
+    lines.append("## User Memories")
+    if memories:
+        for m in memories:
+            lines.append(f"- [{m.get('type', '')}] {m.get('key', '')}: {m.get('value', '')}")
+    else:
+        lines.append("(none)")
+
+    # Recent topics section
+    lines.append("\n## Recent Topics")
+    if recent_topics:
+        for t in recent_topics:
+            lines.append(f"- {t}")
+    else:
+        lines.append("(none)")
+
+    # Suggestion profile section
+    lines.append("\n## Suggestion Profile")
+    top_cats = profile.get("top_categories") or []
+    avoided_cats = profile.get("avoided_categories") or []
+    if top_cats:
+        lines.append(f"Preferred categories: {', '.join(top_cats)}")
+    if avoided_cats:
+        lines.append(f"Avoid these categories: {', '.join(avoided_cats)}")
+    if not top_cats and not avoided_cats:
+        lines.append("(no profile data yet)")
+
+    # Current context section
+    lines.append("\n## Current Context")
+    lines.append(f"Hour of day (24h): {hour}")
+    if day_of_week:
+        lines.append(f"Day of week: {day_of_week}")
+
+    # Exclusions section
+    lines.append("\n## Do NOT Suggest")
+    if exclusion_titles:
+        for title in exclusion_titles:
+            lines.append(f"- {title}")
+    else:
+        lines.append("(no exclusions)")
+
+    return "\n".join(lines)
+
+
+def parse_llm_suggestions(raw: Optional[str]) -> List[Suggestion]:
+    """
+    Parse the LLM response JSON into a list of Suggestion objects.
+
+    Handles:
+    - Plain JSON array
+    - Markdown code-block wrapped (```json ... ```)
+    - Malformed JSON → returns []
+    - Empty or None input → returns []
+    - Items missing title or prompt are skipped
+
+    Returns:
+        List of Suggestion objects (may be empty).
+    """
+    if not raw:
+        return []
+
+    text = raw.strip()
+
+    # Strip markdown code fences if present
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    text = text.strip()
+
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        logger.debug("parse_llm_suggestions: JSON decode failed")
+        return []
+
+    if not isinstance(data, list):
+        logger.debug("parse_llm_suggestions: expected JSON array, got %s", type(data).__name__)
+        return []
+
+    suggestions = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        if not item.get("title") or not item.get("prompt"):
+            continue
+        try:
+            suggestions.append(Suggestion.from_dict(item))
+        except Exception as exc:
+            logger.debug("parse_llm_suggestions: skipping item due to error: %s", exc)
+
+    return suggestions
+
+
+def generate_pool_from_llm(context: Dict[str, Any]) -> List[Suggestion]:
+    """
+    Call the Groq LLM API to generate a suggestion pool.
+
+    Tries models in order: llama-3.3-70b-versatile, llama-3.1-8b-instant.
+    Returns a list of parsed Suggestion objects, or [] on any failure.
+    """
+    api_key = Config.GROQ_API_KEY
+    if not api_key:
+        logger.warning("generate_pool_from_llm: GROQ_API_KEY not configured")
+        return []
+
+    system_prompt = _GENERATION_SYSTEM_PROMPT.replace("{pool_size}", str(POOL_SIZE))
+    user_prompt = build_generation_prompt(context)
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    for model in _GENERATION_MODELS:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "max_tokens": 2000,
+            "temperature": 0.7,
+        }
+        try:
+            response = requests.post(
+                Config.API_URL,
+                json=payload,
+                headers=headers,
+                timeout=20,
+            )
+            if response.status_code != 200:
+                logger.warning(
+                    "generate_pool_from_llm: model %s returned status %d",
+                    model,
+                    response.status_code,
+                )
+                continue
+
+            raw = response.json()["choices"][0]["message"]["content"]
+            suggestions = parse_llm_suggestions(raw)
+            if suggestions:
+                logger.info(
+                    "generate_pool_from_llm: got %d suggestions from model %s",
+                    len(suggestions),
+                    model,
+                )
+                return suggestions
+
+            logger.warning("generate_pool_from_llm: model %s returned empty parse, trying next", model)
+
+        except Exception as exc:
+            logger.warning("generate_pool_from_llm: model %s failed: %s", model, exc)
+
+    return []
