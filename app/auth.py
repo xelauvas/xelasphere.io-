@@ -45,6 +45,12 @@ DISCORD_AUTH_URI = Config.DISCORD_AUTH_URI
 DISCORD_TOKEN_URI = Config.DISCORD_TOKEN_URI
 DISCORD_USER_INFO_URI = Config.DISCORD_USER_INFO_URI
 
+FACEBOOK_CLIENT_ID = Config.FACEBOOK_CLIENT_ID
+FACEBOOK_CLIENT_SECRET = Config.FACEBOOK_CLIENT_SECRET
+FACEBOOK_AUTH_URI = Config.FACEBOOK_AUTH_URI
+FACEBOOK_TOKEN_URI = Config.FACEBOOK_TOKEN_URI
+FACEBOOK_USER_INFO_URI = Config.FACEBOOK_USER_INFO_URI
+
 
 def get_dynamic_redirect_uri(provider: str) -> str:
     """
@@ -79,7 +85,8 @@ def get_dynamic_redirect_uri(provider: str) -> str:
     callback_paths = {
         'google': '/auth/google/callback',
         'microsoft': '/auth/microsoft/callback',
-        'discord': '/auth/discord/callback'
+        'discord': '/auth/discord/callback',
+        'facebook': '/auth/facebook/callback',
     }
 
     callback_path = callback_paths.get(provider, f'/auth/{provider}/callback')
@@ -97,12 +104,14 @@ def get_dynamic_redirect_uri(provider: str) -> str:
 GOOGLE_OAUTH_CONFIGURED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 MICROSOFT_OAUTH_CONFIGURED = bool(MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET)
 DISCORD_OAUTH_CONFIGURED = bool(DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)
+FACEBOOK_OAUTH_CONFIGURED = bool(FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET)
 
 # Log OAuth configuration status 
 logger = logging.getLogger("auth")
 logger.info(f"OAuth Configuration Status - Google: {GOOGLE_OAUTH_CONFIGURED}")
 logger.info(f"OAuth Configuration Status - Microsoft: {MICROSOFT_OAUTH_CONFIGURED}")
 logger.info(f"OAuth Configuration Status - Discord: {DISCORD_OAUTH_CONFIGURED}")
+logger.info(f"OAuth Configuration Status - Facebook: {FACEBOOK_OAUTH_CONFIGURED}")
 
 ALLOWED_AVATAR_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 
@@ -328,7 +337,8 @@ def login():
     oauth_status = {
         'google': GOOGLE_OAUTH_CONFIGURED,
         'microsoft': MICROSOFT_OAUTH_CONFIGURED,
-        'discord': DISCORD_OAUTH_CONFIGURED
+        'discord': DISCORD_OAUTH_CONFIGURED,
+        'facebook': FACEBOOK_OAUTH_CONFIGURED,
     }
     
     return render_template('login.html', oauth_status=oauth_status)
@@ -737,6 +747,117 @@ def discord_callback():
         flash(f'Error occurred: {str(e)}', 'danger')
         return redirect(url_for('pages.index'))  # Redirect to the index page even on error
 
+# Facebook OAuth Login
+@auth_routes.route('/auth/facebook/login')
+def facebook_login():
+    if not FACEBOOK_OAUTH_CONFIGURED:
+        flash('Facebook login is not properly configured. Please contact the administrator.', 'danger')
+        logger.error("Facebook OAuth login attempted but credentials are not configured")
+        return redirect(url_for('auth_routes.login'))
+
+    state = str(uuid.uuid4())
+    session['oauth_state'] = state
+
+    redirect_uri = get_dynamic_redirect_uri('facebook')
+    params = {
+        'client_id': FACEBOOK_CLIENT_ID,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': 'email public_profile',
+        'state': state,
+    }
+
+    facebook_auth_url = f"{FACEBOOK_AUTH_URI}?{urlencode(params)}"
+    return redirect(facebook_auth_url)
+
+
+@auth_routes.route('/auth/facebook/callback')
+def facebook_callback():
+    if not FACEBOOK_OAUTH_CONFIGURED:
+        flash('Facebook login is not properly configured. Please contact the administrator.', 'danger')
+        logger.error("Facebook OAuth callback attempted but credentials are not configured")
+        return redirect(url_for('auth_routes.login'))
+
+    if 'code' not in request.args:
+        flash('Facebook login failed. No authorization code.', 'danger')
+        return redirect(url_for('auth_routes.login'))
+
+    # Validate state to prevent CSRF
+    state = request.args.get('state')
+    stored_state = session.pop('oauth_state', None)
+    if not state or state != stored_state:
+        flash('Facebook login failed. Invalid state parameter.', 'danger')
+        return redirect(url_for('auth_routes.login'))
+
+    code = request.args.get('code')
+
+    # Exchange authorization code for access token
+    redirect_uri = get_dynamic_redirect_uri('facebook')
+    token_params = {
+        'client_id': FACEBOOK_CLIENT_ID,
+        'client_secret': FACEBOOK_CLIENT_SECRET,
+        'code': code,
+        'redirect_uri': redirect_uri,
+    }
+
+    token_response = requests.get(FACEBOOK_TOKEN_URI, params=token_params)
+    if token_response.status_code != 200:
+        flash('Failed to retrieve tokens from Facebook.', 'danger')
+        return redirect(url_for('auth_routes.login'))
+
+    token_json = token_response.json()
+    access_token = token_json.get('access_token')
+
+    # Fetch user's profile info using the access token
+    user_info_params = {
+        'access_token': access_token,
+        'fields': 'id,name,email,picture.width(200).height(200)',
+    }
+    user_info_response = requests.get(FACEBOOK_USER_INFO_URI, params=user_info_params)
+    user_info = user_info_response.json()
+
+    # Extract user information
+    user_email = user_info.get('email')
+    user_name = user_info.get('name', 'Facebook User')
+    picture_data = user_info.get('picture', {}).get('data', {})
+    user_picture = picture_data.get('url') or url_for('static', filename='images/default-profile.png')
+
+    if not user_email:
+        flash('Failed to retrieve email from Facebook. Please ensure your Facebook account has a verified email.', 'danger')
+        return redirect(url_for('auth_routes.login'))
+
+    # Create or link Firebase user
+    try:
+        user = auth.get_user_by_email(user_email)
+    except:
+        user = auth.create_user(email=user_email, display_name=user_name)
+
+    # Store user info in Firestore
+    db.collection('users').document(user.uid).set({
+        'email': user_email,
+        'name': user_name,
+        'picture': user_picture
+    }, merge=True)
+
+    # Store user info in session and make session permanent
+    session.clear()
+    session['user'] = _build_session_user(user.uid, user_email, name=user_name, picture=user_picture)
+    session.permanent = True
+    current_app.permanent_session_lifetime = timedelta(days=7)
+
+    try:
+        options = fetch_options_from_grog_api()
+        if not options:
+            flash('Error fetching options. Please try again later.', 'danger')
+            return redirect(url_for('pages.index'))
+
+        return redirect(url_for('pages.index'))
+
+    except Exception as e:
+        flash(f'Error occurred: {str(e)}', 'danger')
+        return redirect(url_for('pages.index'))
+
+
 # Registration route
 @auth_routes.route('/auth/register', methods=['GET', 'POST'])
 @limiter.limit("10 per minute", key_func=get_auth_rate_limit_key)
@@ -773,7 +894,8 @@ def register():
     oauth_status = {
         'google': GOOGLE_OAUTH_CONFIGURED,
         'microsoft': MICROSOFT_OAUTH_CONFIGURED,
-        'discord': DISCORD_OAUTH_CONFIGURED
+        'discord': DISCORD_OAUTH_CONFIGURED,
+        'facebook': FACEBOOK_OAUTH_CONFIGURED,
     }
     return render_template('register.html', oauth_status=oauth_status)
 

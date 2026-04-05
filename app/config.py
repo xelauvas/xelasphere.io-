@@ -85,6 +85,16 @@ class Config:
     DISCORD_TOKEN_URI = "https://discord.com/api/oauth2/token"
     DISCORD_USER_INFO_URI = "https://discord.com/api/users/@me"
 
+    # Facebook OAuth 2.0 credentials - Use environment variables for production
+    FACEBOOK_CLIENT_ID = os.getenv('FACEBOOK_CLIENT_ID')
+    FACEBOOK_CLIENT_SECRET = os.getenv('FACEBOOK_CLIENT_SECRET')
+    FACEBOOK_REDIRECT_URI = os.getenv('FACEBOOK_REDIRECT_URI', f'{APP_BASE_URL}/auth/facebook/callback')
+
+    # Facebook OAuth URIs
+    FACEBOOK_AUTH_URI = "https://www.facebook.com/v19.0/dialog/oauth"
+    FACEBOOK_TOKEN_URI = "https://graph.facebook.com/v19.0/oauth/access_token"
+    FACEBOOK_USER_INFO_URI = "https://graph.facebook.com/v19.0/me"
+
     # Firebase Admin SDK credentials file and storage bucket
     FIREBASE_CRED_PATH = os.getenv('FIREBASE_CRED_PATH')
     FIREBASE_STORAGE_BUCKET = os.getenv('FIREBASE_STORAGE_BUCKET')
