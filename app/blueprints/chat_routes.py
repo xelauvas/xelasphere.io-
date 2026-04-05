@@ -812,14 +812,15 @@ def chat_stream():
                         'render_mode': render_mode,
                         'artifact': artifact_data,
                         'artifact_error': artifact_error,
-                        'artifact_patches': getattr(routing, '_patch_visual_data', None) if routing else None,
+                        'artifact_patches': getattr(routing, '_patch_visual_data', None) if routing else None,  # Patch visual data for frontend animation
                         'response_id': response_msg_id,
                         'is_email': is_email,
                         'email': email_data,
                         'crypto_chart': crypto_chart,
                         'session_name': stream_session_name
                     }
-                    logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, crypto_chart={crypto_chart is not None}")
+                    _pvd = getattr(routing, '_patch_visual_data', None) if routing else None
+                    logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, has_patches={_pvd is not None}, patch_count={len(_pvd.get('patches',[])) if _pvd else 0}")
 
                     # Save to history and persist artifact
                     if session_id and user_id and not guest_mode:
