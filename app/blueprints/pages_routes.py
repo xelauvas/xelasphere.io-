@@ -85,11 +85,11 @@ def index():
 
         # Mobile gets 7 suggestions (no More), desktop gets 3 + More = 4 (2x2 grid)
         mobile = _is_mobile()
-        num_suggestions = 7 if mobile else 3
+        num_suggestions = 6 if mobile else 3
 
         # Use fallback options for guests (no API call), full options for logged-in users
         if guest_mode:
-            options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=not mobile)
+            options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=True)
 
             # Get accurate guest message count from Firebase (IP-based)
             client_ip = get_client_ip()
@@ -117,7 +117,7 @@ def index():
                 if pool:
                     selected = select_display_slots(pool, per_slot=per_slot)
                     if mobile:
-                        selected = selected[:7]  # cap at 7 for mobile
+                        selected = selected[:6]  # cap at 7 for mobile
                     options = [s.to_task_option() for s in selected]
                     shown_titles = [s.title for s in selected]
                     increment_shown_counts(db, user_id, shown_titles)
@@ -135,7 +135,7 @@ def index():
                     ua = request.headers.get("User-Agent", "")
                     selected = get_signal_based_suggestions(hour=hour, day_of_week=day, user_agent=ua, per_slot=per_slot)
                     if mobile:
-                        selected = selected[:7]
+                        selected = selected[:6]
                     options = [s.to_task_option() for s in selected]
                     import threading
                     threading.Thread(
@@ -144,15 +144,14 @@ def index():
                         daemon=True,
                     ).start()
                 # Desktop: append "More" button for 2x2 grid. Mobile: no More (CSS hides it anyway)
-                if not mobile:
-                    options.append(_TaskOption(
-                        title="More", subtitle="Load new ideas",
-                        action="fetchMoreOptions()", icon="more",
-                    ))
+                options.append(_TaskOption(
+                    title="More", subtitle="Load new ideas",
+                    action="fetchMoreOptions()", icon="more",
+                ))
             except Exception as e:
                 logger.warning(f"Smart suggestions failed, using fallback: {e}")
                 user_preferences = fetch_user_preferences(user_id)
-                options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=not mobile, user_preferences=user_preferences)
+                options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=True, user_preferences=user_preferences)
             guest_count = 0
 
         return render_template(
@@ -182,11 +181,11 @@ def open_shared_session(session_id):
 
         # Mobile gets 7 suggestions (no More), desktop gets 3 + More = 4 (2x2 grid)
         mobile = _is_mobile()
-        num_suggestions = 7 if mobile else 3
+        num_suggestions = 6 if mobile else 3
 
         # Use fallback options for guests (no API call), full options for logged-in users
         if guest_mode:
-            options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=not mobile)
+            options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=True)
 
             # Get accurate guest message count from Firebase (IP-based)
             client_ip = get_client_ip()
@@ -214,7 +213,7 @@ def open_shared_session(session_id):
                 if pool:
                     selected = select_display_slots(pool, per_slot=per_slot)
                     if mobile:
-                        selected = selected[:7]
+                        selected = selected[:6]
                     options = [s.to_task_option() for s in selected]
                     shown_titles = [s.title for s in selected]
                     increment_shown_counts(db, user_id, shown_titles)
@@ -232,7 +231,7 @@ def open_shared_session(session_id):
                     ua = request.headers.get("User-Agent", "")
                     selected = get_signal_based_suggestions(hour=hour, day_of_week=day, user_agent=ua, per_slot=per_slot)
                     if mobile:
-                        selected = selected[:7]
+                        selected = selected[:6]
                     options = [s.to_task_option() for s in selected]
                     import threading
                     threading.Thread(
@@ -240,15 +239,14 @@ def open_shared_session(session_id):
                         args=(db, user_id, "first_conversation"),
                         daemon=True,
                     ).start()
-                if not mobile:
-                    options.append(_TaskOption(
-                        title="More", subtitle="Load new ideas",
-                        action="fetchMoreOptions()", icon="more",
-                    ))
+                options.append(_TaskOption(
+                    title="More", subtitle="Load new ideas",
+                    action="fetchMoreOptions()", icon="more",
+                ))
             except Exception as e:
                 logger.warning(f"Smart suggestions failed, using fallback: {e}")
                 user_preferences = fetch_user_preferences(user_id)
-                options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=not mobile, user_preferences=user_preferences)
+                options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=True, user_preferences=user_preferences)
             guest_count = 0
 
             # Check if session has messages to prevent FOUC
