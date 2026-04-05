@@ -1590,28 +1590,30 @@ ${escapeHtml(entry.content || '')}
                 return;
             }
 
-            // Ensure panel is open on code tab
-            if (!this.panel.classList.contains('is-open')) {
-                if (this.currentVersion && this.currentVersion.files) {
-                    this.panel.classList.add('is-open');
-                    this.panel.setAttribute('aria-hidden', 'false');
-                    document.body.classList.add('artifact-panel-open');
-                    this.loadSavedSplit();
-                    this.updateOffset(false);
-                    this.adjustComposerWidth(true);
-                }
+            // Panel should already be open with the current artifact.
+            // If not, open it with the final artifact directly.
+            const files = this.currentVersion?.files;
+            if (!files || !files.length) {
+                if (finalArtifact) this.openArtifact(finalArtifact, { sessionId, reference });
+                return;
             }
+
+            // Switch to code tab to show the patching
             this.activeTab = 'code';
             this.switchTab('code');
 
-            // Build a map of current file contents from the active version
-            const files = this.currentVersion?.files || [];
+            // Update title to indicate patching
+            if (this.titleEl) {
+                this.titleEl.textContent = 'Applying changes...';
+            }
+
+            // Build file content map from current version
             const fileContentMap = {};
             for (const f of files) {
                 fileContentMap[f.path] = f.content || '';
             }
 
-            // Group patches by file, preserving order
+            // Group patches by file
             const patchesByFile = new Map();
             for (let i = 0; i < patches.length; i++) {
                 const patch = patches[i];
@@ -1621,63 +1623,59 @@ ${escapeHtml(entry.content || '')}
                 patchesByFile.get(patch.file).push(patch);
             }
 
+            if (patchesByFile.size === 0) {
+                // No applicable patches — just open the result
+                if (finalArtifact) this.openArtifact(finalArtifact, { sessionId, reference });
+                return;
+            }
+
             const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-            // Process each file's patches
             for (const [fileName, filePatches] of patchesByFile) {
-                // Switch to the target file in the dropdown
                 const fileIndex = files.findIndex(f => f.path === fileName);
                 if (fileIndex === -1) continue;
 
-                if (this.fileSelect) {
-                    this.fileSelect.value = String(fileIndex);
-                }
-                // Render the file's current code
+                // Switch to the target file
+                if (this.fileSelect) this.fileSelect.value = String(fileIndex);
                 this.renderCodeViewer(this.currentVersion, files[fileIndex]);
-                await delay(300);
+                await delay(400);
 
                 let workingCode = fileContentMap[fileName] || '';
 
-                // Apply each patch in this file
                 for (const patch of filePatches) {
                     const oldStr = patch.old_string;
                     const newStr = patch.new_string;
                     const idx = workingCode.indexOf(oldStr);
                     if (idx === -1) continue;
 
-                    // Highlight old_string in red
-                    const before = this._escapeHtml(workingCode.slice(0, idx));
-                    const highlighted = this._escapeHtml(oldStr);
-                    const after = this._escapeHtml(workingCode.slice(idx + oldStr.length));
-                    this.codeBlock.innerHTML = before +
-                        '<span class="patch-remove">' + highlighted + '</span>' +
-                        after;
+                    // Show old_string highlighted in red
+                    this.codeBlock.innerHTML =
+                        this._escapeHtml(workingCode.slice(0, idx)) +
+                        '<span class="patch-remove">' + this._escapeHtml(oldStr) + '</span>' +
+                        this._escapeHtml(workingCode.slice(idx + oldStr.length));
 
                     const removeEl = this.codeBlock.querySelector('.patch-remove');
                     if (removeEl) removeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    await delay(1000);
+                    await delay(1200);
 
                     // Replace with new_string in green
                     workingCode = workingCode.slice(0, idx) + newStr + workingCode.slice(idx + oldStr.length);
-                    const beforeNew = this._escapeHtml(workingCode.slice(0, idx));
-                    const highlightedNew = this._escapeHtml(newStr);
-                    const afterNew = this._escapeHtml(workingCode.slice(idx + newStr.length));
-                    this.codeBlock.innerHTML = beforeNew +
-                        '<span class="patch-add">' + highlightedNew + '</span>' +
-                        afterNew;
+                    this.codeBlock.innerHTML =
+                        this._escapeHtml(workingCode.slice(0, idx)) +
+                        '<span class="patch-add">' + this._escapeHtml(newStr) + '</span>' +
+                        this._escapeHtml(workingCode.slice(idx + newStr.length));
 
                     const addEl = this.codeBlock.querySelector('.patch-add');
                     if (addEl) addEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    await delay(1000);
+                    await delay(1200);
                 }
 
-                // Update the file content in our map
                 fileContentMap[fileName] = workingCode;
             }
 
-            await delay(600);
+            await delay(800);
 
-            // Open the final patched artifact (switches to preview)
+            // Show the final patched artifact in preview
             if (finalArtifact) {
                 this.openArtifact(finalArtifact, { sessionId, reference });
             }

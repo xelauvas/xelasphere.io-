@@ -727,8 +727,36 @@ def apply_patches(
 
         count = content.count(old_string)
         if count == 0:
-            results.append({'file': target_file, 'status': 'failed', 'reason': f'old_string not found in {target_file}'})
-            continue
+            # Fuzzy fallback: try whitespace-normalized matching
+            import re
+            norm_old = re.sub(r'\s+', ' ', old_string.strip())
+            norm_content = re.sub(r'\s+', ' ', content)
+            if norm_old in norm_content:
+                # Find the original position by matching normalized
+                # Walk through content finding the span that matches when normalized
+                best_start = -1
+                for i in range(len(content)):
+                    chunk = content[i:i+len(old_string)*2]  # search window
+                    if re.sub(r'\s+', ' ', chunk[:len(old_string)+50].strip()).startswith(norm_old):
+                        # Found approximate start, now find exact end
+                        accum = ''
+                        end = i
+                        while end < len(content) and re.sub(r'\s+', ' ', accum.strip()) != norm_old:
+                            accum += content[end]
+                            end += 1
+                            if len(accum) > len(old_string) * 3:
+                                break
+                        if re.sub(r'\s+', ' ', accum.strip()) == norm_old:
+                            old_string = accum  # Use the actual text from the file
+                            count = 1
+                            best_start = i
+                            break
+                if count == 0:
+                    results.append({'file': target_file, 'status': 'failed', 'reason': f'old_string not found in {target_file}'})
+                    continue
+            else:
+                results.append({'file': target_file, 'status': 'failed', 'reason': f'old_string not found in {target_file}'})
+                continue
         if count > 1:
             results.append({'file': target_file, 'status': 'failed', 'reason': f'old_string matches multiple locations in {target_file}'})
             continue

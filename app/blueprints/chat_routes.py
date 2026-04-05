@@ -596,12 +596,15 @@ def chat_stream():
             enhanced_prompt = (
                 f"{artifact_context}\n\n"
                 f"User request: {prompt}\n\n"
-                "IMPORTANT: Apply the fix/update to the code shown above.\n"
-                "Output ONLY a ```artifact_patch block with old_string/new_string pairs — do NOT regenerate the full code.\n"
-                "Format: ```artifact_patch\n"
-                "{\"patches\":[{\"file\":\"filename\",\"old_string\":\"exact text to find\",\"new_string\":\"replacement\"}]}\n"
-                "```\n"
-                "Include 2-4 surrounding lines in old_string for uniqueness. Write a brief summary before the patch block."
+                "YOU MUST RESPOND WITH A ```artifact_patch BLOCK. THIS IS MANDATORY.\n"
+                "DO NOT explain the code. DO NOT say it looks correct. DO NOT regenerate the full artifact.\n"
+                "DO NOT output a ```artifact block. ONLY ```artifact_patch.\n\n"
+                "Step 1: Write 1-2 sentence summary.\n"
+                "Step 2: Output EXACTLY:\n"
+                "```artifact_patch\n"
+                "{\"patches\":[{\"file\":\"FILENAME\",\"old_string\":\"COPY EXACT LINES FROM CODE ABOVE\",\"new_string\":\"FIXED VERSION\"}]}\n"
+                "```\n\n"
+                "old_string must be COPIED CHARACTER-FOR-CHARACTER from the code above. Include 2-4 surrounding lines."
             )
         else:
             logger.debug("[Stream] No active artifact found to inject")

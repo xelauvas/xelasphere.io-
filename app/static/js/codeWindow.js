@@ -2829,23 +2829,16 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             ThinkingIndicator.setContentMode();
 
                             // --- Live artifact streaming detection ---
-                            if (!artifactStreamActive && window.artifactPanel) {
-                                // Check for ```artifact fence but NOT ```artifact_patch
-                                // Guard against chunk boundary splitting "artifact_patch":
-                                // Wait for at least 6 chars after "artifact" to confirm it's not "_patch"
-                                const fenceMatch = streamedContent.match(/```artifact/i);
-                                let fenceIdx = -1;
-                                if (fenceMatch) {
-                                    const afterArtifact = streamedContent.slice(fenceMatch.index + 12); // length of "```artifact"
-                                    if (afterArtifact.startsWith('_patch')) {
-                                        // It's artifact_patch — skip streaming
-                                        fenceIdx = -1;
-                                    } else if (afterArtifact.length >= 6 || afterArtifact.match(/^[\s\n{]/)) {
-                                        // Enough context to confirm it's NOT _patch
-                                        fenceIdx = fenceMatch.index;
-                                    }
-                                    // else: not enough context yet — wait for more chunks
-                                }
+                            // Skip streaming if panel already has an artifact (update flow)
+                            // Patches will be applied visually on the existing code when done arrives
+                            const panelHasArtifact = window.artifactPanel?.currentArtifact &&
+                                window.artifactPanel?.panel?.classList.contains('is-open');
+
+                            if (!artifactStreamActive && window.artifactPanel && !panelHasArtifact) {
+                                // New artifact — detect fence and stream code
+                                const fenceMatch = streamedContent.match(/```artifact(?!_patch)/i);
+                                let fenceIdx = fenceMatch ? fenceMatch.index : -1;
+
                                 if (fenceIdx !== -1) {
                                     artifactStreamActive = true;
                                     artifactFencePosition = fenceIdx;
@@ -3110,8 +3103,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     }
                 }
 
-                // Handle artifact panel update — check for patches first, then streaming, then normal
-                console.log('[DONE] artifact_patches:', streamArtifactPatches, 'artifactStreamActive:', artifactStreamActive, 'hasArtifact:', !!streamArtifact);
+                // Handle artifact panel update
                 if (streamArtifact && window.artifactPanel) {
                     const artifactRef = streamArtifactRef || {
                         artifactId: streamArtifact.artifactId,
@@ -3122,19 +3114,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     };
 
                     if (streamArtifactPatches && streamArtifactPatches.patches && window.artifactPanel.applyPatchesVisually) {
-                        // Patches available — show visual diff animation
-                        console.log('[PATCH] Calling applyPatchesVisually with', streamArtifactPatches.patches.length, 'patches');
-                        // Cancel streaming view completely if it was active
-                        if (artifactStreamActive) {
-                            window.artifactPanel.isStreaming = false;
-                            window.artifactPanel.panel?.classList.remove('is-streaming');
-                            window.artifactPanel._streamBuffer = '';
-                            window.artifactPanel._streamFiles = [];
-                        }
-                        // Restore the previous artifact's code display before patching
-                        if (window.artifactPanel.currentVersion) {
-                            window.artifactPanel.renderVersion(window.artifactPanel.currentVersion);
-                        }
+                        // Patches — animate changes on the current code then show preview
                         window.artifactPanel.applyPatchesVisually(
                             streamArtifactPatches.patches,
                             streamArtifactPatches.patch_results,
@@ -3142,7 +3122,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             { sessionId: requestSessionId, reference: artifactRef }
                         );
                     } else if (artifactStreamActive) {
-                        // Regular streaming finalize — switch from code to preview
+                        // New artifact was streaming — finalize and show preview
                         window.artifactPanel.finalizeStreaming(streamArtifact, {
                             sessionId: requestSessionId,
                             reference: artifactRef
