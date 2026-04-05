@@ -638,6 +638,10 @@ You can learn the basics of almost anything in just 20 focused hours.
             button.dataset.action = option.action;
         }
 
+        // Store metadata for click tracking
+        if (option.category) button.dataset.category = option.category;
+        if (option.slot_type) button.dataset.slotType = option.slot_type;
+
         // Use icon from server response, fallback to 'star' if not provided
         const iconName = option.icon || (isMoreButton ? 'more' : 'star');
         button.dataset.icon = iconName;
@@ -736,6 +740,21 @@ You can learn the basics of almost anything in just 20 focused hours.
         }
     }
 
+    // Report suggestion click to backend for learning loop
+    function reportSuggestionClick(clickData) {
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) return;
+
+        fetch('/suggestion-click', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify(clickData),
+        }).catch(() => {}); // fire-and-forget
+    }
+
     function handleOptionClick(button) {
         const rawAction = button?.dataset?.action || '';
         const action = normalizeAction(rawAction);
@@ -744,6 +763,20 @@ You can learn the basics of almost anything in just 20 focused hours.
         if (action === 'fetchMoreOptions') {
             fetchMoreOptions();
             return;
+        }
+
+        // Report click for smart suggestions learning loop (fire-and-forget)
+        if (!isGuestMode()) {
+            const buttonText = button?.querySelector(CONFIG.SELECTORS.BUTTON_TEXT)?.textContent?.trim();
+            const subtitle = button?.querySelector('.subtitle')?.textContent?.trim();
+            const category = button?.dataset?.category || '';
+            const slotType = button?.dataset?.slotType || '';
+            reportSuggestionClick({
+                title: buttonText || '',
+                subtitle: subtitle || '',
+                category: category,
+                slot_type: slotType,
+            });
         }
 
         // Check for guest mode demo responses
