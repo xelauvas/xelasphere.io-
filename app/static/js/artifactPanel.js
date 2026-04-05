@@ -1388,6 +1388,7 @@ ${escapeHtml(entry.content || '')}
 
         openStreaming() {
             this.isStreaming = true;
+            this.streamingStartTime = Date.now();
             this.streamingAutoScroll = true;
             this.streamingContentExtractor = { started: false, quoteChar: null, depth: 0 };
 
@@ -1446,20 +1447,7 @@ ${escapeHtml(entry.content || '')}
         appendStreamingCode(text) {
             if (!this.isStreaming || !this.streamingCodeContainer) return;
 
-            const ext = this.streamingContentExtractor;
-            if (!ext.started) {
-                if (!ext.buffer) ext.buffer = '';
-                ext.buffer += text;
-                const contentMatch = ext.buffer.match(/"content"\s*:\s*"/);
-                if (contentMatch) {
-                    ext.started = true;
-                    const afterMatch = ext.buffer.slice(contentMatch.index + contentMatch[0].length);
-                    const displayText = this._unescapeJsonString(afterMatch);
-                    this.streamingCodeContainer.textContent += displayText;
-                }
-                return;
-            }
-
+            // Show all text immediately — unescape JSON string escapes for display
             const displayText = this._unescapeJsonString(text);
             this.streamingCodeContainer.textContent += displayText;
 
@@ -1481,33 +1469,44 @@ ${escapeHtml(entry.content || '')}
         }
 
         finalizeStreaming(artifactData, { sessionId = null, reference = null } = {}) {
-            this.isStreaming = false;
-            this.panel.classList.remove('is-streaming');
-            this.streamingContentExtractor = null;
+            const doFinalize = () => {
+                this.isStreaming = false;
+                this.panel.classList.remove('is-streaming');
+                this.streamingContentExtractor = null;
 
-            // Hide streaming container, restore code viewer
-            const codeSection = document.getElementById('artifact-code-panel');
-            if (codeSection) {
-                const streamingContainer = codeSection.querySelector('.artifact-streaming-code');
-                if (streamingContainer) streamingContainer.style.display = 'none';
-                const codeViewer = codeSection.querySelector('.artifact-code');
-                if (codeViewer) codeViewer.style.display = '';
-            }
-
-            if (artifactData) {
-                // Switch to preview and render the artifact
-                this.openArtifact(artifactData, { sessionId, reference });
-            } else {
-                // Parsing failed — show raw code as fallback
+                // Hide streaming container, restore code viewer
+                const codeSection = document.getElementById('artifact-code-panel');
                 if (codeSection) {
                     const streamingContainer = codeSection.querySelector('.artifact-streaming-code');
-                    if (streamingContainer) streamingContainer.style.display = 'block';
+                    if (streamingContainer) streamingContainer.style.display = 'none';
                     const codeViewer = codeSection.querySelector('.artifact-code');
-                    if (codeViewer) codeViewer.style.display = 'none';
+                    if (codeViewer) codeViewer.style.display = '';
                 }
-                if (this.titleEl) {
-                    this.titleEl.textContent = 'Artifact (raw)';
+
+                if (artifactData) {
+                    // Switch to preview and render the artifact
+                    this.openArtifact(artifactData, { sessionId, reference });
+                } else {
+                    // Parsing failed — show raw code as fallback
+                    if (codeSection) {
+                        const streamingContainer = codeSection.querySelector('.artifact-streaming-code');
+                        if (streamingContainer) streamingContainer.style.display = 'block';
+                        const codeViewer = codeSection.querySelector('.artifact-code');
+                        if (codeViewer) codeViewer.style.display = 'none';
+                    }
+                    if (this.titleEl) {
+                        this.titleEl.textContent = 'Artifact (raw)';
+                    }
                 }
+            };
+
+            // Ensure user sees code streaming for at least 1.5s before switching to preview
+            const elapsed = Date.now() - (this.streamingStartTime || 0);
+            const minDisplayTime = 1500;
+            if (elapsed < minDisplayTime) {
+                setTimeout(doFinalize, minDisplayTime - elapsed);
+            } else {
+                doFinalize();
             }
         }
 
