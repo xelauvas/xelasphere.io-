@@ -617,13 +617,27 @@ def chat_stream():
                     logger.info(f"📈 [Stream] Injected stock context for chart query: {symbol}")
                     enhanced_prompt = f"{context_str}\n\nUser question: {enhanced_prompt}"
 
+    # Smart-route 'auto' model to the appropriate streaming model
+    stream_model = model
+    if model == 'auto' or not model:
+        routed_model, task_type = smart_route(
+            message=user_prompt_raw,
+            user_selected_model=None,
+            has_images=False,
+            conversation_length=len(previous_messages) if previous_messages else 0,
+            previous_response=None,
+            conversation_history=previous_messages,
+        )
+        stream_model = routed_model
+        logger.info(f"🔀 [Stream] Smart routing: {task_type} -> {stream_model}")
+
     def generate():
         import json
         reasoning_buffer = []
         content_buffer = []
 
         try:
-            for chunk in stream_deepseek_response(enhanced_prompt, model):
+            for chunk in stream_deepseek_response(enhanced_prompt, stream_model):
                 chunk_type = chunk.get('type')
 
                 if chunk_type == 'reasoning':
