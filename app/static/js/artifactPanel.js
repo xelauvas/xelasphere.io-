@@ -1360,6 +1360,23 @@ ${escapeHtml(entry.content || '')}
 
         close() {
             if (!this.panel) return;
+
+            // Clean up streaming state if active
+            if (this.isStreaming) {
+                this.isStreaming = false;
+                this.streamingContentExtractor = null;
+                this.panel.classList.remove('is-streaming');
+            }
+
+            // Hide streaming container and restore iframe visibility
+            const previewSection = document.getElementById('artifact-preview-panel');
+            if (previewSection) {
+                const streamingContainer = previewSection.querySelector('.artifact-streaming-code');
+                if (streamingContainer) streamingContainer.style.display = 'none';
+                const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
+                if (iframeWrapper) iframeWrapper.style.display = '';
+            }
+
             this.panel.classList.remove('is-open');
             this.panel.setAttribute('aria-hidden', 'true');
             document.body.classList.remove('artifact-panel-open', 'chat-area-wide');
