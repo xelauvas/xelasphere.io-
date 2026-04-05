@@ -1368,15 +1368,13 @@ ${escapeHtml(entry.content || '')}
                 this.panel.classList.remove('is-streaming');
             }
 
-            // Hide streaming container and restore iframe visibility
-            const previewSection = document.getElementById('artifact-preview-panel');
-            if (previewSection) {
-                const streamingContainer = previewSection.querySelector('.artifact-streaming-code');
+            // Hide streaming container and restore code viewer
+            const codeSection = document.getElementById('artifact-code-panel');
+            if (codeSection) {
+                const streamingContainer = codeSection.querySelector('.artifact-streaming-code');
                 if (streamingContainer) streamingContainer.style.display = 'none';
-                const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
-                if (iframeWrapper) iframeWrapper.style.display = '';
-                const iframe = document.getElementById('artifact-preview-frame');
-                if (iframe) iframe.style.display = '';
+                const codeViewer = codeSection.querySelector('.artifact-code');
+                if (codeViewer) codeViewer.style.display = '';
             }
 
             this.panel.classList.remove('is-open');
@@ -1405,15 +1403,14 @@ ${escapeHtml(entry.content || '')}
                 this.versionSelect.disabled = true;
             }
 
-            const previewSection = document.getElementById('artifact-preview-panel');
-            if (previewSection) {
-                // Hide iframe and its wrapper completely
-                const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
-                if (iframeWrapper) iframeWrapper.style.display = 'none';
-                const iframe = document.getElementById('artifact-preview-frame');
-                if (iframe) iframe.style.display = 'none';
+            // Put streaming container in the code section, not preview
+            const codeSection = document.getElementById('artifact-code-panel');
+            if (codeSection) {
+                // Hide the normal code viewer content
+                const codeViewer = codeSection.querySelector('.artifact-code');
+                if (codeViewer) codeViewer.style.display = 'none';
 
-                let container = previewSection.querySelector('.artifact-streaming-code');
+                let container = codeSection.querySelector('.artifact-streaming-code');
                 if (!container) {
                     container = document.createElement('div');
                     container.className = 'artifact-streaming-code';
@@ -1421,7 +1418,7 @@ ${escapeHtml(entry.content || '')}
                     const code = document.createElement('code');
                     pre.appendChild(code);
                     container.appendChild(pre);
-                    previewSection.appendChild(container);
+                    codeSection.appendChild(container);
 
                     // Bind scroll detection once on creation
                     container.addEventListener('scroll', () => {
@@ -1439,8 +1436,8 @@ ${escapeHtml(entry.content || '')}
             this.panel.classList.add('is-open', 'is-streaming');
             this.panel.setAttribute('aria-hidden', 'false');
             document.body.classList.add('artifact-panel-open');
-            this.activeTab = 'preview';
-            this.switchTab('preview');
+            this.activeTab = 'code';
+            this.switchTab('code');
             this.loadSavedSplit();
             this.updateOffset(false);
             this.adjustComposerWidth(true);
@@ -1488,24 +1485,25 @@ ${escapeHtml(entry.content || '')}
             this.panel.classList.remove('is-streaming');
             this.streamingContentExtractor = null;
 
-            const previewSection = document.getElementById('artifact-preview-panel');
-            if (previewSection) {
-                const streamingContainer = previewSection.querySelector('.artifact-streaming-code');
+            // Hide streaming container, restore code viewer
+            const codeSection = document.getElementById('artifact-code-panel');
+            if (codeSection) {
+                const streamingContainer = codeSection.querySelector('.artifact-streaming-code');
                 if (streamingContainer) streamingContainer.style.display = 'none';
-                const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
-                if (iframeWrapper) iframeWrapper.style.display = '';
-                const iframe = document.getElementById('artifact-preview-frame');
-                if (iframe) iframe.style.display = '';
+                const codeViewer = codeSection.querySelector('.artifact-code');
+                if (codeViewer) codeViewer.style.display = '';
             }
 
             if (artifactData) {
+                // Switch to preview and render the artifact
                 this.openArtifact(artifactData, { sessionId, reference });
             } else {
-                if (previewSection) {
-                    const streamingContainer = previewSection.querySelector('.artifact-streaming-code');
-                    if (streamingContainer) streamingContainer.style.display = '';
-                    const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
-                    if (iframeWrapper) iframeWrapper.style.display = 'none';
+                // Parsing failed — show raw code as fallback
+                if (codeSection) {
+                    const streamingContainer = codeSection.querySelector('.artifact-streaming-code');
+                    if (streamingContainer) streamingContainer.style.display = 'block';
+                    const codeViewer = codeSection.querySelector('.artifact-code');
+                    if (codeViewer) codeViewer.style.display = 'none';
                 }
                 if (this.titleEl) {
                     this.titleEl.textContent = 'Artifact (raw)';
