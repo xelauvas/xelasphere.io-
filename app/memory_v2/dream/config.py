@@ -17,6 +17,7 @@ class DreamConfig:
     stale_lock_hours: int = 1
     circuit_breaker_max_failures: int = 3
     circuit_breaker_cooldown_hours: int = 1
+    circuit_breaker_global_max_failures: int = 5
     embedding_similarity_threshold: float = 0.92
     low_value_unused_days: int = 60
     low_value_confidence_floor: float = 0.5

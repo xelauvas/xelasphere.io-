@@ -18,6 +18,7 @@ class TestDreamConfig:
         assert cfg.stale_lock_hours == 1
         assert cfg.circuit_breaker_max_failures == 3
         assert cfg.circuit_breaker_cooldown_hours == 1
+        assert cfg.circuit_breaker_global_max_failures == 5
 
     def test_get_dream_config_no_prefs(self):
         from app.memory_v2.dream.config import get_dream_config
