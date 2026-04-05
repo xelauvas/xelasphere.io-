@@ -8,8 +8,6 @@ State stored in Firestore collection `dream_circuit_breaker`.
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
-
 from app.memory_v2.dream.config import DreamConfig
 
 logger = logging.getLogger(__name__)
@@ -69,6 +67,11 @@ def record_failure(db, user_id: str, config: DreamConfig) -> bool:
     """Record a Kimi failure and trip breaker if threshold reached.
 
     Returns True if any breaker was tripped by this failure.
+
+    Note: The global counter uses read-then-write without a transaction.
+    Two concurrent workers may race, causing the counter to under-count
+    by 1. This is acceptable — it may delay the global breaker by one
+    extra failure, which is conservative and safe.
     """
     try:
         now = datetime.utcnow()
@@ -97,7 +100,7 @@ def record_failure(db, user_id: str, config: DreamConfig) -> bool:
             )
         global_ref.set(global_data)
 
-        # Update per-user counter
+        # Update per-user counter (no race — per-user lock prevents concurrent runs)
         user_ref = db.collection(COLLECTION).document(_user_doc_id(user_id))
         user_snap = user_ref.get()
         user_count = 0
@@ -127,7 +130,11 @@ def record_failure(db, user_id: str, config: DreamConfig) -> bool:
 
 
 def record_success(db, user_id: str) -> None:
-    """Reset both circuit breaker counters after a successful Kimi call."""
+    """Reset both circuit breaker counters after a successful Kimi call.
+
+    Resets the global counter too: a single success proves Kimi is reachable,
+    so accumulated global failures no longer indicate an outage.
+    """
     try:
         reset_data = {
             'consecutive_failures': 0,

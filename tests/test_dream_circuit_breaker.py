@@ -89,6 +89,13 @@ class TestCheckBreaker:
         assert check_breaker(mock_db, 'user_123') is True
 
 
+    def test_allows_on_exception_fail_open(self):
+        from app.memory_v2.dream.circuit_breaker import check_breaker
+        mock_db = MagicMock()
+        mock_db.collection.side_effect = Exception("Firestore unavailable")
+        assert check_breaker(mock_db, 'user_123') is True
+
+
 class TestRecordSuccess:
     def test_resets_both_counters(self):
         from app.memory_v2.dream.circuit_breaker import record_success
@@ -251,3 +258,11 @@ class TestRecordFailure:
         assert tripped is False
         global_data = mock_global_doc.set.call_args[0][0]
         assert global_data['consecutive_failures'] == 1
+
+    def test_returns_false_on_exception(self):
+        from app.memory_v2.dream.circuit_breaker import record_failure
+        from app.memory_v2.dream.config import DreamConfig
+        mock_db = MagicMock()
+        mock_db.collection.side_effect = Exception("Firestore unavailable")
+        config = DreamConfig()
+        assert record_failure(mock_db, 'user_123', config) is False
