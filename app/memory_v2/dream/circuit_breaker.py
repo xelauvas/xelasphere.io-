@@ -63,3 +63,18 @@ def check_breaker(db, user_id: str) -> bool:
     except Exception as exc:
         logger.warning("[dream] Circuit breaker check failed — allowing Phase 2: %s", exc)
         return True
+
+
+def record_success(db, user_id: str) -> None:
+    """Reset both circuit breaker counters after a successful Kimi call."""
+    try:
+        reset_data = {
+            'consecutive_failures': 0,
+            'disabled_until': None,
+            'last_failure_at': None,
+        }
+        db.collection(COLLECTION).document(GLOBAL_DOC_ID).set(reset_data)
+        db.collection(COLLECTION).document(_user_doc_id(user_id)).set(reset_data)
+        logger.debug("[dream] Circuit breaker counters reset for %s", user_id)
+    except Exception as exc:
+        logger.warning("[dream] Failed to reset circuit breaker: %s", exc)

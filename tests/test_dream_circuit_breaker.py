@@ -87,3 +87,31 @@ class TestCheckBreaker:
             mock_global_snap, mock_user_snap,
         ]
         assert check_breaker(mock_db, 'user_123') is True
+
+
+class TestRecordSuccess:
+    def test_resets_both_counters(self):
+        from app.memory_v2.dream.circuit_breaker import record_success
+        mock_db = MagicMock()
+        mock_global_doc = MagicMock()
+        mock_user_doc = MagicMock()
+
+        def mock_document(doc_id):
+            if doc_id == 'global':
+                return mock_global_doc
+            return mock_user_doc
+
+        mock_db.collection.return_value.document.side_effect = mock_document
+
+        record_success(mock_db, 'user_123')
+
+        mock_global_doc.set.assert_called_once_with({
+            'consecutive_failures': 0,
+            'disabled_until': None,
+            'last_failure_at': None,
+        })
+        mock_user_doc.set.assert_called_once_with({
+            'consecutive_failures': 0,
+            'disabled_until': None,
+            'last_failure_at': None,
+        })
