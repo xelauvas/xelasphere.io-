@@ -282,6 +282,9 @@ def open_shared_session(session_id):
 def more_options():
     """Get more task options — serve from precomputed pool for logged-in users."""
     try:
+        mobile = _is_mobile()
+        per_slot = 2 if mobile else 1  # mobile: 6, desktop: 3
+
         if 'user' in session:
             user_id = session['user']['uid']
             try:
@@ -293,7 +296,9 @@ def more_options():
                 if pool:
                     import random
                     random.shuffle(pool)
-                    selected = select_display_slots(pool)
+                    selected = select_display_slots(pool, per_slot=per_slot)
+                    if mobile:
+                        selected = selected[:6]
                     options_dicts = [s.to_task_option().to_dict() for s in selected]
                     options_dicts.append({
                         "title": "More", "subtitle": "Load new ideas",
@@ -319,7 +324,7 @@ def more_options():
         if 'user' in session:
             user_id = session['user']['uid']
             user_preferences = fetch_user_preferences(user_id)
-        num_tasks = 3
+        num_tasks = 6 if mobile else 3
         options = task_generator.generate_task_options(
             user_history=user_history, num_tasks=num_tasks, force_new_tasks=True,
         )
