@@ -5,7 +5,7 @@ Manages a pool of AI-generated personalized suggestions for users.
 The pool is stored in Firestore and refreshed as needed.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
@@ -63,7 +63,7 @@ class Suggestion:
         return TaskOption(
             title=self.title,
             subtitle=self.subtitle,
-            action=f"sendMessage('{self.prompt}')",
+            action=f"sendMessage('{self.prompt.replace(chr(39), chr(92) + chr(39))}')",
             icon=self.icon,
         )
 

@@ -185,7 +185,8 @@ class TestSuggestionToTaskOption:
         s = make_suggestion()
         d = s.to_task_option().to_dict()
         assert d["title"] == s.title
-        assert d["action"] == f"sendMessage('{s.prompt}')"
+        escaped = s.prompt.replace("'", "\\'")
+        assert d["action"] == f"sendMessage('{escaped}')"
 
 
 # ---------------------------------------------------------------------------
