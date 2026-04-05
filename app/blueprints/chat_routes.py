@@ -412,6 +412,7 @@ def chat_stream():
     prompt = request.form.get('prompt', '').strip()
     user_prompt_raw = prompt  # Keep raw user text for intent detection (before file content injection)
     model = request.form.get('model', 'deepseek-reasoner')
+    logger.info(f"[Stream] Received model={model!r}")
     page_id = request.form.get('page_id', '').strip() or None
 
     # Include extracted text from uploaded files
