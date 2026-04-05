@@ -3377,6 +3377,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     sessionId,
                     payload: data.artifact
                 });
+                // Auto-open the artifact panel for non-streaming responses
+                if (data.artifact) {
+                    window.artifactPanel.openArtifact(data.artifact, {
+                        sessionId,
+                        reference: artifactRef
+                    });
+                }
             }
             if (manager?.updateLastAiMessage) {
                 manager.updateLastAiMessage({
