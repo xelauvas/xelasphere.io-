@@ -93,10 +93,44 @@ def index():
                 session['guest']['message_count'] = ip_count
                 session.modified = True
         else:
-            # Fetch user preferences for personalized suggestions
+            # Serve precomputed smart suggestions pool
             user_id = session['user']['uid']
-            user_preferences = fetch_user_preferences(user_id)
-            options = task_generator.get_fallback_options(user_preferences=user_preferences)
+            try:
+                from app.services.smart_suggestions import (
+                    load_pool, select_display_slots, get_signal_based_suggestions,
+                    get_pool_metadata, should_refresh_pool, refresh_pool_background,
+                    increment_shown_counts,
+                )
+                pool = load_pool(db, user_id)
+                if pool:
+                    selected = select_display_slots(pool)
+                    options = [s.to_task_option() for s in selected]
+                    shown_titles = [s.title for s in selected]
+                    increment_shown_counts(db, user_id, shown_titles)
+                    metadata = get_pool_metadata(db, user_id)
+                    if should_refresh_pool(metadata):
+                        import threading
+                        threading.Thread(
+                            target=refresh_pool_background,
+                            args=(db, user_id, "expired"),
+                            daemon=True,
+                        ).start()
+                else:
+                    hour = datetime.utcnow().hour
+                    day = datetime.utcnow().strftime("%A")
+                    ua = request.headers.get("User-Agent", "")
+                    selected = get_signal_based_suggestions(hour=hour, day_of_week=day, user_agent=ua)
+                    options = [s.to_task_option() for s in selected]
+                    import threading
+                    threading.Thread(
+                        target=refresh_pool_background,
+                        args=(db, user_id, "first_conversation"),
+                        daemon=True,
+                    ).start()
+            except Exception as e:
+                logger.warning(f"Smart suggestions failed, using fallback: {e}")
+                user_preferences = fetch_user_preferences(user_id)
+                options = task_generator.get_fallback_options(user_preferences=user_preferences)
             guest_count = 0
 
         return render_template(
@@ -140,10 +174,44 @@ def open_shared_session(session_id):
                 session['guest']['message_count'] = ip_count
                 session.modified = True
         else:
-            # Fetch user preferences for personalized suggestions
+            # Serve precomputed smart suggestions pool
             user_id = session['user']['uid']
-            user_preferences = fetch_user_preferences(user_id)
-            options = task_generator.get_fallback_options(user_preferences=user_preferences)
+            try:
+                from app.services.smart_suggestions import (
+                    load_pool, select_display_slots, get_signal_based_suggestions,
+                    get_pool_metadata, should_refresh_pool, refresh_pool_background,
+                    increment_shown_counts,
+                )
+                pool = load_pool(db, user_id)
+                if pool:
+                    selected = select_display_slots(pool)
+                    options = [s.to_task_option() for s in selected]
+                    shown_titles = [s.title for s in selected]
+                    increment_shown_counts(db, user_id, shown_titles)
+                    metadata = get_pool_metadata(db, user_id)
+                    if should_refresh_pool(metadata):
+                        import threading
+                        threading.Thread(
+                            target=refresh_pool_background,
+                            args=(db, user_id, "expired"),
+                            daemon=True,
+                        ).start()
+                else:
+                    hour = datetime.utcnow().hour
+                    day = datetime.utcnow().strftime("%A")
+                    ua = request.headers.get("User-Agent", "")
+                    selected = get_signal_based_suggestions(hour=hour, day_of_week=day, user_agent=ua)
+                    options = [s.to_task_option() for s in selected]
+                    import threading
+                    threading.Thread(
+                        target=refresh_pool_background,
+                        args=(db, user_id, "first_conversation"),
+                        daemon=True,
+                    ).start()
+            except Exception as e:
+                logger.warning(f"Smart suggestions failed, using fallback: {e}")
+                user_preferences = fetch_user_preferences(user_id)
+                options = task_generator.get_fallback_options(user_preferences=user_preferences)
             guest_count = 0
 
             # Check if session has messages to prevent FOUC
@@ -177,32 +245,74 @@ def open_shared_session(session_id):
 @csrf_required
 @error_handler
 def more_options():
-    """Get more task options for the homepage."""
+    """Get more task options — serve from precomputed pool for logged-in users."""
     try:
+        if 'user' in session:
+            user_id = session['user']['uid']
+            try:
+                from app.services.smart_suggestions import (
+                    load_pool, select_display_slots, increment_shown_counts,
+                    get_pool_metadata, should_refresh_pool, refresh_pool_background,
+                )
+                pool = load_pool(db, user_id)
+                if pool:
+                    import random
+                    random.shuffle(pool)
+                    selected = select_display_slots(pool)
+                    options_dicts = [s.to_task_option().to_dict() for s in selected]
+                    options_dicts.append({
+                        "title": "More", "subtitle": "Load new ideas",
+                        "action": "fetchMoreOptions()", "icon": "more",
+                    })
+                    increment_shown_counts(db, user_id, [s.title for s in selected])
+                    metadata = get_pool_metadata(db, user_id)
+                    if should_refresh_pool(metadata):
+                        import threading
+                        threading.Thread(
+                            target=refresh_pool_background,
+                            args=(db, user_id, "exhausted"),
+                            daemon=True,
+                        ).start()
+                    return jsonify({"options": options_dicts}), 200
+            except Exception as e:
+                logger.warning(f"Smart suggestions more-options failed: {e}")
+
+        # Fallback: original behavior
         current_options = request.json.get('current_options', [])
-        # Fetch user preferences and history for personalized suggestions
         user_preferences = {}
         user_history = None
         if 'user' in session:
             user_id = session['user']['uid']
             user_preferences = fetch_user_preferences(user_id)
-
-        # Always return 3 suggestions + "More" button = 4 total in grid
         num_tasks = 3
-
-        # Use AI model to generate dynamic options (falls back to hardcoded if API fails)
         options = task_generator.generate_task_options(
-            user_history=user_history,
-            num_tasks=num_tasks,
-            force_new_tasks=True  # Always get fresh options when clicking "More"
+            user_history=user_history, num_tasks=num_tasks, force_new_tasks=True,
         )
         new_options = [opt for opt in options if opt not in current_options]
-        # Convert TaskOption objects to dictionaries (includes icon field)
         options_dicts = [opt.to_dict() for opt in new_options]
         return jsonify({"options": options_dicts}), 200
     except Exception as e:
         logger.error(f"Failed to fetch more options: {e}")
         return jsonify({'error': 'Failed to fetch more options.'}), 500
+
+
+@pages_bp.route('/suggestion-click', methods=['POST'])
+@csrf_required
+@error_handler
+def suggestion_click():
+    """Record a suggestion click for the learning loop."""
+    if 'user' not in session:
+        return jsonify({"ok": True}), 200  # silently ignore for guests
+
+    try:
+        from app.services.smart_suggestions import record_click
+        user_id = session['user']['uid']
+        click_data = request.json or {}
+        record_click(db, user_id, click_data)
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.debug(f"Click tracking failed: {e}")
+        return jsonify({"ok": True}), 200  # never fail the user's click
 
 
 @pages_bp.route('/favicon.ico')
