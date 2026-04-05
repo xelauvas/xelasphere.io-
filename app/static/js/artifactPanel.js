@@ -779,8 +779,6 @@ ${escapeHtml(entry.content || '')}
 
             // Live streaming state
             this.isStreaming = false;
-            this.streamingCodeContainer = null;
-            this.streamingAutoScroll = true;
             this._streamBuffer = '';
             this._contentFound = false;
 
@@ -1366,17 +1364,8 @@ ${escapeHtml(entry.content || '')}
             if (this.isStreaming) {
                 this.isStreaming = false;
                 this._streamBuffer = '';
-            this._contentFound = false;
+                this._contentFound = false;
                 this.panel.classList.remove('is-streaming');
-            }
-
-            // Hide streaming container and restore code viewer
-            const codeSection = document.getElementById('artifact-code-panel');
-            if (codeSection) {
-                const streamingContainer = codeSection.querySelector('.artifact-streaming-code');
-                if (streamingContainer) streamingContainer.style.display = 'none';
-                const codeViewer = codeSection.querySelector('.artifact-code');
-                if (codeViewer) codeViewer.style.display = '';
             }
 
             this.panel.classList.remove('is-open');
@@ -1391,7 +1380,6 @@ ${escapeHtml(entry.content || '')}
         openStreaming() {
             this.isStreaming = true;
             this.streamingStartTime = Date.now();
-            this.streamingAutoScroll = true;
             this._streamBuffer = '';
             this._contentFound = false;
 
@@ -1401,40 +1389,22 @@ ${escapeHtml(entry.content || '')}
             if (this.languageBadge) {
                 this.languageBadge.textContent = '';
             }
-
             if (this.versionSelect) {
                 this.versionSelect.innerHTML = '';
                 this.versionSelect.disabled = true;
             }
 
-            // Put streaming container in the code section, not preview
-            const codeSection = document.getElementById('artifact-code-panel');
-            if (codeSection) {
-                // Hide the normal code viewer content
-                const codeViewer = codeSection.querySelector('.artifact-code');
-                if (codeViewer) codeViewer.style.display = 'none';
-
-                let container = codeSection.querySelector('.artifact-streaming-code');
-                if (!container) {
-                    container = document.createElement('div');
-                    container.className = 'artifact-streaming-code';
-                    const pre = document.createElement('pre');
-                    const code = document.createElement('code');
-                    pre.appendChild(code);
-                    container.appendChild(pre);
-                    codeSection.appendChild(container);
-
-                    // Bind scroll detection once on creation
-                    container.addEventListener('scroll', () => {
-                        if (!this.isStreaming) return;
-                        const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 30;
-                        this.streamingAutoScroll = atBottom;
-                    });
-                } else {
-                    container.querySelector('code').textContent = '';
-                }
-                container.style.display = 'block';
-                this.streamingCodeContainer = container.querySelector('code');
+            // Use the existing code block for streaming — no custom container needed
+            if (this.codeBlock) {
+                this.codeBlock.textContent = '';
+                this.codeBlock.className = '';
+            }
+            // Update the file name display
+            if (this.currentFileName) {
+                this.currentFileName.textContent = 'Streaming...';
+            }
+            if (this.fileSelect) {
+                this.fileSelect.innerHTML = '<option>Streaming...</option>';
             }
 
             this.panel.classList.add('is-open', 'is-streaming');
@@ -1448,38 +1418,29 @@ ${escapeHtml(entry.content || '')}
         }
 
         appendStreamingCode(text) {
-            if (!this.isStreaming || !this.streamingCodeContainer) return;
+            if (!this.isStreaming || !this.codeBlock) return;
 
-            // The streaming text is raw artifact JSON: {"title":"...","files":[{"content":"CODE HERE"}]}
-            // We want to display just the file content, not the JSON wrapper.
-            // Buffer text until we find the first "content":" key, then display from there.
-            if (!this._streamBuffer) this._streamBuffer = '';
+            // Buffer text until we find the first "content":" in the artifact JSON,
+            // then display just the file content (not the JSON metadata wrapper).
             this._streamBuffer += text;
 
             if (!this._contentFound) {
-                // Look for the first "content":" pattern in the accumulated buffer
                 const match = this._streamBuffer.match(/"content"\s*:\s*"/);
                 if (match) {
                     this._contentFound = true;
-                    // Extract everything after the match — this is the start of the code
                     const codeStart = this._streamBuffer.slice(match.index + match[0].length);
                     if (codeStart) {
-                        const displayText = this._unescapeJsonString(codeStart);
-                        this.streamingCodeContainer.textContent += displayText;
+                        this.codeBlock.textContent += this._unescapeJsonString(codeStart);
                     }
                 }
-                // Don't display anything until we find content
             } else {
-                // We're inside the content string — unescape and display the new text directly
-                const displayText = this._unescapeJsonString(text);
-                this.streamingCodeContainer.textContent += displayText;
+                this.codeBlock.textContent += this._unescapeJsonString(text);
             }
 
-            if (this.streamingAutoScroll) {
-                const scrollParent = this.streamingCodeContainer.closest('.artifact-streaming-code');
-                if (scrollParent) {
-                    scrollParent.scrollTop = scrollParent.scrollHeight;
-                }
+            // Auto-scroll the code section
+            const codeSection = document.getElementById('artifact-code-panel');
+            if (codeSection) {
+                codeSection.scrollTop = codeSection.scrollHeight;
             }
         }
 
@@ -1497,28 +1458,13 @@ ${escapeHtml(entry.content || '')}
                 this.isStreaming = false;
                 this.panel.classList.remove('is-streaming');
                 this._streamBuffer = '';
-            this._contentFound = false;
-
-                // Hide streaming container, restore code viewer
-                const codeSection = document.getElementById('artifact-code-panel');
-                if (codeSection) {
-                    const streamingContainer = codeSection.querySelector('.artifact-streaming-code');
-                    if (streamingContainer) streamingContainer.style.display = 'none';
-                    const codeViewer = codeSection.querySelector('.artifact-code');
-                    if (codeViewer) codeViewer.style.display = '';
-                }
+                this._contentFound = false;
 
                 if (artifactData) {
-                    // Switch to preview and render the artifact
+                    // openArtifact will render preview + populate code tab properly
                     this.openArtifact(artifactData, { sessionId, reference });
                 } else {
-                    // Parsing failed — show raw code as fallback
-                    if (codeSection) {
-                        const streamingContainer = codeSection.querySelector('.artifact-streaming-code');
-                        if (streamingContainer) streamingContainer.style.display = 'block';
-                        const codeViewer = codeSection.querySelector('.artifact-code');
-                        if (codeViewer) codeViewer.style.display = 'none';
-                    }
+                    // Parsing failed — the streamed code stays visible in the code tab
                     if (this.titleEl) {
                         this.titleEl.textContent = 'Artifact (raw)';
                     }
