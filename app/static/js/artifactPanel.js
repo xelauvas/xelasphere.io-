@@ -1458,19 +1458,24 @@ ${escapeHtml(entry.content || '')}
             if (this._contentFound) {
                 let rawContent = this._streamBuffer.slice(this._contentStart);
 
-                // Try to find where the first file's content string ends
-                // The JSON content value ends with an unescaped " followed by }, or ], etc.
-                // Look for patterns like: "},{"path": or "}]} which signal end of content
-                const endPatterns = [
-                    /(?<!\\)"\s*}\s*,\s*\{\s*"path"/,  // "},{"path" — next file starts
-                    /(?<!\\)"\s*}\s*\]\s*}/,             // "}]} — files array ends
-                ];
-                for (const pattern of endPatterns) {
-                    const endMatch = rawContent.match(pattern);
-                    if (endMatch) {
-                        rawContent = rawContent.slice(0, endMatch.index);
+                // Find where the first file's content JSON string ends.
+                // In the raw buffer, the content value is a JSON string with escaped quotes (\").
+                // The end of the content string is an UNESCAPED " (not preceded by \).
+                // We scan for a " that is NOT preceded by \ (tracking escape state).
+                let endIdx = -1;
+                for (let i = 0; i < rawContent.length; i++) {
+                    if (rawContent[i] === '\\') {
+                        i++; // skip escaped char
+                        continue;
+                    }
+                    if (rawContent[i] === '"') {
+                        endIdx = i;
                         break;
                     }
+                }
+
+                if (endIdx !== -1) {
+                    rawContent = rawContent.slice(0, endIdx);
                 }
 
                 this.codeBlock.textContent = this._unescapeJsonString(rawContent);
