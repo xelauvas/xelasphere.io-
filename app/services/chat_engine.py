@@ -123,8 +123,8 @@ _intent_cache = {}
 _intent_cache_ttl = 300  # 5 minutes
 
 
-MAX_TOKENS = 4096  # Adjust based on AI model's specifications
-RESPONSE_TOKEN_BUFFER = 500  # Reserve tokens for the AI's response
+MAX_TOKENS = 16384  # Models on Groq/Cerebras support 8K-128K context
+RESPONSE_TOKEN_BUFFER = 1024  # Reserve tokens for the AI's response
 
 
 FRIENDLY_AI_ERROR_MESSAGES = {
@@ -1101,9 +1101,9 @@ def build_prompt(
     if system_instructions:
         try_add(1, "system", system_instructions + "\n", required=True)
 
-    # === PRIORITY 2: Developer instructions ===
+    # === PRIORITY 2: Developer instructions (required — contains artifact format rules) ===
     if developer_instructions:
-        try_add(2, "developer", developer_instructions + "\n")
+        try_add(2, "developer", developer_instructions + "\n", required=True)
 
     # === PRIORITY 3: Current user message (required, added last in output) ===
     user_prompt_text = f"User: {user_prompt}\nAssistant:"
