@@ -294,6 +294,7 @@ def build_generation_prompt(context: Dict[str, Any]) -> str:
         context: dict with keys:
             memories (list of dicts with type/key/value),
             recent_topics (list of strings),
+            recent_prompts (list of strings - actual user prompts from recent sessions),
             suggestion_profile (dict with top_categories, avoided_categories),
             hour (int),
             day_of_week (str),
@@ -304,6 +305,7 @@ def build_generation_prompt(context: Dict[str, Any]) -> str:
     """
     memories = (context.get("memories") or [])[:20]
     recent_topics = (context.get("recent_topics") or [])[:5]
+    recent_prompts = (context.get("recent_prompts") or [])[:5]
     profile = context.get("suggestion_profile") or {}
     hour = context.get("hour", 12)
     day_of_week = context.get("day_of_week", "")
@@ -324,6 +326,14 @@ def build_generation_prompt(context: Dict[str, Any]) -> str:
     if recent_topics:
         for t in recent_topics:
             lines.append(f"- {t}")
+    else:
+        lines.append("(none)")
+
+    # Recent user prompts — what the user actually asked about
+    lines.append("\n## Recent User Prompts")
+    if recent_prompts:
+        for p in recent_prompts:
+            lines.append(f"- {p}")
     else:
         lines.append("(none)")
 
@@ -921,8 +931,9 @@ def _get_user_memory_context(db, user_id: str) -> Dict[str, Any]:
     except Exception as exc:
         logger.warning("_get_user_memory_context: failed to load memories for %s: %s", user_id, exc)
 
-    # Load recent session titles
+    # Load recent session titles and user prompts
     recent_topics: list = []
+    recent_prompts: list = []
     try:
         sessions_ref = (
             db.collection("users")
@@ -936,6 +947,16 @@ def _get_user_memory_context(db, user_id: str) -> Dict[str, Any]:
             title = data.get("title", "")
             if title:
                 recent_topics.append(title)
+            # Extract first user prompt from each session
+            messages = data.get("messages", [])
+            if isinstance(messages, list):
+                for msg in messages[:3]:
+                    if isinstance(msg, dict) and msg.get("prompt"):
+                        prompt_text = msg["prompt"].strip()
+                        if len(prompt_text) > 200:
+                            prompt_text = prompt_text[:200] + "..."
+                        recent_prompts.append(prompt_text)
+                        break
     except Exception as exc:
         logger.warning("_get_user_memory_context: failed to load sessions for %s: %s", user_id, exc)
 
@@ -957,6 +978,7 @@ def _get_user_memory_context(db, user_id: str) -> Dict[str, Any]:
     return {
         "memories": memories,
         "recent_topics": recent_topics,
+        "recent_prompts": recent_prompts,
         "suggestion_profile": suggestion_profile,
         "exclusion_titles": exclusion_titles,
         "hour": now.hour,

@@ -633,6 +633,19 @@ class TestBuildGenerationPrompt:
         prompt = build_generation_prompt(ctx)
         assert "## Do NOT Suggest" in prompt
 
+    def test_includes_recent_prompts(self):
+        ctx = make_context(recent_prompts=["Help me build a REST API", "Explain async/await"])
+        prompt = build_generation_prompt(ctx)
+        assert "## Recent User Prompts" in prompt
+        assert "Help me build a REST API" in prompt
+        assert "Explain async/await" in prompt
+
+    def test_empty_recent_prompts_graceful(self):
+        ctx = make_context(recent_prompts=[])
+        prompt = build_generation_prompt(ctx)
+        assert "## Recent User Prompts" in prompt
+        assert "(none)" in prompt
+
 
 # ---------------------------------------------------------------------------
 # parse_llm_suggestions()
