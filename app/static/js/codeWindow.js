@@ -3123,10 +3123,17 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                     if (streamArtifactPatches && streamArtifactPatches.patches && window.artifactPanel.applyPatchesVisually) {
                         // Patches available — show visual diff animation
-                        // Cancel streaming view if it was active
+                        console.log('[PATCH] Calling applyPatchesVisually with', streamArtifactPatches.patches.length, 'patches');
+                        // Cancel streaming view completely if it was active
                         if (artifactStreamActive) {
                             window.artifactPanel.isStreaming = false;
                             window.artifactPanel.panel?.classList.remove('is-streaming');
+                            window.artifactPanel._streamBuffer = '';
+                            window.artifactPanel._streamFiles = [];
+                        }
+                        // Restore the previous artifact's code display before patching
+                        if (window.artifactPanel.currentVersion) {
+                            window.artifactPanel.renderVersion(window.artifactPanel.currentVersion);
                         }
                         window.artifactPanel.applyPatchesVisually(
                             streamArtifactPatches.patches,
