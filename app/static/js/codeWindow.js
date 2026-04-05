@@ -3048,6 +3048,21 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     }
                 }
 
+                // Finalize streaming artifact panel if it was active
+                if (artifactStreamActive && window.artifactPanel) {
+                    const artifactRef = streamArtifactRef || (streamArtifact ? {
+                        artifactId: streamArtifact.artifactId,
+                        title: streamArtifact.title,
+                        type: streamArtifact.type,
+                        primaryLanguage: streamArtifact.primaryLanguage,
+                        summary: displayContent
+                    } : null);
+                    window.artifactPanel.finalizeStreaming(streamArtifact, {
+                        sessionId: requestSessionId,
+                        reference: artifactRef
+                    });
+                }
+
                 // Attach artifact preview if present
                 console.log('Stream artifact data:', { streamArtifact, streamRenderMode, hasPanel: !!window.artifactPanel });
                 if (streamArtifact && messageContainer && window.artifactPanel) {
