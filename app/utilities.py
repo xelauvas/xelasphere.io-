@@ -740,9 +740,14 @@ WHEN NOT TO USE ARTIFACTS:
 When you see "CURRENT ARTIFACT" in the user's message, it contains code that needs fixing/updating.
 1. READ the provided artifact code carefully
 2. IDENTIFY and FIX the issue
-3. OUTPUT a complete ```artifact block with ALL files (including the fix)
-4. DO NOT ask for more information - the code is already provided
-5. DO NOT just explain how to fix - actually provide the fixed code
+3. OUTPUT a ```artifact_patch block with ONLY the changes (old_string/new_string pairs):
+```artifact_patch
+{"patches":[{"file":"App.jsx","old_string":"exact text to find","new_string":"replacement text"}]}
+```
+4. Include 2-4 surrounding lines in old_string for uniqueness
+5. Write a brief summary of what you changed before the patch block
+6. NEVER regenerate the full artifact — always use patches
+7. DO NOT ask for more information - the code is already provided
 
 ⚠️ CRITICAL: DO NOT ASK EXCESSIVE QUESTIONS
 When user asks you to BUILD or CREATE something:

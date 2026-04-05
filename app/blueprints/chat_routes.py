@@ -593,7 +593,16 @@ def chat_stream():
         if artifact_context:
             logger.info(f"📦 [Stream] Injected {len(artifact_context)} chars of artifact context")
             # Prepend artifact context to prompt so AI sees current code
-            enhanced_prompt = f"{artifact_context}\n\nUser request: {prompt}\n\nIMPORTANT: Apply the fix/update to the code shown above and output a complete ```artifact block with ALL files."
+            enhanced_prompt = (
+                f"{artifact_context}\n\n"
+                f"User request: {prompt}\n\n"
+                "IMPORTANT: Apply the fix/update to the code shown above.\n"
+                "Output ONLY a ```artifact_patch block with old_string/new_string pairs — do NOT regenerate the full code.\n"
+                "Format: ```artifact_patch\n"
+                "{\"patches\":[{\"file\":\"filename\",\"old_string\":\"exact text to find\",\"new_string\":\"replacement\"}]}\n"
+                "```\n"
+                "Include 2-4 surrounding lines in old_string for uniqueness. Write a brief summary before the patch block."
+            )
         else:
             logger.debug("[Stream] No active artifact found to inject")
 
