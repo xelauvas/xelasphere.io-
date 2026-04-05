@@ -3811,6 +3811,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 content: content,
                 originalPrompt: content, // Store original prompt
                 isHistory: true,
+                timestamp: message.timestamp,
                 attachments: userAttachments,
                 suppressText: !!message.suppress_text_user,
                 messageKey
@@ -3830,6 +3831,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 content: userPromptSource,
                 originalPrompt: userPromptSource,
                 isHistory: true,
+                timestamp: message.timestamp,
                 attachments: userAttachments,
                 suppressText: false,
                 messageKey
@@ -3861,6 +3863,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                     content: '',
                     isCode: false,
                     isHistory: true,
+                    timestamp: message.timestamp,
                     attachments: aiAttachments,
                     suppressText: true,
                     forceButtons: true,
@@ -3888,6 +3891,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 content: suppressAiText ? '' : aiContent,
                 isCode: message.is_code || false,
                 isHistory: true,
+                timestamp: message.timestamp,
                 attachments: aiAttachments,
                 suppressText: suppressAiText,
                 forceButtons: true,
@@ -4060,6 +4064,8 @@ async loadChatHistory(pageToken = null, limit = 10) {
         if (typeof sender === 'string') {
             messageDiv.dataset.sender = sender.toLowerCase();
         }
+        // Set timestamp: use original message time for history, current time for live
+        messageDiv.dataset.timestamp = timestamp || new Date().toISOString();
         if (messageKey) {
             messageDiv.dataset.messageKey = messageKey;
         } else if (!messageDiv.dataset.messageKey) {
