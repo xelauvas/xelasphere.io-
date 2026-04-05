@@ -12,6 +12,7 @@ from app.memory_v2.dream import gates
 from app.memory_v2.dream import phase1
 from app.memory_v2.dream import phase2
 from app.memory_v2.dream import executor
+from app.memory_v2.dream import circuit_breaker
 from app.memory_v2.store import MemoryStoreV2
 
 logger = logging.getLogger(__name__)
@@ -75,22 +76,27 @@ def _run_consolidation(db, user_id: str, config: DreamConfig) -> bool:
     )
     dream_log.phase1_actions = p1_actions
 
-    # Phase 2 (conditional)
+    # Phase 2 (conditional, with circuit breaker)
     p2_actions = []
     if phase2.should_run_phase2(report, config.pattern_synthesis_threshold):
-        memories_by_id = {m.id: m for m in report.all_active}
-        p2_decisions = phase2.run_phase2(
-            report=report, memories_by_id=memories_by_id,
-            config_token_budget=config.kimi_token_budget,
-            config_max_syntheses=config.max_syntheses_per_cycle,
-        )
-        if p2_decisions is not None:
-            dream_log.kimi_raw_response = str(p2_decisions)
-            p2_actions = executor.execute_phase2_actions(
-                store=store, decisions=p2_decisions, user_id=user_id,
-            )
+        if not circuit_breaker.check_breaker(db, user_id):
+            dream_log.errors.append('Phase 2 skipped: circuit breaker open')
         else:
-            dream_log.errors.append('Phase 2 Kimi call failed')
+            memories_by_id = {m.id: m for m in report.all_active}
+            p2_decisions = phase2.run_phase2(
+                report=report, memories_by_id=memories_by_id,
+                config_token_budget=config.kimi_token_budget,
+                config_max_syntheses=config.max_syntheses_per_cycle,
+            )
+            if p2_decisions is not None:
+                circuit_breaker.record_success(db, user_id)
+                dream_log.kimi_raw_response = str(p2_decisions)
+                p2_actions = executor.execute_phase2_actions(
+                    store=store, decisions=p2_decisions, user_id=user_id,
+                )
+            else:
+                circuit_breaker.record_failure(db, user_id, config)
+                dream_log.errors.append('Phase 2 Kimi call failed')
 
     dream_log.phase2_actions = p2_actions
     dream_log.completed_at = datetime.utcnow()
