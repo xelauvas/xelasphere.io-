@@ -208,12 +208,12 @@ def _score_today_slot(suggestion: Suggestion, hour: int) -> int:
 def select_display_slots(
     pool: List[Suggestion],
     hour: Optional[int] = None,
-    per_slot: int = 2,
+    per_slot: int = 1,
 ) -> List[Suggestion]:
     """
     Pick up to per_slot suggestions per slot type (continue/today/discover).
 
-    Default is 2 per slot = 6 total (matching the 2-column grid layout).
+    Default is 1 per slot = 3 total (matching the 2x2 grid: 3 + More button).
 
     Selection rules:
     - continue: lowest shown_count, random tiebreaker
@@ -815,7 +815,7 @@ def get_signal_based_suggestions(
     hour: int = 12,
     day_of_week: str = "",
     user_agent: str = "",
-    per_slot: int = 2,
+    per_slot: int = 1,
 ) -> List[Suggestion]:
     """
     Pick curated suggestions for a new user based on contextual signals.
@@ -823,7 +823,7 @@ def get_signal_based_suggestions(
     Scores all _CURATED_NEW_USER suggestions against signals and returns the
     top per_slot per slot type: today (most signal-dependent), continue, discover.
 
-    Default is 2 per slot = 6 total (matching the grid layout).
+    Default is 1 per slot = 3 total (matching the 2x2 grid: 3 + More button).
     """
     signals = infer_signals(hour=hour, day_of_week=day_of_week, user_agent=user_agent)
 

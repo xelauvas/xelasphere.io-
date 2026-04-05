@@ -79,7 +79,7 @@ def index():
 
         # Use fallback options for guests (no API call), full options for logged-in users
         if guest_mode:
-            options = task_generator.get_fallback_options()
+            options = task_generator.get_fallback_options(num_tasks=3)
 
             # Get accurate guest message count from Firebase (IP-based)
             client_ip = get_client_ip()
@@ -136,7 +136,7 @@ def index():
             except Exception as e:
                 logger.warning(f"Smart suggestions failed, using fallback: {e}")
                 user_preferences = fetch_user_preferences(user_id)
-                options = task_generator.get_fallback_options(user_preferences=user_preferences)
+                options = task_generator.get_fallback_options(num_tasks=3, user_preferences=user_preferences)
             guest_count = 0
 
         return render_template(
@@ -166,7 +166,7 @@ def open_shared_session(session_id):
 
         # Use fallback options for guests (no API call), full options for logged-in users
         if guest_mode:
-            options = task_generator.get_fallback_options()
+            options = task_generator.get_fallback_options(num_tasks=3)
 
             # Get accurate guest message count from Firebase (IP-based)
             client_ip = get_client_ip()
@@ -222,7 +222,7 @@ def open_shared_session(session_id):
             except Exception as e:
                 logger.warning(f"Smart suggestions failed, using fallback: {e}")
                 user_preferences = fetch_user_preferences(user_id)
-                options = task_generator.get_fallback_options(user_preferences=user_preferences)
+                options = task_generator.get_fallback_options(num_tasks=3, user_preferences=user_preferences)
             guest_count = 0
 
             # Check if session has messages to prevent FOUC
@@ -295,7 +295,7 @@ def more_options():
         if 'user' in session:
             user_id = session['user']['uid']
             user_preferences = fetch_user_preferences(user_id)
-        num_tasks = 6
+        num_tasks = 3
         options = task_generator.generate_task_options(
             user_history=user_history, num_tasks=num_tasks, force_new_tasks=True,
         )
