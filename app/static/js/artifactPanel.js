@@ -1386,6 +1386,8 @@ ${escapeHtml(entry.content || '')}
             this._contentStart = 0;
             this._detectedLang = null;
             this._detectedPath = null;
+            this._streamFiles = [];
+            this._lastParsePos = 0;
 
             if (this.titleEl) {
                 this.titleEl.textContent = 'Generating...';
@@ -1424,68 +1426,114 @@ ${escapeHtml(entry.content || '')}
         appendStreamingCode(text) {
             if (!this.isStreaming || !this.codeBlock) return;
 
-            // Buffer ALL text — we process and display from the full buffer each time
-            // This avoids issues with escape sequences split across chunks
             this._streamBuffer += text;
 
-            if (!this._contentFound) {
-                // Try to detect language and filename from the JSON before "content"
-                if (!this._detectedLang) {
-                    const langMatch = this._streamBuffer.match(/"language"\s*:\s*"(\w+)"/);
-                    if (langMatch) {
-                        this._detectedLang = langMatch[1];
-                        const prismLang = this._detectedLang === 'jsx' ? 'javascript' : this._detectedLang;
-                        this.codeBlock.className = `language-${prismLang}`;
-                    }
-                }
-                if (!this._detectedPath) {
-                    const pathMatch = this._streamBuffer.match(/"path"\s*:\s*"([^"]+)"/);
-                    if (pathMatch) {
-                        this._detectedPath = pathMatch[1];
-                        if (this.currentFileName) this.currentFileName.textContent = this._detectedPath;
-                        if (this.fileSelect) this.fileSelect.innerHTML = `<option>${this._detectedPath}</option>`;
-                    }
-                }
-
-                const match = this._streamBuffer.match(/"content"\s*:\s*"/);
-                if (match) {
-                    this._contentFound = true;
-                    this._contentStart = match.index + match[0].length;
-                }
-            }
-
-            // Re-render from buffer — only show the FIRST file's content
-            if (this._contentFound) {
-                let rawContent = this._streamBuffer.slice(this._contentStart);
-
-                // Find where the first file's content JSON string ends.
-                // In the raw buffer, the content value is a JSON string with escaped quotes (\").
-                // The end of the content string is an UNESCAPED " (not preceded by \).
-                // We scan for a " that is NOT preceded by \ (tracking escape state).
-                let endIdx = -1;
-                for (let i = 0; i < rawContent.length; i++) {
-                    if (rawContent[i] === '\\') {
-                        i++; // skip escaped char
-                        continue;
-                    }
-                    if (rawContent[i] === '"') {
-                        endIdx = i;
-                        break;
-                    }
-                }
-
-                if (endIdx !== -1) {
-                    rawContent = rawContent.slice(0, endIdx);
-                }
-
-                this.codeBlock.textContent = this._unescapeJsonString(rawContent);
-            }
+            // Parse all files from the buffer and display the current one
+            this._parseAndDisplayStreamingFiles();
 
             // Auto-scroll the code section
             const codeSection = document.getElementById('artifact-code-panel');
             if (codeSection) {
                 codeSection.scrollTop = codeSection.scrollHeight;
             }
+        }
+
+        _parseAndDisplayStreamingFiles() {
+            // Extract all complete file entries from the streaming JSON buffer.
+            // Each file looks like: {"path":"App.jsx","language":"jsx","content":"...code..."}
+            // We find each "content":" and scan for the closing unescaped "
+
+            if (!this._streamFiles) this._streamFiles = [];
+
+            const buf = this._streamBuffer;
+            let searchFrom = this._lastParsePos || 0;
+
+            // Find all "path":"..." + "content":"..." pairs
+            while (searchFrom < buf.length) {
+                // Find next "path" key
+                const pathIdx = buf.indexOf('"path"', searchFrom);
+                if (pathIdx === -1) break;
+
+                // Extract path value
+                const pathValMatch = buf.slice(pathIdx).match(/"path"\s*:\s*"([^"]+)"/);
+                if (!pathValMatch) break;
+
+                // Find "language" near this path
+                const langSearch = buf.slice(pathIdx, pathIdx + 200);
+                const langMatch = langSearch.match(/"language"\s*:\s*"(\w+)"/);
+                const lang = langMatch ? langMatch[1] : 'text';
+
+                // Find "content":" after this path
+                const contentIdx = buf.indexOf('"content"', pathIdx);
+                if (contentIdx === -1) break;
+
+                const contentValMatch = buf.slice(contentIdx).match(/"content"\s*:\s*"/);
+                if (!contentValMatch) break;
+
+                const contentStart = contentIdx + contentValMatch[0].length;
+
+                // Scan for the closing unescaped " of the content value
+                let endIdx = -1;
+                for (let i = contentStart; i < buf.length; i++) {
+                    if (buf[i] === '\\') { i++; continue; }
+                    if (buf[i] === '"') { endIdx = i; break; }
+                }
+
+                const filePath = pathValMatch[1];
+                const isComplete = endIdx !== -1;
+                const rawContent = isComplete
+                    ? buf.slice(contentStart, endIdx)
+                    : buf.slice(contentStart);
+
+                // Update or add this file in our tracking array
+                const existing = this._streamFiles.find(f => f.path === filePath);
+                if (existing) {
+                    existing.content = rawContent;
+                    existing.complete = isComplete;
+                    existing.lang = lang;
+                } else {
+                    this._streamFiles.push({ path: filePath, content: rawContent, complete: isComplete, lang });
+                }
+
+                if (isComplete) {
+                    // Move past this file to look for the next one
+                    searchFrom = endIdx + 1;
+                    this._lastParsePos = searchFrom;
+                } else {
+                    // Content still streaming — stay here
+                    break;
+                }
+            }
+
+            // Display the LAST file that has content (the one currently streaming)
+            if (this._streamFiles.length === 0) return;
+
+            // Find the file currently being written (last incomplete, or last complete if all done)
+            let displayFile = this._streamFiles[this._streamFiles.length - 1];
+            for (let i = this._streamFiles.length - 1; i >= 0; i--) {
+                if (!this._streamFiles[i].complete) {
+                    displayFile = this._streamFiles[i];
+                    break;
+                }
+            }
+
+            // Update file dropdown
+            if (this.fileSelect) {
+                const options = this._streamFiles.map((f, i) =>
+                    `<option value="${i}" ${f.path === displayFile.path ? 'selected' : ''}>${f.path}${f.complete ? ' ✓' : ' ...'}</option>`
+                ).join('');
+                this.fileSelect.innerHTML = options;
+            }
+            if (this.currentFileName) {
+                this.currentFileName.textContent = displayFile.path;
+            }
+
+            // Set language class
+            const prismLang = displayFile.lang === 'jsx' ? 'javascript' : displayFile.lang;
+            this.codeBlock.className = `language-${prismLang}`;
+
+            // Display the file content
+            this.codeBlock.textContent = this._unescapeJsonString(displayFile.content);
         }
 
         _unescapeJsonString(str) {
