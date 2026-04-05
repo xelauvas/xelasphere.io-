@@ -1,3 +1,24 @@
+// Typewriter animation for session titles (ChatGPT-style)
+function typewriteTitle(element, text, speed = 28) {
+    // Cancel any in-progress typewriter on this element
+    if (element._typewriteTimer) {
+        clearTimeout(element._typewriteTimer);
+        element._typewriteTimer = null;
+    }
+    element.textContent = '';
+    let i = 0;
+    function tick() {
+        if (i < text.length) {
+            element.textContent += text[i];
+            i++;
+            element._typewriteTimer = setTimeout(tick, speed);
+        } else {
+            element._typewriteTimer = null;
+        }
+    }
+    tick();
+}
+
 // Configuration object for constants
 const CONFIG = Object.freeze({
     ICONS: {
@@ -2847,6 +2868,25 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             console.log('Parsed artifact from done:', streamArtifact);
                             console.log('Parsed email from done:', streamIsEmail, streamEmailData);
                             if (streamCryptoChart) console.log('Parsed crypto chart:', streamCryptoChart);
+                            // Update session title in sidebar with typewriter animation
+                            if (chunk.session_name) {
+                                const mgr = window.chatManager;
+                                if (mgr && requestSessionId && mgr.chatHistory?.[requestSessionId]) {
+                                    const sess = mgr.chatHistory[requestSessionId];
+                                    const newName = chunk.session_name.trim();
+                                    if (newName && newName.toLowerCase() !== 'new chat' && sess.session_name !== newName) {
+                                        sess.session_name = newName;
+                                        sess.autoTitleEligible = false;
+                                        // Find the tab element and typewrite the title
+                                        const tab = document.querySelector(`.chat-tab[data-session-id="${requestSessionId}"] .tab-name`);
+                                        if (tab) {
+                                            typewriteTitle(tab, newName);
+                                        } else if (typeof mgr.renderChatTabs === 'function') {
+                                            mgr.renderChatTabs();
+                                        }
+                                    }
+                                }
+                            }
                         } else if (chunk.type === 'error') {
                             const errorText = chunk.text || 'Streaming error';
                             // If streaming isn't available for this model, fall back silently
@@ -3065,6 +3105,19 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         summary: displayContent
                     } : null);
                     window.artifactPanel.finalizeStreaming(streamArtifact, {
+                        sessionId: requestSessionId,
+                        reference: artifactRef
+                    });
+                } else if (!artifactStreamActive && streamArtifact && window.artifactPanel) {
+                    // Auto-open for non-streaming artifacts (patches, fast responses)
+                    const artifactRef = streamArtifactRef || {
+                        artifactId: streamArtifact.artifactId,
+                        title: streamArtifact.title,
+                        type: streamArtifact.type,
+                        primaryLanguage: streamArtifact.primaryLanguage,
+                        summary: displayContent
+                    };
+                    window.artifactPanel.openArtifact(streamArtifact, {
                         sessionId: requestSessionId,
                         reference: artifactRef
                     });
@@ -3512,7 +3565,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     if (newName && session.session_name !== newName) {
                         session.session_name = newName;
                         session.autoTitleEligible = false;
-                        if (typeof manager.renderChatTabs === 'function') {
+                        const tab = document.querySelector(`.chat-tab[data-session-id="${sessionId}"] .tab-name`);
+                        if (tab) {
+                            typewriteTitle(tab, newName);
+                        } else if (typeof manager.renderChatTabs === 'function') {
                             manager.renderChatTabs();
                         }
                     }
