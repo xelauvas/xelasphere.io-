@@ -777,6 +777,12 @@ ${escapeHtml(entry.content || '')}
             this.currentSessionId = null;
             this.activeTab = 'preview';
 
+            // Live streaming state
+            this.isStreaming = false;
+            this.streamingCodeContainer = null;
+            this.streamingAutoScroll = true;
+            this.streamingContentExtractor = null;
+
             // Edit state
             this.editingFile = null;
             this.editedFiles = new Map();  // Track edited file contents
@@ -1361,6 +1367,125 @@ ${escapeHtml(entry.content || '')}
             this.adjustComposerWidth(false);
             this.clearActivePills();
             this.activeTab = 'preview';
+        }
+
+        openStreaming() {
+            this.isStreaming = true;
+            this.streamingAutoScroll = true;
+            this.streamingContentExtractor = { started: false, quoteChar: null, depth: 0 };
+
+            if (this.titleEl) {
+                this.titleEl.textContent = 'Generating...';
+            }
+            if (this.languageBadge) {
+                this.languageBadge.textContent = '';
+            }
+
+            if (this.versionSelect) {
+                this.versionSelect.innerHTML = '';
+                this.versionSelect.disabled = true;
+            }
+
+            const previewSection = document.getElementById('artifact-preview-panel');
+            if (previewSection) {
+                const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
+                if (iframeWrapper) iframeWrapper.style.display = 'none';
+
+                let container = previewSection.querySelector('.artifact-streaming-code');
+                if (!container) {
+                    container = document.createElement('div');
+                    container.className = 'artifact-streaming-code';
+                    const pre = document.createElement('pre');
+                    const code = document.createElement('code');
+                    pre.appendChild(code);
+                    container.appendChild(pre);
+                    previewSection.appendChild(container);
+                } else {
+                    container.querySelector('code').textContent = '';
+                }
+                container.style.display = '';
+                this.streamingCodeContainer = container.querySelector('code');
+
+                container.addEventListener('scroll', () => {
+                    if (!this.isStreaming) return;
+                    const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 30;
+                    this.streamingAutoScroll = atBottom;
+                });
+            }
+
+            this.panel.classList.add('is-open', 'is-streaming');
+            this.panel.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('artifact-panel-open');
+            this.activeTab = 'preview';
+            this.switchTab('preview');
+            this.loadSavedSplit();
+            this.updateOffset(false);
+            this.adjustComposerWidth(true);
+        }
+
+        appendStreamingCode(text) {
+            if (!this.isStreaming || !this.streamingCodeContainer) return;
+
+            const ext = this.streamingContentExtractor;
+            if (!ext.started) {
+                if (!ext.buffer) ext.buffer = '';
+                ext.buffer += text;
+                const contentMatch = ext.buffer.match(/"content"\s*:\s*"/);
+                if (contentMatch) {
+                    ext.started = true;
+                    const afterMatch = ext.buffer.slice(contentMatch.index + contentMatch[0].length);
+                    const displayText = this._unescapeJsonString(afterMatch);
+                    this.streamingCodeContainer.textContent += displayText;
+                }
+                return;
+            }
+
+            const displayText = this._unescapeJsonString(text);
+            this.streamingCodeContainer.textContent += displayText;
+
+            if (this.streamingAutoScroll) {
+                const scrollParent = this.streamingCodeContainer.closest('.artifact-streaming-code');
+                if (scrollParent) {
+                    scrollParent.scrollTop = scrollParent.scrollHeight;
+                }
+            }
+        }
+
+        _unescapeJsonString(str) {
+            return str
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '\t')
+                .replace(/\\r/g, '\r')
+                .replace(/\\"/g, '"')
+                .replace(/\\\\/g, '\\');
+        }
+
+        finalizeStreaming(artifactData, { sessionId = null, reference = null } = {}) {
+            this.isStreaming = false;
+            this.panel.classList.remove('is-streaming');
+            this.streamingContentExtractor = null;
+
+            const previewSection = document.getElementById('artifact-preview-panel');
+            if (previewSection) {
+                const streamingContainer = previewSection.querySelector('.artifact-streaming-code');
+                if (streamingContainer) streamingContainer.style.display = 'none';
+                const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
+                if (iframeWrapper) iframeWrapper.style.display = '';
+            }
+
+            if (artifactData) {
+                this.openArtifact(artifactData, { sessionId, reference });
+            } else {
+                if (previewSection) {
+                    const streamingContainer = previewSection.querySelector('.artifact-streaming-code');
+                    if (streamingContainer) streamingContainer.style.display = '';
+                    const iframeWrapper = previewSection.querySelector('.artifact-preview-frame');
+                    if (iframeWrapper) iframeWrapper.style.display = 'none';
+                }
+                if (this.titleEl) {
+                    this.titleEl.textContent = 'Artifact (raw)';
+                }
+            }
         }
 
         adjustComposerWidth(isOpen) {
