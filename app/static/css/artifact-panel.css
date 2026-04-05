@@ -2294,12 +2294,14 @@ button.artifact-chat-pill,
   min-height: 48px;
   max-height: 48px;
   padding: 0 12px 0 16px;
-  background: transparent;
-  border-bottom: none;
+  background: var(--artifact-bg, #2b2b2b);
+  border-bottom: 1px solid var(--artifact-border-subtle, rgba(255, 255, 255, 0.04));
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
+  z-index: 10;
 }
 
 .artifact-panel__header-left,
@@ -2374,6 +2376,7 @@ button.artifact-chat-pill,
   background: var(--artifact-bg);
   border-radius: 10px;
   padding: 3px;
+  margin: 6px 12px;
   gap: 2px;
 }
 
@@ -2419,6 +2422,7 @@ button.artifact-chat-pill,
 /* --- Panel Body --- */
 .artifact-panel__body {
   flex: 1;
+  min-height: 0; /* Critical: allows flex child to shrink below content size */
   overflow: hidden;
   position: relative;
 }
