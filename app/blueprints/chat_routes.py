@@ -396,7 +396,7 @@ def chat_stream():
     Returns Server-Sent Events (SSE) with reasoning and content chunks.
     At completion, processes content for artifacts and saves to history.
     """
-    from .utilities import stream_deepseek_response
+    from app.utilities import stream_deepseek_response
 
     user_id = None
     guest_mode = 'guest_id' in session and 'user' not in session
