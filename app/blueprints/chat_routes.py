@@ -846,10 +846,20 @@ def chat_stream():
                                     )
                                     if persisted:
                                         logger.info(f"✅ Stream artifact persisted: {persisted.get('artifactId')}")
-                                        # Update artifact_data with persisted IDs
+                                        # Update artifact_data with persisted IDs and version info
                                         artifact_data['artifactId'] = persisted.get('artifactId', artifact_data.get('artifactId'))
+                                        artifact_data['title'] = persisted.get('title', artifact_data.get('title'))
                                         if persisted.get('activeVersion'):
                                             artifact_data['activeVersion']['versionId'] = persisted['activeVersion'].get('versionId')
+                                            artifact_data['activeVersion']['versionNumber'] = persisted['activeVersion'].get('versionNumber', 1)
+                                        # Update versions array with all versions
+                                        version_count = persisted.get('versionCount', 1)
+                                        artifact_data['versionCount'] = version_count
+                                        if persisted.get('activeVersion'):
+                                            artifact_data['versions'] = [{
+                                                'versionId': persisted['activeVersion'].get('versionId'),
+                                                'versionNumber': persisted['activeVersion'].get('versionNumber', version_count)
+                                            }]
 
                                         artifact_ref = {
                                             'artifactId': persisted.get('artifactId'),

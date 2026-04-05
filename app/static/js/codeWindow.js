@@ -3063,6 +3063,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         title: streamArtifact.title,
                         type: streamArtifact.type,
                         primaryLanguage: streamArtifact.primaryLanguage,
+                        versionNumber: streamArtifact.activeVersion?.versionNumber || streamArtifact.versionCount || 1,
                         summary: displayContent
                     };
                 }
