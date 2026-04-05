@@ -3111,6 +3111,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 }
 
                 // Handle artifact panel update — check for patches first, then streaming, then normal
+                console.log('[DONE] artifact_patches:', streamArtifactPatches, 'artifactStreamActive:', artifactStreamActive, 'hasArtifact:', !!streamArtifact);
                 if (streamArtifact && window.artifactPanel) {
                     const artifactRef = streamArtifactRef || {
                         artifactId: streamArtifact.artifactId,
