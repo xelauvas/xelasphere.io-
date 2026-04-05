@@ -295,7 +295,7 @@ def more_options():
         if 'user' in session:
             user_id = session['user']['uid']
             user_preferences = fetch_user_preferences(user_id)
-        num_tasks = 3
+        num_tasks = 6
         options = task_generator.generate_task_options(
             user_history=user_history, num_tasks=num_tasks, force_new_tasks=True,
         )
