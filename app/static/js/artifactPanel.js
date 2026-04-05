@@ -1400,17 +1400,18 @@ ${escapeHtml(entry.content || '')}
                     pre.appendChild(code);
                     container.appendChild(pre);
                     previewSection.appendChild(container);
+
+                    // Bind scroll detection once on creation
+                    container.addEventListener('scroll', () => {
+                        if (!this.isStreaming) return;
+                        const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 30;
+                        this.streamingAutoScroll = atBottom;
+                    });
                 } else {
                     container.querySelector('code').textContent = '';
                 }
                 container.style.display = '';
                 this.streamingCodeContainer = container.querySelector('code');
-
-                container.addEventListener('scroll', () => {
-                    if (!this.isStreaming) return;
-                    const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 30;
-                    this.streamingAutoScroll = atBottom;
-                });
             }
 
             this.panel.classList.add('is-open', 'is-streaming');
