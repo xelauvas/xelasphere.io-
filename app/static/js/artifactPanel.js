@@ -1385,6 +1385,7 @@ ${escapeHtml(entry.content || '')}
             this._contentFound = false;
             this._contentStart = 0;
             this._detectedLang = null;
+            this._detectedPath = null;
 
             if (this.titleEl) {
                 this.titleEl.textContent = 'Generating...';
@@ -1428,13 +1429,21 @@ ${escapeHtml(entry.content || '')}
             this._streamBuffer += text;
 
             if (!this._contentFound) {
-                // Try to detect language from the JSON before "content"
+                // Try to detect language and filename from the JSON before "content"
                 if (!this._detectedLang) {
                     const langMatch = this._streamBuffer.match(/"language"\s*:\s*"(\w+)"/);
                     if (langMatch) {
                         this._detectedLang = langMatch[1];
                         const prismLang = this._detectedLang === 'jsx' ? 'javascript' : this._detectedLang;
                         this.codeBlock.className = `language-${prismLang}`;
+                    }
+                }
+                if (!this._detectedPath) {
+                    const pathMatch = this._streamBuffer.match(/"path"\s*:\s*"([^"]+)"/);
+                    if (pathMatch) {
+                        this._detectedPath = pathMatch[1];
+                        if (this.currentFileName) this.currentFileName.textContent = this._detectedPath;
+                        if (this.fileSelect) this.fileSelect.innerHTML = `<option>${this._detectedPath}</option>`;
                     }
                 }
 
@@ -1445,9 +1454,25 @@ ${escapeHtml(entry.content || '')}
                 }
             }
 
-            // Re-render the full content from buffer each time (handles split escapes)
+            // Re-render from buffer — only show the FIRST file's content
             if (this._contentFound) {
-                const rawContent = this._streamBuffer.slice(this._contentStart);
+                let rawContent = this._streamBuffer.slice(this._contentStart);
+
+                // Try to find where the first file's content string ends
+                // The JSON content value ends with an unescaped " followed by }, or ], etc.
+                // Look for patterns like: "},{"path": or "}]} which signal end of content
+                const endPatterns = [
+                    /(?<!\\)"\s*}\s*,\s*\{\s*"path"/,  // "},{"path" — next file starts
+                    /(?<!\\)"\s*}\s*\]\s*}/,             // "}]} — files array ends
+                ];
+                for (const pattern of endPatterns) {
+                    const endMatch = rawContent.match(pattern);
+                    if (endMatch) {
+                        rawContent = rawContent.slice(0, endMatch.index);
+                        break;
+                    }
+                }
+
                 this.codeBlock.textContent = this._unescapeJsonString(rawContent);
             }
 
