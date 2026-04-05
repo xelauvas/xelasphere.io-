@@ -4,6 +4,24 @@
  */
 
 /* ==================== */
+/* CLAUDE-STYLE COLOR TOKENS */
+/* ==================== */
+
+.artifact-panel,
+.artifact-chat-pill {
+  --artifact-bg: #2b2b2b;
+  --artifact-bg-elevated: #333333;
+  --artifact-border: rgba(255, 255, 255, 0.06);
+  --artifact-border-subtle: rgba(255, 255, 255, 0.04);
+  --artifact-text: rgba(255, 255, 255, 0.88);
+  --artifact-muted: rgba(255, 255, 255, 0.5);
+  --artifact-hover: rgba(255, 255, 255, 0.05);
+  --artifact-active: rgba(255, 255, 255, 0.08);
+  --artifact-accent: #7c6fe0;
+  --artifact-shadow: rgba(0, 0, 0, 0.25);
+}
+
+/* ==================== */
 /* ARTIFACT PANEL - MAIN CONTAINER */
 /* Design spec: Deep charcoal, 45-55% viewport, rounded corners */
 /* ==================== */
@@ -16,16 +34,16 @@
   width: var(--artifact-panel-width, 50vw);
   min-width: 320px;
   max-width: 55vw;
-  background: var(--background-dark, #212121);
-  border-left: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.08));
-  border-radius: var(--artifact-panel-radius, 12px) 0 0 var(--artifact-panel-radius, 12px);
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4);
+  background: var(--artifact-bg);
+  border-left: 1px solid var(--artifact-border);
+  border-radius: 12px 0 0 12px;
+  box-shadow: -8px 0 32px var(--artifact-shadow);
   transform: translateX(100%);
   opacity: 0;
   transition:
-    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.25s ease;
+    transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.3s ease;
   z-index: var(--z-fixed);
   display: flex;
   flex-direction: column;
@@ -36,13 +54,13 @@
 .artifact-panel.is-open {
   transform: translateX(0);
   opacity: 1;
-  box-shadow: -12px 0 48px rgba(0, 0, 0, 0.5);
+  box-shadow: -12px 0 48px var(--artifact-shadow);
 }
 
 .artifact-panel[aria-hidden="false"] {
   transform: translateX(0);
   opacity: 1;
-  box-shadow: -12px 0 48px rgba(0, 0, 0, 0.5);
+  box-shadow: -12px 0 48px var(--artifact-shadow);
 }
 
 body.artifact-panel-open {
