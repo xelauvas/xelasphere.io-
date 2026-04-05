@@ -3120,6 +3120,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         summary: displayContent
                     };
                     // If patches are available, show visual diff animation first
+                    console.log('[PATCH] Check:', { hasPatches: !!streamArtifactPatches, patches: streamArtifactPatches, hasMethod: !!window.artifactPanel.applyPatchesVisually });
                     if (streamArtifactPatches && streamArtifactPatches.patches && window.artifactPanel.applyPatchesVisually) {
                         window.artifactPanel.applyPatchesVisually(
                             streamArtifactPatches.patches,
