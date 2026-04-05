@@ -235,7 +235,7 @@ body.artifact-panel-resizing .chat-container {
 }
 
 /* ==================== */
-/* RESIZE HANDLE */
+/* RESIZE HANDLE — Subtle */
 /* ==================== */
 
 .artifact-panel__resize-handle {
@@ -249,15 +249,15 @@ body.artifact-panel-resizing .chat-container {
   z-index: 9999;
   user-select: none;
   -webkit-user-select: none;
-  transition: background 0.2s ease;
+  transition: background 0.12s ease;
 }
 
 .artifact-panel__resize-handle:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .artifact-panel__resize-handle:active {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .artifact-panel.is-open .artifact-panel__resize-handle {
@@ -275,28 +275,31 @@ body.artifact-panel-resizing .chat-container {
   cursor: ew-resize;
 }
 
-/* Visible grip handle indicator */
+/* Visible grip indicator */
 .artifact-panel__resize-handle::after {
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 4px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.2);
+  width: 3px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
-  transition: background 0.2s ease, height 0.2s ease;
+  transition: background 0.12s ease, height 0.12s ease, opacity 0.12s ease;
+  opacity: 0;
 }
 
 .artifact-panel__resize-handle:hover::after {
-  background: rgba(255, 255, 255, 0.2);
-  height: 60px;
+  background: rgba(255, 255, 255, 0.15);
+  height: 48px;
+  opacity: 1;
 }
 
 .artifact-panel__resize-handle:active::after {
-  background: rgba(255, 255, 255, 0.5);
-  height: 80px;
+  background: rgba(255, 255, 255, 0.3);
+  height: 64px;
+  opacity: 1;
 }
 
 /* ==================== */
@@ -2557,4 +2560,53 @@ button.artifact-chat-pill,
   .artifact-panel__tab-toggle {
     margin: 4px auto 8px;
   }
+}
+
+/* ==================== */
+/* CONTENT AREA — Claude Spacing */
+/* ==================== */
+
+.artifact-panel__content {
+  padding: 20px;
+}
+
+.artifact-panel__preview-frame {
+  border-radius: 8px;
+  border: 1px solid var(--artifact-border-subtle);
+}
+
+/* Code viewer background */
+.artifact-panel__code-viewer pre,
+.artifact-panel__code-viewer code {
+  background: #1e1e1e;
+  border-radius: 8px;
+}
+
+/* File tree items */
+.artifact-file-node {
+  height: 32px;
+  padding-left: 12px;
+  transition: background 0.12s ease;
+}
+
+.artifact-file-node:hover {
+  background: var(--artifact-hover);
+}
+
+/* Scrollbar styling */
+.artifact-panel ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.artifact-panel ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.artifact-panel ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.artifact-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
