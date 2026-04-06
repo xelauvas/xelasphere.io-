@@ -1355,10 +1355,10 @@ body.artifact-panel-resizing .chat-container {
 .artifact-editor__codemirror .CodeMirror,
 #artifact-edit-codemirror .CodeMirror {
   height: 100%;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  background: var(--code-bg);
-  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
 }
 
 /* CodeMirror in Code tab */
@@ -1368,7 +1368,24 @@ body.artifact-panel-resizing .chat-container {
 }
 
 #artifact-edit-codemirror .CodeMirror {
-  border-top: 1px solid var(--border-primary);
+  border-top: none;
+}
+
+#artifact-edit-codemirror .CodeMirror-gutters {
+  background: transparent;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#artifact-edit-codemirror .CodeMirror-linenumber {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+#artifact-edit-codemirror .CodeMirror-activeline-background {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+#artifact-edit-codemirror .CodeMirror-cursor {
+  border-left: 1.5px solid rgba(255, 255, 255, 0.7);
 }
 
 /* Code viewer layout - no absolute positioning */
@@ -1402,7 +1419,6 @@ body.artifact-panel-resizing .chat-container {
 #artifact-edit-codemirror {
   flex: 1;
   overflow: hidden;
-  display: none;
 }
 
 #artifact-edit-codemirror .CodeMirror {
