@@ -960,8 +960,8 @@ body.artifact-panel-resizing .chat-container {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-3) var(--space-4);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-primary);
+  background: transparent;
+  border-bottom: 1px solid var(--artifact-border-subtle, rgba(255, 255, 255, 0.04));
 }
 
 .artifact-code__file-name {
