@@ -856,50 +856,41 @@ body.artifact-panel-resizing .chat-container {
 .artifact-file-select-wrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 180px;
-  max-width: 320px;
-}
-
-.artifact-file-select-wrapper > i {
-  color: var(--artifact-muted, rgba(255, 255, 255, 0.62));
-  font-size: 14px;
+  min-width: 120px;
+  max-width: 280px;
 }
 
 .artifact-file-select {
   flex: 1;
-  padding: 8px 32px 8px 12px;
-  font-size: 13px;
+  padding: 4px 24px 4px 10px;
+  font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-weight: 500;
-  color: var(--artifact-text, rgba(255, 255, 255, 0.92));
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 10px center;
-  transition: all 150ms ease;
+  background-position: right 6px center;
+  transition: color 0.15s ease;
 }
 
 .artifact-file-select:hover {
-  background-color: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .artifact-file-select:focus {
   outline: none;
-  border-color: var(--artifact-accent, rgba(255, 255, 255, 0.3));
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
 }
 
 .artifact-file-select option {
-  background: #212121;
-  color: rgba(255, 255, 255, 0.92);
-  padding: 8px;
+  background: #1e1e1e;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 6px;
 }
 
 /* Hide the old tree sidebar */
