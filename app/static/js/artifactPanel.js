@@ -1601,101 +1601,70 @@ ${escapeHtml(entry.content || '')}
             }
         }
 
-        async applyPatchesVisually(patches, patchResults, finalArtifact, { sessionId = null, reference = null } = {}) {
-            if (!patches || !patches.length || !this.codeBlock) {
-                if (finalArtifact) this.openArtifact(finalArtifact, { sessionId, reference });
-                return;
-            }
+        applyPatchesVisually(patches, patchResults, finalArtifact, { sessionId = null, reference = null } = {}) {
+            // MVP: open the patched artifact, switch to code tab,
+            // highlight changed regions with a pulse, then switch to preview.
+            // "Make change visible, not theatrical."
 
-            // Panel should already be open with the current artifact.
-            // If not, open it with the final artifact directly.
-            const files = this.currentVersion?.files;
-            if (!files || !files.length) {
-                if (finalArtifact) this.openArtifact(finalArtifact, { sessionId, reference });
-                return;
-            }
+            if (!finalArtifact) return;
 
-            // Switch to code tab to show the patching
+            // Count applied patches for the summary
+            const applied = patches.filter((p, i) => !patchResults?.[i] || patchResults[i].status === 'applied');
+            const failed = patches.length - applied.length;
+
+            // Open the PATCHED artifact (already has the changes applied by backend)
+            this.openArtifact(finalArtifact, { sessionId, reference });
+
+            // Switch to code tab to show the changes
             this.activeTab = 'code';
             this.switchTab('code');
 
-            // Update title to indicate patching
+            // Update title with patch summary
             if (this.titleEl) {
-                this.titleEl.textContent = 'Applying changes...';
+                const summary = failed > 0
+                    ? `Updated (${applied.length} changes, ${failed} failed)`
+                    : `Updated (${applied.length} change${applied.length !== 1 ? 's' : ''})`;
+                this.titleEl.textContent = summary;
             }
 
-            // Build file content map from current version
-            const fileContentMap = {};
-            for (const f of files) {
-                fileContentMap[f.path] = f.content || '';
-            }
+            // Highlight changed regions in the code
+            if (this.codeBlock && applied.length > 0) {
+                const code = this.codeBlock.textContent || '';
+                let html = this._escapeHtml(code);
 
-            // Group patches by file
-            const patchesByFile = new Map();
-            for (let i = 0; i < patches.length; i++) {
-                const patch = patches[i];
-                const result = patchResults && patchResults[i];
-                if (result && result.status !== 'applied') continue;
-                if (!patchesByFile.has(patch.file)) patchesByFile.set(patch.file, []);
-                patchesByFile.get(patch.file).push(patch);
-            }
-
-            if (patchesByFile.size === 0) {
-                // No applicable patches — just open the result
-                if (finalArtifact) this.openArtifact(finalArtifact, { sessionId, reference });
-                return;
-            }
-
-            const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-            for (const [fileName, filePatches] of patchesByFile) {
-                const fileIndex = files.findIndex(f => f.path === fileName);
-                if (fileIndex === -1) continue;
-
-                // Switch to the target file
-                if (this.fileSelect) this.fileSelect.value = String(fileIndex);
-                this.renderCodeViewer(this.currentVersion, files[fileIndex]);
-                await delay(400);
-
-                let workingCode = fileContentMap[fileName] || '';
-
-                for (const patch of filePatches) {
-                    const oldStr = patch.old_string;
+                // Find and highlight each new_string in the patched code
+                for (const patch of applied) {
                     const newStr = patch.new_string;
-                    const idx = workingCode.indexOf(oldStr);
-                    if (idx === -1) continue;
-
-                    // Show old_string highlighted in red
-                    this.codeBlock.innerHTML =
-                        this._escapeHtml(workingCode.slice(0, idx)) +
-                        '<span class="patch-remove">' + this._escapeHtml(oldStr) + '</span>' +
-                        this._escapeHtml(workingCode.slice(idx + oldStr.length));
-
-                    const removeEl = this.codeBlock.querySelector('.patch-remove');
-                    if (removeEl) this._scrollToElement(removeEl);
-                    await delay(1200);
-
-                    // Replace with new_string in green
-                    workingCode = workingCode.slice(0, idx) + newStr + workingCode.slice(idx + oldStr.length);
-                    this.codeBlock.innerHTML =
-                        this._escapeHtml(workingCode.slice(0, idx)) +
-                        '<span class="patch-add">' + this._escapeHtml(newStr) + '</span>' +
-                        this._escapeHtml(workingCode.slice(idx + newStr.length));
-
-                    const addEl = this.codeBlock.querySelector('.patch-add');
-                    if (addEl) this._scrollToElement(addEl);
-                    await delay(1200);
+                    if (!newStr) continue;
+                    const escaped = this._escapeHtml(newStr);
+                    const idx = html.indexOf(escaped);
+                    if (idx !== -1) {
+                        html = html.slice(0, idx) +
+                            '<mark class="patch-highlight">' + escaped + '</mark>' +
+                            html.slice(idx + escaped.length);
+                    }
                 }
+                this.codeBlock.innerHTML = html;
 
-                fileContentMap[fileName] = workingCode;
+                // Scroll to first highlighted region
+                const firstMark = this.codeBlock.querySelector('.patch-highlight');
+                if (firstMark) this._scrollToElement(firstMark);
             }
 
-            await delay(800);
-
-            // Show the final patched artifact in preview
-            if (finalArtifact) {
-                this.openArtifact(finalArtifact, { sessionId, reference });
-            }
+            // After 2.5s, switch to preview and restore title
+            setTimeout(() => {
+                // Remove highlights
+                if (this.codeBlock) {
+                    this.codeBlock.querySelectorAll('.patch-highlight').forEach(el => {
+                        el.replaceWith(document.createTextNode(el.textContent));
+                    });
+                }
+                this.activeTab = 'preview';
+                this.switchTab('preview');
+                if (this.titleEl && finalArtifact.title) {
+                    this.titleEl.textContent = finalArtifact.title;
+                }
+            }, 2500);
         }
 
         _scrollToElement(el) {
