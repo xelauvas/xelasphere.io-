@@ -2300,17 +2300,19 @@ button.artifact-chat-pill,
   z-index: 10;
 }
 
-.artifact-panel__header-left,
-.artifact-panel__header-right {
-  display: none; /* Remove old header groups */
-}
-
 .artifact-panel__header-left {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   flex: 1;
+}
+
+.artifact-panel__header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .artifact-panel__version-badge {
