@@ -193,6 +193,7 @@ class SandboxManager:
                             if vnc_bind:
                                 info.vnc_port = int(vnc_bind[0]['HostPort'])
                                 event['url'] = f'/api/sandbox/vnc/{info.container_id}/'
+                                event['vnc_port'] = info.vnc_port
 
                         yield event
                         continue

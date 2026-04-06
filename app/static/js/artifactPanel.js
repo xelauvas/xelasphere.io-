@@ -2305,9 +2305,10 @@ window.addEventListener('load', function() {
                                 this.activeTab = 'preview';
                                 this.switchTab('preview');
                             }
-                            else if (event.type === 'vnc' && event.url) {
+                            else if (event.type === 'vnc' && event.vnc_port) {
                                 append('GUI running! Loading display...\n', 'repl-prompt');
-                                this.previewFrame.src = event.url + 'vnc_lite.html?autoconnect=true&resize=scale&reconnect=true';
+                                // Route through nginx which handles WebSocket upgrade
+                                this.previewFrame.src = '/sandbox-vnc/' + event.vnc_port + '/vnc_lite.html?autoconnect=true&resize=scale';
                                 this.activeTab = 'preview';
                                 this.switchTab('preview');
                             }
