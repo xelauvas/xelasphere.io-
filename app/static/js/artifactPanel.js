@@ -2301,13 +2301,15 @@ window.addEventListener('load', function() {
                             else if (event.type === 'error') append('Error: ' + event.text + '\n', 'stderr');
                             else if (event.type === 'app' && event.url) {
                                 append('App running!\n', 'repl-prompt');
+                                this.previewFrame.removeAttribute('srcdoc');
                                 this.previewFrame.src = event.url;
                                 this.activeTab = 'preview';
                                 this.switchTab('preview');
                             }
                             else if (event.type === 'vnc' && event.vnc_port) {
                                 append('GUI running! Loading display...\n', 'repl-prompt');
-                                // Route through nginx which handles WebSocket upgrade
+                                // Clear srcdoc first — srcdoc takes priority over src in browsers
+                                this.previewFrame.removeAttribute('srcdoc');
                                 this.previewFrame.src = '/sandbox-vnc/' + event.vnc_port + '/vnc_lite.html?autoconnect=true&resize=scale';
                                 this.activeTab = 'preview';
                                 this.switchTab('preview');
