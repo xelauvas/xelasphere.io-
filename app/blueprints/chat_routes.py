@@ -1317,10 +1317,8 @@ def chat():
                 )
             except Exception:
                 pass
-            # Cap messages in memory — only recent ones are needed for context
-            if len(previous_messages) > 20:
-                logger.debug(f"Trimming {len(previous_messages)} messages to last 20")
-                previous_messages = previous_messages[-20:]
+            # Smart Context: load full history (Context Builder handles compression)
+            logger.debug(f"Loaded {len(previous_messages)} messages (full history for Context Builder)")
 
         # Check if user requests an image (now with chat history for better accuracy)
         if is_image_request(user_prompt, previous_messages):
@@ -1562,18 +1560,6 @@ def chat():
             prompt_max_tokens = 16000 if extracted_text else MAX_TOKENS
             is_recipe_request = False  # Default, updated below if recipe intent detected
 
-            # Claude-inspired: Inject current artifact context when user asks to fix/update
-            artifact_context = None
-            if detect_artifact_update_intent(user_prompt):
-                logger.info(f"🔧 Artifact update intent detected: '{user_prompt[:50]}...'")
-                artifact_context = load_current_artifact_context(user_id, session_id)
-                if artifact_context:
-                    logger.info(f"📦 Injected {len(artifact_context)} chars of artifact context")
-                    # Increase token budget for artifact context
-                    prompt_max_tokens = max(prompt_max_tokens, 24000)
-                else:
-                    logger.debug("No active artifact found to inject")
-
             # Intent-based format enforcement for recipes
             # Classify intent and inject focused format reminder when recipe is detected
             user_intent = classify_user_intent(user_prompt)
@@ -1602,24 +1588,64 @@ def chat():
                 user_prompt = recipe_format_reminder + "User request: " + user_prompt
                 logger.info(f"🍳 Injected recipe format reminder for: {user_prompt[:80]}...")
 
-            full_prompt = build_prompt(
-                user_prompt=user_prompt,
-                extracted_text=extracted_text,
-                search_results=search_results,
-                previous_messages=prev_msgs_for_prompt,
-                user_prefs=user_preferences,
-                session_prefs=session_preferences,
-                session_summary=session_summary_text,
-                relevant_messages=relevant_msgs,
-                system_instructions=SYSTEM_INSTRUCTIONS,
-                developer_instructions=DEVELOPER_INSTRUCTIONS,
-                long_term_memory=long_term_memory,
-                pending_steps=pending_steps_list,
-                canonical_context=artifact_context,  # Claude-style artifact injection
-                encoding_name="cl100k_base",
-                max_tokens=prompt_max_tokens,
-                response_token_buffer=512
+            # --- Smart Context Window: build prompt via ContextBuilder ---
+            artifact_tracker = None
+            try:
+                store = artifact_store
+                artifacts_data = store.list_artifacts(user_id, session_id)
+                artifacts = artifacts_data.get('artifacts', [])
+                active = next((a for a in artifacts if a.get('isActive')), artifacts[0] if artifacts else None)
+                if active:
+                    full_art = store.get_artifact(user_id, session_id, active['artifactId'])
+                    if full_art and full_art.get('activeVersion'):
+                        version = full_art['activeVersion']
+                        files = version.get('files', [])
+                        artifact_tracker = get_tracker(
+                            session_id,
+                            active['artifactId'],
+                            version.get('versionId', ''),
+                        )
+                        artifact_tracker.sync_from_files(files, preserve_sent_hashes=True)
+            except Exception as e:
+                logger.warning(f"Failed to load artifact state: {e}")
+
+            should_inject_artifact = False
+            if artifact_tracker:
+                has_dirty = len(artifact_tracker.get_dirty_files()) > 0
+                last_action_was_patch = False
+                if prev_msgs_for_prompt:
+                    last_meta = prev_msgs_for_prompt[-1].get('turn_metadata', {})
+                    last_action_was_patch = last_meta.get('action_type') == 'patch_artifact'
+                should_inject_artifact = has_dirty or last_action_was_patch
+
+            from app.model_catalog import get_model_context_limit
+            model_context = get_model_context_limit(model)
+            context_builder = ContextBuilder(token_budget=model_context)
+
+            # Include extracted text, search results in user message
+            enriched_prompt = user_prompt
+            if extracted_text:
+                max_extract = min(len(extracted_text), 30000)
+                enriched_prompt = f"Uploaded file content:\n{extracted_text[:max_extract]}\n\nUser request: {enriched_prompt}"
+            if search_results:
+                search_parts = []
+                for r in search_results[:5]:
+                    search_parts.append(f"[{r.title}]({r.link})\n{r.snippet}")
+                search_text = "Web search results:\n" + "\n\n".join(search_parts)
+                enriched_prompt = f"{search_text}\n\n{enriched_prompt}"
+
+            built_context = context_builder.build(
+                system_prompt=SYSTEM_INSTRUCTIONS + "\n" + DEVELOPER_INSTRUCTIONS,
+                full_history=prev_msgs_for_prompt,
+                artifact_state=artifact_tracker if should_inject_artifact else None,
+                user_message=enriched_prompt,
+                memory_context=long_term_memory or None,
             )
+            full_prompt = built_context.prompt
+            prompt_max_tokens = model_context
+            logger.info(f"Context built: {built_context.token_estimate} tokens, "
+                        f"level={built_context.compression_level}, "
+                        f"artifact_files={len(built_context.artifact_files)}")
         except TokenLimitError:
             logger.warning("Input exceeds maximum token limit.")
             return jsonify({'error': 'Input exceeds maximum token limit.'}), 400
@@ -1793,6 +1819,7 @@ def chat():
 
         # Strip HTML tags that some models (like Llama) may output despite instructions
         raw_model_response = strip_html_from_response(raw_model_response)
+        parsed_action = None
 
         if not raw_model_response.strip():
             logger.error(f"AI model returned an empty response for user {user_id}.")
@@ -1826,12 +1853,35 @@ def chat():
         except Exception as e:
             logger.debug(f"Response validation failed: {e}")
 
-        structured_response = parse_structured_response(raw_model_response)
-        routing_decision = artifact_router.route(
-            structured_response,
-            user_prompt,
-            provider_flagged_code=provider_flagged_code
-        )
+        parsed_action = ActionParser.parse(raw_model_response)
+        logger.info(f"ActionParser: action={parsed_action.action}, "
+                     f"has_artifact={parsed_action.artifact_payload is not None}, "
+                     f"has_patch={parsed_action.patch_payload is not None}, "
+                     f"fallback={parsed_action.used_fallback}")
+
+        if parsed_action.action == "create_artifact" and parsed_action.artifact_payload:
+            routing_decision = ArtifactDecision(
+                render_mode="artifact",
+                chat_payload=parsed_action.chat_text,
+                artifact_payload=parsed_action.artifact_payload,
+                contains_code=True,
+                desired_action=ArtifactPreference.UPDATE,
+            )
+        elif parsed_action.action == "patch_artifact" and parsed_action.patch_payload:
+            routing_decision = ArtifactDecision(
+                render_mode="artifact_patch",
+                chat_payload=parsed_action.chat_text,
+                artifact_payload=parsed_action.patch_payload,
+                contains_code=True,
+                desired_action=ArtifactPreference.UPDATE,
+            )
+        else:
+            structured_response = parse_structured_response(raw_model_response)
+            routing_decision = artifact_router.route(
+                structured_response,
+                user_prompt,
+                provider_flagged_code=provider_flagged_code,
+            )
         # Determine response text based on render mode
         chat_payload = routing_decision.chat_payload or ""
         remainder = structured_response.remainder or ""
@@ -1938,6 +1988,9 @@ def chat():
                         contains_code=True,
                         desired_action=ArtifactPreference.UPDATE,
                     )
+                    if applied_count > 0 and artifact_tracker:
+                        for pf in patched_files:
+                            artifact_tracker.mark_mutated(pf['path'], pf.get('content', ''))
                 else:
                     # All patches failed — clear payload so no broken artifact gets created
                     routing_decision = ArtifactDecision(
@@ -2033,6 +2086,28 @@ def chat():
             else:
                 title = session_data.get('session_name') or "Offline Session"
 
+            # Build turn metadata for Smart Context
+            chat_action_type = parsed_action.action if parsed_action is not None else "chat"
+            chat_had_error = getattr(routing_decision, 'error_message', None) is not None
+            chat_art_mutation = None
+            if artifact_reference:
+                chat_art_mutation = {
+                    "artifact_id": artifact_reference.get('artifactId'),
+                    "from_version": None,
+                    "to_version": artifact_reference.get('versionId'),
+                    "files_changed": [f.get('path', '') for f in
+                                      (routing_decision.artifact_payload or {}).get('files', [])],
+                }
+            chat_turn_metadata = extract_turn_metadata(
+                turn_number=len(previous_messages) + 1,
+                user_message=user_prompt,
+                action_type=chat_action_type,
+                had_error=chat_had_error,
+                artifact_mutation=chat_art_mutation,
+                error_detail=getattr(routing_decision, 'error_message', None),
+                model=selected_model_id or model,
+            )
+
             # Save this interaction (offline cache if persistence fails)
             chat_data, persisted = save_interaction(
                 user_id=user_id,
@@ -2053,6 +2128,7 @@ def chat():
                 model_id=selected_model_id or model,
                 task_type=selected_task_type,
                 auto_selected=bool(smart_routing_enabled) or (session.get('selected_model') == AUTO_MODEL),
+                turn_metadata=chat_turn_metadata,
             )
             if artifact_payload and not persisted:
                 chat_data['artifact_draft'] = artifact_payload
