@@ -666,12 +666,13 @@
             <!-- Resize Handle -->
             <div id="artifact-panel-resize" class="artifact-panel__resize-handle" aria-hidden="true"></div>
 
-            <!-- Unified Header: Title | Tabs | Actions -->
+            <!-- Header: Tabs left | Close right -->
             <header class="artifact-panel__header">
-                <div class="artifact-panel__header-left"></div>
-                <div class="artifact-panel__tab-toggle">
-                    <button data-artifact-tab="preview" class="artifact-panel__tab-btn is-active" role="tab" aria-selected="true" aria-controls="artifact-preview-panel">Preview</button>
-                    <button data-artifact-tab="code" class="artifact-panel__tab-btn" role="tab" aria-selected="false" aria-controls="artifact-code-panel">Code</button>
+                <div class="artifact-panel__header-left">
+                    <div class="artifact-panel__tab-toggle">
+                        <button data-artifact-tab="preview" class="artifact-panel__tab-btn is-active" role="tab" aria-selected="true" aria-controls="artifact-preview-panel">Preview</button>
+                        <button data-artifact-tab="code" class="artifact-panel__tab-btn" role="tab" aria-selected="false" aria-controls="artifact-code-panel">Code</button>
+                    </div>
                 </div>
                 <div class="artifact-panel__header-right">
                     <button id="artifact-publish-btn" class="artifact-panel__header-action" type="button">Publish</button>
