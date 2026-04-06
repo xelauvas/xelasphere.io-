@@ -840,12 +840,19 @@ async function loadPackagesFor(code) {
     var match, detected = new Set();
     while ((match = importRe.exec(code)) !== null) detected.add(match[1]);
 
-    // Warn about unsupported packages
+    // Check for unsupported packages — block execution if found
+    var blocked = [];
     for (var u of UNSUPPORTED) {
         if (detected.has(u)) {
-            appendOutput('Warning: ' + u + ' is not available in browser Python\\n', 'stderr');
+            blocked.push(u);
             detected.delete(u);
         }
+    }
+    if (blocked.length > 0) {
+        appendOutput('Cannot run: ' + blocked.join(', ') + ' not available in browser Python.\\n', 'stderr');
+        appendOutput('These packages require native OS access and cannot run in WebAssembly.\\n', 'stderr');
+        appendOutput('Tip: Use the REPL below for packages that work in the browser.\\n\\n', 'repl-prompt');
+        return false;
     }
 
     // Load built-in Pyodide packages
@@ -901,6 +908,7 @@ async function loadPackagesFor(code) {
             '_plt.show = _inline_show'
         );
     }
+    return true;
 }
 
 async function runScript() {
@@ -917,8 +925,13 @@ async function runScript() {
 
     appendOutput('--- Running ${entryName.replace(/'/g, "\\'")} ---\\n', 'repl-prompt');
 
+    var canRun = await loadPackagesFor(code);
+    if (canRun === false) {
+        document.getElementById('repl-input').focus();
+        return;
+    }
+
     try {
-        await loadPackagesFor(code);
         await py.runPythonAsync(code);
     } catch (err) {
         appendOutput(err.message || String(err), 'stderr');
