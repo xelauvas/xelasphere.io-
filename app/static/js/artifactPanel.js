@@ -783,6 +783,10 @@ ${escapeHtml(entry.content || '')}
             this._streamBuffer = '';
             this._contentFound = false;
 
+            // Live patch streaming state
+            this.isPatchStreaming = false;
+            this._patchQueue = Promise.resolve();
+
             // Edit state
             this.editingFile = null;
             this.editedFiles = new Map();  // Track edited file contents
@@ -1313,7 +1317,7 @@ ${escapeHtml(entry.content || '')}
             }
         }
 
-        openArtifact(artifact, { sessionId = null, reference = null } = {}) {
+        openArtifact(artifact, { sessionId = null, reference = null, initialTab = 'preview' } = {}) {
             if (!artifact) return;
             this.currentArtifact = artifact;
             this.currentSessionId = sessionId || this.currentSessionId;
@@ -1334,8 +1338,8 @@ ${escapeHtml(entry.content || '')}
             if (this.currentVersion) {
                 this.renderVersion(this.currentVersion);
             }
-            this.activeTab = 'preview';
-            this.switchTab('preview');
+            this.activeTab = initialTab;
+            this.switchTab(initialTab);
             this.panel.classList.add('is-open');
             this.panel.setAttribute('aria-hidden', 'false');
             document.body.classList.add('artifact-panel-open');
@@ -1602,24 +1606,19 @@ ${escapeHtml(entry.content || '')}
         }
 
         applyPatchesVisually(patches, patchResults, finalArtifact, { sessionId = null, reference = null } = {}) {
-            // MVP: open the patched artifact, switch to code tab,
-            // highlight changed regions with a pulse, then switch to preview.
+            // Open patched artifact on code tab, highlight changed regions,
+            // scroll to first change, then transition to preview.
             // "Make change visible, not theatrical."
-
             if (!finalArtifact) return;
 
-            // Count applied patches for the summary
             const applied = patches.filter((p, i) => !patchResults?.[i] || patchResults[i].status === 'applied');
             const failed = patches.length - applied.length;
 
-            // Open the PATCHED artifact (already has the changes applied by backend)
-            this.openArtifact(finalArtifact, { sessionId, reference });
-
-            // Switch to code tab to show the changes
-            this.activeTab = 'code';
-            this.switchTab('code');
+            // Open directly on code tab — no flash from preview→code switch
+            this.openArtifact(finalArtifact, { sessionId, reference, initialTab: 'code' });
 
             // Update title with patch summary
+            const savedTitle = finalArtifact.title;
             if (this.titleEl) {
                 const summary = failed > 0
                     ? `Updated (${applied.length} changes, ${failed} failed)`
@@ -1627,44 +1626,235 @@ ${escapeHtml(entry.content || '')}
                 this.titleEl.textContent = summary;
             }
 
-            // Highlight changed regions in the code
-            if (this.codeBlock && applied.length > 0) {
-                const code = this.codeBlock.textContent || '';
-                let html = this._escapeHtml(code);
-
-                // Find and highlight each new_string in the patched code
-                for (const patch of applied) {
-                    const newStr = patch.new_string;
-                    if (!newStr) continue;
-                    const escaped = this._escapeHtml(newStr);
-                    const idx = html.indexOf(escaped);
-                    if (idx !== -1) {
-                        html = html.slice(0, idx) +
-                            '<mark class="patch-highlight">' + escaped + '</mark>' +
-                            html.slice(idx + escaped.length);
+            // Highlight changed regions — switch to the patched file first
+            if (this.codeBlock && applied.length > 0 && this.currentVersion?.files) {
+                // Find which file was patched (use first applied patch's target)
+                const patchedFileName = applied[0].file;
+                const patchedFile = this.currentVersion.files.find(f => f.path === patchedFileName);
+                if (patchedFile && this.currentFile?.path !== patchedFileName) {
+                    this.renderCodeViewer(this.currentVersion, patchedFile);
+                    // Update file dropdown to match
+                    if (this.fileSelect) {
+                        const idx = this.currentVersion.files.indexOf(patchedFile);
+                        if (idx >= 0) this.fileSelect.value = String(idx);
                     }
                 }
-                this.codeBlock.innerHTML = html;
 
-                // Scroll to first highlighted region
-                const firstMark = this.codeBlock.querySelector('.patch-highlight');
-                if (firstMark) this._scrollToElement(firstMark);
+                // Wait two frames for Prism to finish highlighting
+                requestAnimationFrame(() => { requestAnimationFrame(() => {
+                    for (const patch of applied) {
+                        if (!patch.new_string) continue;
+                        // If patch targets a different file than currently shown, skip
+                        if (patch.file !== this.currentFile?.path) continue;
+                        this._highlightTextInElement(this.codeBlock, patch.new_string);
+                    }
+                    const firstMark = this.codeBlock.querySelector('.patch-highlight');
+                    if (firstMark) this._scrollToElement(firstMark);
+                }); });
             }
 
-            // After 2.5s, switch to preview and restore title
+            // After 3s, fade highlights and switch to preview
             setTimeout(() => {
-                // Remove highlights
                 if (this.codeBlock) {
                     this.codeBlock.querySelectorAll('.patch-highlight').forEach(el => {
-                        el.replaceWith(document.createTextNode(el.textContent));
+                        el.classList.add('patch-highlight-fade');
                     });
                 }
-                this.activeTab = 'preview';
-                this.switchTab('preview');
-                if (this.titleEl && finalArtifact.title) {
-                    this.titleEl.textContent = finalArtifact.title;
+                // Remove marks and switch tab after fade completes
+                setTimeout(() => {
+                    if (this.codeBlock) {
+                        this.codeBlock.querySelectorAll('.patch-highlight').forEach(el => {
+                            const parent = el.parentNode;
+                            while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                            parent.removeChild(el);
+                        });
+                    }
+                    this.activeTab = 'preview';
+                    this.switchTab('preview');
+                    if (this.titleEl && savedTitle) {
+                        this.titleEl.textContent = savedTitle;
+                    }
+                }, 400);
+            }, 3000);
+        }
+
+        openPatchStreaming() {
+            if (!this.currentVersion || !this.codeBlock) return;
+
+            this.isPatchStreaming = true;
+            this._patchQueue = Promise.resolve();
+
+            // Switch to code tab showing current (pre-patch) code
+            this.activeTab = 'code';
+            this.switchTab('code');
+
+            if (this.titleEl) {
+                this.titleEl.textContent = 'Updating...';
+            }
+
+            // Ensure panel is open
+            if (!this.panel.classList.contains('is-open')) {
+                this.panel.classList.add('is-open');
+                this.panel.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('artifact-panel-open');
+                this.loadSavedSplit();
+                this.updateOffset(false);
+                this.adjustComposerWidth(true);
+            }
+        }
+
+        applyLivePatch(file, oldStr, newStr) {
+            if (!this.isPatchStreaming) return;
+            this._patchQueue = this._patchQueue.then(() => this._animatePatch(file, oldStr, newStr));
+        }
+
+        async _animatePatch(file, oldStr, newStr) {
+            if (!this.codeBlock) return;
+
+            // Switch to target file if needed
+            if (this.currentVersion?.files && this.currentFile?.path !== file) {
+                const targetFile = this.currentVersion.files.find(f => f.path === file);
+                if (targetFile) {
+                    this.renderCodeViewer(this.currentVersion, targetFile);
+                    if (this.fileSelect) {
+                        const idx = this.currentVersion.files.indexOf(targetFile);
+                        if (idx >= 0) this.fileSelect.value = String(idx);
+                    }
                 }
-            }, 2500);
+            }
+
+            // Wait a frame for render to settle
+            await new Promise(r => requestAnimationFrame(r));
+
+            const codeText = this.codeBlock.textContent || '';
+
+            // Normalize for matching (JSON may have literal \n)
+            let searchOld = oldStr;
+            if (!codeText.includes(searchOld)) {
+                searchOld = searchOld.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+            }
+            if (!codeText.includes(searchOld)) return; // can't find it, skip
+
+            // Highlight old code in red
+            this._highlightTextInElement(this.codeBlock, searchOld, 'patch-removing');
+            const removeMark = this.codeBlock.querySelector('.patch-removing');
+            if (removeMark) this._scrollToElement(removeMark);
+
+            // Pause so user sees the red highlight
+            await new Promise(r => setTimeout(r, 400));
+
+            // Replace with new code, switch to green
+            if (removeMark) {
+                removeMark.textContent = newStr;
+                removeMark.className = 'patch-added';
+            }
+
+            // Update in-memory file content so subsequent patches match correctly
+            if (this.currentFile) {
+                this.currentFile.content = (this.currentFile.content || '').replace(oldStr, newStr);
+            }
+
+            // Brief pause to show green before next patch
+            await new Promise(r => setTimeout(r, 300));
+        }
+
+        finalizePatchStreaming(artifact, { sessionId = null, reference = null } = {}) {
+            if (!this.isPatchStreaming) return;
+
+            // Wait for animation queue to drain, then switch to final artifact
+            this._patchQueue.then(() => {
+                this.isPatchStreaming = false;
+
+                // Brief pause to show last green highlight
+                setTimeout(() => {
+                    // Remove all patch marks
+                    if (this.codeBlock) {
+                        this.codeBlock.querySelectorAll('.patch-removing, .patch-added').forEach(el => {
+                            const parent = el.parentNode;
+                            while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                            parent.removeChild(el);
+                        });
+                    }
+
+                    // Open the server-patched artifact (authoritative) on Preview
+                    if (artifact) {
+                        this.openArtifact(artifact, { sessionId, reference });
+                    }
+                }, 500);
+            });
+        }
+
+        /**
+         * Highlight a substring within an element by wrapping matching text nodes
+         * in <mark> tags — preserves existing DOM structure (Prism spans, etc.)
+         */
+        _highlightTextInElement(root, searchStr, className = 'patch-highlight') {
+            if (!searchStr || !root) return;
+            const normalized = searchStr.replace(/\r\n/g, '\n');
+
+            // Collect all text nodes in order
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            const textNodes = [];
+            let node;
+            while ((node = walker.nextNode())) textNodes.push(node);
+
+            // Build concatenated text with node index mapping
+            let fullText = '';
+            const map = []; // map[charIndex] = { node, offset }
+            for (const tn of textNodes) {
+                const text = tn.nodeValue;
+                for (let i = 0; i < text.length; i++) {
+                    map.push({ node: tn, offset: i });
+                }
+                fullText += text;
+            }
+
+            // Find the substring in the concatenated text
+            const idx = fullText.indexOf(normalized);
+            if (idx === -1) return;
+
+            // Determine which text nodes are spanned by the match
+            const startEntry = map[idx];
+            const endEntry = map[idx + normalized.length - 1];
+            if (!startEntry || !endEntry) return;
+
+            // Collect unique nodes involved in the match
+            const startNode = startEntry.node;
+            const startOffset = startEntry.offset;
+            const endNode = endEntry.node;
+            const endOffset = endEntry.offset;
+
+            // Use Range to wrap the match
+            try {
+                const range = document.createRange();
+                range.setStart(startNode, startOffset);
+                range.setEnd(endNode, endOffset + 1);
+
+                const mark = document.createElement('mark');
+                mark.className = className;
+                range.surroundContents(mark);
+            } catch (e) {
+                // surroundContents fails if range crosses element boundaries.
+                // Fallback: wrap each line's text nodes individually.
+                const lines = normalized.split('\n');
+                let searchPos = idx;
+                for (const line of lines) {
+                    if (!line) { searchPos += 1; continue; } // skip newline char
+                    const lineStart = map[searchPos];
+                    const lineEnd = map[searchPos + line.length - 1];
+                    if (lineStart && lineEnd) {
+                        try {
+                            const r = document.createRange();
+                            r.setStart(lineStart.node, lineStart.offset);
+                            r.setEnd(lineEnd.node, lineEnd.offset + 1);
+                            const m = document.createElement('mark');
+                            m.className = className;
+                            r.surroundContents(m);
+                        } catch (_) { /* skip this line */ }
+                    }
+                    searchPos += line.length + 1; // +1 for newline
+                }
+            }
         }
 
         _scrollToElement(el) {

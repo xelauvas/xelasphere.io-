@@ -19,6 +19,68 @@ function typewriteTitle(element, text, speed = 28) {
     tick();
 }
 
+// Incremental JSON parser helpers for live patch streaming
+function scanClosingQuote(str, from) {
+    for (let i = from; i < str.length; i++) {
+        if (str[i] === '\\') { i++; continue; }
+        if (str[i] === '"') return i;
+    }
+    return -1;
+}
+
+function unescapePatchJsonString(str) {
+    return str.replace(/\\(n|t|r|"|\\|\/)/g, (_, ch) => {
+        switch (ch) {
+            case 'n': return '\n';
+            case 't': return '\t';
+            case 'r': return '\r';
+            case '"': return '"';
+            case '\\': return '\\';
+            case '/': return '/';
+            default: return _;
+        }
+    });
+}
+
+function extractCompletePatchesFromBuffer(buffer, skip) {
+    const patches = [];
+    let searchFrom = 0;
+
+    while (searchFrom < buffer.length) {
+        const fileIdx = buffer.indexOf('"file"', searchFrom);
+        if (fileIdx === -1) break;
+
+        const fileMatch = buffer.slice(fileIdx).match(/"file"\s*:\s*"([^"]+)"/);
+        if (!fileMatch) break;
+
+        const oldIdx = buffer.indexOf('"old_string"', fileIdx);
+        if (oldIdx === -1) break;
+
+        const oldColonQuote = buffer.indexOf('"', oldIdx + '"old_string"'.length + 1);
+        if (oldColonQuote === -1) break;
+        const oldEnd = scanClosingQuote(buffer, oldColonQuote + 1);
+        if (oldEnd === -1) break;
+
+        const newIdx = buffer.indexOf('"new_string"', oldEnd);
+        if (newIdx === -1) break;
+
+        const newColonQuote = buffer.indexOf('"', newIdx + '"new_string"'.length + 1);
+        if (newColonQuote === -1) break;
+        const newEnd = scanClosingQuote(buffer, newColonQuote + 1);
+        if (newEnd === -1) break;
+
+        patches.push({
+            file: fileMatch[1],
+            old_string: unescapePatchJsonString(buffer.slice(oldColonQuote + 1, oldEnd)),
+            new_string: unescapePatchJsonString(buffer.slice(newColonQuote + 1, newEnd)),
+        });
+
+        searchFrom = newEnd + 1;
+    }
+
+    return patches.slice(skip);
+}
+
 // Configuration object for constants
 const CONFIG = Object.freeze({
     ICONS: {
@@ -2791,6 +2853,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let streamMemoryUpdated = false;
                 let streamDreamNotification = null;
                 let streamArtifactPatches = null;
+                let patchStreamActive = false;
+                let patchStreamBuffer = '';
+                let patchParsedPatches = [];
                 let artifactStreamActive = false;
                 let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
@@ -2856,6 +2921,24 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 // Route new chunks to the artifact panel
                                 window.artifactPanel.appendStreamingCode(chunk.text || '');
                             }
+
+                            // --- Live patch streaming detection ---
+                            if (!patchStreamActive && !artifactStreamActive) {
+                                const patchFenceMatch = streamedContent.match(/```artifact_patch/i);
+                                if (patchFenceMatch && window.artifactPanel?.currentArtifact) {
+                                    patchStreamActive = true;
+                                    patchStreamBuffer = streamedContent.slice(patchFenceMatch.index);
+                                    patchParsedPatches = [];
+                                    window.artifactPanel.openPatchStreaming();
+                                }
+                            } else if (patchStreamActive) {
+                                patchStreamBuffer += chunk.text || '';
+                                const newPatches = extractCompletePatchesFromBuffer(patchStreamBuffer, patchParsedPatches.length);
+                                for (const patch of newPatches) {
+                                    patchParsedPatches.push(patch);
+                                    window.artifactPanel.applyLivePatch(patch.file, patch.old_string, patch.new_string);
+                                }
+                            }
                         } else if (chunk.type === 'done') {
                             console.log('Received done chunk:', chunk);
                             streamedReasoning = chunk.reasoning || streamedReasoning;
@@ -2885,7 +2968,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     if (newName && newName.toLowerCase() !== 'new chat' && sess.session_name !== newName) {
                                         sess.session_name = newName;
                                         sess.autoTitleEligible = false;
-                                        // Find the tab element and typewrite the title
                                         const tab = document.querySelector(`.chat-tab[data-session-id="${requestSessionId}"] .tab-name`);
                                         if (tab) {
                                             typewriteTitle(tab, newName);
@@ -3105,7 +3187,21 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 }
 
                 // Handle artifact panel update
-                if (streamArtifact && window.artifactPanel) {
+                if (patchStreamActive && streamArtifact && window.artifactPanel) {
+                    // Live patch streaming was active — finalize with server result
+                    patchStreamActive = false;
+                    const artifactRef = streamArtifactRef || {
+                        artifactId: streamArtifact.artifactId,
+                        title: streamArtifact.title,
+                        type: streamArtifact.type,
+                        primaryLanguage: streamArtifact.primaryLanguage,
+                        summary: displayContent
+                    };
+                    window.artifactPanel.finalizePatchStreaming(streamArtifact, {
+                        sessionId: requestSessionId,
+                        reference: artifactRef
+                    });
+                } else if (streamArtifact && window.artifactPanel) {
                     const artifactRef = streamArtifactRef || {
                         artifactId: streamArtifact.artifactId,
                         title: streamArtifact.title,
@@ -3115,7 +3211,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     };
 
                     if (streamArtifactPatches && streamArtifactPatches.patches && window.artifactPanel.applyPatchesVisually) {
-                        // Patches — animate changes on the current code then show preview
+                        // Fallback: patches arrived but live streaming didn't activate
                         window.artifactPanel.applyPatchesVisually(
                             streamArtifactPatches.patches,
                             streamArtifactPatches.patch_results,
