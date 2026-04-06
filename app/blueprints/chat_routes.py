@@ -761,6 +761,38 @@ def chat_stream():
                                     failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
                                     logger.info(f"🩹 Patch results: {applied_count} applied, {failed_count} failed")
 
+                                    # Patch retry: if all patches failed, retry once with actual file content
+                                    if failed_count > 0 and applied_count == 0:
+                                        logger.info(f"🔄 Patch retry: {failed_count} patches failed, attempting retry")
+                                        yield f"data: {json.dumps({'type': 'status', 'text': 'Verifying patch...'})}\n\n"
+                                        failed_files = set(r['file'] for r in patch_results if r['status'] == 'failed')
+                                        retry_parts = []
+                                        for ff in failed_files:
+                                            file_entry = next((f for f in current_files if f['path'] == ff), None)
+                                            if file_entry:
+                                                lang = file_entry.get('language', 'text')
+                                                retry_parts.append(
+                                                    f"Your patch for {ff} failed: the old_string does not "
+                                                    f"exist in the current file. Here is the actual content:\n\n"
+                                                    f"```{lang}\n{file_entry.get('content', '')}\n```\n\n"
+                                                    f"Please provide a corrected artifact_patch."
+                                                )
+                                        retry_prompt = "\n".join(retry_parts)
+                                        try:
+                                            retry_response, _, _ = get_ai_response(retry_prompt, stream_model)
+                                            retry_parsed = ActionParser.parse(retry_response)
+                                            if retry_parsed.patch_payload:
+                                                patched_files, patch_results = apply_patches(
+                                                    current_files, retry_parsed.patch_payload.get('patches', [])
+                                                )
+                                                applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
+                                                failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
+                                                if applied_count > 0:
+                                                    chat_summary = retry_parsed.chat_text or parsed_action.chat_text
+                                                    logger.info(f"🔄 Patch retry succeeded: {applied_count} applied")
+                                        except Exception as retry_err:
+                                            logger.warning(f"🔄 Patch retry failed: {retry_err}")
+
                                     if applied_count > 0:
                                         primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
                                         # Store patches for frontend visual application
@@ -1973,6 +2005,36 @@ def chat():
                 applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
                 failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
                 logger.info(f"🩹 [NonStream] Patch results: {applied_count} applied, {failed_count} failed")
+
+                if failed_count > 0 and applied_count == 0:
+                    logger.info(f"🔄 [NonStream] Patch retry: {failed_count} patches failed")
+                    failed_files = set(r['file'] for r in patch_results if r['status'] == 'failed')
+                    retry_parts = []
+                    for ff in failed_files:
+                        file_entry = next((f for f in current_files if f['path'] == ff), None)
+                        if file_entry:
+                            lang = file_entry.get('language', 'text')
+                            retry_parts.append(
+                                f"Your patch for {ff} failed: the old_string does not "
+                                f"exist in the current file. Here is the actual content:\n\n"
+                                f"```{lang}\n{file_entry.get('content', '')}\n```\n\n"
+                                f"Please provide a corrected artifact_patch."
+                            )
+                    retry_prompt = "\n".join(retry_parts)
+                    try:
+                        retry_response, _, _ = get_ai_response(retry_prompt, model)
+                        retry_parsed = ActionParser.parse(retry_response)
+                        if retry_parsed.patch_payload:
+                            patched_files, patch_results = apply_patches(
+                                current_files, retry_parsed.patch_payload.get('patches', [])
+                            )
+                            applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
+                            failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
+                            if applied_count > 0:
+                                response_text = retry_parsed.chat_text or routing_decision.chat_payload
+                                logger.info(f"🔄 [NonStream] Patch retry succeeded: {applied_count} applied")
+                    except Exception as retry_err:
+                        logger.warning(f"🔄 [NonStream] Patch retry failed: {retry_err}")
 
                 if applied_count > 0:
                     primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
