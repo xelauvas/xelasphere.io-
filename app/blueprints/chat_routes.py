@@ -586,19 +586,27 @@ def chat_stream():
                         active['artifactId'],
                         version.get('versionId', ''),
                     )
+                    logger.info(f"[Stream] Artifact tracker: {len(files)} files from Firestore, "
+                                f"tracker has {len(artifact_tracker.files)} files before sync")
                     artifact_tracker.sync_from_files(files, preserve_sent_hashes=True)
+                    logger.info(f"[Stream] After sync: {len(artifact_tracker.files)} files, "
+                                f"dirty={len(artifact_tracker.get_dirty_files())}, "
+                                f"paths={list(artifact_tracker.files.keys())}")
         except Exception as e:
             logger.warning(f"[Stream] Failed to load artifact state: {e}")
 
     # Determine if we should inject artifact context
-    should_inject_artifact = False
+    # When an active artifact exists, ALWAYS inject so the model can patch correctly.
+    should_inject_artifact = artifact_tracker is not None and len(artifact_tracker.files) > 0
     if artifact_tracker:
         has_dirty = len(artifact_tracker.get_dirty_files()) > 0
         last_action_was_patch = False
         if previous_messages:
             last_meta = previous_messages[-1].get('turn_metadata', {})
             last_action_was_patch = last_meta.get('action_type') == 'patch_artifact'
-        should_inject_artifact = has_dirty or last_action_was_patch
+        logger.info(f"[Stream] Inject decision: should_inject={should_inject_artifact}, "
+                    f"has_dirty={has_dirty}, last_was_patch={last_action_was_patch}, "
+                    f"total_files={len(artifact_tracker.files)}")
 
     # NOTE: ContextBuilder call + crypto injection moved below smart routing (needs stream_model)
 
@@ -1678,14 +1686,9 @@ def chat():
             except Exception as e:
                 logger.warning(f"Failed to load artifact state: {e}")
 
-            should_inject_artifact = False
-            if artifact_tracker:
-                has_dirty = len(artifact_tracker.get_dirty_files()) > 0
-                last_action_was_patch = False
-                if prev_msgs_for_prompt:
-                    last_meta = prev_msgs_for_prompt[-1].get('turn_metadata', {})
-                    last_action_was_patch = last_meta.get('action_type') == 'patch_artifact'
-                should_inject_artifact = has_dirty or last_action_was_patch
+            # Always inject artifact context when an active artifact exists.
+            # The model needs all files to produce correct patches.
+            should_inject_artifact = artifact_tracker is not None and len(artifact_tracker.files) > 0
 
             from app.model_catalog import get_model_context_limit
             model_context = get_model_context_limit(model)
