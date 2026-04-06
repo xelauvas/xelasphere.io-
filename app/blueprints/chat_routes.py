@@ -55,7 +55,8 @@ from app.services.chat_engine import (
     build_artifact_reference_payload, build_draft_artifact,
 )
 from app.artifacts import (
-    ArtifactPreference, ArtifactDecision, parse_structured_response,
+    ArtifactPreference, ArtifactDecision, StructuredResponse,
+    parse_structured_response,
     detect_artifact_update_intent, load_current_artifact_context,
     delete_local_attachments, ARTIFACT_UPDATE_PATTERNS,
     apply_patches, ArtifactStore,
@@ -725,6 +726,20 @@ def chat_stream():
                                 contains_code=True,
                                 desired_action=ArtifactPreference.UPDATE,
                             )
+                        elif parsed_action.action == "create_artifact" and not parsed_action.artifact_payload:
+                            # ACTION said create_artifact but no valid artifact JSON —
+                            # model produced regular code blocks. Use old router with
+                            # code block extraction fallback.
+                            logger.info("Stream ActionParser: create_artifact without payload, falling back to code block extraction")
+                            fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else full_content
+                            structured = parse_structured_response(fallback_text)
+                            structured = StructuredResponse(
+                                meta={"output_mode": "artifact", "contains_code": True},
+                                chat=structured.chat,
+                                artifact=structured.artifact,
+                                remainder=structured.remainder,
+                            )
+                            routing = artifact_router.route(structured, prompt, provider_flagged_code=True)
                         elif parsed_action.action == "patch_artifact" and parsed_action.patch_payload:
                             routing = ArtifactDecision(
                                 render_mode="artifact_patch",
@@ -1899,6 +1914,29 @@ def chat():
                 artifact_payload=parsed_action.artifact_payload,
                 contains_code=True,
                 desired_action=ArtifactPreference.UPDATE,
+            )
+        elif parsed_action.action == "create_artifact" and not parsed_action.artifact_payload:
+            # ACTION said create_artifact but no valid artifact JSON — model produced
+            # regular code blocks instead of ```artifact fence. Use the old router which
+            # has _construct_artifact_from_code_blocks() fallback for this case.
+            logger.info("ActionParser: create_artifact without payload, falling back to code block extraction")
+            fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else raw_model_response
+            structured_response = parse_structured_response(fallback_text)
+            # Force the structured response meta to indicate artifact intent
+            if structured_response.meta is None or not structured_response.meta:
+                structured_response = StructuredResponse(
+                    meta={"output_mode": "artifact", "contains_code": True},
+                    chat=structured_response.chat,
+                    artifact=structured_response.artifact,
+                    remainder=structured_response.remainder,
+                )
+            else:
+                structured_response.meta["output_mode"] = "artifact"
+                structured_response.meta["contains_code"] = True
+            routing_decision = artifact_router.route(
+                structured_response,
+                user_prompt,
+                provider_flagged_code=True,
             )
         elif parsed_action.action == "patch_artifact" and parsed_action.patch_payload:
             routing_decision = ArtifactDecision(
