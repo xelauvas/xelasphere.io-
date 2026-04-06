@@ -858,13 +858,23 @@ async function loadPackagesFor(code) {
         srvBtn.onclick = function() {
             srvBtn.remove();
             appendOutput('Starting server execution...\\n', 'repl-prompt');
-            // Call parent's sandbox runner directly (same-origin srcdoc can access parent)
+            var code = JSON.parse(document.getElementById('code-data').textContent);
+            var files = JSON.parse(document.getElementById('files-data').textContent);
+            // Try direct parent access first, fall back to postMessage
             try {
-                var code = JSON.parse(document.getElementById('code-data').textContent);
-                var files = JSON.parse(document.getElementById('files-data').textContent);
-                window.parent.artifactPanel._runOnServer(code, files, ENTRY_NAME);
+                if (window.parent && window.parent.artifactPanel && window.parent.artifactPanel._runOnServer) {
+                    window.parent.artifactPanel._runOnServer(code, files, ENTRY_NAME);
+                    return;
+                }
             } catch(e) {
-                appendOutput('Error: ' + e.message + '\\n', 'stderr');
+                appendOutput('Direct access failed: ' + e.message + '\\n', 'stderr');
+            }
+            // Fallback: postMessage
+            try {
+                window.parent.postMessage({type: 'sandbox-needs-server', code: code, files: files, entry: ENTRY_NAME}, '*');
+                appendOutput('Waiting for server...\\n', 'repl-prompt');
+            } catch(e2) {
+                appendOutput('Cannot reach server: ' + e2.message + '\\n', 'stderr');
             }
         };
         document.getElementById('output').appendChild(srvBtn);
