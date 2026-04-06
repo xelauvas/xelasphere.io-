@@ -1864,8 +1864,15 @@ window.addEventListener('load', function() {
 
             this._streamBuffer += text;
 
-            // Parse all files from the buffer and display in CodeMirror
-            this._parseAndDisplayStreamingFiles();
+            // Debounce CodeMirror updates to avoid freezing the browser.
+            // Without this, every token-sized chunk (~5 chars) triggers a full
+            // CodeMirror setValue + re-render. For a 3KB artifact that's ~600
+            // synchronous re-renders. Debouncing to 80ms batches chunks and
+            // updates once per visual frame.
+            if (this._streamDebounce) clearTimeout(this._streamDebounce);
+            this._streamDebounce = setTimeout(() => {
+                this._parseAndDisplayStreamingFiles();
+            }, 80);
         }
 
         _parseAndDisplayStreamingFiles() {
@@ -1993,6 +2000,12 @@ window.addEventListener('load', function() {
 
         finalizeStreaming(artifactData, { sessionId = null, reference = null } = {}) {
             const doFinalize = () => {
+                // Flush any pending debounced update
+                if (this._streamDebounce) {
+                    clearTimeout(this._streamDebounce);
+                    this._streamDebounce = null;
+                    this._parseAndDisplayStreamingFiles();
+                }
                 this.isStreaming = false;
                 this.panel.classList.remove('is-streaming');
                 this._streamBuffer = '';
