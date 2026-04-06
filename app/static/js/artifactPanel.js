@@ -2310,7 +2310,7 @@ window.addEventListener('load', function() {
                                 append('GUI running! Loading display...\n', 'repl-prompt');
                                 // Clear srcdoc first — srcdoc takes priority over src in browsers
                                 this.previewFrame.removeAttribute('srcdoc');
-                                this.previewFrame.src = '/sandbox-vnc/' + event.vnc_port + '/vnc_lite.html?autoconnect=true&resize=scale';
+                                this.previewFrame.src = '/sandbox-vnc/' + event.vnc_port + '/vnc_lite.html?autoconnect=true&resize=scale&path=sandbox-vnc/' + event.vnc_port + '/websockify';
                                 this.activeTab = 'preview';
                                 this.switchTab('preview');
                             }
