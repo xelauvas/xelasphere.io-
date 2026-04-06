@@ -722,6 +722,10 @@ def chat_stream():
                                 patch_data = routing.artifact_payload
                                 current_files, full_artifact = _load_current_artifact_files(user_id, session_id)
                                 if current_files:
+                                    for i, p in enumerate(patch_data.get('patches', [])):
+                                        logger.info(f"🩹 Patch[{i}] file='{p.get('file')}' old_string='{repr(p.get('old_string','')[:120])}' new_string='{repr(p.get('new_string','')[:120])}'")
+                                    for cf in current_files:
+                                        logger.info(f"🩹 Current file='{cf.get('path')}' content_len={len(cf.get('content',''))}")
                                     patched_files, patch_results = apply_patches(current_files, patch_data.get('patches', []))
                                     applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
                                     failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
@@ -753,6 +757,10 @@ def chat_stream():
                                     logger.warning("No active artifact found to patch")
                                     routing.artifact_payload = None
                                     render_mode = 'inline'
+
+                                # Strip the artifact_patch fence from chat_summary
+                                import re as _re
+                                chat_summary = _re.sub(r'```artifact_patch.*', '', chat_summary, flags=_re.DOTALL).strip()
 
                             if routing.artifact_payload:
                                 files = routing.artifact_payload.get('files', [])
@@ -826,7 +834,7 @@ def chat_stream():
                         'session_name': stream_session_name
                     }
                     _pvd = getattr(routing, '_patch_visual_data', None) if routing else None
-                    logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, has_patches={_pvd is not None}, patch_count={len(_pvd.get('patches',[])) if _pvd else 0}")
+                    logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, has_patches={_pvd is not None}, patch_count={len(_pvd.get('patches',[])) if _pvd else 0}, session_name={repr(stream_session_name)}")
 
                     # Save to history and persist artifact
                     if session_id and user_id and not guest_mode:

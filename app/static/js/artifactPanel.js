@@ -1737,16 +1737,20 @@ ${escapeHtml(entry.content || '')}
 
             // Highlight old code in red
             this._highlightTextInElement(this.codeBlock, searchOld, 'patch-removing');
-            const removeMark = this.codeBlock.querySelector('.patch-removing');
-            if (removeMark) this._scrollToElement(removeMark);
+            const removeMarks = this.codeBlock.querySelectorAll('.patch-removing');
+            if (removeMarks.length > 0) this._scrollToElement(removeMarks[0]);
 
             // Pause so user sees the red highlight
             await new Promise(r => setTimeout(r, 400));
 
-            // Replace with new code, switch to green
-            if (removeMark) {
-                removeMark.textContent = newStr;
-                removeMark.className = 'patch-added';
+            // Replace all old marks with a single green mark containing new code
+            if (removeMarks.length > 0) {
+                const addMark = document.createElement('mark');
+                addMark.className = 'patch-added';
+                addMark.textContent = newStr;
+                removeMarks[0].parentNode.insertBefore(addMark, removeMarks[0]);
+                // Remove all old red marks
+                removeMarks.forEach(m => m.parentNode.removeChild(m));
             }
 
             // Update in-memory file content so subsequent patches match correctly
