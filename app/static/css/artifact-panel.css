@@ -1026,6 +1026,35 @@ body.artifact-panel-resizing .chat-container {
   font-size: 11px;
 }
 
+.artifact-code__edit-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.35);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.artifact-code__edit-toggle:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.artifact-code__edit-toggle[aria-pressed="true"] {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.artifact-code__edit-toggle i {
+  font-size: 12px;
+}
+
 .artifact-code__block {
   flex: 1;
   margin: 0;
