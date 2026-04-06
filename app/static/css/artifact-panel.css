@@ -854,15 +854,13 @@ body.artifact-panel-resizing .chat-container {
 
 /* File Selector Dropdown */
 .artifact-file-select-wrapper {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  min-width: 120px;
-  max-width: 280px;
 }
 
 .artifact-file-select {
-  flex: 1;
-  padding: 4px 16px 4px 10px;
+  width: auto;
+  padding: 4px 16px 4px 0;
   font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-weight: 500;
