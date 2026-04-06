@@ -1355,10 +1355,12 @@ body.artifact-panel-resizing .chat-container {
 .artifact-editor__codemirror .CodeMirror,
 #artifact-edit-codemirror .CodeMirror {
   height: 100%;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 14px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.88);
+  font-family: 'Fira Code', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  letter-spacing: 0.01em;
+  background: #1a1a1f;
+  color: #abb2bf;
 }
 
 /* CodeMirror in Code tab */
@@ -1369,24 +1371,92 @@ body.artifact-panel-resizing .chat-container {
 
 #artifact-edit-codemirror .CodeMirror {
   border-top: none;
+  padding-top: 8px;
 }
 
+/* Gutter — subtle separator like VS Code */
 #artifact-edit-codemirror .CodeMirror-gutters {
-  background: transparent;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: #1a1a1f;
+  border-right: none;
+  padding-right: 8px;
+  min-width: 48px;
 }
 
 #artifact-edit-codemirror .CodeMirror-linenumber {
-  color: rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.18);
+  font-size: 12px;
+  padding: 0 8px 0 12px;
 }
 
+/* Active line — subtle highlight like VS Code */
 #artifact-edit-codemirror .CodeMirror-activeline-background {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
 }
 
+/* Cursor */
 #artifact-edit-codemirror .CodeMirror-cursor {
-  border-left: 1.5px solid rgba(255, 255, 255, 0.7);
+  border-left: 2px solid #528bff;
 }
+
+/* Selection — muted blue like VS Code */
+#artifact-edit-codemirror .CodeMirror-selected,
+#artifact-edit-codemirror .CodeMirror-focused .CodeMirror-selected {
+  background: rgba(82, 139, 255, 0.18);
+}
+
+/* Matching brackets */
+#artifact-edit-codemirror .CodeMirror-matchingbracket {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* Scrollbar — thin dark like IDE */
+#artifact-edit-codemirror .CodeMirror-vscrollbar,
+#artifact-edit-codemirror .CodeMirror-hscrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+#artifact-edit-codemirror .CodeMirror-vscrollbar::-webkit-scrollbar,
+#artifact-edit-codemirror .CodeMirror-hscrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+#artifact-edit-codemirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+#artifact-edit-codemirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+#artifact-edit-codemirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover,
+#artifact-edit-codemirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* One Dark syntax colors */
+#artifact-edit-codemirror .cm-keyword { color: #c678dd; }
+#artifact-edit-codemirror .cm-atom { color: #d19a66; }
+#artifact-edit-codemirror .cm-number { color: #d19a66; }
+#artifact-edit-codemirror .cm-def { color: #61afef; }
+#artifact-edit-codemirror .cm-variable { color: #e06c75; }
+#artifact-edit-codemirror .cm-variable-2 { color: #e06c75; }
+#artifact-edit-codemirror .cm-variable-3,
+#artifact-edit-codemirror .cm-type { color: #e5c07b; }
+#artifact-edit-codemirror .cm-property { color: #61afef; }
+#artifact-edit-codemirror .cm-operator { color: #56b6c2; }
+#artifact-edit-codemirror .cm-comment { color: #5c6370; font-style: italic; }
+#artifact-edit-codemirror .cm-string { color: #98c379; }
+#artifact-edit-codemirror .cm-string-2 { color: #98c379; }
+#artifact-edit-codemirror .cm-meta { color: #61afef; }
+#artifact-edit-codemirror .cm-qualifier { color: #d19a66; }
+#artifact-edit-codemirror .cm-builtin { color: #56b6c2; }
+#artifact-edit-codemirror .cm-bracket { color: #abb2bf; }
+#artifact-edit-codemirror .cm-tag { color: #e06c75; }
+#artifact-edit-codemirror .cm-attribute { color: #d19a66; }
+#artifact-edit-codemirror .cm-hr { color: #5c6370; }
+#artifact-edit-codemirror .cm-link { color: #56b6c2; text-decoration: underline; }
 
 /* Code viewer layout - no absolute positioning */
 .artifact-code__viewer {
