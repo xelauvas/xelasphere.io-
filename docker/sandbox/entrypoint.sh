@@ -77,7 +77,7 @@ case "$MODE" in
         fi
 
         # Start VNC server on the virtual display
-        x11vnc -display :99 -nopw -listen 0.0.0.0 -port 5900 -shared -forever -bg -xkb 2>/dev/null
+        x11vnc -display :99 -nopw -shared -forever -noxdamage 2>/dev/null &
         sleep 0.5
 
         # Start noVNC websocket bridge
