@@ -417,15 +417,17 @@ body.artifact-panel-resizing .chat-container {
 
 /* Close button - icon only */
 .artifact-panel__close-btn {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: #fff;
+  font-size: 18px;
+  line-height: 1;
   cursor: pointer;
   transition: all 150ms ease;
 }
