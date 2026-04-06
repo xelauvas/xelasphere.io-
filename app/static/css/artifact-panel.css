@@ -1362,15 +1362,22 @@ body.artifact-panel-resizing .chat-container {
   color: #d4d4d4;
 }
 
-/* CodeMirror in Code tab */
+/* CodeMirror in Code tab — must fill entire code panel */
 #artifact-edit-codemirror {
   flex: 1;
   overflow: hidden;
+  min-height: 0;
+  position: relative;
 }
 
 #artifact-edit-codemirror .CodeMirror {
   border-top: none;
   padding-top: 4px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 /* Gutter — no separator, same bg */
