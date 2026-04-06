@@ -18,7 +18,7 @@ sandbox_bp = Blueprint('sandbox', __name__)
 @sandbox_bp.route('/api/sandbox/run', methods=['POST'])
 def sandbox_run():
     """Start a sandboxed Python execution. Returns SSE stream."""
-    user_id = session.get('user_id')
+    user_id = session.get('user', {}).get('uid') if session.get('user') else None
     if not user_id:
         return jsonify({"error": "Authentication required"}), 401
 
@@ -63,7 +63,7 @@ def sandbox_run():
 @sandbox_bp.route('/api/sandbox/stop', methods=['POST'])
 def sandbox_stop():
     """Kill a user's running sandbox container."""
-    user_id = session.get('user_id')
+    user_id = session.get('user', {}).get('uid') if session.get('user') else None
     if not user_id:
         return jsonify({"error": "Authentication required"}), 401
 
@@ -75,7 +75,7 @@ def sandbox_stop():
 @sandbox_bp.route('/api/sandbox/proxy/<container_id>/<path:path>')
 def sandbox_proxy(container_id, path):
     """Reverse proxy to a running app container."""
-    user_id = session.get('user_id')
+    user_id = session.get('user', {}).get('uid') if session.get('user') else None
     if not user_id:
         return "Unauthorized", 401
 
