@@ -1355,12 +1355,11 @@ body.artifact-panel-resizing .chat-container {
 .artifact-editor__codemirror .CodeMirror,
 #artifact-edit-codemirror .CodeMirror {
   height: 100%;
-  font-family: 'Fira Code', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: 'Söhne Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
-  line-height: 1.65;
-  letter-spacing: 0.01em;
-  background: #1a1a1f;
-  color: #abb2bf;
+  line-height: 1.55;
+  background: #1e1e1e;
+  color: #d4d4d4;
 }
 
 /* CodeMirror in Code tab */
@@ -1371,51 +1370,56 @@ body.artifact-panel-resizing .chat-container {
 
 #artifact-edit-codemirror .CodeMirror {
   border-top: none;
-  padding-top: 8px;
+  padding-top: 4px;
 }
 
-/* Gutter — subtle separator like VS Code */
+/* Gutter — no separator, same bg */
 #artifact-edit-codemirror .CodeMirror-gutters {
-  background: #1a1a1f;
+  background: #1e1e1e;
   border-right: none;
-  padding-right: 8px;
-  min-width: 48px;
+  min-width: 44px;
 }
 
 #artifact-edit-codemirror .CodeMirror-linenumber {
-  color: rgba(255, 255, 255, 0.18);
+  color: #6e7681;
   font-size: 12px;
-  padding: 0 8px 0 12px;
+  padding: 0 12px 0 16px;
 }
 
-/* Active line — subtle highlight like VS Code */
+/* Active line */
 #artifact-edit-codemirror .CodeMirror-activeline-background {
-  background: rgba(255, 255, 255, 0.04);
+  background: #2a2d2e;
 }
 
-/* Cursor */
+/* Cursor — white thin blink */
 #artifact-edit-codemirror .CodeMirror-cursor {
-  border-left: 2px solid #528bff;
+  border-left: 1.5px solid #e0e0e0;
 }
 
-/* Selection — muted blue like VS Code */
+/* Selection — VS Code blue */
 #artifact-edit-codemirror .CodeMirror-selected,
 #artifact-edit-codemirror .CodeMirror-focused .CodeMirror-selected {
-  background: rgba(82, 139, 255, 0.18);
+  background: #264f78;
 }
 
 /* Matching brackets */
 #artifact-edit-codemirror .CodeMirror-matchingbracket {
   color: #fff !important;
-  background: rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+  outline: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-/* Scrollbar — thin dark like IDE */
+/* Scrollbar — thin translucent */
+#artifact-edit-codemirror .CodeMirror-simplescroll-vertical div,
+#artifact-edit-codemirror .CodeMirror-simplescroll-horizontal div {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-radius: 3px;
+}
+
 #artifact-edit-codemirror .CodeMirror-vscrollbar,
 #artifact-edit-codemirror .CodeMirror-hscrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 #artifact-edit-codemirror .CodeMirror-vscrollbar::-webkit-scrollbar,
@@ -1426,37 +1430,37 @@ body.artifact-panel-resizing .chat-container {
 
 #artifact-edit-codemirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
 #artifact-edit-codemirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 3px;
 }
 
 #artifact-edit-codemirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover,
 #artifact-edit-codemirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.25);
 }
 
-/* One Dark syntax colors */
-#artifact-edit-codemirror .cm-keyword { color: #c678dd; }
-#artifact-edit-codemirror .cm-atom { color: #d19a66; }
-#artifact-edit-codemirror .cm-number { color: #d19a66; }
-#artifact-edit-codemirror .cm-def { color: #61afef; }
-#artifact-edit-codemirror .cm-variable { color: #e06c75; }
-#artifact-edit-codemirror .cm-variable-2 { color: #e06c75; }
+/* VS Code Dark+ syntax colors (ChatGPT Canvas style) */
+#artifact-edit-codemirror .cm-keyword { color: #c586c0; }
+#artifact-edit-codemirror .cm-atom { color: #569cd6; }
+#artifact-edit-codemirror .cm-number { color: #b5cea8; }
+#artifact-edit-codemirror .cm-def { color: #dcdcaa; }
+#artifact-edit-codemirror .cm-variable { color: #9cdcfe; }
+#artifact-edit-codemirror .cm-variable-2 { color: #9cdcfe; }
 #artifact-edit-codemirror .cm-variable-3,
-#artifact-edit-codemirror .cm-type { color: #e5c07b; }
-#artifact-edit-codemirror .cm-property { color: #61afef; }
-#artifact-edit-codemirror .cm-operator { color: #56b6c2; }
-#artifact-edit-codemirror .cm-comment { color: #5c6370; font-style: italic; }
-#artifact-edit-codemirror .cm-string { color: #98c379; }
-#artifact-edit-codemirror .cm-string-2 { color: #98c379; }
-#artifact-edit-codemirror .cm-meta { color: #61afef; }
-#artifact-edit-codemirror .cm-qualifier { color: #d19a66; }
-#artifact-edit-codemirror .cm-builtin { color: #56b6c2; }
-#artifact-edit-codemirror .cm-bracket { color: #abb2bf; }
-#artifact-edit-codemirror .cm-tag { color: #e06c75; }
-#artifact-edit-codemirror .cm-attribute { color: #d19a66; }
-#artifact-edit-codemirror .cm-hr { color: #5c6370; }
-#artifact-edit-codemirror .cm-link { color: #56b6c2; text-decoration: underline; }
+#artifact-edit-codemirror .cm-type { color: #4ec9b0; }
+#artifact-edit-codemirror .cm-property { color: #9cdcfe; }
+#artifact-edit-codemirror .cm-operator { color: #d4d4d4; }
+#artifact-edit-codemirror .cm-comment { color: #6a9955; font-style: italic; }
+#artifact-edit-codemirror .cm-string { color: #ce9178; }
+#artifact-edit-codemirror .cm-string-2 { color: #ce9178; }
+#artifact-edit-codemirror .cm-meta { color: #9cdcfe; }
+#artifact-edit-codemirror .cm-qualifier { color: #d7ba7d; }
+#artifact-edit-codemirror .cm-builtin { color: #4ec9b0; }
+#artifact-edit-codemirror .cm-bracket { color: #d4d4d4; }
+#artifact-edit-codemirror .cm-tag { color: #569cd6; }
+#artifact-edit-codemirror .cm-attribute { color: #9cdcfe; }
+#artifact-edit-codemirror .cm-hr { color: #6e7681; }
+#artifact-edit-codemirror .cm-link { color: #4ec9b0; text-decoration: underline; }
 
 /* Code viewer layout - no absolute positioning */
 .artifact-code__viewer {
