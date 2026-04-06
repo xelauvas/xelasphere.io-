@@ -2306,8 +2306,8 @@ window.addEventListener('load', function() {
                                 this.switchTab('preview');
                             }
                             else if (event.type === 'vnc' && event.url) {
-                                append('GUI running!\n', 'repl-prompt');
-                                this.previewFrame.src = event.url + 'vnc.html?autoconnect=true';
+                                append('GUI running! Loading display...\n', 'repl-prompt');
+                                this.previewFrame.src = event.url + 'vnc_lite.html?autoconnect=true&resize=scale&reconnect=true';
                                 this.activeTab = 'preview';
                                 this.switchTab('preview');
                             }

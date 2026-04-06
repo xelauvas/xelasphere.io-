@@ -102,3 +102,31 @@ def sandbox_proxy(container_id, path):
         return Response(resp.content, status=resp.status_code, headers=headers)
     except Exception as e:
         return f"Proxy error: {e}", 502
+
+
+@sandbox_bp.route('/api/sandbox/vnc/<container_id>/', defaults={'path': 'vnc.html'})
+@sandbox_bp.route('/api/sandbox/vnc/<container_id>/<path:path>')
+def sandbox_vnc(container_id, path):
+    """Proxy noVNC static files and WebSocket to the container."""
+    user_id = session.get('user', {}).get('uid') if session.get('user') else None
+    if not user_id:
+        return "Unauthorized", 401
+
+    info = sandbox_manager.get_container(container_id)
+    if not info or info.user_id != user_id:
+        return "Container not found", 404
+
+    if not info.vnc_port:
+        return "VNC not ready", 503
+
+    target_url = f"http://127.0.0.1:{info.vnc_port}/{path}"
+    if request.query_string:
+        target_url += f"?{request.query_string.decode()}"
+
+    try:
+        resp = http_requests.get(target_url, timeout=10)
+        excluded_headers = {'transfer-encoding', 'content-encoding', 'content-length', 'connection'}
+        headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded_headers}
+        return Response(resp.content, status=resp.status_code, headers=headers)
+    except Exception as e:
+        return f"VNC proxy error: {e}", 502
