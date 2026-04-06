@@ -187,6 +187,7 @@ def create_app():
 
     from app.blueprints.sandbox_routes import sandbox_bp
     app.register_blueprint(sandbox_bp)
+    csrf.exempt(sandbox_bp)
 
     # Configure logging
     if not os.path.exists('logs'):
