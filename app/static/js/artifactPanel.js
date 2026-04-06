@@ -779,20 +779,20 @@ async function initPyodide() {
         pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/' });
 
         // Redirect stdout/stderr
-        pyodide.runPython(\`
-import sys
-class _Out:
-    def __init__(self, cls):
-        self.cls = cls
-    def write(self, text):
-        if text:
-            from js import appendOutput
-            appendOutput(text, self.cls)
-    def flush(self):
-        pass
-sys.stdout = _Out('stdout')
-sys.stderr = _Out('stderr')
-\`);
+        pyodide.runPython(
+            'import sys\\n' +
+            'class _Out:\\n' +
+            '    def __init__(self, cls):\\n' +
+            '        self.cls = cls\\n' +
+            '    def write(self, text):\\n' +
+            '        if text:\\n' +
+            '            from js import appendOutput\\n' +
+            '            appendOutput(text, self.cls)\\n' +
+            '    def flush(self):\\n' +
+            '        pass\\n' +
+            'sys.stdout = _Out("stdout")\\n' +
+            'sys.stderr = _Out("stderr")'
+        );
 
         setStatus('Python 3.11 ready');
         setTimeout(() => setStatus(''), 3000);
@@ -840,21 +840,21 @@ async function loadPackagesFor(code) {
         setStatus('');
     }
     if (pkgs.includes('matplotlib')) {
-        pyodide.runPython(\`
-import matplotlib; matplotlib.use('Agg')
-import matplotlib.pyplot as _plt
-def _inline_show(*a, **kw):
-    import io, base64
-    from js import appendHtml
-    buf = io.BytesIO()
-    _plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', facecolor='#1e1e1e', edgecolor='none')
-    buf.seek(0)
-    b64 = base64.b64encode(buf.read()).decode()
-    buf.close()
-    appendHtml('<div class="plot-container"><img src="data:image/png;base64,' + b64 + '"/></div>')
-    _plt.close('all')
-_plt.show = _inline_show
-\`);
+        pyodide.runPython(
+            'import matplotlib; matplotlib.use("Agg")\\n' +
+            'import matplotlib.pyplot as _plt\\n' +
+            'def _inline_show(*a, **kw):\\n' +
+            '    import io, base64\\n' +
+            '    from js import appendHtml\\n' +
+            '    buf = io.BytesIO()\\n' +
+            '    _plt.savefig(buf, format="png", dpi=100, bbox_inches="tight", facecolor="#1e1e1e", edgecolor="none")\\n' +
+            '    buf.seek(0)\\n' +
+            '    b64 = base64.b64encode(buf.read()).decode()\\n' +
+            '    buf.close()\\n' +
+            '    appendHtml(\\'<div class="plot-container"><img src="data:image/png;base64,\\' + b64 + \\'"/></div>\\')\\n' +
+            '    _plt.close("all")\\n' +
+            '_plt.show = _inline_show'
+        );
     }
 }
 
@@ -899,16 +899,17 @@ replInput.addEventListener('keydown', async function(e) {
             var py = await initPyodide();
             await loadPackagesFor(cmd);
 
-            // Use compile to detect expressions vs statements
-            var result = await py.runPythonAsync(\`
-_result = None
-try:
-    _code = compile(\\\`\` + cmd.replace(/\\\\/g,'\\\\\\\\').replace(/\\\`/g,'\\\\\\`') + \`\\\`, '<repl>', 'eval')
-    _result = eval(_code)
-except SyntaxError:
-    exec(compile(\\\`\` + cmd.replace(/\\\\/g,'\\\\\\\\').replace(/\\\`/g,'\\\\\\`') + \`\\\`, '<repl>', 'exec'))
-_result
-\`);
+            // Pass command via globals to avoid quoting issues
+            py.globals.set('_repl_cmd', cmd);
+            var result = await py.runPythonAsync(
+                '_repl_result = None\\n' +
+                'try:\\n' +
+                '    _repl_code = compile(_repl_cmd, "<repl>", "eval")\\n' +
+                '    _repl_result = eval(_repl_code)\\n' +
+                'except SyntaxError:\\n' +
+                '    exec(compile(_repl_cmd, "<repl>", "exec"))\\n' +
+                '_repl_result'
+            );
             if (result !== undefined && result !== null && String(result) !== 'None') {
                 appendOutput(String(result) + '\\n', 'stdout');
             }
