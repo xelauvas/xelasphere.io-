@@ -120,19 +120,35 @@ class ArtifactStateTracker:
             )
         self._file_contents[file_path] = new_content
 
+    def get_all_files(self) -> List[Dict[str, Any]]:
+        """Return all tracked files with their content."""
+        self.last_access = time.time()
+        result = []
+        for path, state in self.files.items():
+            content = self._file_contents.get(path, "")
+            result.append({"path": path, "language": state.language, "content": content})
+        return result
+
     def get_context_injection(
         self,
         max_bytes: int,
         user_message: str = "",
+        include_all: bool = False,
     ) -> List[Dict[str, Any]]:
-        """Return minimal set of file contents for prompt injection.
+        """Return file contents for prompt injection.
 
-        Priority: dirty files first, scored by keyword overlap with
-        user message tokens and file paths/languages. Respects byte budget.
+        When include_all=False (default): only dirty files (for minimal injection).
+        When include_all=True: all files (needed when model will patch any file).
+
+        Priority: dirty files first, then clean files. Scored by keyword
+        overlap with user message. Respects byte budget.
         """
         self.last_access = time.time()
-        dirty = self.get_dirty_files()
-        if not dirty:
+        if include_all:
+            candidates = [(p, self._file_contents.get(p, "")) for p in self.files]
+        else:
+            candidates = self.get_dirty_files()
+        if not candidates:
             return []
 
         user_tokens = set(user_message.lower().split()) if user_message else set()
@@ -143,11 +159,11 @@ class ArtifactStateTracker:
             path_tokens.add(lang)
             return len(user_tokens & path_tokens)
 
-        dirty.sort(key=lambda x: _score(x[0]), reverse=True)
+        candidates.sort(key=lambda x: _score(x[0]), reverse=True)
 
         result = []
         total_bytes = 0
-        for path, content in dirty:
+        for path, content in candidates:
             content_bytes = len(content.encode("utf-8"))
             if total_bytes + content_bytes > max_bytes:
                 continue

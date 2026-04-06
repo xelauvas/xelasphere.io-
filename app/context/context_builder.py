@@ -209,9 +209,13 @@ class ContextBuilder:
         artifact_files: List[Dict[str, Any]] = []
         zone2_text = ""
         if artifact_state is not None:
+            # Always inject ALL files when artifact context is requested.
+            # The model needs full file content to produce correct patches,
+            # not just dirty files.
             artifact_files = artifact_state.get_context_injection(
                 max_bytes=zone2_budget_bytes,
                 user_message=user_message,
+                include_all=True,
             )
             if artifact_files:
                 zone2_text = self._format_artifact_context(artifact_files)
