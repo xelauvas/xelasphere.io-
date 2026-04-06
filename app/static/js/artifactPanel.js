@@ -1751,6 +1751,8 @@ ${escapeHtml(entry.content || '')}
                 removeMarks[0].parentNode.insertBefore(addMark, removeMarks[0]);
                 // Remove all old red marks
                 removeMarks.forEach(m => m.parentNode.removeChild(m));
+                // Scroll to follow the green replacement
+                this._scrollToElement(addMark);
             }
 
             // Update in-memory file content so subsequent patches match correctly
