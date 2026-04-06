@@ -425,14 +425,14 @@ body.artifact-panel-resizing .chat-container {
   background: transparent;
   border: none;
   border-radius: 8px;
-  color: var(--artifact-muted, rgba(255, 255, 255, 0.62));
+  color: #fff;
   cursor: pointer;
   transition: all 150ms ease;
 }
 
 .artifact-panel__close-btn:hover {
-  background: var(--artifact-hover, rgba(255, 255, 255, 0.06));
-  color: var(--artifact-text, rgba(255, 255, 255, 0.92));
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .artifact-panel__close-btn:focus-visible {
