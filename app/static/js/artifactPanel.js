@@ -1349,6 +1349,23 @@ ${escapeHtml(entry.content || '')}
             // Trigger composer width adjustment
             this.adjustComposerWidth(true);
 
+            // Fetch full artifact from server to get all versions for the dropdown
+            if (this.currentSessionId && artifact.artifactId) {
+                this.fetchArtifact(this.currentSessionId, artifact.artifactId, { force: true })
+                    .then(fullArtifact => {
+                        if (fullArtifact && fullArtifact.versions && fullArtifact.versions.length > 1) {
+                            this.populateVersionSelect(fullArtifact);
+                            // Cache all versions
+                            for (const v of fullArtifact.versions || []) {
+                                if (v.versionId && v.files) {
+                                    this.versionCache.set(v.versionId, v);
+                                }
+                            }
+                        }
+                    })
+                    .catch(() => {}); // silent — dropdown just won't have old versions
+            }
+
             // Mark corresponding pill as active if it exists
             if (reference && reference.artifactId) {
                 const pill = document.querySelector(`.artifact-chat-pill[data-artifact-id="${reference.artifactId}"]`);
