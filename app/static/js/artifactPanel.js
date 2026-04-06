@@ -904,12 +904,14 @@ async function loadPackagesFor(code) {
     }
     if (blocked.length > 0) {
         appendOutput('This script needs ' + blocked.join(', ') + ' which requires a server runtime.\\n\\n', 'stderr');
-        var btn = document.createElement('button');
-        btn.className = 'tool-btn';
-        btn.style.margin = '8px 0';
-        btn.textContent = '\\u25b6 Run on Server';
-        btn.onclick = function() { btn.remove(); runOnServer(); };
-        document.getElementById('output').appendChild(btn);
+        appendOutput('Click "Run on Server" above to execute.\\n', 'repl-prompt');
+        // Tell parent to show Run on Server button
+        window.parent.postMessage({
+            type: 'sandbox-needs-server',
+            code: JSON.parse(document.getElementById('code-data').textContent),
+            files: JSON.parse(document.getElementById('files-data').textContent),
+            entry: ENTRY_NAME
+        }, '*');
         return false;
     }
 
@@ -1211,8 +1213,13 @@ window.addEventListener('load', function() {
                     this.previewFrame.src = e.data.url + 'vnc.html?autoconnect=true';
                     this.activeTab = 'preview';
                     this.switchTab('preview');
+                } else if (e.data?.type === 'sandbox-needs-server') {
+                    this._showRunOnServer(e.data);
                 }
             });
+
+            // Also handle sandbox-stdout/stderr from server run
+            this._sandboxAbort = null;
             this.versionSelect?.addEventListener('change', () => {
                 this.handleVersionChange();
                 if (this.versionBadge) this.versionBadge.value = this.versionSelect.value;
@@ -2247,6 +2254,99 @@ window.addEventListener('load', function() {
                     }
                 }, 500);
             });
+        }
+
+        _showRunOnServer(data) {
+            // Show a "Run on Server" button in the panel header
+            if (this._serverRunBtn) this._serverRunBtn.remove();
+            const btn = document.createElement('button');
+            btn.className = 'artifact-panel__header-action';
+            btn.style.cssText = 'color:#4ec9b0;font-weight:600;';
+            btn.textContent = '\u25b6 Run on Server';
+            btn.onclick = () => {
+                btn.remove();
+                this._serverRunBtn = null;
+                this._runOnServer(data.code, data.files, data.entry);
+            };
+            this._serverRunBtn = btn;
+            // Insert before close button in header
+            const headerRight = this.panel.querySelector('.artifact-panel__header-right');
+            if (headerRight) {
+                headerRight.insertBefore(btn, headerRight.firstChild);
+            }
+        }
+
+        async _runOnServer(code, filesObj, entry) {
+            // Stream output into the preview iframe's terminal
+            const iframe = this.previewFrame;
+            const iframeDoc = iframe?.contentDocument || iframe?.contentWindow?.document;
+            const output = iframeDoc?.getElementById('output');
+            const outputWrap = iframeDoc?.getElementById('output-wrap');
+
+            function append(text, cls) {
+                if (!output) return;
+                const span = iframeDoc.createElement('span');
+                span.className = cls || 'stdout';
+                span.textContent = text;
+                output.appendChild(span);
+                if (outputWrap) outputWrap.scrollTop = outputWrap.scrollHeight;
+            }
+
+            if (output) output.innerHTML = '';
+            append('Connecting to server...\n', 'repl-prompt');
+
+            const fileList = Object.keys(filesObj).map(p => ({path: p, content: filesObj[p]}));
+
+            try {
+                const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                const headers = {'Content-Type': 'application/json'};
+                if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
+
+                const resp = await fetch('/api/sandbox/run', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({code, files: fileList, entry}),
+                    credentials: 'same-origin'
+                });
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buf = '';
+
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    buf += decoder.decode(value, {stream: true});
+                    const lines = buf.split('\n\n');
+                    buf = lines.pop();
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const event = JSON.parse(line.slice(6));
+                            if (event.type === 'stdout') append(event.text, 'stdout');
+                            else if (event.type === 'stderr') append(event.text, 'stderr');
+                            else if (event.type === 'install') append(event.text + '\n', 'repl-prompt');
+                            else if (event.type === 'status') append(event.text + '\n', 'repl-prompt');
+                            else if (event.type === 'exit') append('\nProcess exited with code ' + event.code + '\n', 'repl-prompt');
+                            else if (event.type === 'error') append('Error: ' + event.text + '\n', 'stderr');
+                            else if (event.type === 'app' && event.url) {
+                                append('App running!\n', 'repl-prompt');
+                                this.previewFrame.src = event.url;
+                                this.activeTab = 'preview';
+                                this.switchTab('preview');
+                            }
+                            else if (event.type === 'vnc' && event.url) {
+                                append('GUI running!\n', 'repl-prompt');
+                                this.previewFrame.src = event.url + 'vnc.html?autoconnect=true';
+                                this.activeTab = 'preview';
+                                this.switchTab('preview');
+                            }
+                        } catch(e) {}
+                    }
+                }
+            } catch (err) {
+                append('Server error: ' + err.message + '\n', 'stderr');
+            }
         }
 
         /**
