@@ -185,6 +185,9 @@ def create_app():
     app.register_blueprint(auth_routes)
     app.register_blueprint(crypto_bp)
 
+    from app.blueprints.sandbox_routes import sandbox_bp
+    app.register_blueprint(sandbox_bp)
+
     # Configure logging
     if not os.path.exists('logs'):
         os.mkdir('logs')
