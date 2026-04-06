@@ -800,37 +800,52 @@ def chat_stream():
                                     failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
                                     logger.info(f"🩹 Patch results: {applied_count} applied, {failed_count} failed")
 
-                                    # Patch retry: if all patches failed, retry once with actual file content
+                                    # Patch retry: if all patches failed, fall back to full regeneration
                                     if failed_count > 0 and applied_count == 0:
-                                        logger.info(f"🔄 Patch retry: {failed_count} patches failed, attempting retry")
-                                        yield f"data: {json.dumps({'type': 'status', 'text': 'Verifying patch...'})}\n\n"
-                                        failed_files = set(r['file'] for r in patch_results if r['status'] == 'failed')
-                                        retry_parts = []
-                                        for ff in failed_files:
-                                            file_entry = next((f for f in current_files if f['path'] == ff), None)
-                                            if file_entry:
-                                                lang = file_entry.get('language', 'text')
-                                                retry_parts.append(
-                                                    f"Your patch for {ff} failed: the old_string does not "
-                                                    f"exist in the current file. Here is the actual content:\n\n"
-                                                    f"```{lang}\n{file_entry.get('content', '')}\n```\n\n"
-                                                    f"Please provide a corrected artifact_patch."
-                                                )
-                                        retry_prompt = "\n".join(retry_parts)
+                                        logger.info(f"🔄 Patch failed ({failed_count} failures), requesting full artifact regeneration")
+                                        yield f"data: {json.dumps({'type': 'status', 'text': 'Regenerating artifact...'})}\n\n"
+
+                                        # Build retry prompt asking for full artifact (not patch)
+                                        regen_parts = ["The artifact_patch could not be applied. "
+                                                       "Please regenerate the COMPLETE artifact with the changes applied.\n\n"
+                                                       "Current files:\n"]
+                                        for cf in current_files:
+                                            lang = cf.get('language', 'text')
+                                            regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
+                                        regen_parts.append(f"\nUser request: {prompt}\n\n"
+                                                          "Respond with ACTION: create_artifact and a complete ```artifact block "
+                                                          "containing ALL files with the changes applied.")
+                                        regen_prompt = "\n".join(regen_parts)
                                         try:
-                                            retry_response, _, _ = get_ai_response(retry_prompt, stream_model)
-                                            retry_parsed = ActionParser.parse(retry_response)
-                                            if retry_parsed.patch_payload:
+                                            regen_response, _, _ = get_ai_response(regen_prompt, stream_model)
+                                            regen_parsed = ActionParser.parse(regen_response)
+                                            if regen_parsed.artifact_payload:
+                                                patched_files = regen_parsed.artifact_payload.get('files', [])
+                                                applied_count = len(patched_files)
+                                                failed_count = 0
+                                                chat_summary = regen_parsed.chat_text or parsed_action.chat_text
+                                                # Switch routing to artifact create
+                                                routing = ArtifactDecision(
+                                                    render_mode="artifact",
+                                                    chat_payload=chat_summary,
+                                                    artifact_payload=regen_parsed.artifact_payload,
+                                                    contains_code=True,
+                                                    desired_action=ArtifactPreference.UPDATE,
+                                                )
+                                                render_mode = 'artifact'
+                                                logger.info(f"🔄 Full regeneration succeeded: {applied_count} files")
+                                            elif regen_parsed.patch_payload:
+                                                # Model sent another patch, try to apply it
                                                 patched_files, patch_results = apply_patches(
-                                                    current_files, retry_parsed.patch_payload.get('patches', [])
+                                                    current_files, regen_parsed.patch_payload.get('patches', [])
                                                 )
                                                 applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
                                                 failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
                                                 if applied_count > 0:
-                                                    chat_summary = retry_parsed.chat_text or parsed_action.chat_text
-                                                    logger.info(f"🔄 Patch retry succeeded: {applied_count} applied")
+                                                    chat_summary = regen_parsed.chat_text or parsed_action.chat_text
+                                                    logger.info(f"🔄 Retry patch succeeded: {applied_count} applied")
                                         except Exception as retry_err:
-                                            logger.warning(f"🔄 Patch retry failed: {retry_err}")
+                                            logger.warning(f"🔄 Regeneration retry failed: {retry_err}")
 
                                     if applied_count > 0:
                                         primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
@@ -2073,34 +2088,44 @@ def chat():
                 logger.info(f"🩹 [NonStream] Patch results: {applied_count} applied, {failed_count} failed")
 
                 if failed_count > 0 and applied_count == 0:
-                    logger.info(f"🔄 [NonStream] Patch retry: {failed_count} patches failed")
-                    failed_files = set(r['file'] for r in patch_results if r['status'] == 'failed')
-                    retry_parts = []
-                    for ff in failed_files:
-                        file_entry = next((f for f in current_files if f['path'] == ff), None)
-                        if file_entry:
-                            lang = file_entry.get('language', 'text')
-                            retry_parts.append(
-                                f"Your patch for {ff} failed: the old_string does not "
-                                f"exist in the current file. Here is the actual content:\n\n"
-                                f"```{lang}\n{file_entry.get('content', '')}\n```\n\n"
-                                f"Please provide a corrected artifact_patch."
-                            )
-                    retry_prompt = "\n".join(retry_parts)
+                    logger.info(f"🔄 [NonStream] Patch failed ({failed_count} failures), requesting full regeneration")
+                    regen_parts = ["The artifact_patch could not be applied. "
+                                   "Please regenerate the COMPLETE artifact with the changes applied.\n\n"
+                                   "Current files:\n"]
+                    for cf in current_files:
+                        lang = cf.get('language', 'text')
+                        regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
+                    regen_parts.append(f"\nUser request: {user_prompt}\n\n"
+                                      "Respond with ACTION: create_artifact and a complete ```artifact block "
+                                      "containing ALL files with the changes applied.")
+                    regen_prompt = "\n".join(regen_parts)
                     try:
-                        retry_response, _, _ = get_ai_response(retry_prompt, model)
-                        retry_parsed = ActionParser.parse(retry_response)
-                        if retry_parsed.patch_payload:
+                        regen_response, _, _ = get_ai_response(regen_prompt, model)
+                        regen_parsed = ActionParser.parse(regen_response)
+                        if regen_parsed.artifact_payload:
+                            patched_files = regen_parsed.artifact_payload.get('files', [])
+                            applied_count = len(patched_files)
+                            failed_count = 0
+                            response_text = regen_parsed.chat_text or routing_decision.chat_payload
+                            routing_decision = ArtifactDecision(
+                                render_mode="artifact",
+                                chat_payload=response_text,
+                                artifact_payload=regen_parsed.artifact_payload,
+                                contains_code=True,
+                                desired_action=ArtifactPreference.UPDATE,
+                            )
+                            logger.info(f"🔄 [NonStream] Full regeneration succeeded: {applied_count} files")
+                        elif regen_parsed.patch_payload:
                             patched_files, patch_results = apply_patches(
-                                current_files, retry_parsed.patch_payload.get('patches', [])
+                                current_files, regen_parsed.patch_payload.get('patches', [])
                             )
                             applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
                             failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
                             if applied_count > 0:
-                                response_text = retry_parsed.chat_text or routing_decision.chat_payload
-                                logger.info(f"🔄 [NonStream] Patch retry succeeded: {applied_count} applied")
+                                response_text = regen_parsed.chat_text or routing_decision.chat_payload
+                                logger.info(f"🔄 [NonStream] Retry patch succeeded: {applied_count} applied")
                     except Exception as retry_err:
-                        logger.warning(f"🔄 [NonStream] Patch retry failed: {retry_err}")
+                        logger.warning(f"🔄 [NonStream] Regeneration retry failed: {retry_err}")
 
                 if applied_count > 0:
                     primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
