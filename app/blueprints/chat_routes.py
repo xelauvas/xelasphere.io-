@@ -904,10 +904,16 @@ def chat_stream():
                         except Exception as title_err:
                             logger.warning(f"Failed to update session title in streaming: {title_err}")
 
+                    # Strip ACTION line from content so frontend doesn't see it
+                    display_content = full_content
+                    if parsed_action is not None and not parsed_action.used_fallback:
+                        # ACTION line was parsed — use chat_text (stripped) as display content
+                        display_content = parsed_action.chat_text
+
                     done_payload = {
                         'type': 'done',
                         'reasoning': full_reasoning,
-                        'content': full_content,
+                        'content': display_content,
                         'chat_summary': chat_summary,
                         'render_mode': render_mode,
                         'artifact': artifact_data,
