@@ -58,8 +58,11 @@ from app.artifacts import (
     ArtifactPreference, ArtifactDecision, parse_structured_response,
     detect_artifact_update_intent, load_current_artifact_context,
     delete_local_attachments, ARTIFACT_UPDATE_PATTERNS,
-    apply_patches,
+    apply_patches, ArtifactStore,
 )
+from app.context.action_parser import ActionParser, StreamingActionBuffer
+from app.context.context_builder import ContextBuilder, extract_turn_metadata
+from app.context.artifact_state_tracker import get_tracker, ArtifactStateTracker
 from app.file_processor import (
     get_file_type, generate_unique_filename, extract_text_concurrently,
     _safe_upload_relative_path, _build_metadata_lookup,
@@ -481,10 +484,8 @@ def chat_stream():
                     )
                 except Exception:
                     pass
-                # Cap messages in memory — only recent ones are needed for context
-                if len(previous_messages) > 20:
-                    logger.debug(f"[Stream] Trimming {len(previous_messages)} messages to last 20")
-                    previous_messages = previous_messages[-20:]
+                # Smart Context: load full history (Context Builder handles compression)
+                logger.debug(f"[Stream] Loaded {len(previous_messages)} messages (full history for Context Builder)")
                 logger.debug(f"[Stream] Loaded {len(previous_messages)} previous messages for context")
         except Exception as e:
             logger.warning(f"Failed to load session for streaming: {e}")
@@ -565,49 +566,53 @@ def chat_stream():
             logger.warning(f"[Stream] Memory V3 failed (using V2 only): {e}")
     # ============================================================
 
-    # Inject memory context into streaming prompt (was missing — memories retrieved but never used)
-    enhanced_prompt = prompt
-    if long_term_memory_stream:
-        enhanced_prompt = f"User memory (from previous sessions):\n{long_term_memory_stream}\n\n{enhanced_prompt}"
-        logger.info(f"🧠 [Stream] Injected {len(long_term_memory_stream)} chars of memory context into prompt")
+    # --- Smart Context Window: build prompt via ContextBuilder ---
+    artifact_tracker = None
+    if session_id and user_id:
+        try:
+            from app.config import db as _db
+            store = ArtifactStore(_db)
+            artifacts_data = store.list_artifacts(user_id, session_id)
+            artifacts = artifacts_data.get('artifacts', [])
+            active = next((a for a in artifacts if a.get('isActive')), artifacts[0] if artifacts else None)
+            if active:
+                full_art = store.get_artifact(user_id, session_id, active['artifactId'])
+                if full_art and full_art.get('activeVersion'):
+                    version = full_art['activeVersion']
+                    files = version.get('files', [])
+                    artifact_tracker = get_tracker(
+                        session_id,
+                        active['artifactId'],
+                        version.get('versionId', ''),
+                    )
+                    artifact_tracker.sync_from_files(files, preserve_sent_hashes=True)
+        except Exception as e:
+            logger.warning(f"[Stream] Failed to load artifact state: {e}")
 
-    # Inject recent chat history for conversation continuity
-    if previous_messages:
-        recent = previous_messages[-6:]  # Last 3 exchanges
-        history_lines = []
-        for msg in recent:
-            role = "User" if msg.get('prompt') else "Assistant"
-            if msg.get('prompt'):
-                history_lines.append(f"User: {msg['prompt'][:300]}")
-            if msg.get('response'):
-                history_lines.append(f"Assistant: {msg['response'][:300]}")
-        if history_lines:
-            history_block = "\n".join(history_lines)
-            enhanced_prompt = f"Recent conversation:\n{history_block}\n\n{enhanced_prompt}"
-            logger.info(f"🔍 [Stream] Injected {len(recent)} recent messages into prompt")
+    # Determine if we should inject artifact context
+    should_inject_artifact = False
+    if artifact_tracker:
+        has_dirty = len(artifact_tracker.get_dirty_files()) > 0
+        last_action_was_patch = False
+        if previous_messages:
+            last_meta = previous_messages[-1].get('turn_metadata', {})
+            last_action_was_patch = last_meta.get('action_type') == 'patch_artifact'
+        should_inject_artifact = has_dirty or last_action_was_patch
 
-    # Claude-inspired: Inject current artifact context when user asks to fix/update
-    if session_id and user_id and detect_artifact_update_intent(prompt):
-        logger.info(f"🔧 [Stream] Artifact update intent detected: '{prompt[:50]}...'")
-        artifact_context = load_current_artifact_context(user_id, session_id)
-        if artifact_context:
-            logger.info(f"📦 [Stream] Injected {len(artifact_context)} chars of artifact context")
-            # Prepend artifact context to prompt so AI sees current code
-            enhanced_prompt = (
-                f"{artifact_context}\n\n"
-                f"User request: {prompt}\n\n"
-                "YOU MUST RESPOND WITH A ```artifact_patch BLOCK. THIS IS MANDATORY.\n"
-                "DO NOT explain the code. DO NOT say it looks correct. DO NOT regenerate the full artifact.\n"
-                "DO NOT output a ```artifact block. ONLY ```artifact_patch.\n\n"
-                "Step 1: Write 1-2 sentence summary.\n"
-                "Step 2: Output EXACTLY:\n"
-                "```artifact_patch\n"
-                "{\"patches\":[{\"file\":\"FILENAME\",\"old_string\":\"COPY EXACT LINES FROM CODE ABOVE\",\"new_string\":\"FIXED VERSION\"}]}\n"
-                "```\n\n"
-                "old_string must be COPIED CHARACTER-FOR-CHARACTER from the code above. Include 2-4 surrounding lines."
-            )
-        else:
-            logger.debug("[Stream] No active artifact found to inject")
+    from app.model_catalog import get_model_context_limit
+    model_context = get_model_context_limit(stream_model)
+    context_builder = ContextBuilder(token_budget=model_context)
+    built_context = context_builder.build(
+        system_prompt=SYSTEM_INSTRUCTIONS + "\n" + DEVELOPER_INSTRUCTIONS,
+        full_history=previous_messages,
+        artifact_state=artifact_tracker if should_inject_artifact else None,
+        user_message=prompt,
+        memory_context=long_term_memory_stream or None,
+    )
+    enhanced_prompt = built_context.prompt
+    logger.info(f"[Stream] Context built: {built_context.token_estimate} tokens, "
+                f"level={built_context.compression_level}, "
+                f"artifact_files={len(built_context.artifact_files)}")
 
     # Inject crypto/stock context ONLY when user explicitly asks for price/chart
     # Use raw user prompt (not file-enriched prompt) to avoid false positives from file content
@@ -676,6 +681,7 @@ def chat_stream():
         import json
         reasoning_buffer = []
         content_buffer = []
+        parsed_action = None  # Set when response is complete
 
         try:
             for chunk in stream_deepseek_response(enhanced_prompt, stream_model):
@@ -705,16 +711,40 @@ def chat_stream():
                     routing = None
 
                     try:
-                        structured = parse_structured_response(full_content)
-                        routing = artifact_router.route(structured, prompt, provider_flagged_code=False)
-                        logger.info(f"Stream routing decision: render_mode={routing.render_mode}, has_payload={routing.artifact_payload is not None}")
-                        logger.info(f"Stream chat_payload: {repr(routing.chat_payload[:200] if routing.chat_payload else None)}")
-                        logger.info(f"Stream structured.chat: {repr(structured.chat[:200] if structured.chat else None)}")
-                        logger.info(f"Stream structured.remainder: {repr(structured.remainder[:200] if structured.remainder else None)}")
+                        parsed_action = ActionParser.parse(full_content)
+                        logger.info(f"Stream ActionParser: action={parsed_action.action}, "
+                                    f"has_artifact={parsed_action.artifact_payload is not None}, "
+                                    f"has_patch={parsed_action.patch_payload is not None}, "
+                                    f"fallback={parsed_action.used_fallback}")
+
+                        if parsed_action.action == "create_artifact" and parsed_action.artifact_payload:
+                            routing = ArtifactDecision(
+                                render_mode="artifact",
+                                chat_payload=parsed_action.chat_text,
+                                artifact_payload=parsed_action.artifact_payload,
+                                contains_code=True,
+                                desired_action=ArtifactPreference.UPDATE,
+                            )
+                        elif parsed_action.action == "patch_artifact" and parsed_action.patch_payload:
+                            routing = ArtifactDecision(
+                                render_mode="artifact_patch",
+                                chat_payload=parsed_action.chat_text,
+                                artifact_payload=parsed_action.patch_payload,
+                                contains_code=True,
+                                desired_action=ArtifactPreference.UPDATE,
+                            )
+                        else:
+                            routing = ArtifactDecision(
+                                render_mode="inline",
+                                chat_payload=parsed_action.chat_text,
+                                artifact_payload=None,
+                                contains_code=False,
+                                desired_action=ArtifactPreference.NONE,
+                            )
 
                         if routing.render_mode and routing.render_mode != 'inline':
                             render_mode = routing.render_mode
-                            chat_summary = routing.chat_payload or structured.remainder or ''
+                            chat_summary = routing.chat_payload or ''
                             logger.info(f"Stream chat_summary set to: {repr(chat_summary[:200])}")
 
                             # Handle artifact_patch — apply patches and send both patches + result to frontend
@@ -745,6 +775,13 @@ def chat_stream():
                                             'files': patched_files,
                                         }
                                         render_mode = 'artifact'
+
+                                        # Update state tracker with mutated files
+                                        if artifact_tracker:
+                                            for pf in patched_files:
+                                                artifact_tracker.mark_mutated(
+                                                    pf['path'], pf.get('content', '')
+                                                )
                                     else:
                                         # All patches failed — don't create a broken empty artifact
                                         routing.artifact_payload = None
@@ -902,6 +939,28 @@ def chat_stream():
                                         'pending': True
                                     }
 
+                            # Build turn metadata for Smart Context
+                            action_type = parsed_action.action if parsed_action is not None else "chat"
+                            had_error = bool(artifact_error)
+                            art_mutation = None
+                            if artifact_ref:
+                                art_mutation = {
+                                    "artifact_id": artifact_ref.get('artifactId'),
+                                    "from_version": None,
+                                    "to_version": artifact_ref.get('versionId'),
+                                    "files_changed": [f.get('path', '') for f in
+                                                      (routing.artifact_payload or {}).get('files', [])],
+                                }
+                            stream_turn_metadata = extract_turn_metadata(
+                                turn_number=len(previous_messages) + 1,
+                                user_message=prompt,
+                                action_type=action_type,
+                                had_error=had_error,
+                                artifact_mutation=art_mutation,
+                                error_detail=artifact_error,
+                                model=stream_model,
+                            )
+
                             logger.info(f"📦 Saving stream interaction: render_mode={render_mode}, artifact_ref={artifact_ref is not None}, artifact_id={artifact_ref.get('artifactId') if artifact_ref else None}, pending={artifact_ref.get('pending') if artifact_ref else 'N/A'}")
                             save_interaction(
                                 user_id=user_id,
@@ -916,7 +975,8 @@ def chat_stream():
                                 render_mode=render_mode,
                                 artifact_reference=artifact_ref,
                                 reasoning=full_reasoning if full_reasoning else None,
-                                crypto_chart=crypto_chart
+                                crypto_chart=crypto_chart,
+                                turn_metadata=stream_turn_metadata,
                             )
                             logger.info(f"Streaming response saved to history for session {session_id}")
 
