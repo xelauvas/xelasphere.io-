@@ -592,16 +592,17 @@ DEVELOPER_INSTRUCTIONS = (
 
     "After the ACTION line, write your response.\n\n"
 
-    "-- ACTION: chat --\n"
-    "ACTION: chat\n\n"
-    "Your normal markdown response here. Code blocks for illustration are fine.\n\n"
+    "EXAMPLE for chat responses:\n"
+    "ACTION: chat\n"
+    "[your markdown response]\n\n"
 
-    "-- ACTION: create_artifact --\n"
-    "ACTION: create_artifact\n\n"
-    "Brief explanation of what you're building.\n\n"
+    "EXAMPLE for creating artifacts:\n"
+    "ACTION: create_artifact\n"
+    "[brief explanation]\n"
     "```artifact\n"
-    "{\"title\":\"...\",\"type\":\"project\",\"primaryLanguage\":\"...\","
-    "\"files\":[{\"path\":\"...\",\"language\":\"...\",\"content\":\"...\"}]}\n"
+    "{\"title\":\"App Name\",\"type\":\"project\",\"primaryLanguage\":\"jsx\","
+    "\"files\":[{\"path\":\"App.jsx\",\"language\":\"jsx\",\"content\":\"...\"},"
+    "{\"path\":\"style.css\",\"language\":\"css\",\"content\":\"...\"}]}\n"
     "```\n\n"
 
     "For React apps: Use App.jsx as entrypoint + style.css. DO NOT create index.html.\n"
@@ -612,9 +613,9 @@ DEVELOPER_INSTRUCTIONS = (
     "For plain HTML apps: Create index.html, style.css, script.js.\n"
     "React artifacts MUST have AT LEAST 2 files: App.jsx + style.css.\n\n"
 
-    "-- ACTION: patch_artifact --\n"
-    "ACTION: patch_artifact\n\n"
-    "Brief explanation of what you're changing.\n\n"
+    "EXAMPLE for patching artifacts:\n"
+    "ACTION: patch_artifact\n"
+    "[brief explanation]\n"
     "```artifact_patch\n"
     "{\"patches\":[{\"file\":\"App.jsx\",\"old_string\":\"exact text to find\",\"new_string\":\"replacement\"}]}\n"
     "```\n\n"

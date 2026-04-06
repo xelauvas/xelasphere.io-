@@ -18,7 +18,8 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-_ACTION_LINE_RE = re.compile(r"^\s*ACTION:\s*(\w+)", re.IGNORECASE)
+# Match "ACTION: xyz", "-- ACTION: xyz --", "**ACTION: xyz**" etc.
+_ACTION_LINE_RE = re.compile(r"^\s*[-*]*\s*ACTION:\s*(\w+)", re.IGNORECASE)
 _ARTIFACT_FENCE_RE = re.compile(r"```artifact\s*([\s\S]*?)\s*```", re.IGNORECASE)
 _ARTIFACT_UNCLOSED_RE = re.compile(r"```artifact\s*([\s\S]+)", re.IGNORECASE)
 _PATCH_FENCE_RE = re.compile(r"```artifact_patch\s*([\s\S]*?)\s*```", re.IGNORECASE)
