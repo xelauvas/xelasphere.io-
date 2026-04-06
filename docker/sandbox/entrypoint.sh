@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+# Don't use set -e — background processes (Xvfb, x11vnc) may return non-zero
 
 MODE="${MODE:-script}"
 ENTRY="${ENTRY:-main.py}"
@@ -63,6 +63,7 @@ case "$MODE" in
 
     gui)
         export DISPLAY=:99
+        export SDL_AUDIODRIVER=dummy
 
         # Start virtual framebuffer
         Xvfb :99 -screen 0 800x600x24 -ac +extension GLX +render -noreset &
