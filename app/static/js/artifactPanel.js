@@ -2391,9 +2391,9 @@ ${escapeHtml(entry.content || '')}
 
             // Initialize tab content when switching
             if (target === 'code' && this.currentVersion) {
-                // Exit edit mode if switching to code tab
-                if (this.isEditMode) {
-                    this.exitEditMode();
+                // Auto-enter edit mode when switching to code tab
+                if (!this.isEditMode && !this.isPatchStreaming && !this.isStreaming) {
+                    setTimeout(() => this.enterEditMode(), 50);
                 }
             } else if (target === 'diff' && this.currentArtifact) {
                 this.initializeDiffTab(this.currentArtifact);
@@ -2797,9 +2797,13 @@ ${escapeHtml(entry.content || '')}
             if (currentContent !== originalContent) {
                 this.editedFiles.set(this.editingFile.path, currentContent);
                 this.updateEditButtons(true);
+                // Auto-save after 2s of inactivity
+                clearTimeout(this._autoSaveTimer);
+                this._autoSaveTimer = setTimeout(() => this.saveEdits(), 2000);
             } else {
                 this.editedFiles.delete(this.editingFile.path);
                 this.updateEditButtons(this.editedFiles.size > 0);
+                clearTimeout(this._autoSaveTimer);
             }
         }
 
