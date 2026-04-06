@@ -39,10 +39,22 @@ def check_guest_ip_limit(ip_hash):
     """Check if IP has exceeded guest message limit.
 
     Returns (is_blocked, message_count) tuple.
+
+    IMPORTANT: Firestore calls must not block page render. If Firestore is slow/unreachable,
+    fail open (treat as not blocked) rather than hanging the request.
     """
     try:
         doc_ref = db.collection('guest_ips').document(ip_hash)
-        doc = doc_ref.get()
+
+        # Avoid request hangs: `DocumentReference.get()` can block/retry for a long time.
+        # Use a short timeout when supported.
+        try:
+            # Disable retries for page-load path; prefer fast failure over hanging.
+            doc = doc_ref.get(timeout=2, retry=None)
+        except TypeError:
+            # Older client versions may not support the timeout kwarg.
+            doc = doc_ref.get()
+
         if doc.exists:
             data = doc.to_dict()
             count = data.get('message_count', 0)
@@ -54,9 +66,18 @@ def check_guest_ip_limit(ip_hash):
 
 
 def fetch_user_preferences(user_id):
-    """Fetch user preferences for personalized suggestions."""
+    """Fetch user preferences for personalized suggestions.
+
+    IMPORTANT: Keep this non-blocking for page loads.
+    """
     try:
-        user_doc = db.collection('users').document(user_id).get()
+        doc_ref = db.collection('users').document(user_id)
+        try:
+            # Disable retries for page-load path; prefer fast failure over hanging.
+            user_doc = doc_ref.get(timeout=2, retry=None)
+        except TypeError:
+            user_doc = doc_ref.get()
+
         if user_doc.exists:
             data = user_doc.to_dict()
             return data.get('preferences', {})
@@ -251,7 +272,11 @@ def open_shared_session(session_id):
 
             # Check if session has messages to prevent FOUC
             try:
-                session_doc = db.collection('users').document(user_id).collection('chat_sessions').document(session_id).get()
+                doc_ref = db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
+                try:
+                    session_doc = doc_ref.get(timeout=2, retry=None)
+                except TypeError:
+                    session_doc = doc_ref.get()
                 if session_doc.exists:
                     session_data = session_doc.to_dict()
                     msg_count = len(session_data.get('messages', []))

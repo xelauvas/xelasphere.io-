@@ -714,19 +714,39 @@ def apply_patches(
     file_map = {f['path']: f for f in patched_files}
 
     for patch in patches:
-        target_file = patch['file']
-        old_string = patch['old_string']
-        new_string = patch['new_string']
+        target_file = patch.get('file', '')
+        old_string = patch.get('old_string', '')
+        new_string = patch.get('new_string', '')
 
         if target_file not in file_map:
-            results.append({'file': target_file, 'status': 'failed', 'reason': f'File "{target_file}" not found'})
-            continue
+            available = list(file_map.keys())
+            logger.warning(f"🩹 Patch target '{target_file}' not in files: {available}")
+            # Fallback: if only one file, use it regardless of name
+            if len(file_map) == 1:
+                target_file = list(file_map.keys())[0]
+                logger.info(f"🩹 Single-file fallback: using '{target_file}'")
+            else:
+                results.append({'file': target_file, 'status': 'failed', 'reason': f'File "{target_file}" not found'})
+                continue
 
         file_entry = file_map[target_file]
         content = file_entry.get('content', '')
 
+        logger.debug(f"🩹 Patch target='{target_file}', old_string[:80]={repr(old_string[:80])}")
+        logger.debug(f"🩹 Content[:200]={repr(content[:200])}")
+
         count = content.count(old_string)
         if count == 0:
+            logger.info(f"🩹 Exact match failed for old_string ({len(old_string)} chars) in {target_file} ({len(content)} chars)")
+            # Try with normalized line endings
+            old_norm_nl = old_string.replace('\r\n', '\n').replace('\r', '\n')
+            content_norm_nl = content.replace('\r\n', '\n').replace('\r', '\n')
+            if old_norm_nl != old_string and content_norm_nl.count(old_norm_nl) == 1:
+                logger.info(f"🩹 Line-ending normalization matched!")
+                file_entry['content'] = content_norm_nl.replace(old_norm_nl, new_string.replace('\r\n', '\n').replace('\r', '\n'), 1)
+                results.append({'file': target_file, 'status': 'applied'})
+                continue
+
             # Fuzzy fallback: try whitespace-normalized matching
             import re
             norm_old = re.sub(r'\s+', ' ', old_string.strip())

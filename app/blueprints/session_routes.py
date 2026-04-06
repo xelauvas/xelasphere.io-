@@ -138,7 +138,11 @@ def select_chat_session():
     user_id = session['user']['uid']
     try:
         session_ref = db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
-        if not session_ref.get().exists:
+        try:
+            session_doc = session_ref.get(timeout=2, retry=None)
+        except TypeError:
+            session_doc = session_ref.get()
+        if not session_doc.exists:
             return jsonify({'error': 'Chat session not found.'}), 404
 
         session['current_session_id'] = session_id
@@ -158,7 +162,10 @@ def mark_session_read(session_id):
 
     try:
         session_ref = db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
-        session_doc = session_ref.get()
+        try:
+            session_doc = session_ref.get(timeout=2, retry=None)
+        except TypeError:
+            session_doc = session_ref.get()
 
         if not session_doc.exists:
             return jsonify({'error': 'Chat session not found.'}), 404
@@ -191,7 +198,11 @@ def get_unread_counts():
         query = sessions_ref.where('status', '!=', 'archived').select(
             ['last_message_at', 'last_updated', 'status']
         )
-        all_sessions = query.stream()
+        # Avoid hanging the UI if Firestore is slow/quota-limited.
+        try:
+            all_sessions = query.stream(timeout=2, retry=None)
+        except TypeError:
+            all_sessions = query.stream()
 
         session_timestamps = {}
         for doc in all_sessions:

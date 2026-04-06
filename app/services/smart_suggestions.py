@@ -125,18 +125,24 @@ def save_pool(db, user_id: str, suggestions: List[Suggestion], reason: str) -> N
 
 
 def load_pool(db, user_id: str) -> List[Suggestion]:
-    """
-    Load the suggestion pool from Firestore.
+    """Load the suggestion pool from Firestore.
 
     Returns an empty list if no pool document exists yet.
+
+    IMPORTANT: This function may be called during page render. Firestore calls must not
+    hang the request; prefer fast-fail over long retries.
     """
-    snapshot = (
+    doc_ref = (
         db.collection("users")
         .document(user_id)
         .collection("smart_suggestions")
         .document("pool")
-        .get()
     )
+    try:
+        snapshot = doc_ref.get(timeout=2, retry=None)
+    except TypeError:
+        # Older client versions may not support timeout/retry kwargs.
+        snapshot = doc_ref.get()
     if not snapshot.exists:
         return []
 
@@ -146,19 +152,23 @@ def load_pool(db, user_id: str) -> List[Suggestion]:
 
 
 def get_pool_metadata(db, user_id: str) -> Dict[str, Any]:
-    """
-    Return metadata about the current suggestion pool.
+    """Return metadata about the current suggestion pool.
 
     Returns a dict with last_refresh, refresh_reason, and pool_size.
     Returns defaults if the pool document does not exist.
+
+    IMPORTANT: Keep non-blocking for page loads.
     """
-    snapshot = (
+    doc_ref = (
         db.collection("users")
         .document(user_id)
         .collection("smart_suggestions")
         .document("pool")
-        .get()
     )
+    try:
+        snapshot = doc_ref.get(timeout=2, retry=None)
+    except TypeError:
+        snapshot = doc_ref.get()
     if not snapshot.exists:
         return {
             "last_refresh": None,
