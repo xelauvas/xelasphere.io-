@@ -884,7 +884,7 @@ async function loadPackagesFor(code) {
             setStatus('');
         }
     }
-    if (pkgs.includes('matplotlib')) {
+    if (builtins.includes('matplotlib')) {
         pyodide.runPython(
             'import matplotlib; matplotlib.use("Agg")\\n' +
             'import matplotlib.pyplot as _plt\\n' +
