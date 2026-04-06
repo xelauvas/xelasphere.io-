@@ -767,59 +767,6 @@ var history = [];
 var histIdx = -1;
 var ENTRY_NAME = '${entryName.replace(/'/g, "\\'")}';
 
-async function runOnServer() {
-    var output = document.getElementById('output');
-    output.innerHTML = '';
-    var code = JSON.parse(document.getElementById('code-data').textContent);
-    var files = JSON.parse(document.getElementById('files-data').textContent);
-    var fileList = Object.keys(files).map(function(p) { return {path: p, content: files[p]}; });
-
-    appendOutput('Connecting to server...\\n', 'repl-prompt');
-
-    try {
-        var resp = await fetch('/api/sandbox/run', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({code: code, files: fileList, entry: ENTRY_NAME}),
-            credentials: 'same-origin'
-        });
-
-        var reader = resp.body.getReader();
-        var decoder = new TextDecoder();
-        var buf = '';
-
-        while (true) {
-            var chunk = await reader.read();
-            if (chunk.done) break;
-            buf += decoder.decode(chunk.value, {stream: true});
-            var lines = buf.split('\\n\\n');
-            buf = lines.pop();
-            for (var line of lines) {
-                if (!line.startsWith('data: ')) continue;
-                try {
-                    var event = JSON.parse(line.slice(6));
-                    if (event.type === 'stdout') appendOutput(event.text, 'stdout');
-                    else if (event.type === 'stderr') appendOutput(event.text, 'stderr');
-                    else if (event.type === 'install') appendOutput(event.text + '\\n', 'repl-prompt');
-                    else if (event.type === 'status') appendOutput(event.text + '\\n', 'repl-prompt');
-                    else if (event.type === 'exit') appendOutput('\\nProcess exited with code ' + event.code + '\\n', 'repl-prompt');
-                    else if (event.type === 'error') appendOutput('Error: ' + event.text + '\\n', 'stderr');
-                    else if (event.type === 'app') {
-                        appendOutput('App running!\\n', 'repl-prompt');
-                        window.parent.postMessage({type: 'sandbox-app', url: event.url}, '*');
-                    }
-                    else if (event.type === 'vnc') {
-                        appendOutput('GUI running!\\n', 'repl-prompt');
-                        window.parent.postMessage({type: 'sandbox-vnc', url: event.url}, '*');
-                    }
-                } catch(e) {}
-            }
-        }
-    } catch (err) {
-        appendOutput('Server error: ' + err.message + '\\n', 'stderr');
-    }
-}
-
 async function initPyodide() {
     if (pyodideReady) return pyodideReady;
     pyodideReady = (async () => {
