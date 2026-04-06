@@ -829,15 +829,60 @@ function clearOutput() {
     document.getElementById('output').innerHTML = '';
 }
 
+// Packages that need native Pyodide builds (not micropip)
+var BUILTIN_PKGS = ['numpy','pandas','matplotlib','scipy','scikit-learn','pillow','sympy','networkx','sqlalchemy'];
+// Packages that cannot work in browser
+var UNSUPPORTED = ['pygame','tkinter','cv2','opencv','flask','django','fastapi','socket','multiprocessing','subprocess'];
+
 async function loadPackagesFor(code) {
-    var pkgs = [];
-    if (code.includes('import numpy') || code.includes('from numpy')) pkgs.push('numpy');
-    if (code.includes('import pandas') || code.includes('from pandas')) pkgs.push('pandas');
-    if (code.includes('matplotlib') || code.includes('plt.')) pkgs.push('matplotlib');
-    if (pkgs.length > 0) {
-        setStatus('Loading ' + pkgs.join(', ') + '...');
-        await pyodide.loadPackage(pkgs);
+    // Detect all "import X" and "from X import" statements
+    var importRe = /(?:^|\\n)\\s*(?:import|from)\\s+([a-zA-Z_][a-zA-Z0-9_]*)/g;
+    var match, detected = new Set();
+    while ((match = importRe.exec(code)) !== null) detected.add(match[1]);
+
+    // Warn about unsupported packages
+    for (var u of UNSUPPORTED) {
+        if (detected.has(u)) {
+            appendOutput('Warning: ' + u + ' is not available in browser Python\\n', 'stderr');
+            detected.delete(u);
+        }
+    }
+
+    // Load built-in Pyodide packages
+    var builtins = [];
+    for (var d of detected) {
+        var pkg = BUILTIN_PKGS.find(function(p) { return p === d || p.replace('-','') === d; });
+        if (pkg) { builtins.push(pkg); detected.delete(d); }
+    }
+    // Remove standard library modules
+    var stdlib = ['sys','os','io','json','math','random','re','collections','itertools','functools','datetime','time','string','pathlib','typing','abc','copy','hashlib','base64','struct','csv','textwrap','enum','dataclasses'];
+    for (var s of stdlib) detected.delete(s);
+
+    if (builtins.length > 0) {
+        setStatus('Loading ' + builtins.join(', ') + '...');
+        await pyodide.loadPackage(builtins);
         setStatus('');
+    }
+
+    // Try micropip for remaining packages
+    var remaining = Array.from(detected);
+    if (remaining.length > 0) {
+        try {
+            await pyodide.loadPackage('micropip');
+            var micropip = pyodide.pyimport('micropip');
+            for (var pkg of remaining) {
+                try {
+                    setStatus('Installing ' + pkg + '...');
+                    await micropip.install(pkg);
+                    setStatus('');
+                } catch(e) {
+                    appendOutput('Could not install ' + pkg + ': ' + (e.message || e) + '\\n', 'stderr');
+                }
+            }
+            setStatus('');
+        } catch(e) {
+            setStatus('');
+        }
     }
     if (pkgs.includes('matplotlib')) {
         pyodide.runPython(
@@ -894,6 +939,27 @@ replInput.addEventListener('keydown', async function(e) {
         histIdx = history.length;
 
         appendOutput('>>> ' + cmd + '\\n', 'repl-in');
+
+        // Handle !pip install commands
+        if (cmd.trim().startsWith('!pip install') || cmd.trim().startsWith('pip install')) {
+            var pkgName = cmd.replace(/!?pip\\s+install\\s+/,'').trim();
+            if (pkgName) {
+                try {
+                    var py = await initPyodide();
+                    await py.loadPackage('micropip');
+                    var micropip = py.pyimport('micropip');
+                    setStatus('Installing ' + pkgName + '...');
+                    await micropip.install(pkgName);
+                    appendOutput('Successfully installed ' + pkgName + '\\n', 'stdout');
+                    setStatus('');
+                } catch(e) {
+                    appendOutput('Failed to install ' + pkgName + ': ' + (e.message || e) + '\\n', 'stderr');
+                    setStatus('');
+                }
+            }
+            scrollBottom();
+            return;
+        }
 
         try {
             var py = await initPyodide();
