@@ -2205,7 +2205,11 @@ ${escapeHtml(entry.content || '')}
             if (isNaN(selectedIndex) || selectedIndex < 0) return;
             const file = this.currentVersion.files[selectedIndex];
             if (file) {
-                this.renderCodeViewer(this.currentVersion, file);
+                if (this.isEditMode && this.editCodeMirror) {
+                    this.loadFileForEditing(file);
+                } else {
+                    this.renderCodeViewer(this.currentVersion, file);
+                }
             }
         }
 
