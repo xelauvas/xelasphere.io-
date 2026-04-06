@@ -1,6 +1,6 @@
 /* --- General Variables for Colors --- */
 :root {
-    --bg-syntax: #282c34;          /* Dark background from screenshot */
+    --bg-syntax: #1a1a1f;          /* Match app --background-darker */
     --text-syntax: #abb2bf;        /* Default text color */
     --keyword-color: #c678dd;      /* Keywords (purple) */
     --function-color: #ef6161;     /* Functions (blue) */
