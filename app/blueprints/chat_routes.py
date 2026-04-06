@@ -600,42 +600,7 @@ def chat_stream():
             last_action_was_patch = last_meta.get('action_type') == 'patch_artifact'
         should_inject_artifact = has_dirty or last_action_was_patch
 
-    from app.model_catalog import get_model_context_limit
-    model_context = get_model_context_limit(stream_model)
-    context_builder = ContextBuilder(token_budget=model_context)
-    built_context = context_builder.build(
-        system_prompt=SYSTEM_INSTRUCTIONS + "\n" + DEVELOPER_INSTRUCTIONS,
-        full_history=previous_messages,
-        artifact_state=artifact_tracker if should_inject_artifact else None,
-        user_message=prompt,
-        memory_context=long_term_memory_stream or None,
-    )
-    enhanced_prompt = built_context.prompt
-    logger.info(f"[Stream] Context built: {built_context.token_estimate} tokens, "
-                f"level={built_context.compression_level}, "
-                f"artifact_files={len(built_context.artifact_files)}")
-
-    # Inject crypto/stock context ONLY when user explicitly asks for price/chart
-    # Use raw user prompt (not file-enriched prompt) to avoid false positives from file content
-    chart_query = detect_crypto_price_query(user_prompt_raw)
-    if chart_query:
-        asset_type = chart_query.get('asset_type')
-        if asset_type == 'crypto':
-            coin = chart_query.get('coin')
-            if coin:
-                crypto_context = get_crypto_ai_context(coin)
-                if crypto_context:
-                    context_str = format_crypto_context_for_ai(crypto_context)
-                    logger.info(f"💰 [Stream] Injected crypto context for chart query: {coin}")
-                    enhanced_prompt = f"{context_str}\n\nUser question: {enhanced_prompt}"
-        elif asset_type == 'stock':
-            symbol = chart_query.get('symbol')
-            if symbol:
-                stock_context = get_stock_ai_context(symbol)
-                if stock_context:
-                    context_str = format_stock_context_for_ai(stock_context)
-                    logger.info(f"📈 [Stream] Injected stock context for chart query: {symbol}")
-                    enhanced_prompt = f"{context_str}\n\nUser question: {enhanced_prompt}"
+    # NOTE: ContextBuilder call + crypto injection moved below smart routing (needs stream_model)
 
     # Smart-route 'auto' model, but force a streaming-capable model
     stream_model = model
@@ -657,6 +622,43 @@ def chat_stream():
         if provider not in ("deepseek", "moonshot"):
             stream_model = "deepseek-chat"
             logger.info(f"🔀 [Stream] Overriding non-streaming model to deepseek-chat")
+
+    # --- Build prompt via ContextBuilder (after stream_model is resolved) ---
+    from app.model_catalog import get_model_context_limit
+    model_context = get_model_context_limit(stream_model)
+    context_builder = ContextBuilder(token_budget=model_context)
+    built_context = context_builder.build(
+        system_prompt=SYSTEM_INSTRUCTIONS + "\n" + DEVELOPER_INSTRUCTIONS,
+        full_history=previous_messages,
+        artifact_state=artifact_tracker if should_inject_artifact else None,
+        user_message=prompt,
+        memory_context=long_term_memory_stream or None,
+    )
+    enhanced_prompt = built_context.prompt
+    logger.info(f"[Stream] Context built: {built_context.token_estimate} tokens, "
+                f"level={built_context.compression_level}, "
+                f"artifact_files={len(built_context.artifact_files)}")
+
+    # Inject crypto/stock context ONLY when user explicitly asks for price/chart
+    chart_query = detect_crypto_price_query(user_prompt_raw)
+    if chart_query:
+        asset_type = chart_query.get('asset_type')
+        if asset_type == 'crypto':
+            coin = chart_query.get('coin')
+            if coin:
+                crypto_context = get_crypto_ai_context(coin)
+                if crypto_context:
+                    context_str = format_crypto_context_for_ai(crypto_context)
+                    logger.info(f"💰 [Stream] Injected crypto context for chart query: {coin}")
+                    enhanced_prompt = f"{context_str}\n\nUser question: {enhanced_prompt}"
+        elif asset_type == 'stock':
+            symbol = chart_query.get('symbol')
+            if symbol:
+                stock_context = get_stock_ai_context(symbol)
+                if stock_context:
+                    context_str = format_stock_context_for_ai(stock_context)
+                    logger.info(f"📈 [Stream] Injected stock context for chart query: {symbol}")
+                    enhanced_prompt = f"{context_str}\n\nUser question: {enhanced_prompt}"
 
     def _load_current_artifact_files(uid, sid):
         """Load current artifact files for patching."""
