@@ -2377,7 +2377,7 @@ button.artifact-chat-pill,
   background: transparent;
   border: none;
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.5);
+  color: #fff;
   cursor: pointer;
   transition: all 120ms ease;
   flex-shrink: 0;
@@ -2386,7 +2386,7 @@ button.artifact-chat-pill,
 
 .artifact-panel__close-btn:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.85);
+  color: #fff;
 }
 
 .artifact-panel__close-btn svg {
