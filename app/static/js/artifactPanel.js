@@ -2722,7 +2722,7 @@ ${escapeHtml(entry.content || '')}
         }
 
         loadFileForEditing(file) {
-            if (!file || !this.editCodeMirror || !this.editCurrentFileName) return;
+            if (!file || !this.editCodeMirror) return;
 
             this.editingFile = file;
             this.originalFileContent = file.content || '';
@@ -2737,7 +2737,7 @@ ${escapeHtml(entry.content || '')}
             const mode = this.getCodeMirrorMode(file);
             this.editCodeMirror.setOption('mode', mode);
 
-            this.editCurrentFileName.textContent = file.path || 'File';
+            if (this.currentFileName) this.currentFileName.textContent = file.path || 'File';
 
             // Update button states
             const hasChanges = this.editedFiles.has(file.path);
