@@ -686,6 +686,204 @@ ${escapeHtml(entry.content || '')}
             }
         },
         {
+            name: 'python',
+            matches: version => {
+                const entry = (version.entrypointPath || '').toLowerCase();
+                if (entry.endsWith('.py')) return true;
+                if (version.files?.some(f => (f.path || '').toLowerCase().endsWith('.py'))) return true;
+                return version.files?.some(f => (f.language || '').toLowerCase() === 'python');
+            },
+            render: (frame, version) => {
+                if (!frame) return;
+                const pyFile = version.files?.find(f =>
+                    (f.path || '').toLowerCase().endsWith('.py') || (f.language || '').toLowerCase() === 'python'
+                ) || version.files?.[0];
+                const code = pyFile?.content || '';
+
+                // Collect all .py files for multi-file support
+                const allFiles = {};
+                (version.files || []).forEach(f => {
+                    if ((f.path || '').endsWith('.py')) {
+                        allFiles[f.path] = f.content || '';
+                    }
+                });
+
+                const codePayload = JSON.stringify(code).replace(/<\/script/g, '<\\/script');
+                const filesPayload = JSON.stringify(allFiles).replace(/<\/script/g, '<\\/script');
+                const entryName = pyFile?.path || 'main.py';
+
+                frame.srcdoc = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#1e1e1e;color:#d4d4d4;font-family:'Söhne Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.6;min-height:100vh;display:flex;flex-direction:column;}
+#toolbar{padding:8px 16px;background:#181818;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:10px;flex-shrink:0;}
+#toolbar .file-name{color:rgba(255,255,255,0.5);font-size:12px;}
+#run-btn{padding:4px 14px;font-size:12px;font-weight:500;color:#1e1e1e;background:#4ec9b0;border:none;border-radius:5px;cursor:pointer;transition:background .15s;}
+#run-btn:hover{background:#5edfc4;}
+#run-btn:disabled{opacity:0.5;cursor:wait;}
+#status{font-size:11px;color:rgba(255,255,255,0.35);}
+#output-wrap{flex:1;overflow:auto;padding:12px 16px;}
+#output{white-space:pre-wrap;word-break:break-word;}
+.stdout{color:#d4d4d4;}
+.stderr{color:#f44747;}
+.plot-container{margin:8px 0;max-width:100%;border-radius:6px;overflow:hidden;background:#1e1e1e;}
+.plot-container img{max-width:100%;display:block;}
+.input-line{display:flex;gap:6px;align-items:center;margin:4px 0;}
+.input-line input{flex:1;background:#2d2d2d;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#d4d4d4;font-family:inherit;font-size:13px;padding:4px 8px;outline:none;}
+.input-line input:focus{border-color:#4ec9b0;}
+.welcome{color:rgba(255,255,255,0.25);padding:40px 16px;text-align:center;font-size:14px;}
+</style>
+</head>
+<body>
+<div id="toolbar">
+    <button id="run-btn" onclick="runCode()">&#9654; Run</button>
+    <span class="file-name">${escapeHtml(entryName)}</span>
+    <span id="status"></span>
+</div>
+<div id="output-wrap">
+    <div id="output"><div class="welcome">Press Run to execute</div></div>
+</div>
+
+<script id="code-data" type="application/json">${codePayload}</script>
+<script id="files-data" type="application/json">${filesPayload}</script>
+
+<script>
+var pyodideReady = null;
+var pyodide = null;
+
+async function loadPyodide_() {
+    if (pyodideReady) return pyodideReady;
+    pyodideReady = (async () => {
+        document.getElementById('status').textContent = 'Loading Python...';
+        if (!window.loadPyodide) {
+            var s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js';
+            document.head.appendChild(s);
+            await new Promise((ok, fail) => { s.onload = ok; s.onerror = fail; });
+        }
+        pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/' });
+        document.getElementById('status').textContent = 'Python ready';
+        setTimeout(() => document.getElementById('status').textContent = '', 2000);
+        return pyodide;
+    })();
+    return pyodideReady;
+}
+
+function appendOutput(text, cls) {
+    var el = document.getElementById('output');
+    var span = document.createElement('span');
+    span.className = cls || 'stdout';
+    span.textContent = text;
+    el.appendChild(span);
+    el.parentElement.scrollTop = el.parentElement.scrollHeight;
+}
+
+async function runCode() {
+    var btn = document.getElementById('run-btn');
+    var output = document.getElementById('output');
+    output.innerHTML = '';
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+
+    try {
+        var py = await loadPyodide_();
+        var code = JSON.parse(document.getElementById('code-data').textContent);
+        var files = JSON.parse(document.getElementById('files-data').textContent);
+
+        // Write auxiliary .py files so imports work
+        for (var path in files) {
+            if (path !== '${entryName.replace(/'/g, "\\'")}') {
+                py.FS.writeFile('/home/pyodide/' + path, files[path]);
+            }
+        }
+
+        // Redirect stdout/stderr
+        py.runPython(\`
+import sys, io
+
+class _Out:
+    def __init__(self, cls):
+        self.cls = cls
+    def write(self, text):
+        if text:
+            from js import appendOutput
+            appendOutput(text, self.cls)
+    def flush(self):
+        pass
+
+sys.stdout = _Out('stdout')
+sys.stderr = _Out('stderr')
+\`);
+
+        // Check if matplotlib is used and set up Agg backend
+        if (code.includes('matplotlib') || code.includes('plt.')) {
+            await py.loadPackage('matplotlib');
+            py.runPython(\`
+import matplotlib
+matplotlib.use('Agg')
+\`);
+        }
+
+        // Load common packages if referenced
+        var pkgs = [];
+        if (code.includes('import numpy') || code.includes('from numpy')) pkgs.push('numpy');
+        if (code.includes('import pandas') || code.includes('from pandas')) pkgs.push('pandas');
+        if (pkgs.length > 0) {
+            document.getElementById('status').textContent = 'Loading packages...';
+            await py.loadPackage(pkgs);
+            document.getElementById('status').textContent = '';
+        }
+
+        // Patch plt.show() to render inline
+        if (code.includes('matplotlib') || code.includes('plt.')) {
+            py.runPython(\`
+import matplotlib.pyplot as _plt
+_orig_show = _plt.show
+def _inline_show(*a, **kw):
+    import io, base64
+    from js import document
+    buf = io.BytesIO()
+    _plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', facecolor='#1e1e1e', edgecolor='none')
+    buf.seek(0)
+    b64 = base64.b64encode(buf.read()).decode()
+    buf.close()
+    container = document.createElement('div')
+    container.className = 'plot-container'
+    img = document.createElement('img')
+    img.src = 'data:image/png;base64,' + b64
+    container.appendChild(img)
+    document.getElementById('output').appendChild(container)
+    output_wrap = document.getElementById('output-wrap')
+    output_wrap.scrollTop = output_wrap.scrollHeight
+    _plt.close('all')
+_plt.show = _inline_show
+\`);
+        }
+
+        await py.runPythonAsync(code);
+
+    } catch (err) {
+        appendOutput(err.message || String(err), 'stderr');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '\\u25b6 Run';
+    }
+}
+
+// Auto-run on load
+window.addEventListener('load', function() {
+    setTimeout(runCode, 100);
+});
+</script>
+</body>
+</html>`;
+            }
+        },
+        {
             name: 'plain',
             matches: () => true,
             render: (frame, version) => {
