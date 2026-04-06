@@ -2375,11 +2375,18 @@ button.artifact-chat-pill,
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
+  outline: none;
   transition: color 0.15s ease;
 }
 
 .artifact-panel__version-badge:hover {
   color: rgba(255, 255, 255, 0.7);
+}
+
+.artifact-panel__version-badge:focus,
+.artifact-panel__version-badge:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .artifact-panel__version-badge option {
