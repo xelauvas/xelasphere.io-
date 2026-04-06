@@ -1797,6 +1797,9 @@ window.addEventListener('load', function() {
             this._detectedPath = null;
             this._streamFiles = [];
             this._lastParsePos = 0;
+            this._lastStreamContentLen = 0;
+            this._lastStreamFilePath = null;
+            this._lastStreamFileCount = 0;
 
             if (this.titleEl) {
                 this.titleEl.textContent = 'Generating...';
@@ -1872,7 +1875,7 @@ window.addEventListener('load', function() {
             if (this._streamDebounce) clearTimeout(this._streamDebounce);
             this._streamDebounce = setTimeout(() => {
                 this._parseAndDisplayStreamingFiles();
-            }, 80);
+            }, 150);
         }
 
         _parseAndDisplayStreamingFiles() {
@@ -1954,28 +1957,50 @@ window.addEventListener('load', function() {
                 }
             }
 
-            // Update file dropdown
-            if (this.fileSelect) {
+            // Update file dropdown — only when file list actually changes
+            const fileCount = this._streamFiles.length;
+            if (this.fileSelect && fileCount !== this._lastStreamFileCount) {
+                this._lastStreamFileCount = fileCount;
                 const options = this._streamFiles.map((f, i) =>
                     `<option value="${i}" ${f.path === displayFile.path ? 'selected' : ''}>${f.path}${f.complete ? ' ✓' : ' ...'}</option>`
                 ).join('');
                 this.fileSelect.innerHTML = options;
             }
-            if (this.currentFileName) {
+            if (this.currentFileName && this.currentFileName.textContent !== displayFile.path) {
                 this.currentFileName.textContent = displayFile.path;
             }
 
-            // Display in CodeMirror if available, fallback to codeBlock
+            // Display in CodeMirror: append delta instead of full replace
             const content = this._unescapeJsonString(displayFile.content);
             if (this.editCodeMirror && this.isStreaming) {
                 const mode = this.getCodeMirrorMode({ language: displayFile.lang, path: displayFile.path });
-                this.editCodeMirror.setOption('mode', mode);
-                // Only update if content changed (avoid cursor jump)
-                if (this.editCodeMirror.getValue() !== content) {
-                    this.editCodeMirror.setValue(content);
-                    // Auto-scroll to bottom during streaming
-                    this.editCodeMirror.scrollIntoView({ line: this.editCodeMirror.lineCount() - 1, ch: 0 });
+                if (this.editCodeMirror.getOption('mode') !== mode) {
+                    this.editCodeMirror.setOption('mode', mode);
                 }
+
+                const prevLen = this._lastStreamContentLen || 0;
+                const currentVal = this.editCodeMirror.getValue();
+
+                if (displayFile.path !== this._lastStreamFilePath) {
+                    // File switched — full replace needed
+                    this.editCodeMirror.setValue(content);
+                    this._lastStreamFilePath = displayFile.path;
+                    this._lastStreamContentLen = content.length;
+                } else if (content.length > prevLen && currentVal.length === prevLen) {
+                    // Same file, content grew — append the delta only
+                    const delta = content.slice(prevLen);
+                    const lastLine = this.editCodeMirror.lastLine();
+                    const lastCh = this.editCodeMirror.getLine(lastLine).length;
+                    this.editCodeMirror.replaceRange(delta, { line: lastLine, ch: lastCh });
+                    this._lastStreamContentLen = content.length;
+                } else if (content !== currentVal) {
+                    // Content changed in unexpected way — full replace
+                    this.editCodeMirror.setValue(content);
+                    this._lastStreamContentLen = content.length;
+                }
+
+                // Auto-scroll to bottom
+                this.editCodeMirror.scrollIntoView({ line: this.editCodeMirror.lineCount() - 1, ch: 0 });
             } else if (this.codeBlock) {
                 const prismLang = displayFile.lang === 'jsx' ? 'javascript' : displayFile.lang;
                 this.codeBlock.className = `language-${prismLang}`;
