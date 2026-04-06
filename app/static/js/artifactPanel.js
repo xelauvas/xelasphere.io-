@@ -1214,6 +1214,7 @@ window.addEventListener('load', function() {
                     this.activeTab = 'preview';
                     this.switchTab('preview');
                 } else if (e.data?.type === 'sandbox-needs-server') {
+                    console.log('[Sandbox] Received sandbox-needs-server message', e.data);
                     this._showRunOnServer(e.data);
                 }
             });
@@ -2269,10 +2270,13 @@ window.addEventListener('load', function() {
                 this._runOnServer(data.code, data.files, data.entry);
             };
             this._serverRunBtn = btn;
-            // Insert before close button in header
-            const headerRight = this.panel.querySelector('.artifact-panel__header-right');
+            const headerRight = document.querySelector('#artifact-panel .artifact-panel__header-right')
+                || document.querySelector('.artifact-panel__header-right');
             if (headerRight) {
                 headerRight.insertBefore(btn, headerRight.firstChild);
+            } else {
+                // Fallback: put it in the toolbar area of the iframe output
+                console.warn('No header-right found for Run on Server button');
             }
         }
 
