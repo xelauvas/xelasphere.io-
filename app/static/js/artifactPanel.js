@@ -1712,14 +1712,23 @@ ${escapeHtml(entry.content || '')}
             if (!this.codeBlock) return;
 
             // Switch to target file if needed
-            if (this.currentVersion?.files && this.currentFile?.path !== file) {
+            const needsSwitch = this.currentVersion?.files && this.currentFile?.path !== file;
+            if (needsSwitch) {
                 const targetFile = this.currentVersion.files.find(f => f.path === file);
                 if (targetFile) {
+                    // Clear previous file's marks before switching
+                    this.codeBlock.querySelectorAll('.patch-removing, .patch-added').forEach(el => {
+                        const parent = el.parentNode;
+                        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                        parent.removeChild(el);
+                    });
                     this.renderCodeViewer(this.currentVersion, targetFile);
                     if (this.fileSelect) {
                         const idx = this.currentVersion.files.indexOf(targetFile);
                         if (idx >= 0) this.fileSelect.value = String(idx);
                     }
+                    // Extra frame wait for Prism highlight after file switch
+                    await new Promise(r => requestAnimationFrame(r));
                 }
             }
 
