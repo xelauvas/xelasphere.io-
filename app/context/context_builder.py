@@ -145,3 +145,237 @@ def build_tier2_summary(metadata_list: List[Dict[str, Any]]) -> str:
         lines.append("".join(parts))
 
     return "\n".join(lines)
+
+
+@dataclass
+class BuiltContext:
+    """Output of ContextBuilder.build().
+
+    prompt: The flat assembled string to pass to the API.
+    messages: Structured message list for future messages-API migration.
+    """
+
+    prompt: str
+    messages: List[Dict[str, str]]
+    artifact_files: List[Dict[str, Any]]
+    token_estimate: int
+    compression_level: str  # 'none' | 'microcompact' | 'summarized'
+
+
+class ContextBuilder:
+    """Smart prompt assembler with 4-zone budget allocation.
+
+    Outputs a flat prompt string matching the existing API contract.
+    """
+
+    TIER1_SIZE = 5
+
+    def __init__(self, token_budget: int = 16384) -> None:
+        self.token_budget = token_budget
+
+    def build(
+        self,
+        system_prompt: str,
+        full_history: List[Dict[str, Any]],
+        artifact_state: Optional[Any] = None,
+        user_message: str = "",
+        memory_context: Optional[str] = None,
+    ) -> BuiltContext:
+        """Assemble the optimal prompt within the token budget."""
+        prompt_parts: List[str] = []
+        messages: List[Dict[str, str]] = []
+
+        # --- Zone 1: System prompt (fixed cost) ---
+        zone1_text = system_prompt
+        if memory_context:
+            zone1_text += f"\n\nUser memory:\n{memory_context}"
+        zone1_tokens = estimate_tokens_auto(zone1_text)
+        prompt_parts.append(zone1_text)
+        messages.append({"role": "system", "content": zone1_text})
+
+        # --- Zone 4: User message (fixed cost, added last) ---
+        zone4_text = f"User: {user_message}\nAssistant:"
+        zone4_tokens = estimate_tokens_auto(zone4_text)
+
+        # --- Zone 3 minimum: last TIER1_SIZE turns verbatim ---
+        tier1_messages = full_history[-self.TIER1_SIZE:]
+        tier1_text_estimate = self._estimate_history_tokens(tier1_messages)
+
+        # --- Zone 2: Artifact context (dynamic budget) ---
+        available = int(self.token_budget * _HEADROOM_FACTOR)
+        zone2_budget_tokens = max(0, available - zone1_tokens - zone4_tokens - tier1_text_estimate)
+        zone2_budget_bytes = int(zone2_budget_tokens * _ENGLISH_CHARS_PER_TOKEN)
+
+        artifact_files: List[Dict[str, Any]] = []
+        zone2_text = ""
+        if artifact_state is not None:
+            artifact_files = artifact_state.get_context_injection(
+                max_bytes=zone2_budget_bytes,
+                user_message=user_message,
+            )
+            if artifact_files:
+                zone2_text = self._format_artifact_context(artifact_files)
+                artifact_state.mark_sent([f["path"] for f in artifact_files])
+
+        zone2_tokens = estimate_tokens_auto(zone2_text) if zone2_text else 0
+        if zone2_text:
+            prompt_parts.append(zone2_text)
+            messages.append({"role": "system", "content": zone2_text})
+
+        # --- Zone 3: Conversation history (fills remaining budget) ---
+        remaining_tokens = available - zone1_tokens - zone2_tokens - zone4_tokens
+        zone3_parts, zone3_messages, compression_level = self._build_zone3(
+            full_history, remaining_tokens, artifact_state
+        )
+        prompt_parts.extend(zone3_parts)
+        messages.extend(zone3_messages)
+
+        # --- Zone 4: User message (always last) ---
+        prompt_parts.append(zone4_text)
+        messages.append({"role": "user", "content": user_message})
+
+        prompt = "\n".join(prompt_parts)
+        total_tokens = estimate_tokens_auto(prompt)
+
+        return BuiltContext(
+            prompt=prompt,
+            messages=messages,
+            artifact_files=artifact_files,
+            token_estimate=total_tokens,
+            compression_level=compression_level,
+        )
+
+    def _build_zone3(
+        self,
+        full_history: List[Dict[str, Any]],
+        budget_tokens: int,
+        artifact_state: Optional[Any],
+    ) -> tuple:
+        """Build Zone 3 conversation history with 3 tiers."""
+        if not full_history:
+            return [], [], "none"
+
+        tier1_start = max(0, len(full_history) - self.TIER1_SIZE)
+        older_messages = full_history[:tier1_start]
+        tier1_messages = full_history[tier1_start:]
+
+        artifact_version = None
+        if artifact_state is not None:
+            artifact_version = getattr(artifact_state, "version_id", None)
+
+        # Tier 1: verbatim with microcompact on older ones in window
+        compression_level = "none"
+        never_compact_count = 2
+        tier1_prompt_parts = []
+        tier1_msg_list = []
+
+        for idx, msg in enumerate(tier1_messages):
+            is_recent = idx >= len(tier1_messages) - never_compact_count
+            if is_recent:
+                source_msg = msg
+            else:
+                source_msg = microcompact_message(msg, artifact_version=artifact_version)
+                if source_msg.get("response") != msg.get("response"):
+                    compression_level = "microcompact"
+
+            prompt_text = source_msg.get("prompt", "")
+            response_text = source_msg.get("response", "")
+            if prompt_text:
+                user_line = f"User: {prompt_text}"
+                tier1_prompt_parts.append(user_line)
+                tier1_msg_list.append({"role": "user", "content": prompt_text})
+            if response_text:
+                asst_line = f"Assistant: {response_text}"
+                tier1_prompt_parts.append(asst_line)
+                tier1_msg_list.append({"role": "assistant", "content": response_text})
+
+        tier1_tokens = sum(estimate_tokens_auto(p) for p in tier1_prompt_parts)
+
+        # Tier 2: Metadata summary of older messages
+        tier2_text = ""
+        if older_messages:
+            metadata_list = []
+            for i, msg in enumerate(older_messages):
+                meta = msg.get("turn_metadata")
+                if meta:
+                    metadata_list.append(meta)
+                else:
+                    metadata_list.append({
+                        "turn_number": i + 1,
+                        "user_intent_summary": (msg.get("prompt", "") or "")[:80],
+                        "action_type": "chat",
+                        "had_error": False,
+                        "artifact_mutation": None,
+                        "model": msg.get("model_id", ""),
+                    })
+            tier2_text = build_tier2_summary(metadata_list)
+            compression_level = "summarized"
+
+        tier2_tokens = estimate_tokens_auto(tier2_text) if tier2_text else 0
+
+        # Assemble within budget
+        total_zone3 = tier1_tokens + tier2_tokens
+        result_parts = []
+        result_msgs = []
+
+        if total_zone3 <= budget_tokens:
+            if tier2_text:
+                result_parts.append(tier2_text)
+                result_msgs.append({"role": "system", "content": tier2_text})
+            result_parts.extend(tier1_prompt_parts)
+            result_msgs.extend(tier1_msg_list)
+        elif tier1_tokens <= budget_tokens:
+            remaining = budget_tokens - tier1_tokens
+            if tier2_text and remaining > 0:
+                tier2_lines = tier2_text.split("\n")
+                truncated = []
+                tokens_used = 0
+                for line in tier2_lines:
+                    line_tokens = estimate_tokens_auto(line)
+                    if tokens_used + line_tokens > remaining:
+                        break
+                    truncated.append(line)
+                    tokens_used += line_tokens
+                if truncated:
+                    trunc_text = "\n".join(truncated)
+                    result_parts.append(trunc_text)
+                    result_msgs.append({"role": "system", "content": trunc_text})
+            result_parts.extend(tier1_prompt_parts)
+            result_msgs.extend(tier1_msg_list)
+        else:
+            tokens_used = 0
+            trimmed_parts = []
+            trimmed_msgs = []
+            # Keep most recent first
+            for part, msg in zip(reversed(tier1_prompt_parts), reversed(tier1_msg_list)):
+                part_tokens = estimate_tokens_auto(part)
+                if tokens_used + part_tokens > budget_tokens:
+                    break
+                trimmed_parts.append(part)
+                trimmed_msgs.append(msg)
+                tokens_used += part_tokens
+            result_parts = list(reversed(trimmed_parts))
+            result_msgs = list(reversed(trimmed_msgs))
+
+        return result_parts, result_msgs, compression_level
+
+    def _estimate_history_tokens(self, messages: List[Dict[str, Any]]) -> int:
+        total = 0
+        for msg in messages:
+            if msg.get("prompt"):
+                total += estimate_tokens_auto(f"User: {msg['prompt']}")
+            if msg.get("response"):
+                total += estimate_tokens_auto(f"Assistant: {msg['response']}")
+        return total
+
+    def _format_artifact_context(self, files: List[Dict[str, Any]]) -> str:
+        parts = ["CURRENT ARTIFACT FILES (for reference when fixing/updating):"]
+        for f in files:
+            path = f.get("path", "unknown")
+            lang = f.get("language", "text")
+            content = f.get("content", "")
+            parts.append(f"\n{path} ({lang}):")
+            parts.append(f"```{lang}")
+            parts.append(content)
+            parts.append("```")
+        return "\n".join(parts)

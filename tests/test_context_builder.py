@@ -144,3 +144,139 @@ class TestBuildTier2Summary:
         assert "Build a Snake game" in summary
         assert "Created artifact" in summary or "create_artifact" in summary
         assert "[ERROR]" in summary or "error" in summary.lower()
+
+
+class TestContextBuilderBuild:
+    def _make_message(self, turn, prompt, response, action_type="chat",
+                      had_error=False, artifact_mutation=None, error_detail=None):
+        msg = {
+            "prompt": prompt,
+            "response": response,
+            "timestamp": f"2026-04-06T12:{turn:02d}:00",
+        }
+        if artifact_mutation:
+            msg["artifact_id"] = artifact_mutation.get("artifact_id")
+        msg["turn_metadata"] = {
+            "turn_number": turn,
+            "user_intent_summary": prompt[:80],
+            "action_type": action_type,
+            "had_error": had_error,
+            "error_detail": error_detail,
+            "artifact_mutation": artifact_mutation,
+            "model": "test-model",
+        }
+        return msg
+
+    def test_build_with_short_history(self):
+        from app.context.context_builder import ContextBuilder
+        messages = [self._make_message(i, f"prompt {i}", f"response {i}") for i in range(3)]
+        builder = ContextBuilder(token_budget=8000)
+        result = builder.build(
+            system_prompt="You are helpful.",
+            full_history=messages,
+            artifact_state=None,
+            user_message="What next?",
+            memory_context=None,
+        )
+        assert result.compression_level == "none"
+        assert "What next?" in result.prompt
+        assert len(result.artifact_files) == 0
+
+    def test_build_includes_tier1_verbatim(self):
+        from app.context.context_builder import ContextBuilder
+        messages = [self._make_message(i, f"prompt {i}", f"response {i}") for i in range(10)]
+        builder = ContextBuilder(token_budget=8000)
+        result = builder.build(
+            system_prompt="You are helpful.",
+            full_history=messages,
+            artifact_state=None,
+            user_message="New question",
+            memory_context=None,
+        )
+        assert "prompt 9" in result.prompt
+        assert "prompt 8" in result.prompt
+        assert "prompt 7" in result.prompt
+        assert "prompt 6" in result.prompt
+        assert "prompt 5" in result.prompt
+
+    def test_build_includes_tier2_summary(self):
+        from app.context.context_builder import ContextBuilder
+        messages = [self._make_message(i, f"prompt {i}", f"response {i}") for i in range(12)]
+        builder = ContextBuilder(token_budget=8000)
+        result = builder.build(
+            system_prompt="You are helpful.",
+            full_history=messages,
+            artifact_state=None,
+            user_message="Next?",
+            memory_context=None,
+        )
+        assert "Conversation Summary" in result.prompt
+
+    def test_build_with_artifact_injection(self):
+        from app.context.context_builder import ContextBuilder
+        from app.context.artifact_state_tracker import ArtifactStateTracker
+        tracker = ArtifactStateTracker(artifact_id="art_1", version_id="ver_1")
+        tracker.sync_from_files([
+            {"path": "main.py", "language": "python", "content": "x = 1"},
+        ])
+        messages = [self._make_message(1, "build something", "ok")]
+        builder = ContextBuilder(token_budget=8000)
+        result = builder.build(
+            system_prompt="System.",
+            full_history=messages,
+            artifact_state=tracker,
+            user_message="Fix the code",
+            memory_context=None,
+        )
+        assert len(result.artifact_files) == 1
+        assert result.artifact_files[0]["path"] == "main.py"
+        assert "main.py" in result.prompt
+
+    def test_build_includes_memory_context(self):
+        from app.context.context_builder import ContextBuilder
+        messages = [self._make_message(1, "hi", "hello")]
+        builder = ContextBuilder(token_budget=8000)
+        result = builder.build(
+            system_prompt="System.",
+            full_history=messages,
+            artifact_state=None,
+            user_message="Tell me about X",
+            memory_context="User prefers dark mode. User works at Acme Corp.",
+        )
+        assert "dark mode" in result.prompt
+
+    def test_microcompact_applied_to_older_tier1_messages(self):
+        from app.context.context_builder import ContextBuilder
+        messages = []
+        for i in range(8):
+            if i == 4:
+                code_lines = "\n".join([f"    line_{j} = {j}" for j in range(60)])
+                resp = f"Here is the code:\n```python\n{code_lines}\n```"
+            else:
+                resp = f"response {i}"
+            messages.append(self._make_message(i, f"prompt {i}", resp))
+
+        builder = ContextBuilder(token_budget=8000)
+        result = builder.build(
+            system_prompt="System.",
+            full_history=messages,
+            artifact_state=None,
+            user_message="Next",
+            memory_context=None,
+        )
+        assert "line_0" not in result.prompt
+        assert "[Code block:" in result.prompt
+
+    def test_proper_role_interleaving(self):
+        from app.context.context_builder import ContextBuilder
+        messages = [self._make_message(1, "hello", "world")]
+        builder = ContextBuilder(token_budget=8000)
+        result = builder.build(
+            system_prompt="System.",
+            full_history=messages,
+            artifact_state=None,
+            user_message="Next",
+            memory_context=None,
+        )
+        assert "User: hello" in result.prompt
+        assert "Assistant: world" in result.prompt
