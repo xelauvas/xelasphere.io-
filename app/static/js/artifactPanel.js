@@ -904,14 +904,23 @@ async function loadPackagesFor(code) {
     }
     if (blocked.length > 0) {
         appendOutput('This script needs ' + blocked.join(', ') + ' which requires a server runtime.\\n\\n', 'stderr');
-        appendOutput('Click "Run on Server" above to execute.\\n', 'repl-prompt');
-        // Tell parent to show Run on Server button
-        window.parent.postMessage({
-            type: 'sandbox-needs-server',
-            code: JSON.parse(document.getElementById('code-data').textContent),
-            files: JSON.parse(document.getElementById('files-data').textContent),
-            entry: ENTRY_NAME
-        }, '*');
+        var srvBtn = document.createElement('button');
+        srvBtn.className = 'tool-btn';
+        srvBtn.style.margin = '8px 0';
+        srvBtn.textContent = '\\u25b6 Run on Server';
+        srvBtn.onclick = function() {
+            srvBtn.remove();
+            appendOutput('Starting server execution...\\n', 'repl-prompt');
+            // Call parent's sandbox runner directly (same-origin srcdoc can access parent)
+            try {
+                var code = JSON.parse(document.getElementById('code-data').textContent);
+                var files = JSON.parse(document.getElementById('files-data').textContent);
+                window.parent.artifactPanel._runOnServer(code, files, ENTRY_NAME);
+            } catch(e) {
+                appendOutput('Error: ' + e.message + '\\n', 'stderr');
+            }
+        };
+        document.getElementById('output').appendChild(srvBtn);
         return false;
     }
 
