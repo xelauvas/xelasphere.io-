@@ -772,6 +772,61 @@ def chat_stream():
                                 contains_code=True,
                                 desired_action=ArtifactPreference.UPDATE,
                             )
+                        elif parsed_action.action == "patch_artifact" and not parsed_action.patch_payload:
+                            # ACTION said patch_artifact but JSON parse failed.
+                            # Fall back to full regeneration.
+                            logger.info("Stream: patch_artifact without valid payload, requesting full regeneration")
+                            current_files, full_artifact = _load_current_artifact_files(user_id, session_id)
+                            if current_files:
+                                yield f"data: {json.dumps({'type': 'status', 'text': 'Regenerating artifact...'})}\n\n"
+                                regen_parts = ["The artifact_patch JSON was malformed. "
+                                               "Please regenerate the COMPLETE artifact with the changes applied.\n\n"
+                                               "Current files:\n"]
+                                for cf in current_files:
+                                    lang = cf.get('language', 'text')
+                                    regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
+                                regen_parts.append(f"\nUser request: {prompt}\n\n"
+                                                  "Respond with ACTION: create_artifact and a complete ```artifact block "
+                                                  "containing ALL files with the changes applied.")
+                                regen_prompt = "\n".join(regen_parts)
+                                try:
+                                    regen_response, _, _ = get_ai_response(regen_prompt, stream_model)
+                                    regen_parsed = ActionParser.parse(regen_response)
+                                    if regen_parsed.artifact_payload:
+                                        routing = ArtifactDecision(
+                                            render_mode="artifact",
+                                            chat_payload=regen_parsed.chat_text or parsed_action.chat_text,
+                                            artifact_payload=regen_parsed.artifact_payload,
+                                            contains_code=True,
+                                            desired_action=ArtifactPreference.UPDATE,
+                                        )
+                                        chat_summary = routing.chat_payload
+                                        logger.info(f"Stream: regeneration succeeded with {len(regen_parsed.artifact_payload.get('files',[]))} files")
+                                    else:
+                                        routing = ArtifactDecision(
+                                            render_mode="inline",
+                                            chat_payload=parsed_action.chat_text,
+                                            artifact_payload=None,
+                                            contains_code=False,
+                                            desired_action=ArtifactPreference.NONE,
+                                        )
+                                except Exception as regen_err:
+                                    logger.warning(f"Stream: regeneration failed: {regen_err}")
+                                    routing = ArtifactDecision(
+                                        render_mode="inline",
+                                        chat_payload=parsed_action.chat_text,
+                                        artifact_payload=None,
+                                        contains_code=False,
+                                        desired_action=ArtifactPreference.NONE,
+                                    )
+                            else:
+                                routing = ArtifactDecision(
+                                    render_mode="inline",
+                                    chat_payload=parsed_action.chat_text,
+                                    artifact_payload=None,
+                                    contains_code=False,
+                                    desired_action=ArtifactPreference.NONE,
+                                )
                         else:
                             routing = ArtifactDecision(
                                 render_mode="inline",
@@ -1986,6 +2041,50 @@ def chat():
                 contains_code=True,
                 desired_action=ArtifactPreference.UPDATE,
             )
+        elif parsed_action.action == "patch_artifact" and not parsed_action.patch_payload:
+            # ACTION said patch_artifact but JSON parse failed. Regenerate full artifact.
+            logger.info("ActionParser: patch_artifact without valid payload, requesting full regeneration")
+            try:
+                store = artifact_store
+                artifacts_data = store.list_artifacts(user_id, session_id)
+                artifacts = artifacts_data.get('artifacts', [])
+                active = next((a for a in artifacts if a.get('isActive')), artifacts[0] if artifacts else None)
+                if active:
+                    full_art = store.get_artifact(user_id, session_id, active['artifactId'])
+                    if full_art and full_art.get('activeVersion'):
+                        regen_files = full_art['activeVersion'].get('files', [])
+                        regen_parts = ["The artifact_patch JSON was malformed. "
+                                       "Please regenerate the COMPLETE artifact with the changes applied.\n\n"
+                                       "Current files:\n"]
+                        for cf in regen_files:
+                            lang = cf.get('language', 'text')
+                            regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
+                        regen_parts.append(f"\nUser request: {user_prompt}\n\n"
+                                          "Respond with ACTION: create_artifact and a complete ```artifact block "
+                                          "containing ALL files with the changes applied.")
+                        regen_prompt = "\n".join(regen_parts)
+                        regen_response, _, _ = get_ai_response(regen_prompt, model)
+                        regen_parsed = ActionParser.parse(regen_response)
+                        if regen_parsed.artifact_payload:
+                            routing_decision = ArtifactDecision(
+                                render_mode="artifact",
+                                chat_payload=regen_parsed.chat_text or parsed_action.chat_text,
+                                artifact_payload=regen_parsed.artifact_payload,
+                                contains_code=True,
+                                desired_action=ArtifactPreference.UPDATE,
+                            )
+                            logger.info(f"Regeneration succeeded with {len(regen_parsed.artifact_payload.get('files',[]))} files")
+                        else:
+                            raise ValueError("Regeneration produced no artifact")
+                    else:
+                        raise ValueError("No active version")
+                else:
+                    raise ValueError("No active artifact")
+            except Exception as regen_err:
+                logger.warning(f"Regeneration failed: {regen_err}, falling back to old router")
+                fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else raw_model_response
+                structured_response = parse_structured_response(fallback_text)
+                routing_decision = artifact_router.route(structured_response, user_prompt, provider_flagged_code=provider_flagged_code)
         else:
             # Use chat_text (ACTION line already stripped) for the old parser fallback
             fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else raw_model_response
