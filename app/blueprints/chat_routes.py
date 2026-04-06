@@ -687,7 +687,6 @@ def chat_stream():
         parsed_action = None  # Set when response is complete
         action_buffer = StreamingActionBuffer()  # Buffer first line to strip ACTION:
         action_resolved = False
-        in_artifact_fence = False  # True when inside ```artifact JSON block
 
         try:
             for chunk in stream_deepseek_response(enhanced_prompt, stream_model):
@@ -702,38 +701,16 @@ def chat_stream():
                     text = chunk.get('text', '')
                     content_buffer.append(text)
 
-                    # Buffer until ACTION line is resolved, then forward
+                    # Only strip the ACTION: first line — frontend handles
+                    # artifact fence detection and streaming display
                     if not action_resolved:
                         result = action_buffer.feed(text)
                         if result is not None:
                             action_resolved = True
-                            # Forward any remainder after the ACTION line
-                            remainder = action_buffer.remainder
-                            if remainder:
-                                # Check if remainder starts artifact fence — don't forward that
-                                if '```artifact' not in remainder:
-                                    yield f"data: {json.dumps({'type': 'content', 'text': remainder})}\n\n"
-                                else:
-                                    # Split at fence start, forward pre-fence text
-                                    fence_idx = remainder.find('```artifact')
-                                    if fence_idx > 0:
-                                        yield f"data: {json.dumps({'type': 'content', 'text': remainder[:fence_idx]})}\n\n"
-                                    in_artifact_fence = True
-                        continue  # Don't forward raw chunks while buffering
-
-                    # After ACTION resolved: suppress artifact fence content
-                    if in_artifact_fence:
-                        # Check for fence close
-                        if '```' in text and not text.strip().startswith('```artifact'):
-                            in_artifact_fence = False
-                        continue  # Don't forward artifact JSON to frontend
-                    elif '```artifact' in text:
-                        # Artifact fence starting in this chunk
-                        fence_idx = text.find('```artifact')
-                        if fence_idx > 0:
-                            yield f"data: {json.dumps({'type': 'content', 'text': text[:fence_idx]})}\n\n"
-                        in_artifact_fence = True
-                        continue
+                            # Forward remainder after the ACTION line
+                            if action_buffer.remainder:
+                                yield f"data: {json.dumps({'type': 'content', 'text': action_buffer.remainder})}\n\n"
+                        continue  # Buffer until first newline
 
                     yield f"data: {json.dumps({'type': 'content', 'text': text})}\n\n"
 
