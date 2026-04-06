@@ -1420,6 +1420,11 @@ ${escapeHtml(entry.content || '')}
             this._streamFiles = [];
             this._lastParsePos = 0;
 
+            // Exit edit mode so streaming code display is visible
+            if (this.isEditMode) {
+                this.exitEditMode();
+            }
+
             if (this.titleEl) {
                 this.titleEl.textContent = 'Generating...';
             }
@@ -1693,6 +1698,11 @@ ${escapeHtml(entry.content || '')}
 
             this.isPatchStreaming = true;
             this._patchQueue = Promise.resolve();
+
+            // Exit edit mode so patch animations show on the code display
+            if (this.isEditMode) {
+                this.exitEditMode();
+            }
 
             // Switch to code tab showing current (pre-patch) code
             this.activeTab = 'code';
