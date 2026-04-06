@@ -1762,16 +1762,38 @@ ${escapeHtml(entry.content || '')}
         populateVersionSelect(artifact) {
             if (!this.versionSelect) return;
             this.versionSelect.innerHTML = '';
-            (artifact.versions || []).forEach(version => {
-                const option = document.createElement('option');
-                option.value = version.versionId;
-                option.textContent = `v${version.versionNumber}`;
-                if (artifact.activeVersionId === version.versionId) {
-                    option.selected = true;
+
+            const versions = artifact.versions || [];
+            const versionCount = artifact.versionCount || versions.length || 1;
+
+            // If we only have the active version but know there are more,
+            // build placeholder entries so the dropdown isn't disabled
+            if (versions.length <= 1 && versionCount > 1) {
+                for (let i = 1; i <= versionCount; i++) {
+                    const option = document.createElement('option');
+                    if (i === versionCount && versions.length === 1) {
+                        option.value = versions[0].versionId;
+                        option.textContent = `v${i}`;
+                        option.selected = true;
+                    } else {
+                        option.value = `placeholder-v${i}`;
+                        option.textContent = `v${i}`;
+                    }
+                    this.versionSelect.appendChild(option);
                 }
-                this.versionSelect.appendChild(option);
-            });
-            this.versionSelect.disabled = (artifact.versions || []).length <= 1;
+            } else {
+                versions.forEach(version => {
+                    const option = document.createElement('option');
+                    option.value = version.versionId;
+                    option.textContent = `v${version.versionNumber}`;
+                    if (artifact.activeVersionId === version.versionId) {
+                        option.selected = true;
+                    }
+                    this.versionSelect.appendChild(option);
+                });
+            }
+
+            this.versionSelect.disabled = versionCount <= 1;
         }
 
         updateHeader(artifact) {
