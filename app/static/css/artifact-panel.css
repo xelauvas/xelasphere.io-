@@ -9,16 +9,16 @@
 
 .artifact-panel,
 .artifact-chat-pill {
-  --artifact-bg: #2b2b2b;
-  --artifact-bg-elevated: #333333;
+  --artifact-bg: #212121;
+  --artifact-bg-elevated: #212121;
   --artifact-border: rgba(255, 255, 255, 0.06);
   --artifact-border-subtle: rgba(255, 255, 255, 0.04);
   --artifact-text: rgba(255, 255, 255, 0.88);
   --artifact-muted: rgba(255, 255, 255, 0.5);
   --artifact-hover: rgba(255, 255, 255, 0.05);
   --artifact-active: rgba(255, 255, 255, 0.08);
-  --artifact-accent: #7c6fe0;
-  --artifact-shadow: rgba(0, 0, 0, 0.25);
+  --artifact-accent: #f0f0f0;
+  --artifact-shadow: rgba(0, 0, 0, 0.35);
 }
 
 /* ==================== */
@@ -836,7 +836,7 @@ body.artifact-panel-resizing .chat-container {
 .artifact-code {
   display: flex;
   height: 100%;
-  background: var(--background-dark, #212121);
+  background: #1a1a1f;
 }
 
 /* No tree layout - full width code viewer */
@@ -2040,7 +2040,7 @@ button.artifact-chat-pill:hover {
 
 .artifact-chat-pill__icon i {
   font-size: 14px;
-  color: var(--artifact-accent, #7c6fe0);
+  color: var(--artifact-accent, #f0f0f0);
   opacity: 1;
 }
 
@@ -2764,12 +2764,12 @@ button.artifact-chat-pill,
 }
 
 .artifact-panel.is-streaming .artifact-streaming-code {
-  border-left: 2px solid var(--artifact-accent, #7c6fe0);
+  border-left: 2px solid var(--artifact-accent, #f0f0f0);
   animation: streaming-pulse 2s ease-in-out infinite;
 }
 
 @keyframes streaming-pulse {
-  0%, 100% { border-left-color: var(--artifact-accent, #7c6fe0); }
+  0%, 100% { border-left-color: var(--artifact-accent, #f0f0f0); }
   50% { border-left-color: rgba(124, 111, 224, 0.3); }
 }
 
