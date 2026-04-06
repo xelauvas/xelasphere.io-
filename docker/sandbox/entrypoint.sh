@@ -62,11 +62,24 @@ case "$MODE" in
         ;;
 
     gui)
-        Xvfb :99 -screen 0 800x600x24 &
-        sleep 0.5
         export DISPLAY=:99
 
-        x11vnc -display :99 -nopw -listen 0.0.0.0 -port 5900 -shared -forever -bg 2>/dev/null
+        # Start virtual framebuffer
+        Xvfb :99 -screen 0 800x600x24 -ac +extension GLX +render -noreset &
+        XVFB_PID=$!
+        sleep 1
+
+        # Verify Xvfb started
+        if ! kill -0 $XVFB_PID 2>/dev/null; then
+            echo "SANDBOX_EVENT:{\"type\":\"error\",\"text\":\"Failed to start virtual display\"}"
+            exit 1
+        fi
+
+        # Start VNC server on the virtual display
+        x11vnc -display :99 -nopw -listen 0.0.0.0 -port 5900 -shared -forever -bg -xkb 2>/dev/null
+        sleep 0.5
+
+        # Start noVNC websocket bridge
         websockify --web /usr/share/novnc 6080 localhost:5900 &
         sleep 0.5
 

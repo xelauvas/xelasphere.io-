@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir \
     beautifulsoup4 rich sympy networkx scikit-learn \
     opencv-python-headless seaborn plotly dash
 
+# Create X11 socket directory (needed by Xvfb when running as non-root)
+RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
+
 # Non-root user
 RUN useradd -m -s /bin/bash sandbox
 
