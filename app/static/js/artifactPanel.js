@@ -1420,11 +1420,6 @@ ${escapeHtml(entry.content || '')}
             this._streamFiles = [];
             this._lastParsePos = 0;
 
-            // Exit edit mode so streaming code display is visible
-            if (this.isEditMode) {
-                this.exitEditMode();
-            }
-
             if (this.titleEl) {
                 this.titleEl.textContent = 'Generating...';
             }
@@ -1435,19 +1430,24 @@ ${escapeHtml(entry.content || '')}
                 this.versionSelect.innerHTML = '';
                 this.versionSelect.disabled = true;
             }
-
-            // Use the existing code block for streaming
-            if (this.codeBlock) {
-                this.codeBlock.textContent = '';
-                this.codeBlock.className = 'language-jsx'; // Default; updated when language detected
-            }
-            // Update the file name display
             if (this.currentFileName) {
                 this.currentFileName.textContent = 'Streaming...';
             }
             if (this.fileSelect) {
                 this.fileSelect.innerHTML = '<option>Streaming...</option>';
             }
+
+            // Init CodeMirror for streaming (read-only during stream)
+            this._ensureCodeMirror();
+            if (this.editCodeMirror) {
+                this.editCodeMirror.setValue('');
+                this.editCodeMirror.setOption('readOnly', true);
+                this.editCodeMirror.setOption('mode', 'jsx');
+            }
+
+            // Show CodeMirror, hide old code display
+            if (this.codeDisplay) this.codeDisplay.style.display = 'none';
+            if (this.editCodeMirrorContainer) this.editCodeMirrorContainer.style.display = 'block';
 
             this.panel.classList.add('is-open', 'is-streaming');
             this.panel.setAttribute('aria-hidden', 'false');
@@ -1457,21 +1457,37 @@ ${escapeHtml(entry.content || '')}
             this.loadSavedSplit();
             this.updateOffset(false);
             this.adjustComposerWidth(true);
+
+            // Refresh after layout settles
+            setTimeout(() => this.editCodeMirror?.refresh(), 50);
+        }
+
+        _ensureCodeMirror() {
+            if (!this.editCodeMirror && typeof CodeMirror !== 'undefined') {
+                this.editCodeMirrorContainer.innerHTML = '';
+                this.editCodeMirror = CodeMirror(this.editCodeMirrorContainer, {
+                    lineNumbers: true,
+                    theme: 'material-darker',
+                    mode: 'javascript',
+                    matchBrackets: true,
+                    autoCloseBrackets: true,
+                    styleActiveLine: true,
+                    indentUnit: 4,
+                    tabSize: 4,
+                    indentWithTabs: false,
+                    lineWrapping: false
+                });
+                this.editCodeMirror.on('change', () => this.handleEditInput());
+            }
         }
 
         appendStreamingCode(text) {
-            if (!this.isStreaming || !this.codeBlock) return;
+            if (!this.isStreaming) return;
 
             this._streamBuffer += text;
 
-            // Parse all files from the buffer and display the current one
+            // Parse all files from the buffer and display in CodeMirror
             this._parseAndDisplayStreamingFiles();
-
-            // Auto-scroll the code section
-            const codeSection = document.getElementById('artifact-code-panel');
-            if (codeSection) {
-                codeSection.scrollTop = codeSection.scrollHeight;
-            }
         }
 
         _parseAndDisplayStreamingFiles() {
@@ -1564,12 +1580,22 @@ ${escapeHtml(entry.content || '')}
                 this.currentFileName.textContent = displayFile.path;
             }
 
-            // Set language class
-            const prismLang = displayFile.lang === 'jsx' ? 'javascript' : displayFile.lang;
-            this.codeBlock.className = `language-${prismLang}`;
-
-            // Display the file content
-            this.codeBlock.textContent = this._unescapeJsonString(displayFile.content);
+            // Display in CodeMirror if available, fallback to codeBlock
+            const content = this._unescapeJsonString(displayFile.content);
+            if (this.editCodeMirror && this.isStreaming) {
+                const mode = this.getCodeMirrorMode({ language: displayFile.lang, path: displayFile.path });
+                this.editCodeMirror.setOption('mode', mode);
+                // Only update if content changed (avoid cursor jump)
+                if (this.editCodeMirror.getValue() !== content) {
+                    this.editCodeMirror.setValue(content);
+                    // Auto-scroll to bottom during streaming
+                    this.editCodeMirror.scrollIntoView({ line: this.editCodeMirror.lineCount() - 1, ch: 0 });
+                }
+            } else if (this.codeBlock) {
+                const prismLang = displayFile.lang === 'jsx' ? 'javascript' : displayFile.lang;
+                this.codeBlock.className = `language-${prismLang}`;
+                this.codeBlock.textContent = content;
+            }
         }
 
         _unescapeJsonString(str) {
@@ -1594,9 +1620,9 @@ ${escapeHtml(entry.content || '')}
                 this._streamBuffer = '';
                 this._contentFound = false;
 
-                // Final syntax highlight on the streamed code before switching
-                if (this.codeBlock && typeof Prism !== 'undefined') {
-                    try { Prism.highlightElement(this.codeBlock); } catch (e) {}
+                // Make CodeMirror editable now that streaming is done
+                if (this.editCodeMirror) {
+                    this.editCodeMirror.setOption('readOnly', false);
                 }
 
                 if (artifactData) {
@@ -2926,24 +2952,9 @@ ${escapeHtml(entry.content || '')}
 
             this.isEditMode = true;
 
-            // Initialize CodeMirror if not already created
-            if (!this.editCodeMirror && typeof CodeMirror !== 'undefined') {
-                this.editCodeMirrorContainer.innerHTML = ''; // Clear container
-                this.editCodeMirror = CodeMirror(this.editCodeMirrorContainer, {
-                    lineNumbers: true,
-                    theme: 'material-darker',
-                    mode: 'javascript',
-                    matchBrackets: true,
-                    autoCloseBrackets: true,
-                    styleActiveLine: true,
-                    indentUnit: 4,
-                    tabSize: 4,
-                    indentWithTabs: false,
-                    lineWrapping: false
-                });
-
-                // Listen for changes
-                this.editCodeMirror.on('change', () => this.handleEditInput());
+            this._ensureCodeMirror();
+            if (this.editCodeMirror) {
+                this.editCodeMirror.setOption('readOnly', false);
             }
 
             // Get current file from code viewer
