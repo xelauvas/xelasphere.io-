@@ -717,6 +717,7 @@ ${escapeHtml(entry.content || '')}
             this.closeBtn = document.getElementById('artifact-panel-close');
             this.downloadBtn = document.getElementById('artifact-download-btn');
             this.versionSelect = document.getElementById('artifact-version-select');
+            this.versionBadge = document.getElementById('artifact-version-badge');
             this.tabButtons = Array.from(document.querySelectorAll('[data-artifact-tab]'));
             this.tabPanels = Array.from(document.querySelectorAll('[data-artifact-panel]'));
             this.previewFrame = document.getElementById('artifact-preview-frame');
@@ -808,7 +809,16 @@ ${escapeHtml(entry.content || '')}
 
         bindEvents() {
             this.closeBtn?.addEventListener('click', () => this.close());
-            this.versionSelect?.addEventListener('change', () => this.handleVersionChange());
+            this.versionSelect?.addEventListener('change', () => {
+                this.handleVersionChange();
+                if (this.versionBadge) this.versionBadge.value = this.versionSelect.value;
+            });
+            this.versionBadge?.addEventListener('change', () => {
+                if (this.versionSelect) {
+                    this.versionSelect.value = this.versionBadge.value;
+                    this.handleVersionChange();
+                }
+            });
             this.fileSelect?.addEventListener('change', () => this.handleFileSelectChange());
             this.downloadBtn?.addEventListener('click', () => this.downloadZip());
             this.copyFileBtn?.addEventListener('click', () => this.copyCurrentFile());
@@ -1985,6 +1995,13 @@ ${escapeHtml(entry.content || '')}
             }
 
             this.versionSelect.disabled = versionCount <= 1;
+
+            // Sync header version badge
+            if (this.versionBadge) {
+                this.versionBadge.innerHTML = this.versionSelect.innerHTML;
+                this.versionBadge.value = this.versionSelect.value;
+                this.versionBadge.disabled = this.versionSelect.disabled;
+            }
         }
 
         updateHeader(artifact) {
