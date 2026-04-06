@@ -2404,10 +2404,15 @@ ${escapeHtml(entry.content || '')}
             });
 
             // Initialize tab content when switching
+            clearTimeout(this._autoEditTimer);
             if (target === 'code' && this.currentVersion) {
-                // Auto-enter edit mode when switching to code tab
+                // Auto-enter edit mode when switching to code tab (not during streaming)
                 if (!this.isEditMode && !this.isPatchStreaming && !this.isStreaming) {
-                    setTimeout(() => this.enterEditMode(), 50);
+                    this._autoEditTimer = setTimeout(() => {
+                        if (!this.isStreaming && !this.isPatchStreaming) {
+                            this.enterEditMode();
+                        }
+                    }, 50);
                 }
             } else if (target === 'diff' && this.currentArtifact) {
                 this.initializeDiffTab(this.currentArtifact);
