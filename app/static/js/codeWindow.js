@@ -2859,6 +2859,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let artifactStreamActive = false;
                 let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
+                // Use array to avoid O(n²) string concatenation per chunk.
+                // streamedContent is only built (joined) when needed.
+                const _contentChunks = [];
+                let _contentJoinedAt = 0;  // index up to which streamedContent is current
 
                 const processLine = (line) => {
                     if (!line.startsWith('data: ')) return;
@@ -2879,11 +2883,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             ThinkingIndicator.appendReasoning(chunk.text || '');
                         } else if (chunk.type === 'content') {
                             const chunkText = chunk.text || '';
-                            streamedContent += chunkText;
+                            // Array push is O(1) vs string concat O(n)
+                            _contentChunks.push(chunkText);
 
-                            // Fast path: once artifact streaming is active, only
-                            // accumulate text and forward to panel (debounced).
-                            // Skip all detection, DOM queries, regex scans.
+                            // Fast path: once artifact/patch streaming is active,
+                            // only forward to panel. No string joins, no regex, no DOM queries.
                             if (artifactStreamActive) {
                                 if (window.artifactPanel) {
                                     window.artifactPanel.appendStreamingCode(chunkText);
@@ -2891,7 +2895,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 if (bgRequest) {
                                     BackgroundRequestManager.appendContent(requestSessionId, chunkText);
                                 }
-                                // Skip everything below — no detection needed
                             } else if (patchStreamActive) {
                                 patchStreamBuffer += chunkText;
                                 const newPatches = extractCompletePatchesFromBuffer(patchStreamBuffer, patchParsedPatches.length);
@@ -2903,7 +2906,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     BackgroundRequestManager.appendContent(requestSessionId, chunkText);
                                 }
                             } else {
-                                // Detection phase: not yet in artifact/patch mode
+                                // Detection phase: not yet in artifact/patch mode.
+                                // Only join the string when we need to run fence detection.
                                 if (isFirstContentChunk) {
                                     isFirstContentChunk = false;
                                     window.scrollState?.contentArrived?.();
@@ -2913,40 +2917,51 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     BackgroundRequestManager.appendContent(requestSessionId, chunkText);
                                 }
 
-                                // --- Artifact fence detection ---
-                                const panelHasArtifact = window.artifactPanel?.currentArtifact &&
-                                    window.artifactPanel?.panel?.classList.contains('is-open');
+                                // Only run fence detection if chunk contains backtick (cheap check)
+                                if (chunkText.includes('`')) {
+                                    // Rebuild streamedContent only when needed
+                                    streamedContent = _contentChunks.join('');
+                                    _contentJoinedAt = _contentChunks.length;
 
-                                if (window.artifactPanel && !panelHasArtifact) {
-                                    const fenceMatch = streamedContent.match(/```artifact(?!_patch)/i);
-                                    if (fenceMatch) {
-                                        artifactStreamActive = true;
-                                        artifactFencePosition = fenceMatch.index;
-                                        window.artifactPanel.openStreaming();
-                                        const fenceEnd = streamedContent.indexOf('\n', fenceMatch.index);
-                                        if (fenceEnd !== -1) {
-                                            const afterFence = streamedContent.slice(fenceEnd + 1);
-                                            if (afterFence) {
-                                                window.artifactPanel.appendStreamingCode(afterFence);
+                                    // --- Artifact fence detection ---
+                                    const panelHasArtifact = window.artifactPanel?.currentArtifact &&
+                                        window.artifactPanel?.panel?.classList.contains('is-open');
+
+                                    if (window.artifactPanel && !panelHasArtifact) {
+                                        const fenceMatch = streamedContent.match(/```artifact(?!_patch)/i);
+                                        if (fenceMatch) {
+                                            artifactStreamActive = true;
+                                            artifactFencePosition = fenceMatch.index;
+                                            window.artifactPanel.openStreaming();
+                                            const fenceEnd = streamedContent.indexOf('\n', fenceMatch.index);
+                                            if (fenceEnd !== -1) {
+                                                const afterFence = streamedContent.slice(fenceEnd + 1);
+                                                if (afterFence) {
+                                                    window.artifactPanel.appendStreamingCode(afterFence);
+                                                }
                                             }
                                         }
                                     }
-                                }
 
-                                // --- Patch fence detection ---
-                                if (!artifactStreamActive) {
-                                    const patchFenceMatch = streamedContent.match(/```artifact_patch/i);
-                                    if (patchFenceMatch && window.artifactPanel?.currentArtifact) {
-                                        patchStreamActive = true;
-                                        patchStreamBuffer = streamedContent.slice(patchFenceMatch.index);
-                                        patchParsedPatches = [];
-                                        window.artifactPanel.openPatchStreaming();
+                                    // --- Patch fence detection ---
+                                    if (!artifactStreamActive) {
+                                        const patchFenceMatch = streamedContent.match(/```artifact_patch/i);
+                                        if (patchFenceMatch && window.artifactPanel?.currentArtifact) {
+                                            patchStreamActive = true;
+                                            patchStreamBuffer = streamedContent.slice(patchFenceMatch.index);
+                                            patchParsedPatches = [];
+                                            window.artifactPanel.openPatchStreaming();
+                                        }
                                     }
                                 }
                             }
                         } else if (chunk.type === 'done') {
                             console.log('Received done chunk:', chunk);
                             streamedReasoning = chunk.reasoning || streamedReasoning;
+                            // Join accumulated chunks if not already joined
+                            if (_contentChunks.length > _contentJoinedAt) {
+                                streamedContent = _contentChunks.join('');
+                            }
                             streamedContent = chunk.content || streamedContent;
                             streamChatSummary = chunk.chat_summary || streamedContent;
                             streamRenderMode = chunk.render_mode || 'inline';
