@@ -1891,6 +1891,7 @@ def chat():
                      f"has_patch={parsed_action.patch_payload is not None}, "
                      f"fallback={parsed_action.used_fallback}")
 
+        structured_response = None  # Only set in fallback path
         if parsed_action.action == "create_artifact" and parsed_action.artifact_payload:
             routing_decision = ArtifactDecision(
                 render_mode="artifact",
@@ -1908,7 +1909,9 @@ def chat():
                 desired_action=ArtifactPreference.UPDATE,
             )
         else:
-            structured_response = parse_structured_response(raw_model_response)
+            # Use chat_text (ACTION line already stripped) for the old parser fallback
+            fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else raw_model_response
+            structured_response = parse_structured_response(fallback_text)
             routing_decision = artifact_router.route(
                 structured_response,
                 user_prompt,
@@ -1916,7 +1919,7 @@ def chat():
             )
         # Determine response text based on render mode
         chat_payload = routing_decision.chat_payload or ""
-        remainder = structured_response.remainder or ""
+        remainder = (structured_response.remainder if structured_response else parsed_action.chat_text) or ""
 
         # For code_window mode: verify code actually exists
         has_code_anywhere = "```" in chat_payload or "```" in remainder or "```" in raw_model_response
@@ -1976,7 +1979,7 @@ def chat():
         logger.info(f"🔍 ARTIFACT DEBUG: AI render_mode={routing_decision.render_mode}, effective={effective_render_mode}")
         logger.info(f"🔍 ARTIFACT DEBUG: AI contains_code={routing_decision.contains_code}, effective={effective_contains_code}")
         logger.info(f"🔍 ARTIFACT DEBUG: has_code_anywhere={has_code_anywhere}")
-        logger.info(f"🔍 ARTIFACT DEBUG: meta={structured_response.meta}")
+        logger.info(f"🔍 ARTIFACT DEBUG: meta={structured_response.meta if structured_response else 'N/A (ActionParser path)'}")
         logger.info(f"🔍 ARTIFACT DEBUG: response_text_preview={response_text[:200] if response_text else 'EMPTY'}...")
 
         artifact_payload = None
