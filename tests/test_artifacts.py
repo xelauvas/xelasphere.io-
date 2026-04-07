@@ -712,3 +712,81 @@ class TestExtractArtifactAnyFormat:
     def test_returns_none_for_neither_format(self):
         from app.artifacts import extract_artifact_any_format
         assert extract_artifact_any_format("just some chat text") is None
+
+
+class TestEndToEndFencedFormat:
+    """Integration test: simulate a model response through ActionParser."""
+
+    def test_full_response_with_fenced_format(self):
+        from app.context.action_parser import ActionParser
+        model_response = (
+            "ACTION: create_artifact\n\n"
+            "I'll build a simple React counter app for you.\n\n"
+            '```artifact-meta\n'
+            '{"title": "Counter App", "type": "project", "primaryLanguage": "jsx"}\n'
+            '```\n\n'
+            '```artifact-file:App.jsx:jsx\n'
+            "import React, { useState } from 'react';\n"
+            "import './style.css';\n"
+            "\n"
+            "export default function App() {\n"
+            "  const [count, setCount] = useState(0);\n"
+            "  return (\n"
+            '    <div className="container">\n'
+            "      <h1>Counter: {count}</h1>\n"
+            '      <button onClick={() => setCount(c => c + 1)}>+</button>\n'
+            '      <button onClick={() => setCount(c => c - 1)}>-</button>\n'
+            "    </div>\n"
+            "  );\n"
+            "}\n"
+            '```\n\n'
+            '```artifact-file:style.css:css\n'
+            ".container {\n"
+            "  text-align: center;\n"
+            "  padding: 40px;\n"
+            "  font-family: 'Segoe UI', sans-serif;\n"
+            "}\n"
+            "button {\n"
+            "  font-size: 24px;\n"
+            "  margin: 0 10px;\n"
+            "  padding: 8px 20px;\n"
+            "}\n"
+            '```\n\n'
+            "Click the buttons to increment or decrement the counter."
+        )
+        result = ActionParser.parse(model_response)
+        assert result.action == "create_artifact"
+        assert not result.used_fallback
+        assert result.artifact_payload is not None
+        assert result.artifact_payload["title"] == "Counter App"
+        assert len(result.artifact_payload["files"]) == 2
+        jsx_file = result.artifact_payload["files"][0]
+        assert jsx_file["path"] == "App.jsx"
+        assert jsx_file["language"] == "jsx"
+        assert 'className="container"' in jsx_file["content"]
+        assert "useState(0)" in jsx_file["content"]
+        assert "setCount(c => c + 1)" in jsx_file["content"]
+        css_file = result.artifact_payload["files"][1]
+        assert css_file["path"] == "style.css"
+        assert "'Segoe UI'" in css_file["content"]
+        assert "artifact-meta" not in result.chat_text
+        assert "artifact-file" not in result.chat_text
+        assert "simple React counter app" in result.chat_text
+        assert "Click the buttons" in result.chat_text
+
+    def test_old_json_format_still_works_end_to_end(self):
+        from app.context.action_parser import ActionParser
+        model_response = (
+            "ACTION: create_artifact\n\n"
+            "Here's the app.\n\n"
+            '```artifact\n'
+            '{"title":"Legacy App","type":"project","primaryLanguage":"jsx",'
+            '"files":[{"path":"App.jsx","language":"jsx","content":"export default function App() { return <div>Hi</div>; }"},'
+            '{"path":"style.css","language":"css","content":"body { margin: 0; }"}]}\n'
+            '```'
+        )
+        result = ActionParser.parse(model_response)
+        assert result.action == "create_artifact"
+        assert result.artifact_payload is not None
+        assert result.artifact_payload["title"] == "Legacy App"
+        assert len(result.artifact_payload["files"]) == 2
