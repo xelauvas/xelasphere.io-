@@ -2897,10 +2897,47 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             _contentChunks.push(chunkText);
 
                             // Fast path: once artifact/patch streaming is active,
-                            // only forward to panel. No string joins, no regex, no DOM queries.
+                            // only forward to panel. Filter out fence markers, handle file switches.
                             if (artifactStreamActive) {
                                 if (window.artifactPanel) {
-                                    window.artifactPanel.appendStreamingCode(chunkText);
+                                    // Buffer for cross-chunk fence detection
+                                    if (!window._artifactStreamBuf) window._artifactStreamBuf = '';
+                                    window._artifactStreamBuf += chunkText;
+                                    let buf = window._artifactStreamBuf;
+
+                                    // Check for file boundary: closing ``` + new artifact-file:
+                                    const fileSwitchRe = /```\s*\n*```artifact-file:([^:]+):(\w+)\s*\n?/gi;
+                                    let switchMatch;
+                                    let lastEnd = 0;
+                                    let processed = '';
+                                    while ((switchMatch = fileSwitchRe.exec(buf)) !== null) {
+                                        // Code before the switch
+                                        processed += buf.slice(lastEnd, switchMatch.index);
+                                        lastEnd = switchMatch.index + switchMatch[0].length;
+                                        // Flush current code to panel, then switch file
+                                        if (processed) {
+                                            window.artifactPanel.appendStreamingCode(processed);
+                                            processed = '';
+                                        }
+                                        const newPath = switchMatch[1].trim();
+                                        const newLang = switchMatch[2].trim();
+                                        console.log('[ARTIFACT-STREAM] File switch:', newPath, newLang);
+                                        if (window.artifactPanel.switchStreamingFile) {
+                                            window.artifactPanel.switchStreamingFile(newPath, newLang);
+                                        }
+                                    }
+                                    processed += buf.slice(lastEnd);
+
+                                    // Strip standalone fence markers (``` on its own line)
+                                    processed = processed.replace(/^```artifact-meta\s*\n[\s\S]*?```\s*\n?/i, '');
+                                    processed = processed.replace(/^```artifact-file:[^\n]*\n/i, '');
+                                    // Strip closing fences that aren't part of a file switch
+                                    processed = processed.replace(/\n```\s*$/m, '');
+
+                                    if (processed) {
+                                        window.artifactPanel.appendStreamingCode(processed);
+                                    }
+                                    window._artifactStreamBuf = '';
                                 }
                                 if (bgRequest) {
                                     BackgroundRequestManager.appendContent(requestSessionId, chunkText);
@@ -2932,6 +2969,18 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     // Rebuild streamedContent only when needed
                                     streamedContent = _contentChunks.join('');
                                     _contentJoinedAt = _contentChunks.length;
+                                    // DEBUG: log fence detection attempts
+                                    if (streamedContent.includes('artifact')) {
+                                        console.log('[ARTIFACT-DEBUG] Fence check:', {
+                                            hasMetaFence: /```artifact-meta/i.test(streamedContent),
+                                            hasFileFence: /```artifact-file:/i.test(streamedContent),
+                                            hasOldFence: /```artifact(?![-_])/i.test(streamedContent),
+                                            panelExists: !!window.artifactPanel,
+                                            artifactStreamActive,
+                                            contentLen: streamedContent.length,
+                                            first200: streamedContent.substring(0, 200)
+                                        });
+                                    }
 
                                     // --- Artifact fence detection (new fenced format + old fallback) ---
                                     const panelHasArtifact = window.artifactPanel?.currentArtifact &&

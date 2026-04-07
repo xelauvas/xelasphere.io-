@@ -813,8 +813,19 @@ def chat_stream():
                                     lang = cf.get('language', 'text')
                                     regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
                                 regen_parts.append(f"\nUser request: {prompt}\n\n"
-                                                  "Respond with ACTION: create_artifact, then a ```artifact-meta block with title/type/primaryLanguage JSON, "
-                                                  "then each file in its own ```artifact-file:path:language block with raw code. Include ALL files.")
+                                                  "Respond EXACTLY in this format:\n\n"
+                                                  "ACTION: create_artifact\n\n"
+                                                  "[brief explanation]\n\n"
+                                                  "```artifact-meta\n"
+                                                  "{\"title\":\"App Name\",\"type\":\"project\",\"primaryLanguage\":\"jsx\"}\n"
+                                                  "```\n\n"
+                                                  "```artifact-file:App.jsx:jsx\n"
+                                                  "... full code here ...\n"
+                                                  "```\n\n"
+                                                  "```artifact-file:style.css:css\n"
+                                                  "... full code here ...\n"
+                                                  "```\n\n"
+                                                  "Include ALL files. Code goes raw in each block, NO JSON wrapping.")
                                 regen_prompt = "\n".join(regen_parts)
                                 # Try regen with current model first, then cascade
                                 regen_models = [stream_model] + [m for m in ARTIFACT_MODEL_CASCADE if m != stream_model]

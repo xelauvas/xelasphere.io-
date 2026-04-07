@@ -1799,6 +1799,7 @@ window.addEventListener('load', function() {
             this._lastParsePos = 0;
             this._lastStreamContentLen = 0;
             this._lastStreamFilePath = null;
+            this._lastStreamFileLang = null;
             this._lastStreamFileCount = 0;
 
             if (this.titleEl) {
@@ -1867,15 +1868,68 @@ window.addEventListener('load', function() {
 
             this._streamBuffer += text;
 
-            // Debounce CodeMirror updates to avoid freezing the browser.
-            // Without this, every token-sized chunk (~5 chars) triggers a full
-            // CodeMirror setValue + re-render. For a 3KB artifact that's ~600
-            // synchronous re-renders. Debouncing to 80ms batches chunks and
-            // updates once per visual frame.
+            // Debounce CodeMirror updates to batch chunks per visual frame
             if (this._streamDebounce) clearTimeout(this._streamDebounce);
             this._streamDebounce = setTimeout(() => {
-                this._parseAndDisplayStreamingFiles();
-            }, 150);
+                this._flushStreamToCodeMirror();
+            }, 80);
+        }
+
+        _flushStreamToCodeMirror() {
+            if (!this.editCodeMirror || !this._streamBuffer) return;
+            const doc = this.editCodeMirror.getDoc();
+            const lastLine = doc.lastLine();
+            const lastCh = doc.getLine(lastLine).length;
+            // Delta append — don't setValue, just insert at end
+            doc.replaceRange(this._streamBuffer, { line: lastLine, ch: lastCh });
+            this._streamBuffer = '';
+            // Auto-scroll to bottom of editor
+            this.editCodeMirror.scrollIntoView({ line: doc.lastLine(), ch: 0 });
+        }
+
+        switchStreamingFile(path, language) {
+            if (!this.isStreaming) return;
+            // Flush any remaining buffer for the previous file
+            this._flushStreamToCodeMirror();
+
+            // Save current file content
+            if (!this._streamFiles) this._streamFiles = [];
+            if (this.editCodeMirror && this._lastStreamFilePath) {
+                this._streamFiles.push({
+                    path: this._lastStreamFilePath,
+                    language: this._lastStreamFileLang || 'text',
+                    content: this.editCodeMirror.getValue()
+                });
+            }
+
+            // Switch to new file
+            this._lastStreamFilePath = path;
+            this._lastStreamFileLang = language;
+
+            // Clear CodeMirror and set new mode
+            if (this.editCodeMirror) {
+                this.editCodeMirror.setValue('');
+                const modeMap = { jsx: 'jsx', javascript: 'javascript', js: 'javascript', css: 'css', html: 'htmlmixed', python: 'python', py: 'python' };
+                this.editCodeMirror.setOption('mode', modeMap[language] || language);
+            }
+
+            // Update file selector UI
+            if (this.fileSelect) {
+                const opt = document.createElement('option');
+                opt.value = path;
+                opt.textContent = path;
+                opt.selected = true;
+                // Remove "Streaming..." placeholder
+                if (this.fileSelect.options.length === 1 && this.fileSelect.options[0].textContent === 'Streaming...') {
+                    this.fileSelect.innerHTML = '';
+                }
+                this.fileSelect.appendChild(opt);
+            }
+            if (this.currentFileName) {
+                this.currentFileName.textContent = path;
+            }
+
+            console.log('[ArtifactPanel] Switched streaming to:', path, language);
         }
 
         _parseAndDisplayStreamingFiles() {
