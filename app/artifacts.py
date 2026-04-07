@@ -46,6 +46,14 @@ MAX_ARTIFACT_FILE_BYTES = 200_000
 DEFAULT_PRIMARY_LANGUAGE = "code"
 SAFE_TEXT_LANGUAGES = {"text", "plain", "markdown"}
 
+# Curly quote normalization for patch matching
+_CURLY_TO_STRAIGHT = str.maketrans({
+    '\u2018': "'",  # LEFT SINGLE QUOTATION MARK
+    '\u2019': "'",  # RIGHT SINGLE QUOTATION MARK
+    '\u201C': '"',  # LEFT DOUBLE QUOTATION MARK
+    '\u201D': '"',  # RIGHT DOUBLE QUOTATION MARK
+})
+
 
 class ArtifactParseError(ValueError):
     """Raised when an artifact block cannot be parsed safely."""
@@ -738,6 +746,63 @@ def apply_patches(
         count = content.count(old_string)
         if count == 0:
             logger.info(f"🩹 Exact match failed for old_string ({len(old_string)} chars) in {target_file} ({len(content)} chars)")
+
+            # Try with normalized quotes (curly → straight)
+            old_norm_q = old_string.translate(_CURLY_TO_STRAIGHT)
+            content_norm_q = content.translate(_CURLY_TO_STRAIGHT)
+            if old_norm_q != old_string and content_norm_q.count(old_norm_q) == 1:
+                logger.info(f"🩹 Quote normalization matched!")
+                # Find the actual position in normalized content
+                norm_pos = content_norm_q.index(old_norm_q)
+                actual_old = content[norm_pos:norm_pos + len(old_norm_q)]
+                # Apply replacement preserving original content around the match
+                file_entry['content'] = content[:norm_pos] + new_string + content[norm_pos + len(actual_old):]
+                results.append({'file': target_file, 'status': 'applied'})
+                continue
+
+            # Try with per-line whitespace stripping (indentation mismatch)
+            line_strip_matched = False
+            old_lines = [l.strip() for l in old_string.splitlines()]
+            content_lines = content.splitlines()
+            # Sliding window match on stripped lines
+            old_stripped = '\n'.join(old_lines)
+            for start_idx in range(len(content_lines) - len(old_lines) + 1):
+                window = content_lines[start_idx:start_idx + len(old_lines)]
+                window_stripped = '\n'.join(l.strip() for l in window)
+                if window_stripped == old_stripped:
+                    # Found match with different indentation
+                    actual_start = sum(len(l) + 1 for l in content_lines[:start_idx])  # +1 for \n
+                    actual_end = actual_start + sum(len(l) + 1 for l in window) - 1  # -1 for last \n
+                    actual_old = content[actual_start:actual_end]
+                    # Preserve the original indentation pattern in new_string
+                    # Use the first matched line's indentation as reference
+                    if window and old_lines:
+                        original_indent = len(window[0]) - len(window[0].lstrip())
+                        old_indent = len(old_string.splitlines()[0]) - len(old_string.splitlines()[0].lstrip()) if old_string.splitlines() else 0
+                        indent_diff = original_indent - old_indent
+                        if indent_diff != 0:
+                            # Adjust new_string indentation to match actual file
+                            adjusted_lines = []
+                            for line in new_string.splitlines():
+                                if line.strip() and indent_diff > 0:
+                                    adjusted_lines.append(' ' * indent_diff + line)
+                                elif line.strip() and indent_diff < 0:
+                                    # Remove indentation (but don't go negative)
+                                    stripped = line.lstrip()
+                                    current_indent = len(line) - len(stripped)
+                                    new_indent = max(0, current_indent + indent_diff)
+                                    adjusted_lines.append(' ' * new_indent + stripped)
+                                else:
+                                    adjusted_lines.append(line)
+                            new_string = '\n'.join(adjusted_lines)
+                    file_entry['content'] = content[:actual_start] + new_string + content[actual_end:]
+                    logger.info(f"🩹 Line-strip matching succeeded (indent diff: {indent_diff if 'indent_diff' in dir() else 'N/A'})")
+                    results.append({'file': target_file, 'status': 'applied'})
+                    line_strip_matched = True
+                    break
+            if line_strip_matched:
+                continue
+
             # Try with normalized line endings
             old_norm_nl = old_string.replace('\r\n', '\n').replace('\r', '\n')
             content_norm_nl = content.replace('\r\n', '\n').replace('\r', '\n')
