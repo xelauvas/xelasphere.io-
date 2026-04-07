@@ -27,6 +27,8 @@ const VoiceModeModule = (function() {
     let currentState = 'idle';
     let isMuted = false;
     let animationId = null;
+    let _resizeHandler = null;
+    let _keydownHandler = null;
 
     // Audio
     let audioContext = null;
@@ -337,14 +339,16 @@ const VoiceModeModule = (function() {
         // Initialize WebGL
         initWebGL();
 
-        // Event listeners
+        // Event listeners (store refs for cleanup in exit())
+        _resizeHandler = resize;
+        _keydownHandler = onKeyDown;
         resize();
-        window.addEventListener('resize', resize);
+        window.addEventListener('resize', _resizeHandler);
         canvasFx.addEventListener('click', onCanvasClick);
         overlay.querySelector('.vm-close-btn').addEventListener('click', exit);
         primaryBtn.addEventListener('click', onPrimaryClick);
         muteBtn.addEventListener('click', toggleMute);
-        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keydown', _keydownHandler);
     }
 
     function initWebGL() {
@@ -519,6 +523,9 @@ const VoiceModeModule = (function() {
             cancelAnimationFrame(animationId);
             animationId = null;
         }
+        // Clean up event listeners added in createOverlay
+        if (_resizeHandler) window.removeEventListener('resize', _resizeHandler);
+        if (_keydownHandler) document.removeEventListener('keydown', _keydownHandler);
         overlay.classList.remove('active');
         document.body.style.overflow = '';
     }

@@ -29,14 +29,32 @@ logger = logging.getLogger(__name__)
 pages_bp = Blueprint('pages', __name__)
 
 
+def _is_mobile():
+    """Check if the request is from a mobile device."""
+    ua = request.headers.get("User-Agent", "").lower()
+    return any(kw in ua for kw in ("iphone", "android", "mobile"))
+
+
 def check_guest_ip_limit(ip_hash):
     """Check if IP has exceeded guest message limit.
 
     Returns (is_blocked, message_count) tuple.
+
+    IMPORTANT: Firestore calls must not block page render. If Firestore is slow/unreachable,
+    fail open (treat as not blocked) rather than hanging the request.
     """
     try:
         doc_ref = db.collection('guest_ips').document(ip_hash)
-        doc = doc_ref.get()
+
+        # Avoid request hangs: `DocumentReference.get()` can block/retry for a long time.
+        # Use a short timeout when supported.
+        try:
+            # Disable retries for page-load path; prefer fast failure over hanging.
+            doc = doc_ref.get(timeout=2, retry=None)
+        except TypeError:
+            # Older client versions may not support the timeout kwarg.
+            doc = doc_ref.get()
+
         if doc.exists:
             data = doc.to_dict()
             count = data.get('message_count', 0)
@@ -48,9 +66,18 @@ def check_guest_ip_limit(ip_hash):
 
 
 def fetch_user_preferences(user_id):
-    """Fetch user preferences for personalized suggestions."""
+    """Fetch user preferences for personalized suggestions.
+
+    IMPORTANT: Keep this non-blocking for page loads.
+    """
     try:
-        user_doc = db.collection('users').document(user_id).get()
+        doc_ref = db.collection('users').document(user_id)
+        try:
+            # Disable retries for page-load path; prefer fast failure over hanging.
+            user_doc = doc_ref.get(timeout=2, retry=None)
+        except TypeError:
+            user_doc = doc_ref.get()
+
         if user_doc.exists:
             data = user_doc.to_dict()
             return data.get('preferences', {})
@@ -77,9 +104,13 @@ def index():
             session['guest_messages'] = []
             session.modified = True
 
+        # Mobile gets 7 suggestions (no More), desktop gets 3 + More = 4 (2x2 grid)
+        mobile = _is_mobile()
+        num_suggestions = 6 if mobile else 3
+
         # Use fallback options for guests (no API call), full options for logged-in users
         if guest_mode:
-            options = task_generator.get_fallback_options()
+            options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=True)
 
             # Get accurate guest message count from Firebase (IP-based)
             client_ip = get_client_ip()
@@ -93,10 +124,55 @@ def index():
                 session['guest']['message_count'] = ip_count
                 session.modified = True
         else:
-            # Fetch user preferences for personalized suggestions
+            # Serve precomputed smart suggestions pool
             user_id = session['user']['uid']
-            user_preferences = fetch_user_preferences(user_id)
-            options = task_generator.get_fallback_options(user_preferences=user_preferences)
+            try:
+                from app.services.smart_suggestions import (
+                    load_pool, select_display_slots, get_signal_based_suggestions,
+                    get_pool_metadata, should_refresh_pool, refresh_pool_background,
+                    increment_shown_counts,
+                )
+                from app.grog_api import TaskOption as _TaskOption
+                per_slot = 3 if mobile else 1  # 3 per slot = ~7-9 for mobile, 1 per slot = 3 for desktop
+                pool = load_pool(db, user_id)
+                if pool:
+                    selected = select_display_slots(pool, per_slot=per_slot)
+                    if mobile:
+                        selected = selected[:6]  # cap at 7 for mobile
+                    options = [s.to_task_option() for s in selected]
+                    shown_titles = [s.title for s in selected]
+                    increment_shown_counts(db, user_id, shown_titles)
+                    metadata = get_pool_metadata(db, user_id)
+                    if should_refresh_pool(metadata):
+                        import threading
+                        threading.Thread(
+                            target=refresh_pool_background,
+                            args=(db, user_id, "expired"),
+                            daemon=True,
+                        ).start()
+                else:
+                    hour = datetime.utcnow().hour
+                    day = datetime.utcnow().strftime("%A")
+                    ua = request.headers.get("User-Agent", "")
+                    selected = get_signal_based_suggestions(hour=hour, day_of_week=day, user_agent=ua, per_slot=per_slot)
+                    if mobile:
+                        selected = selected[:6]
+                    options = [s.to_task_option() for s in selected]
+                    import threading
+                    threading.Thread(
+                        target=refresh_pool_background,
+                        args=(db, user_id, "first_conversation"),
+                        daemon=True,
+                    ).start()
+                # Desktop: append "More" button for 2x2 grid. Mobile: no More (CSS hides it anyway)
+                options.append(_TaskOption(
+                    title="More", subtitle="Load new ideas",
+                    action="fetchMoreOptions()", icon="more",
+                ))
+            except Exception as e:
+                logger.warning(f"Smart suggestions failed, using fallback: {e}")
+                user_preferences = fetch_user_preferences(user_id)
+                options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=True, user_preferences=user_preferences)
             guest_count = 0
 
         return render_template(
@@ -106,7 +182,8 @@ def index():
             is_guest=guest_mode,
             guest_message_count=guest_count,
             guest_message_limit=GUEST_MESSAGE_LIMIT,
-            guest_banner_threshold=GUEST_BANNER_THRESHOLD
+            guest_banner_threshold=GUEST_BANNER_THRESHOLD,
+            session_has_messages=False
         )
     except Exception as e:
         logger.error(f"Failed to load the index page: {e}")
@@ -123,9 +200,13 @@ def open_shared_session(session_id):
         guest_mode = is_guest() or session_id.startswith('guest_')
         session_has_messages = False
 
+        # Mobile gets 7 suggestions (no More), desktop gets 3 + More = 4 (2x2 grid)
+        mobile = _is_mobile()
+        num_suggestions = 6 if mobile else 3
+
         # Use fallback options for guests (no API call), full options for logged-in users
         if guest_mode:
-            options = task_generator.get_fallback_options()
+            options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=True)
 
             # Get accurate guest message count from Firebase (IP-based)
             client_ip = get_client_ip()
@@ -139,15 +220,63 @@ def open_shared_session(session_id):
                 session['guest']['message_count'] = ip_count
                 session.modified = True
         else:
-            # Fetch user preferences for personalized suggestions
+            # Serve precomputed smart suggestions pool
             user_id = session['user']['uid']
-            user_preferences = fetch_user_preferences(user_id)
-            options = task_generator.get_fallback_options(user_preferences=user_preferences)
+            try:
+                from app.services.smart_suggestions import (
+                    load_pool, select_display_slots, get_signal_based_suggestions,
+                    get_pool_metadata, should_refresh_pool, refresh_pool_background,
+                    increment_shown_counts,
+                )
+                from app.grog_api import TaskOption as _TaskOption
+                per_slot = 3 if mobile else 1
+                pool = load_pool(db, user_id)
+                if pool:
+                    selected = select_display_slots(pool, per_slot=per_slot)
+                    if mobile:
+                        selected = selected[:6]
+                    options = [s.to_task_option() for s in selected]
+                    shown_titles = [s.title for s in selected]
+                    increment_shown_counts(db, user_id, shown_titles)
+                    metadata = get_pool_metadata(db, user_id)
+                    if should_refresh_pool(metadata):
+                        import threading
+                        threading.Thread(
+                            target=refresh_pool_background,
+                            args=(db, user_id, "expired"),
+                            daemon=True,
+                        ).start()
+                else:
+                    hour = datetime.utcnow().hour
+                    day = datetime.utcnow().strftime("%A")
+                    ua = request.headers.get("User-Agent", "")
+                    selected = get_signal_based_suggestions(hour=hour, day_of_week=day, user_agent=ua, per_slot=per_slot)
+                    if mobile:
+                        selected = selected[:6]
+                    options = [s.to_task_option() for s in selected]
+                    import threading
+                    threading.Thread(
+                        target=refresh_pool_background,
+                        args=(db, user_id, "first_conversation"),
+                        daemon=True,
+                    ).start()
+                options.append(_TaskOption(
+                    title="More", subtitle="Load new ideas",
+                    action="fetchMoreOptions()", icon="more",
+                ))
+            except Exception as e:
+                logger.warning(f"Smart suggestions failed, using fallback: {e}")
+                user_preferences = fetch_user_preferences(user_id)
+                options = task_generator.get_fallback_options(num_tasks=num_suggestions, include_more_option=True, user_preferences=user_preferences)
             guest_count = 0
 
             # Check if session has messages to prevent FOUC
             try:
-                session_doc = db.collection('users').document(user_id).collection('chat_sessions').document(session_id).get()
+                doc_ref = db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
+                try:
+                    session_doc = doc_ref.get(timeout=2, retry=None)
+                except TypeError:
+                    session_doc = doc_ref.get()
                 if session_doc.exists:
                     session_data = session_doc.to_dict()
                     msg_count = len(session_data.get('messages', []))
@@ -176,34 +305,79 @@ def open_shared_session(session_id):
 @csrf_required
 @error_handler
 def more_options():
-    """Get more task options for the homepage."""
+    """Get more task options — serve from precomputed pool for logged-in users."""
     try:
+        mobile = _is_mobile()
+        per_slot = 2 if mobile else 1  # mobile: 6, desktop: 3
+
+        if 'user' in session:
+            user_id = session['user']['uid']
+            try:
+                from app.services.smart_suggestions import (
+                    load_pool, select_display_slots, increment_shown_counts,
+                    get_pool_metadata, should_refresh_pool, refresh_pool_background,
+                )
+                pool = load_pool(db, user_id)
+                if pool:
+                    import random
+                    random.shuffle(pool)
+                    selected = select_display_slots(pool, per_slot=per_slot)
+                    if mobile:
+                        selected = selected[:6]
+                    options_dicts = [s.to_task_option().to_dict() for s in selected]
+                    options_dicts.append({
+                        "title": "More", "subtitle": "Load new ideas",
+                        "action": "fetchMoreOptions()", "icon": "more",
+                    })
+                    increment_shown_counts(db, user_id, [s.title for s in selected])
+                    metadata = get_pool_metadata(db, user_id)
+                    if should_refresh_pool(metadata):
+                        import threading
+                        threading.Thread(
+                            target=refresh_pool_background,
+                            args=(db, user_id, "exhausted"),
+                            daemon=True,
+                        ).start()
+                    return jsonify({"options": options_dicts}), 200
+            except Exception as e:
+                logger.warning(f"Smart suggestions more-options failed: {e}")
+
+        # Fallback: original behavior
         current_options = request.json.get('current_options', [])
-        # Fetch user preferences and history for personalized suggestions
         user_preferences = {}
         user_history = None
         if 'user' in session:
             user_id = session['user']['uid']
             user_preferences = fetch_user_preferences(user_id)
-
-        # Detect mobile devices to return more options
-        user_agent = request.headers.get('User-Agent', '').lower()
-        is_mobile = any(x in user_agent for x in ['mobile', 'android', 'iphone', 'ipad', 'ipod'])
-        num_tasks = 7 if is_mobile else 6
-
-        # Use AI model to generate dynamic options (falls back to hardcoded if API fails)
+        num_tasks = 6 if mobile else 3
         options = task_generator.generate_task_options(
-            user_history=user_history,
-            num_tasks=num_tasks,
-            force_new_tasks=True  # Always get fresh options when clicking "More"
+            user_history=user_history, num_tasks=num_tasks, force_new_tasks=True,
         )
         new_options = [opt for opt in options if opt not in current_options]
-        # Convert TaskOption objects to dictionaries (includes icon field)
         options_dicts = [opt.to_dict() for opt in new_options]
         return jsonify({"options": options_dicts}), 200
     except Exception as e:
         logger.error(f"Failed to fetch more options: {e}")
         return jsonify({'error': 'Failed to fetch more options.'}), 500
+
+
+@pages_bp.route('/suggestion-click', methods=['POST'])
+@csrf_required
+@error_handler
+def suggestion_click():
+    """Record a suggestion click for the learning loop."""
+    if 'user' not in session:
+        return jsonify({"ok": True}), 200  # silently ignore for guests
+
+    try:
+        from app.services.smart_suggestions import record_click
+        user_id = session['user']['uid']
+        click_data = request.json or {}
+        record_click(db, user_id, click_data)
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.debug(f"Click tracking failed: {e}")
+        return jsonify({"ok": True}), 200  # never fail the user's click
 
 
 @pages_bp.route('/favicon.ico')

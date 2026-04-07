@@ -71,7 +71,7 @@ class Config:
     MICROSOFT_REDIRECT_URI = os.getenv('MICROSOFT_REDIRECT_URI', f'{APP_BASE_URL}/auth/microsoft/callback')
 
     # Microsoft OAuth URIs
-    MICROSOFT_AUTH_URI = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize"
+    MICROSOFT_AUTH_URI = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
     MICROSOFT_TOKEN_URI = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
     MICROSOFT_USER_INFO_URI = "https://graph.microsoft.com/v1.0/me"
 
@@ -84,6 +84,16 @@ class Config:
     DISCORD_AUTH_URI = "https://discord.com/api/oauth2/authorize"
     DISCORD_TOKEN_URI = "https://discord.com/api/oauth2/token"
     DISCORD_USER_INFO_URI = "https://discord.com/api/users/@me"
+
+    # Facebook OAuth 2.0 credentials - Use environment variables for production
+    FACEBOOK_CLIENT_ID = os.getenv('FACEBOOK_CLIENT_ID')
+    FACEBOOK_CLIENT_SECRET = os.getenv('FACEBOOK_CLIENT_SECRET')
+    FACEBOOK_REDIRECT_URI = os.getenv('FACEBOOK_REDIRECT_URI', f'{APP_BASE_URL}/auth/facebook/callback')
+
+    # Facebook OAuth URIs
+    FACEBOOK_AUTH_URI = "https://www.facebook.com/v19.0/dialog/oauth"
+    FACEBOOK_TOKEN_URI = "https://graph.facebook.com/v19.0/oauth/access_token"
+    FACEBOOK_USER_INFO_URI = "https://graph.facebook.com/v19.0/me"
 
     # Firebase Admin SDK credentials file and storage bucket
     FIREBASE_CRED_PATH = os.getenv('FIREBASE_CRED_PATH')

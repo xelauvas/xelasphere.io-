@@ -526,7 +526,7 @@ def _execute_prompt_request(prompt: str, resolved_model: str, provider: str, api
             {"role": "user", "content": prompt}
         ],
         "model": resolved_model,
-        "max_tokens": 2048,
+        "max_tokens": 8192,
         "temperature": temperature
     }
 
@@ -631,8 +631,8 @@ def send_prompt(prompt, model="llama-3.1-70b-versatile"):
         else:
             logger.warning(f"{fallback_provider} fallback also failed: {error_payload}")
 
-    # If rate limited and we have a Cerebras fallback, try it
-    elif status_code == 429 and provider == "groq" and resolved_model in FALLBACK_MODELS:
+    # If rate limited or payload too large and we have a Cerebras fallback, try it
+    elif status_code in (429, 413) and provider == "groq" and resolved_model in FALLBACK_MODELS:
         fallback_model = FALLBACK_MODELS[resolved_model]
         logger.info(f"Groq rate limited, falling back to Cerebras model: {fallback_model}")
 
@@ -736,13 +736,26 @@ WHEN NOT TO USE ARTIFACTS:
 - Code reviews, debugging explanations
 - Any non-runnable code (config files, pseudocode)
 
-🔧 ARTIFACT UPDATES & BUG FIXES (CRITICAL):
-When you see "CURRENT ARTIFACT" in the user's message, it contains code that needs fixing/updating.
-1. READ the provided artifact code carefully
-2. IDENTIFY and FIX the issue
-3. OUTPUT a complete ```artifact block with ALL files (including the fix)
-4. DO NOT ask for more information - the code is already provided
-5. DO NOT just explain how to fix - actually provide the fixed code
+🔧 ARTIFACT UPDATES & BUG FIXES (MANDATORY FORMAT):
+When you see "CURRENT ARTIFACT" in the user's message, you MUST follow this EXACT format.
+DO NOT explain the code. DO NOT say "the code looks correct". DO NOT regenerate the full artifact.
+You MUST output a ```artifact_patch block. This is NOT optional.
+
+STEP 1: Write a 1-2 sentence summary of what you're changing.
+STEP 2: Output EXACTLY this format (nothing else):
+```artifact_patch
+{"patches":[{"file":"App.jsx","old_string":"COPY EXACT LINES FROM THE CODE ABOVE","new_string":"THE FIXED VERSION OF THOSE LINES"}]}
+```
+
+RULES:
+- old_string MUST be copied EXACTLY from the CURRENT ARTIFACT code (character-for-character, including whitespace)
+- Include 2-4 surrounding lines in old_string so it matches uniquely
+- new_string is the replacement with the fix applied
+- Multiple patches: {"patches":[{...},{...}]}
+- For CSS changes, use "file":"style.css"
+- NEVER output a ```artifact block — ONLY ```artifact_patch
+- NEVER say "the code looks correct" — if the user reports an error, FIX IT
+- NEVER output just text explaining the fix — you MUST include the patch block
 
 ⚠️ CRITICAL: DO NOT ASK EXCESSIVE QUESTIONS
 When user asks you to BUILD or CREATE something:
@@ -769,7 +782,7 @@ For simple questions or explanations, just respond normally without artifacts.""
     }
 
     try:
-        response = requests.post(url, json=data, headers=headers, stream=True, timeout=120)
+        response = requests.post(url, json=data, headers=headers, stream=True, timeout=(10, 90))
         response.raise_for_status()
 
         for line in response.iter_lines():

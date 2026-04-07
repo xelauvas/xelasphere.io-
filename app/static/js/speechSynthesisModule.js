@@ -627,7 +627,50 @@ function appendActionButtons(container, messageId, { skipSourcesRefresh = false 
         }
     }, 'branch');
 
-    moreMenu.append(readMenuOption, reportMenuOption, branchMenuOption);
+    // --- Smart timestamp header ---
+    const timeHeader = document.createElement('div');
+    timeHeader.className = 'action-more-time-header';
+
+    function formatSmartTime(isoString) {
+        if (!isoString) return '';
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return '';
+        const now = new Date();
+        const diffMs = now - date;
+        const diffDays = Math.floor(diffMs / 86400000);
+        const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+
+        if (diffDays === 0 && now.getDate() === date.getDate()) {
+            return 'Today ' + timeStr;
+        }
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (date.getDate() === yesterday.getDate() &&
+            date.getMonth() === yesterday.getMonth() &&
+            date.getFullYear() === yesterday.getFullYear()) {
+            return 'Yesterday ' + timeStr;
+        }
+        if (diffDays < 7) {
+            const dayName = date.toLocaleDateString([], { weekday: 'long' });
+            return dayName + ' ' + timeStr;
+        }
+        const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        if (date.getFullYear() !== now.getFullYear()) {
+            return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + timeStr;
+        }
+        return dateStr + ' ' + timeStr;
+    }
+
+    function updateTimeHeader() {
+        const ts = messageElement?.dataset?.timestamp;
+        timeHeader.textContent = formatSmartTime(ts);
+    }
+    updateTimeHeader();
+
+    // Update the timestamp each time the menu opens
+    moreButton._updateTimeHeader = updateTimeHeader;
+
+    moreMenu.append(timeHeader, readMenuOption, reportMenuOption, branchMenuOption);
 
     moreButton.addEventListener('click', (event) => {
         if (activeButton === moreButton && (isSpeaking || isFetchingAudio)) {
@@ -640,6 +683,8 @@ function appendActionButtons(container, messageId, { skipSourcesRefresh = false 
         event.stopPropagation();
         const isOpen = moreMenu.classList.toggle('open');
         if (isOpen) {
+            // Refresh the smart timestamp each time the menu opens
+            if (moreButton._updateTimeHeader) moreButton._updateTimeHeader();
             const closeMenu = (e) => {
                 if (!moreMenu.contains(e.target) && e.target !== moreButton) {
                     moreMenu.classList.remove('open');
@@ -697,7 +742,7 @@ function attachSourcesToMessage(messageId, searchResults) {
 
     const primaryRow = messageElement.querySelector('.action-buttons-row');
     if (primaryRow) {
-        renderSourcesButton(primaryRow, messageElement, messageId, messageSources);
+        renderSourcesButton(primaryRow, messageElement, messageId, searchResults);
     }
 }
 
@@ -813,10 +858,10 @@ function retryAnswer(originalPrompt, messageId) {
 // Mock implementation of hideOriginalInput function (you may already have this)
 function hideOriginalInput(messageId) {
     const messageElement = document.getElementById(messageId);
-    if (messageElement) {
-        messageElement.style.display = 'none'; // Hide the message element
-    }
-    
+    if (!messageElement) return;
+
+    messageElement.style.display = 'none'; // Hide the message element
+
     const originalPrompt = messageElement.dataset.originalPrompt;
     if (originalPrompt) {
         const promptElements = document.querySelectorAll(`[data-original-prompt="${originalPrompt}"]`);

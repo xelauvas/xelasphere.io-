@@ -253,7 +253,11 @@ class ChatSession:
         return {'chat_history': chat_history, 'next_page_token': next_token}
 
     def get_session(self, user_id: str, session_id: str) -> Optional[Dict[str, Any]]:
-        session_doc = self._get_session_ref(user_id, session_id).get()
+        doc_ref = self._get_session_ref(user_id, session_id)
+        try:
+            session_doc = doc_ref.get(timeout=2, retry=None)
+        except TypeError:
+            session_doc = doc_ref.get()
         if not session_doc.exists:
             return None
 
@@ -332,7 +336,11 @@ class ChatSession:
             .collection('chat_sessions') \
             .order_by('last_updated', direction=gc_firestore.Query.DESCENDING)
         if page_token:
-            last_doc = self._get_session_ref(user_id, page_token).get()
+            last_ref = self._get_session_ref(user_id, page_token)
+            try:
+                last_doc = last_ref.get(timeout=2, retry=None)
+            except TypeError:
+                last_doc = last_ref.get()
             if last_doc.exists:
                 query = query.start_after(last_doc)
         return query

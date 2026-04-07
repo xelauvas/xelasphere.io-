@@ -60,6 +60,8 @@ class MemoryJudge:
         MemoryType.PROJECT: 0.5,
         MemoryType.CONSTRAINT: 0.8,    # Constraints need high confidence
         MemoryType.TEMPORARY: 0.4,     # Lower bar for temp items
+        MemoryType.FEEDBACK: 0.65,     # Medium bar - corrections are important but must be real
+        MemoryType.REFERENCE: 0.6,     # Medium bar - references are verifiable
     }
 
     # Patterns that suggest low-value memories
@@ -168,7 +170,9 @@ class MemoryJudge:
             )
 
         # Too long (probably not a discrete fact)
-        if len(value) > 500:
+        # Feedback type allows longer values (includes Why/How structure)
+        max_length = 800 if candidate.type == MemoryType.FEEDBACK else 500
+        if len(value) > max_length:
             return JudgmentResult(
                 decision=JudgmentDecision.REJECT,
                 reason="Value too long for memory"
@@ -220,6 +224,18 @@ class MemoryJudge:
         if candidate.type == MemoryType.CONSTRAINT:
             confidence += 0.1
 
+        # Boost for feedback (user corrections/confirmations are high signal)
+        if candidate.type == MemoryType.FEEDBACK:
+            # Corrections ("no not that", "stop doing X") are very reliable signals
+            if any(w in quote for w in ["stop", "don't", "not that", "wrong", "no,"]):
+                confidence += 0.10
+            # Confirmations ("perfect", "exactly") are slightly less reliable
+            elif any(w in quote for w in ["perfect", "exactly", "great", "keep"]):
+                confidence += 0.05
+            # "From now on" directives are explicit and high confidence
+            if "from now on" in quote or "going forward" in quote:
+                confidence += 0.10
+
         # Clamp to valid range
         return max(0.0, min(1.0, confidence))
 
@@ -246,8 +262,17 @@ class MemoryJudge:
                 existing_memory_id=existing.id
             )
 
-        # Profile type: newer overwrites (singular facts)
+        # Profile type: newer overwrites, but only if confidence is sufficient
         if candidate.type == MemoryType.PROFILE:
+            # Guard: don't let low-confidence extractions overwrite high-confidence facts
+            # e.g. prevents "Ada Price" (0.7) from overwriting "Xela Uvas" (0.95)
+            if existing.confidence >= 0.85 and candidate.confidence < existing.confidence - 0.1:
+                return JudgmentResult(
+                    decision=JudgmentDecision.STORE_PROVISIONAL,
+                    reason=f"New value confidence ({candidate.confidence:.2f}) too low to supersede existing ({existing.confidence:.2f})",
+                    existing_memory_id=existing.id,
+                    adjusted_confidence=candidate.confidence
+                )
             return JudgmentResult(
                 decision=JudgmentDecision.SUPERSEDE,
                 reason="Profile fact updated - superseding old value",
@@ -294,6 +319,24 @@ class MemoryJudge:
             return JudgmentResult(
                 decision=JudgmentDecision.UPDATE,
                 reason="Project info updated",
+                existing_memory_id=existing.id,
+                adjusted_confidence=candidate.confidence
+            )
+
+        # Feedback type: newer supersedes (user changed their mind or refined)
+        if candidate.type == MemoryType.FEEDBACK:
+            return JudgmentResult(
+                decision=JudgmentDecision.SUPERSEDE,
+                reason="Feedback updated — newer guidance replaces old",
+                existing_memory_id=existing.id,
+                adjusted_confidence=candidate.confidence
+            )
+
+        # Reference type: update (URLs/tools may change)
+        if candidate.type == MemoryType.REFERENCE:
+            return JudgmentResult(
+                decision=JudgmentDecision.SUPERSEDE,
+                reason="Reference updated — newer pointer replaces old",
                 existing_memory_id=existing.id,
                 adjusted_confidence=candidate.confidence
             )

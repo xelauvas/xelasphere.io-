@@ -4,6 +4,24 @@
  */
 
 /* ==================== */
+/* CLAUDE-STYLE COLOR TOKENS */
+/* ==================== */
+
+.artifact-panel,
+.artifact-chat-pill {
+  --artifact-bg: #212121;
+  --artifact-bg-elevated: #212121;
+  --artifact-border: rgba(255, 255, 255, 0.06);
+  --artifact-border-subtle: rgba(255, 255, 255, 0.04);
+  --artifact-text: rgba(255, 255, 255, 0.88);
+  --artifact-muted: rgba(255, 255, 255, 0.5);
+  --artifact-hover: rgba(255, 255, 255, 0.05);
+  --artifact-active: rgba(255, 255, 255, 0.08);
+  --artifact-accent: #f0f0f0;
+  --artifact-shadow: rgba(0, 0, 0, 0.35);
+}
+
+/* ==================== */
 /* ARTIFACT PANEL - MAIN CONTAINER */
 /* Design spec: Deep charcoal, 45-55% viewport, rounded corners */
 /* ==================== */
@@ -16,16 +34,16 @@
   width: var(--artifact-panel-width, 50vw);
   min-width: 320px;
   max-width: 55vw;
-  background: var(--background-dark, #212121);
-  border-left: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.08));
-  border-radius: var(--artifact-panel-radius, 12px) 0 0 var(--artifact-panel-radius, 12px);
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4);
+  background: var(--artifact-bg);
+  border-left: 1px solid var(--artifact-border);
+  border-radius: 12px 0 0 12px;
+  box-shadow: -8px 0 32px var(--artifact-shadow);
   transform: translateX(100%);
   opacity: 0;
   transition:
-    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.25s ease;
+    transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.3s ease;
   z-index: var(--z-fixed);
   display: flex;
   flex-direction: column;
@@ -36,13 +54,13 @@
 .artifact-panel.is-open {
   transform: translateX(0);
   opacity: 1;
-  box-shadow: -12px 0 48px rgba(0, 0, 0, 0.5);
+  box-shadow: -12px 0 48px var(--artifact-shadow);
 }
 
 .artifact-panel[aria-hidden="false"] {
   transform: translateX(0);
   opacity: 1;
-  box-shadow: -12px 0 48px rgba(0, 0, 0, 0.5);
+  box-shadow: -12px 0 48px var(--artifact-shadow);
 }
 
 body.artifact-panel-open {
@@ -217,7 +235,7 @@ body.artifact-panel-resizing .chat-container {
 }
 
 /* ==================== */
-/* RESIZE HANDLE */
+/* RESIZE HANDLE — Subtle */
 /* ==================== */
 
 .artifact-panel__resize-handle {
@@ -231,15 +249,15 @@ body.artifact-panel-resizing .chat-container {
   z-index: 9999;
   user-select: none;
   -webkit-user-select: none;
-  transition: background 0.2s ease;
+  transition: background 0.12s ease;
 }
 
 .artifact-panel__resize-handle:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .artifact-panel__resize-handle:active {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .artifact-panel.is-open .artifact-panel__resize-handle {
@@ -257,33 +275,35 @@ body.artifact-panel-resizing .chat-container {
   cursor: ew-resize;
 }
 
-/* Visible grip handle indicator */
+/* Visible grip indicator */
 .artifact-panel__resize-handle::after {
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 4px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.2);
+  width: 3px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
-  transition: background 0.2s ease, height 0.2s ease;
+  transition: background 0.12s ease, height 0.12s ease, opacity 0.12s ease;
+  opacity: 0;
 }
 
 .artifact-panel__resize-handle:hover::after {
-  background: rgba(255, 255, 255, 0.2);
-  height: 60px;
+  background: rgba(255, 255, 255, 0.15);
+  height: 48px;
+  opacity: 1;
 }
 
 .artifact-panel__resize-handle:active::after {
-  background: rgba(255, 255, 255, 0.5);
-  height: 80px;
+  background: rgba(255, 255, 255, 0.3);
+  height: 64px;
+  opacity: 1;
 }
 
 /* ==================== */
-/* HEADER - Design Spec Compliant */
-/* Height: 52-60px, sticky, horizontal layout */
+/* HEADER - Claude Style */
 /* ==================== */
 
 .artifact-panel__header {
@@ -291,48 +311,48 @@ body.artifact-panel-resizing .chat-container {
   top: 0;
   z-index: 100;
   flex-shrink: 0;
-  height: var(--artifact-header-height, 56px);
-  min-height: 52px;
-  max-height: 60px;
-  padding: 0 14px;
-  background: var(--background-dark, #212121);
-  border-bottom: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.08));
+  height: 44px;
+  padding: 0 12px;
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: 8px;
 }
 
 /* Left header group */
 .artifact-panel__header-left {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
 }
 
-/* Artifact switch button - 36x36px rounded square */
+/* Artifact switch button - ghost icon button */
 .artifact-panel__switch-btn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.08));
+  background: transparent;
+  border: none;
   border-radius: 8px;
-  color: var(--artifact-muted, rgba(255, 255, 255, 0.62));
+  color: var(--artifact-muted);
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: all 0.12s ease;
+  flex-shrink: 0;
 }
 
 .artifact-panel__switch-btn:hover {
-  background: var(--artifact-hover, rgba(255, 255, 255, 0.06));
-  border-color: rgba(255, 255, 255, 0.15);
-  color: var(--artifact-text, rgba(255, 255, 255, 0.92));
+  background: var(--artifact-hover);
+  color: var(--artifact-text);
 }
 
 .artifact-panel__switch-btn:focus-visible {
-  outline: 2px solid var(--artifact-accent, #3b82f6);
+  outline: 2px solid var(--artifact-accent);
   outline-offset: 2px;
 }
 
@@ -344,85 +364,81 @@ body.artifact-panel-resizing .chat-container {
 .artifact-panel__header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
-/* Header action buttons (Copy, Publish) */
+/* Header action buttons - ghost icon style (no borders, no text) */
 .artifact-panel__header-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 500;
-  font-family: system-ui, -apple-system, sans-serif;
-  color: var(--artifact-text, rgba(255, 255, 255, 0.92));
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 0;
+  color: var(--artifact-muted);
   background: transparent;
-  border: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.08));
-  border-radius: 10px;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: all 0.12s ease;
 }
 
 .artifact-panel__header-btn:hover {
-  background: var(--artifact-hover, rgba(255, 255, 255, 0.06));
-  border-color: rgba(255, 255, 255, 0.15);
+  background: var(--artifact-hover);
+  color: var(--artifact-text);
 }
 
 .artifact-panel__header-btn:focus-visible {
-  outline: 2px solid var(--artifact-accent, #3b82f6);
+  outline: 2px solid var(--artifact-accent);
   outline-offset: 2px;
 }
 
 .artifact-panel__header-btn i {
-  font-size: 12px;
-  color: var(--artifact-muted, rgba(255, 255, 255, 0.62));
+  font-size: 16px;
+  color: inherit;
 }
 
-/* Copy button with dropdown caret */
+/* Remove old dropdown caret on copy button */
 .artifact-panel__header-btn--copy::after {
-  content: '';
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 4px solid var(--artifact-muted, rgba(255, 255, 255, 0.62));
-  margin-left: 4px;
+  display: none;
 }
 
-/* Publish button - more prominent */
+/* Publish button - same ghost style, no special treatment */
 .artifact-panel__header-btn--publish {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: transparent;
+  border: none;
 }
 
 .artifact-panel__header-btn--publish:hover {
-  background: rgba(255, 255, 255, 0.10);
-  border-color: rgba(255, 255, 255, 0.20);
+  background: var(--artifact-hover);
 }
 
 /* Close button - icon only */
 .artifact-panel__close-btn {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  color: var(--artifact-muted, rgba(255, 255, 255, 0.62));
+  border-radius: 6px;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
   cursor: pointer;
   transition: all 150ms ease;
 }
 
 .artifact-panel__close-btn:hover {
-  background: var(--artifact-hover, rgba(255, 255, 255, 0.06));
-  color: var(--artifact-text, rgba(255, 255, 255, 0.92));
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .artifact-panel__close-btn:focus-visible {
-  outline: 2px solid var(--artifact-accent, #3b82f6);
+  outline: 2px solid var(--artifact-accent, rgba(255, 255, 255, 0.3));
   outline-offset: 2px;
 }
 
@@ -441,7 +457,7 @@ body.artifact-panel-resizing .chat-container {
   width: 320px;
   min-width: 280px;
   max-width: 340px;
-  background: #121826;
+  background: var(--artifact-bg, #212121);
   border: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.08));
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
@@ -493,8 +509,8 @@ body.artifact-panel-resizing .chat-container {
 }
 
 .artifact-switcher-dropdown__item.is-selected {
-  background: var(--artifact-accent2, rgba(59, 130, 246, 0.18));
-  border-color: var(--artifact-accent, #3b82f6);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .artifact-switcher-dropdown__item-title {
@@ -589,7 +605,7 @@ body.artifact-panel-resizing .chat-container {
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
-  background: var(--background-dark, #212121);
+  background: transparent;
   border-bottom: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.08));
   gap: 12px;
 }
@@ -604,50 +620,50 @@ body.artifact-panel-resizing .chat-container {
 .artifact-panel__type-badge {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  font-family: var(--font-mono);
-  color: var(--color-primary-300);
-  background: rgba(14, 165, 233, 0.1);
-  border: 1px solid var(--color-primary-700);
-  border-radius: var(--radius-md);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: var(--artifact-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--artifact-border);
+  border-radius: 6px;
+  text-transform: lowercase;
+  letter-spacing: 0.01em;
 }
 
 .artifact-panel__version-label {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+  gap: 4px;
+  font-size: 12px;
+  color: var(--artifact-muted);
 }
 
 .artifact-panel__version-label span {
-  font-weight: var(--font-medium);
+  font-weight: 500;
 }
 
 .artifact-panel__version-label select {
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-sm);
-  font-family: var(--font-mono);
-  color: var(--text-primary);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
+  padding: 2px 8px;
+  font-size: 12px;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: var(--artifact-text);
+  background: var(--artifact-bg);
+  border: 1px solid var(--artifact-border);
+  border-radius: 6px;
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-in-out);
+  transition: border-color 0.12s ease;
 }
 
 .artifact-panel__version-label select:hover {
-  border-color: var(--border-focus);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .artifact-panel__version-label select:focus {
-  outline: 2px solid var(--border-focus);
+  outline: 2px solid var(--artifact-accent);
   outline-offset: 2px;
-  border-color: var(--border-focus);
+  border-color: var(--artifact-accent);
 }
 
 .artifact-panel__header-actions {
@@ -822,7 +838,7 @@ body.artifact-panel-resizing .chat-container {
 .artifact-code {
   display: flex;
   height: 100%;
-  background: var(--background-dark, #212121);
+  background: transparent;
 }
 
 /* No tree layout - full width code viewer */
@@ -838,52 +854,41 @@ body.artifact-panel-resizing .chat-container {
 
 /* File Selector Dropdown */
 .artifact-file-select-wrapper {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-width: 180px;
-  max-width: 320px;
-}
-
-.artifact-file-select-wrapper > i {
-  color: var(--artifact-muted, rgba(255, 255, 255, 0.62));
-  font-size: 14px;
 }
 
 .artifact-file-select {
-  flex: 1;
-  padding: 8px 32px 8px 12px;
-  font-size: 13px;
+  width: auto;
+  padding: 4px 16px 4px 0;
+  font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-weight: 500;
-  color: var(--artifact-text, rgba(255, 255, 255, 0.92));
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 10px center;
-  transition: all 150ms ease;
+  background-position: right 2px center;
+  transition: color 0.15s ease;
 }
 
 .artifact-file-select:hover {
-  background-color: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .artifact-file-select:focus {
   outline: none;
-  border-color: var(--artifact-accent, #3b82f6);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
 .artifact-file-select option {
-  background: #1a1a1f;
-  color: rgba(255, 255, 255, 0.92);
-  padding: 8px;
+  background: #1e1e1e;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 6px;
 }
 
 /* Hide the old tree sidebar */
@@ -946,8 +951,8 @@ body.artifact-panel-resizing .chat-container {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-3) var(--space-4);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-primary);
+  background: transparent;
+  border-bottom: 1px solid var(--artifact-border-subtle, rgba(255, 255, 255, 0.04));
 }
 
 .artifact-code__file-name {
@@ -968,57 +973,82 @@ body.artifact-panel-resizing .chat-container {
 .hero-btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  color: var(--text-secondary);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.45);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-in-out);
+  transition: color 0.15s ease, background 0.15s ease;
   white-space: nowrap;
 }
 
 .artifact-code__action-btn:hover,
 .hero-btn.ghost:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-  border-color: var(--border-focus);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .hero-btn.primary {
-  color: var(--text-inverse);
-  background: var(--color-primary-600);
-  border-color: var(--color-primary-600);
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
 }
 
 .hero-btn.primary:hover:not(:disabled) {
-  background: var(--color-primary-500);
-  border-color: var(--color-primary-500);
-  box-shadow: var(--shadow-md);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .hero-btn.primary:disabled,
 .artifact-code__action-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.3;
   cursor: not-allowed;
-  transform: none;
 }
 
 .artifact-code__action-btn i,
 .hero-btn i {
-  font-size: var(--icon-xs);
+  font-size: 11px;
+}
+
+.artifact-code__edit-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.35);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.artifact-code__edit-toggle:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.artifact-code__edit-toggle[aria-pressed="true"] {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.artifact-code__edit-toggle i {
+  font-size: 12px;
 }
 
 .artifact-code__block {
   flex: 1;
   margin: 0;
   padding: 0;
-  background: var(--background-darker, #1a1a1f);
+  background: transparent;
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 14px;
@@ -1076,7 +1106,7 @@ body.artifact-panel-resizing .chat-container {
   flex-shrink: 0;
   min-width: 48px;
   padding: 16px 12px 16px 16px;
-  background: rgba(0, 0, 0, 0.2);
+  background: transparent;
   border-right: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.08));
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 14px;
@@ -1093,7 +1123,7 @@ body.artifact-panel-resizing .chat-container {
 
 /* Selection highlight */
 .artifact-code__block ::selection {
-  background: rgba(59, 130, 246, 0.25);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 /* ==================== */
@@ -1314,21 +1344,119 @@ body.artifact-panel-resizing .chat-container {
 .artifact-editor__codemirror .CodeMirror,
 #artifact-edit-codemirror .CodeMirror {
   height: 100%;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  background: var(--code-bg);
-  color: var(--text-primary);
+  font-family: 'Söhne Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  background: #1e1e1e;
+  color: #d4d4d4;
 }
 
-/* CodeMirror in Code tab */
+/* CodeMirror in Code tab — must fill entire code panel */
 #artifact-edit-codemirror {
   flex: 1;
   overflow: hidden;
+  min-height: 0;
+  position: relative;
 }
 
 #artifact-edit-codemirror .CodeMirror {
-  border-top: 1px solid var(--border-primary);
+  border-top: none;
+  padding-top: 4px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
+
+/* Gutter — no separator, same bg */
+#artifact-edit-codemirror .CodeMirror-gutters {
+  background: #1e1e1e;
+  border-right: none;
+  min-width: 44px;
+}
+
+#artifact-edit-codemirror .CodeMirror-linenumber {
+  color: #6e7681;
+  font-size: 12px;
+  padding: 0 12px 0 16px;
+}
+
+/* Active line */
+#artifact-edit-codemirror .CodeMirror-activeline-background {
+  background: #2a2d2e;
+}
+
+/* Cursor — white thin blink */
+#artifact-edit-codemirror .CodeMirror-cursor {
+  border-left: 1.5px solid #e0e0e0;
+}
+
+/* Selection — VS Code blue */
+#artifact-edit-codemirror .CodeMirror-selected,
+#artifact-edit-codemirror .CodeMirror-focused .CodeMirror-selected {
+  background: #264f78;
+}
+
+/* Matching brackets */
+#artifact-edit-codemirror .CodeMirror-matchingbracket {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.08);
+  outline: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+/* Scrollbar — thin translucent */
+#artifact-edit-codemirror .CodeMirror-simplescroll-vertical div,
+#artifact-edit-codemirror .CodeMirror-simplescroll-horizontal div {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-radius: 3px;
+}
+
+#artifact-edit-codemirror .CodeMirror-vscrollbar,
+#artifact-edit-codemirror .CodeMirror-hscrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+#artifact-edit-codemirror .CodeMirror-vscrollbar::-webkit-scrollbar,
+#artifact-edit-codemirror .CodeMirror-hscrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+#artifact-edit-codemirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+#artifact-edit-codemirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+#artifact-edit-codemirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover,
+#artifact-edit-codemirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* VS Code Dark+ syntax colors (ChatGPT Canvas style) */
+#artifact-edit-codemirror .cm-keyword { color: #c586c0; }
+#artifact-edit-codemirror .cm-atom { color: #569cd6; }
+#artifact-edit-codemirror .cm-number { color: #b5cea8; }
+#artifact-edit-codemirror .cm-def { color: #dcdcaa; }
+#artifact-edit-codemirror .cm-variable { color: #9cdcfe; }
+#artifact-edit-codemirror .cm-variable-2 { color: #9cdcfe; }
+#artifact-edit-codemirror .cm-variable-3,
+#artifact-edit-codemirror .cm-type { color: #4ec9b0; }
+#artifact-edit-codemirror .cm-property { color: #9cdcfe; }
+#artifact-edit-codemirror .cm-operator { color: #d4d4d4; }
+#artifact-edit-codemirror .cm-comment { color: #6a9955; font-style: italic; }
+#artifact-edit-codemirror .cm-string { color: #ce9178; }
+#artifact-edit-codemirror .cm-string-2 { color: #ce9178; }
+#artifact-edit-codemirror .cm-meta { color: #9cdcfe; }
+#artifact-edit-codemirror .cm-qualifier { color: #d7ba7d; }
+#artifact-edit-codemirror .cm-builtin { color: #4ec9b0; }
+#artifact-edit-codemirror .cm-bracket { color: #d4d4d4; }
+#artifact-edit-codemirror .cm-tag { color: #569cd6; }
+#artifact-edit-codemirror .cm-attribute { color: #9cdcfe; }
+#artifact-edit-codemirror .cm-hr { color: #6e7681; }
+#artifact-edit-codemirror .cm-link { color: #4ec9b0; text-decoration: underline; }
 
 /* Code viewer layout - no absolute positioning */
 .artifact-code__viewer {
@@ -1361,7 +1489,6 @@ body.artifact-panel-resizing .chat-container {
 #artifact-edit-codemirror {
   flex: 1;
   overflow: hidden;
-  display: none;
 }
 
 #artifact-edit-codemirror .CodeMirror {
@@ -1798,9 +1925,9 @@ body.artifact-panel-resizing .chat-container {
   margin: 12px 0;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(59, 130, 246, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   box-shadow:
-    inset 0 0 0 1px rgba(59, 130, 246, 0.15),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
     0 10px 28px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(10px);
   cursor: pointer;
@@ -1963,54 +2090,44 @@ body.artifact-panel-resizing .chat-container {
 }
 
 /* ===========================
-   PILL LAYOUT (ACTIVE STYLES)
-   These styles override earlier definitions
+   PILL LAYOUT — Claude Style
    =========================== */
 
 button.artifact-chat-pill {
-  /* reset button-ish stuff */
   border: 0 !important;
   background: transparent;
   padding: 0;
   text-align: left !important;
   cursor: pointer !important;
-
   width: 100% !important;
 }
 
-/* Make the *whole button* the pill */
 button.artifact-chat-pill {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-
-  padding: 14px 16px !important;
-  border-radius: 14px !important;
-
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid rgba(59, 130, 246, 0.55) !important;
-  box-shadow:
-    inset 0 0 0 1px rgba(59, 130, 246, 0.15),
-    0 10px 28px rgba(0, 0, 0, 0.35) !important;
-
-  backdrop-filter: blur(10px) !important;
+  padding: 12px 16px !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid var(--artifact-border, rgba(255, 255, 255, 0.06)) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  transition: background 0.12s ease, border-color 0.12s ease !important;
 }
 
 button.artifact-chat-pill:hover {
-  border-color: rgba(59, 130, 246, 0.8);
-  box-shadow:
-    inset 0 0 0 1px rgba(59, 130, 246, 0.22),
-    0 14px 34px rgba(0, 0, 0, 0.45);
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: none !important;
 }
 
-/* The content wrapper should be a row: left header + right preview */
 .artifact-chat-pill__content {
   width: 100% !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  gap: 14px !important;
-  min-width: 0 !important; /* allow ellipsis */
+  gap: 12px !important;
+  min-width: 0 !important;
 }
 
 /* Left side */
@@ -2022,56 +2139,56 @@ button.artifact-chat-pill:hover {
   flex: 1 1 auto !important;
 }
 
-/* Icon */
+/* Icon — accent diamond */
 .artifact-chat-pill__icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
-
-  background: rgba(139, 92, 246, 0.14); /* subtle purple-ish */
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  background: rgba(124, 111, 224, 0.12);
+  box-shadow: none;
   flex: 0 0 auto;
 }
 
 .artifact-chat-pill__icon i {
-  font-size: 16px;
-  opacity: 0.95;
+  font-size: 14px;
+  color: var(--artifact-accent, #f0f0f0);
+  opacity: 1;
 }
 
 /* Filename + meta */
 .artifact-chat-pill__info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .artifact-chat-pill__title {
-  font-weight: 600;
-  line-height: 1.15;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--artifact-text, rgba(255, 255, 255, 0.88));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Turn "javascript" + "v1" into "javascript • v1" on one line */
 .artifact-chat-pill__meta {
   display: flex !important;
   align-items: center !important;
   flex-direction: row !important;
   gap: 6px !important;
   font-size: 12px !important;
-  opacity: 0.75 !important;
+  color: var(--artifact-muted, rgba(255, 255, 255, 0.5)) !important;
   white-space: nowrap !important;
 }
 
-/* Add the dot separator */
 .artifact-chat-pill__language::after {
-  content: "•";
+  content: "·";
   margin-left: 6px;
-  opacity: 0.8;
+  opacity: 0.6;
 }
 
 /* OLD STYLES - COMMENTED OUT - ACTIVE STYLES AT BOTTOM OF FILE */
@@ -2290,27 +2407,71 @@ button.artifact-chat-pill,
   min-height: 48px;
   max-height: 48px;
   padding: 0 12px 0 16px;
-  background: transparent;
-  border-bottom: none;
+  background: var(--artifact-bg, #2b2b2b);
+  border-bottom: 1px solid var(--artifact-border-subtle, rgba(255, 255, 255, 0.04));
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
+  z-index: 10;
 }
 
-.artifact-panel__header-left,
+.artifact-panel__header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
 .artifact-panel__header-right {
-  display: none; /* Remove old header groups */
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.artifact-panel__version-badge {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: rgba(255, 255, 255, 0.4);
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  transition: color 0.15s ease;
+}
+
+.artifact-panel__version-badge:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.artifact-panel__version-badge:focus,
+.artifact-panel__version-badge:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.artifact-panel__version-badge option {
+  background: #212121;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 6px 10px;
 }
 
 .artifact-panel__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -2340,7 +2501,7 @@ button.artifact-chat-pill,
   background: transparent;
   border: none;
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.5);
+  color: #fff;
   cursor: pointer;
   transition: all 120ms ease;
   flex-shrink: 0;
@@ -2349,7 +2510,7 @@ button.artifact-chat-pill,
 
 .artifact-panel__close-btn:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.85);
+  color: #fff;
 }
 
 .artifact-panel__close-btn svg {
@@ -2361,47 +2522,36 @@ button.artifact-chat-pill,
   font-size: 14px;
 }
 
-/* --- Pill Tab Toggle --- */
+/* --- Inline Pill Tab Toggle (centered in header) --- */
 .artifact-panel__tab-toggle {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 6px 16px 10px;
   flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 1px;
 }
 
 .artifact-panel__tab-toggle > .artifact-panel__tab-btn {
   display: inline-flex;
   align-items: center;
-  padding: 5px 16px;
-  font-size: 13px;
+  gap: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
   font-weight: 500;
-  font-family: inherit;
-  border: none;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: rgba(255, 255, 255, 0.4);
   background: transparent;
-  color: rgba(255, 255, 255, 0.45);
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 150ms ease;
-  border-radius: 9999px;
+  transition: background 0.15s ease, color 0.15s ease;
   white-space: nowrap;
 }
 
-.artifact-panel__tab-toggle > .artifact-panel__tab-btn:first-child {
-  border-radius: 9999px 0 0 9999px;
-}
-
-.artifact-panel__tab-toggle > .artifact-panel__tab-btn:last-child {
-  border-radius: 0 9999px 9999px 0;
-}
-
-/* Pill background behind both buttons */
-.artifact-panel__tab-toggle {
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 9999px;
-  padding: 3px;
-  width: fit-content;
-  margin: 6px auto 10px;
-  gap: 0;
+.artifact-panel__tab-btn svg {
+  flex-shrink: 0;
 }
 
 .artifact-panel__tab-toggle > .artifact-panel__tab-btn:hover {
@@ -2409,10 +2559,26 @@ button.artifact-chat-pill,
 }
 
 .artifact-panel__tab-toggle > .artifact-panel__tab-btn.is-active {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Publish + close actions in header */
+.artifact-panel__header-action {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+  background: transparent;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.artifact-panel__header-action:hover {
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* --- Hide old tabs nav --- */
@@ -2423,6 +2589,7 @@ button.artifact-chat-pill,
 /* --- Panel Body --- */
 .artifact-panel__body {
   flex: 1;
+  min-height: 0; /* Critical: allows flex child to shrink below content size */
   overflow: hidden;
   position: relative;
 }
@@ -2564,4 +2731,264 @@ button.artifact-chat-pill,
   .artifact-panel__tab-toggle {
     margin: 4px auto 8px;
   }
+}
+
+/* ==================== */
+/* CONTENT AREA — Claude Spacing */
+/* ==================== */
+
+.artifact-panel__content {
+  padding: 20px;
+}
+
+.artifact-panel__preview-frame {
+  border-radius: 8px;
+  border: 1px solid var(--artifact-border-subtle);
+}
+
+/* Code viewer background */
+.artifact-panel__code-viewer pre,
+.artifact-panel__code-viewer code {
+  background: #1e1e1e;
+  border-radius: 8px;
+}
+
+/* File tree items */
+.artifact-file-node {
+  height: 32px;
+  padding-left: 12px;
+  transition: background 0.12s ease;
+}
+
+.artifact-file-node:hover {
+  background: var(--artifact-hover);
+}
+
+/* Scrollbar styling */
+.artifact-panel ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.artifact-panel ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.artifact-panel ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.artifact-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ==================== */
+/* LOADING & TRANSITION ANIMATIONS */
+/* ==================== */
+
+/* Skeleton shimmer for loading state */
+@keyframes artifactShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.artifact-panel__loading {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.02) 25%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.02) 75%
+  );
+  background-size: 200% 100%;
+  animation: artifactShimmer 1.5s ease-in-out infinite;
+  border-radius: 8px;
+  min-height: 200px;
+}
+
+/* Tab content crossfade */
+.artifact-panel__tab-content {
+  transition: opacity 0.15s ease;
+}
+
+.artifact-panel__tab-content.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.artifact-panel__tab-content.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  position: relative;
+}
+
+/* Mobile panel: slide up from bottom */
+@media (max-width: 768px) {
+  .artifact-panel {
+    transform: translateY(100%) !important;
+    transition:
+      transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1) !important;
+  }
+
+  .artifact-panel.is-open,
+  body.artifact-panel-open .artifact-panel {
+    transform: translateY(0) !important;
+  }
+}
+
+/* ==================== */
+/* COMPOSER — Claude Style Input */
+/* ==================== */
+
+.artifact-panel__composer-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 44px 0 16px;
+  font-size: 14px;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: var(--artifact-text);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--artifact-border);
+  border-radius: 12px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.artifact-panel__composer-input::placeholder {
+  color: var(--artifact-muted);
+}
+
+.artifact-panel__composer-input:focus {
+  border-color: var(--artifact-accent);
+  box-shadow: 0 0 0 3px rgba(124, 111, 224, 0.1);
+}
+
+.artifact-panel__composer-submit {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--artifact-accent);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+  pointer-events: none;
+}
+
+.artifact-panel__composer-input:not(:placeholder-shown) ~ .artifact-panel__composer-submit,
+.artifact-panel__composer-submit.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.artifact-panel__composer-submit:hover {
+  background: #6b5ec7;
+}
+
+/* ==================== */
+/* STREAMING CODE VIEW */
+/* ==================== */
+
+.artifact-streaming-code {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #1a1a2e;
+  padding: 0;
+  display: none;
+}
+
+.artifact-streaming-code pre {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  min-height: 100%;
+}
+
+.artifact-streaming-code code {
+  font-family: inherit;
+  color: inherit;
+}
+
+.artifact-panel.is-streaming .artifact-streaming-code {
+  border-left: 2px solid var(--artifact-accent, #f0f0f0);
+  animation: streaming-pulse 2s ease-in-out infinite;
+}
+
+@keyframes streaming-pulse {
+  0%, 100% { border-left-color: var(--artifact-accent, #f0f0f0); }
+  50% { border-left-color: rgba(124, 111, 224, 0.3); }
+}
+
+/* ==================== */
+/* PATCH VISUAL DIFF */
+/* ==================== */
+
+.patch-highlight {
+  background: rgba(56, 229, 77, 0.18);
+  border-left: 3px solid #38e54d;
+  padding: 2px 4px;
+  margin-left: -4px;
+  display: inline;
+  animation: patch-pulse 2s ease-in-out infinite;
+  transition: background 0.5s ease, border-color 0.5s ease, opacity 0.5s ease;
+  box-shadow: inset 0 0 0 1px rgba(56, 229, 77, 0.12);
+}
+
+.patch-highlight-fade {
+  background: transparent;
+  border-left-color: transparent;
+  box-shadow: none;
+  opacity: 0;
+}
+
+@keyframes patch-pulse {
+  0%   { background: rgba(56, 229, 77, 0.30); }
+  50%  { background: rgba(56, 229, 77, 0.10); }
+  100% { background: rgba(56, 229, 77, 0.30); }
+}
+
+.patch-removing {
+  background: rgba(255, 70, 70, 0.25);
+  border-left: 3px solid #ff4646;
+  padding: 2px 4px;
+  margin-left: -4px;
+  display: inline;
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 70, 70, 0.6);
+  animation: patch-remove-pulse 0.8s ease-in-out;
+}
+
+.patch-added {
+  background: rgba(56, 229, 77, 0.25);
+  border-left: 3px solid #38e54d;
+  padding: 2px 4px;
+  margin-left: -4px;
+  display: inline;
+  animation: patch-add-pulse 0.6s ease-out;
+}
+
+@keyframes patch-remove-pulse {
+  0%   { background: rgba(255, 70, 70, 0.45); }
+  100% { background: rgba(255, 70, 70, 0.25); }
+}
+
+@keyframes patch-add-pulse {
+  0%   { background: rgba(56, 229, 77, 0.5); }
+  100% { background: rgba(56, 229, 77, 0.25); }
 }

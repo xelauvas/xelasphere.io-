@@ -109,7 +109,7 @@
 
     function cancelHold() {
         // Only clear selection if a long-press was actually started
-        const wasHolding = holdTimer || activeMessage;
+        const wasHolding = !!holdTimer;
 
         if (holdTimer) {
             clearTimeout(holdTimer);

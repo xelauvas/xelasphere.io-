@@ -55,10 +55,15 @@ from app.services.chat_engine import (
     build_artifact_reference_payload, build_draft_artifact,
 )
 from app.artifacts import (
-    ArtifactPreference, parse_structured_response,
+    ArtifactPreference, ArtifactDecision, StructuredResponse,
+    parse_structured_response,
     detect_artifact_update_intent, load_current_artifact_context,
     delete_local_attachments, ARTIFACT_UPDATE_PATTERNS,
+    apply_patches, ArtifactStore,
 )
+from app.context.action_parser import ActionParser, StreamingActionBuffer
+from app.context.context_builder import ContextBuilder, extract_turn_metadata
+from app.context.artifact_state_tracker import get_tracker, ArtifactStateTracker
 from app.file_processor import (
     get_file_type, generate_unique_filename, extract_text_concurrently,
     _safe_upload_relative_path, _build_metadata_lookup,
@@ -89,6 +94,8 @@ from app.system_rules import get_system_rules, should_skip_memory, should_skip_r
 from app.list_registry import process_ai_response_for_lists, resolve_user_pointer
 from app.smart_guard import smart_check_input, smart_tag_response, smart_validate_response
 from app.memory_v2 import MemoryOrchestrator, SessionContext, ConversationState, MemoryFeatureFlags
+from app.memory_v2.dream import maybe_consolidate as dream_maybe_consolidate
+from app.memory_v2.dream.gates import get_dream_state, update_dream_state
 from app.memory_v3 import (
     get_v3_context, V3_ENABLED, reset_v3_state,
     should_inject_v3, get_v3_cohort, get_rollout_manager,
@@ -394,7 +401,7 @@ def chat_stream():
     Returns Server-Sent Events (SSE) with reasoning and content chunks.
     At completion, processes content for artifacts and saves to history.
     """
-    from .utilities import stream_deepseek_response
+    from app.utilities import stream_deepseek_response
 
     user_id = None
     guest_mode = 'guest_id' in session and 'user' not in session
@@ -410,6 +417,7 @@ def chat_stream():
     prompt = request.form.get('prompt', '').strip()
     user_prompt_raw = prompt  # Keep raw user text for intent detection (before file content injection)
     model = request.form.get('model', 'deepseek-reasoner')
+    logger.info(f"[Stream] Received model={model!r}")
     page_id = request.form.get('page_id', '').strip() or None
 
     # Include extracted text from uploaded files
@@ -477,10 +485,8 @@ def chat_stream():
                     )
                 except Exception:
                     pass
-                # Cap messages in memory — only recent ones are needed for context
-                if len(previous_messages) > 20:
-                    logger.debug(f"[Stream] Trimming {len(previous_messages)} messages to last 20")
-                    previous_messages = previous_messages[-20:]
+                # Smart Context: load full history (Context Builder handles compression)
+                logger.debug(f"[Stream] Loaded {len(previous_messages)} messages (full history for Context Builder)")
                 logger.debug(f"[Stream] Loaded {len(previous_messages)} previous messages for context")
         except Exception as e:
             logger.warning(f"Failed to load session for streaming: {e}")
@@ -561,40 +567,87 @@ def chat_stream():
             logger.warning(f"[Stream] Memory V3 failed (using V2 only): {e}")
     # ============================================================
 
-    # Inject memory context into streaming prompt (was missing — memories retrieved but never used)
-    enhanced_prompt = prompt
-    if long_term_memory_stream:
-        enhanced_prompt = f"User memory (from previous sessions):\n{long_term_memory_stream}\n\n{enhanced_prompt}"
-        logger.info(f"🧠 [Stream] Injected {len(long_term_memory_stream)} chars of memory context into prompt")
+    # --- Smart Context Window: build prompt via ContextBuilder ---
+    artifact_tracker = None
+    if session_id and user_id:
+        try:
+            from app.config import db as _db
+            store = ArtifactStore(_db)
+            artifacts_data = store.list_artifacts(user_id, session_id)
+            artifacts = artifacts_data.get('artifacts', [])
+            active = next((a for a in artifacts if a.get('isActive')), artifacts[0] if artifacts else None)
+            if active:
+                full_art = store.get_artifact(user_id, session_id, active['artifactId'])
+                if full_art and full_art.get('activeVersion'):
+                    version = full_art['activeVersion']
+                    files = version.get('files', [])
+                    artifact_tracker = get_tracker(
+                        session_id,
+                        active['artifactId'],
+                        version.get('versionId', ''),
+                    )
+                    logger.info(f"[Stream] Artifact tracker: {len(files)} files from Firestore, "
+                                f"tracker has {len(artifact_tracker.files)} files before sync")
+                    artifact_tracker.sync_from_files(files, preserve_sent_hashes=True)
+                    logger.info(f"[Stream] After sync: {len(artifact_tracker.files)} files, "
+                                f"dirty={len(artifact_tracker.get_dirty_files())}, "
+                                f"paths={list(artifact_tracker.files.keys())}")
+        except Exception as e:
+            logger.warning(f"[Stream] Failed to load artifact state: {e}")
 
-    # Inject recent chat history for conversation continuity
-    if previous_messages:
-        recent = previous_messages[-6:]  # Last 3 exchanges
-        history_lines = []
-        for msg in recent:
-            role = "User" if msg.get('prompt') else "Assistant"
-            if msg.get('prompt'):
-                history_lines.append(f"User: {msg['prompt'][:300]}")
-            if msg.get('response'):
-                history_lines.append(f"Assistant: {msg['response'][:300]}")
-        if history_lines:
-            history_block = "\n".join(history_lines)
-            enhanced_prompt = f"Recent conversation:\n{history_block}\n\n{enhanced_prompt}"
-            logger.info(f"🔍 [Stream] Injected {len(recent)} recent messages into prompt")
+    # Determine if we should inject artifact context
+    # When an active artifact exists, ALWAYS inject so the model can patch correctly.
+    should_inject_artifact = artifact_tracker is not None and len(artifact_tracker.files) > 0
+    if artifact_tracker:
+        has_dirty = len(artifact_tracker.get_dirty_files()) > 0
+        last_action_was_patch = False
+        if previous_messages:
+            last_meta = previous_messages[-1].get('turn_metadata', {})
+            last_action_was_patch = last_meta.get('action_type') == 'patch_artifact'
+        logger.info(f"[Stream] Inject decision: should_inject={should_inject_artifact}, "
+                    f"has_dirty={has_dirty}, last_was_patch={last_action_was_patch}, "
+                    f"total_files={len(artifact_tracker.files)}")
 
-    # Claude-inspired: Inject current artifact context when user asks to fix/update
-    if session_id and user_id and detect_artifact_update_intent(prompt):
-        logger.info(f"🔧 [Stream] Artifact update intent detected: '{prompt[:50]}...'")
-        artifact_context = load_current_artifact_context(user_id, session_id)
-        if artifact_context:
-            logger.info(f"📦 [Stream] Injected {len(artifact_context)} chars of artifact context")
-            # Prepend artifact context to prompt so AI sees current code
-            enhanced_prompt = f"{artifact_context}\n\nUser request: {prompt}\n\nIMPORTANT: Apply the fix/update to the code shown above and output a complete ```artifact block with ALL files."
-        else:
-            logger.debug("[Stream] No active artifact found to inject")
+    # NOTE: ContextBuilder call + crypto injection moved below smart routing (needs stream_model)
+
+    # Smart-route 'auto' model, but force a streaming-capable model
+    stream_model = model
+    if model == 'auto' or not model:
+        routed_model, task_type = smart_route(
+            message=user_prompt_raw,
+            user_selected_model=None,
+            has_images=False,
+            conversation_length=len(previous_messages) if previous_messages else 0,
+            previous_response=None,
+            conversation_history=previous_messages,
+        )
+        stream_model = routed_model
+        logger.info(f"🔀 [Stream] Smart routing: {task_type} -> {stream_model}")
+        # Stream endpoint only supports DeepSeek/Moonshot — force deepseek-chat if needed
+        from app.model_catalog import resolve_model_id, MODEL_PROVIDERS
+        resolved = resolve_model_id(stream_model)
+        provider = MODEL_PROVIDERS.get(resolved, "")
+        if provider not in ("deepseek", "moonshot"):
+            stream_model = "deepseek-chat"
+            logger.info(f"🔀 [Stream] Overriding non-streaming model to deepseek-chat")
+
+    # --- Build prompt via ContextBuilder (after stream_model is resolved) ---
+    from app.model_catalog import get_model_context_limit
+    model_context = get_model_context_limit(stream_model)
+    context_builder = ContextBuilder(token_budget=model_context)
+    built_context = context_builder.build(
+        system_prompt=SYSTEM_INSTRUCTIONS + "\n" + DEVELOPER_INSTRUCTIONS,
+        full_history=previous_messages,
+        artifact_state=artifact_tracker if should_inject_artifact else None,
+        user_message=prompt,
+        memory_context=long_term_memory_stream or None,
+    )
+    enhanced_prompt = built_context.prompt
+    logger.info(f"[Stream] Context built: {built_context.token_estimate} tokens, "
+                f"level={built_context.compression_level}, "
+                f"artifact_files={len(built_context.artifact_files)}")
 
     # Inject crypto/stock context ONLY when user explicitly asks for price/chart
-    # Use raw user prompt (not file-enriched prompt) to avoid false positives from file content
     chart_query = detect_crypto_price_query(user_prompt_raw)
     if chart_query:
         asset_type = chart_query.get('asset_type')
@@ -615,13 +668,36 @@ def chat_stream():
                     logger.info(f"📈 [Stream] Injected stock context for chart query: {symbol}")
                     enhanced_prompt = f"{context_str}\n\nUser question: {enhanced_prompt}"
 
+    def _load_current_artifact_files(uid, sid):
+        """Load current artifact files for patching."""
+        try:
+            store = artifact_store
+            artifacts_data = store.list_artifacts(uid, sid)
+            artifacts = artifacts_data.get('artifacts', [])
+            active = next((a for a in artifacts if a.get('isActive')), artifacts[0] if artifacts else None)
+            if not active:
+                return None, None
+            full = store.get_artifact(uid, sid, active['artifactId'])
+            if not full:
+                return None, None
+            version = full.get('activeVersion')
+            if not version:
+                return None, None
+            return version.get('files', []), full
+        except Exception as e:
+            logger.warning(f"Failed to load artifact files for patching: {e}")
+            return None, None
+
     def generate():
         import json
         reasoning_buffer = []
         content_buffer = []
+        parsed_action = None  # Set when response is complete
+        action_buffer = StreamingActionBuffer()  # Buffer first line to strip ACTION:
+        action_resolved = False
 
         try:
-            for chunk in stream_deepseek_response(enhanced_prompt, model):
+            for chunk in stream_deepseek_response(enhanced_prompt, stream_model):
                 chunk_type = chunk.get('type')
 
                 if chunk_type == 'reasoning':
@@ -632,6 +708,18 @@ def chat_stream():
                 elif chunk_type == 'content':
                     text = chunk.get('text', '')
                     content_buffer.append(text)
+
+                    # Only strip the ACTION: first line — frontend handles
+                    # artifact fence detection and streaming display
+                    if not action_resolved:
+                        result = action_buffer.feed(text)
+                        if result is not None:
+                            action_resolved = True
+                            # Forward remainder after the ACTION line
+                            if action_buffer.remainder:
+                                yield f"data: {json.dumps({'type': 'content', 'text': action_buffer.remainder})}\n\n"
+                        continue  # Buffer until first newline
+
                     yield f"data: {json.dumps({'type': 'content', 'text': text})}\n\n"
 
                 elif chunk_type == 'done':
@@ -642,22 +730,215 @@ def chat_stream():
 
                     # Process content for artifacts
                     artifact_data = None
+                    artifact_error = None
                     render_mode = 'inline'
                     chat_summary = full_content
                     routing = None
 
                     try:
-                        structured = parse_structured_response(full_content)
-                        routing = artifact_router.route(structured, prompt, provider_flagged_code=False)
-                        logger.info(f"Stream routing decision: render_mode={routing.render_mode}, has_payload={routing.artifact_payload is not None}")
-                        logger.info(f"Stream chat_payload: {repr(routing.chat_payload[:200] if routing.chat_payload else None)}")
-                        logger.info(f"Stream structured.chat: {repr(structured.chat[:200] if structured.chat else None)}")
-                        logger.info(f"Stream structured.remainder: {repr(structured.remainder[:200] if structured.remainder else None)}")
+                        parsed_action = ActionParser.parse(full_content)
+                        logger.info(f"Stream ActionParser: action={parsed_action.action}, "
+                                    f"has_artifact={parsed_action.artifact_payload is not None}, "
+                                    f"has_patch={parsed_action.patch_payload is not None}, "
+                                    f"fallback={parsed_action.used_fallback}")
+
+                        if parsed_action.action == "create_artifact" and parsed_action.artifact_payload:
+                            routing = ArtifactDecision(
+                                render_mode="artifact",
+                                chat_payload=parsed_action.chat_text,
+                                artifact_payload=parsed_action.artifact_payload,
+                                contains_code=True,
+                                desired_action=ArtifactPreference.UPDATE,
+                            )
+                        elif parsed_action.action == "create_artifact" and not parsed_action.artifact_payload:
+                            # ACTION said create_artifact but no valid artifact JSON —
+                            # model produced regular code blocks. Use old router with
+                            # code block extraction fallback.
+                            logger.info("Stream ActionParser: create_artifact without payload, falling back to code block extraction")
+                            fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else full_content
+                            structured = parse_structured_response(fallback_text)
+                            structured = StructuredResponse(
+                                meta={"output_mode": "artifact", "contains_code": True},
+                                chat=structured.chat,
+                                artifact=structured.artifact,
+                                remainder=structured.remainder,
+                            )
+                            routing = artifact_router.route(structured, prompt, provider_flagged_code=True)
+                        elif parsed_action.action == "patch_artifact" and parsed_action.patch_payload:
+                            routing = ArtifactDecision(
+                                render_mode="artifact_patch",
+                                chat_payload=parsed_action.chat_text,
+                                artifact_payload=parsed_action.patch_payload,
+                                contains_code=True,
+                                desired_action=ArtifactPreference.UPDATE,
+                            )
+                        elif parsed_action.action == "patch_artifact" and not parsed_action.patch_payload:
+                            # ACTION said patch_artifact but JSON parse failed.
+                            # Fall back to full regeneration.
+                            logger.info("Stream: patch_artifact without valid payload, requesting full regeneration")
+                            current_files, full_artifact = _load_current_artifact_files(user_id, session_id)
+                            if current_files:
+                                yield f"data: {json.dumps({'type': 'status', 'text': 'Regenerating artifact...'})}\n\n"
+                                regen_parts = ["The artifact_patch JSON was malformed. "
+                                               "Please regenerate the COMPLETE artifact with the changes applied.\n\n"
+                                               "Current files:\n"]
+                                for cf in current_files:
+                                    lang = cf.get('language', 'text')
+                                    regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
+                                regen_parts.append(f"\nUser request: {prompt}\n\n"
+                                                  "Respond with ACTION: create_artifact and a complete ```artifact block "
+                                                  "containing ALL files with the changes applied.")
+                                regen_prompt = "\n".join(regen_parts)
+                                try:
+                                    regen_response, _, _ = get_ai_response(regen_prompt, stream_model)
+                                    regen_parsed = ActionParser.parse(regen_response)
+                                    if regen_parsed.artifact_payload:
+                                        routing = ArtifactDecision(
+                                            render_mode="artifact",
+                                            chat_payload=regen_parsed.chat_text or parsed_action.chat_text,
+                                            artifact_payload=regen_parsed.artifact_payload,
+                                            contains_code=True,
+                                            desired_action=ArtifactPreference.UPDATE,
+                                        )
+                                        chat_summary = routing.chat_payload
+                                        logger.info(f"Stream: regeneration succeeded with {len(regen_parsed.artifact_payload.get('files',[]))} files")
+                                    else:
+                                        routing = ArtifactDecision(
+                                            render_mode="inline",
+                                            chat_payload=parsed_action.chat_text,
+                                            artifact_payload=None,
+                                            contains_code=False,
+                                            desired_action=ArtifactPreference.NONE,
+                                        )
+                                except Exception as regen_err:
+                                    logger.warning(f"Stream: regeneration failed: {regen_err}")
+                                    routing = ArtifactDecision(
+                                        render_mode="inline",
+                                        chat_payload=parsed_action.chat_text,
+                                        artifact_payload=None,
+                                        contains_code=False,
+                                        desired_action=ArtifactPreference.NONE,
+                                    )
+                            else:
+                                routing = ArtifactDecision(
+                                    render_mode="inline",
+                                    chat_payload=parsed_action.chat_text,
+                                    artifact_payload=None,
+                                    contains_code=False,
+                                    desired_action=ArtifactPreference.NONE,
+                                )
+                        else:
+                            routing = ArtifactDecision(
+                                render_mode="inline",
+                                chat_payload=parsed_action.chat_text,
+                                artifact_payload=None,
+                                contains_code=False,
+                                desired_action=ArtifactPreference.NONE,
+                            )
 
                         if routing.render_mode and routing.render_mode != 'inline':
                             render_mode = routing.render_mode
-                            chat_summary = routing.chat_payload or structured.remainder or ''
+                            chat_summary = routing.chat_payload or ''
                             logger.info(f"Stream chat_summary set to: {repr(chat_summary[:200])}")
+
+                            # Handle artifact_patch — apply patches and send both patches + result to frontend
+                            if routing.render_mode == 'artifact_patch' and routing.artifact_payload:
+                                patch_data = routing.artifact_payload
+                                current_files, full_artifact = _load_current_artifact_files(user_id, session_id)
+                                if current_files:
+                                    for i, p in enumerate(patch_data.get('patches', [])):
+                                        logger.info(f"🩹 Patch[{i}] file='{p.get('file')}' old_string='{repr(p.get('old_string','')[:120])}' new_string='{repr(p.get('new_string','')[:120])}'")
+                                    for cf in current_files:
+                                        logger.info(f"🩹 Current file='{cf.get('path')}' content_len={len(cf.get('content',''))}")
+                                    patched_files, patch_results = apply_patches(current_files, patch_data.get('patches', []))
+                                    applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
+                                    failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
+                                    logger.info(f"🩹 Patch results: {applied_count} applied, {failed_count} failed")
+
+                                    # Patch retry: if all patches failed, fall back to full regeneration
+                                    if failed_count > 0 and applied_count == 0:
+                                        logger.info(f"🔄 Patch failed ({failed_count} failures), requesting full artifact regeneration")
+                                        yield f"data: {json.dumps({'type': 'status', 'text': 'Regenerating artifact...'})}\n\n"
+
+                                        # Build retry prompt asking for full artifact (not patch)
+                                        regen_parts = ["The artifact_patch could not be applied. "
+                                                       "Please regenerate the COMPLETE artifact with the changes applied.\n\n"
+                                                       "Current files:\n"]
+                                        for cf in current_files:
+                                            lang = cf.get('language', 'text')
+                                            regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
+                                        regen_parts.append(f"\nUser request: {prompt}\n\n"
+                                                          "Respond with ACTION: create_artifact and a complete ```artifact block "
+                                                          "containing ALL files with the changes applied.")
+                                        regen_prompt = "\n".join(regen_parts)
+                                        try:
+                                            regen_response, _, _ = get_ai_response(regen_prompt, stream_model)
+                                            regen_parsed = ActionParser.parse(regen_response)
+                                            if regen_parsed.artifact_payload:
+                                                patched_files = regen_parsed.artifact_payload.get('files', [])
+                                                applied_count = len(patched_files)
+                                                failed_count = 0
+                                                chat_summary = regen_parsed.chat_text or parsed_action.chat_text
+                                                # Switch routing to artifact create
+                                                routing = ArtifactDecision(
+                                                    render_mode="artifact",
+                                                    chat_payload=chat_summary,
+                                                    artifact_payload=regen_parsed.artifact_payload,
+                                                    contains_code=True,
+                                                    desired_action=ArtifactPreference.UPDATE,
+                                                )
+                                                render_mode = 'artifact'
+                                                logger.info(f"🔄 Full regeneration succeeded: {applied_count} files")
+                                            elif regen_parsed.patch_payload:
+                                                # Model sent another patch, try to apply it
+                                                patched_files, patch_results = apply_patches(
+                                                    current_files, regen_parsed.patch_payload.get('patches', [])
+                                                )
+                                                applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
+                                                failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
+                                                if applied_count > 0:
+                                                    chat_summary = regen_parsed.chat_text or parsed_action.chat_text
+                                                    logger.info(f"🔄 Retry patch succeeded: {applied_count} applied")
+                                        except Exception as retry_err:
+                                            logger.warning(f"🔄 Regeneration retry failed: {retry_err}")
+
+                                    if applied_count > 0:
+                                        primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
+                                        # Store patches for frontend visual application
+                                        routing._patch_visual_data = {
+                                            'patches': patch_data.get('patches', []),
+                                            'patch_results': patch_results,
+                                        }
+                                        routing.artifact_payload = {
+                                            'title': full_artifact.get('title', 'Patched Artifact') if full_artifact else 'Patched Artifact',
+                                            'type': full_artifact.get('type', 'project') if full_artifact else 'project',
+                                            'primaryLanguage': primary_lang,
+                                            'files': patched_files,
+                                        }
+                                        render_mode = 'artifact'
+
+                                        # Update state tracker with mutated files
+                                        if artifact_tracker:
+                                            for pf in patched_files:
+                                                artifact_tracker.mark_mutated(
+                                                    pf['path'], pf.get('content', '')
+                                                )
+                                    else:
+                                        # All patches failed — don't create a broken empty artifact
+                                        routing.artifact_payload = None
+                                        render_mode = 'inline'
+
+                                    if failed_count > 0:
+                                        failed_msgs = [r['reason'] for r in patch_results if r['status'] == 'failed']
+                                        artifact_error = f"{failed_count} patch(es) failed: {'; '.join(failed_msgs)}"
+                                else:
+                                    logger.warning("No active artifact found to patch")
+                                    routing.artifact_payload = None
+                                    render_mode = 'inline'
+
+                                # Strip the artifact_patch fence from chat_summary
+                                import re as _re
+                                chat_summary = _re.sub(r'```artifact_patch.*', '', chat_summary, flags=_re.DOTALL).strip()
 
                             if routing.artifact_payload:
                                 files = routing.artifact_payload.get('files', [])
@@ -704,31 +985,44 @@ def chat_stream():
                         asset = crypto_chart.get('symbol') if asset_type == 'stock' else crypto_chart.get('coin')
                         logger.info(f"Stream: {asset_type.upper()} chart detected for {asset}")
 
+                    # Update session title before building done payload so we can include it
+                    stream_session_name = None
+                    if session_id and user_id and not guest_mode:
+                        try:
+                            session_ref = db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
+                            session_doc = session_ref.get()
+                            session_data = session_doc.to_dict() if session_doc.exists else {}
+                            stream_session_name = update_session_title_if_missing(user_id, session_id, session_data, chat_summary, prompt)
+                        except Exception as title_err:
+                            logger.warning(f"Failed to update session title in streaming: {title_err}")
+
+                    # Strip ACTION line from content so frontend doesn't see it
+                    display_content = full_content
+                    if parsed_action is not None and not parsed_action.used_fallback:
+                        # ACTION line was parsed — use chat_text (stripped) as display content
+                        display_content = parsed_action.chat_text
+
                     done_payload = {
                         'type': 'done',
                         'reasoning': full_reasoning,
-                        'content': full_content,
+                        'content': display_content,
                         'chat_summary': chat_summary,
                         'render_mode': render_mode,
                         'artifact': artifact_data,
+                        'artifact_error': artifact_error,
+                        'artifact_patches': getattr(routing, '_patch_visual_data', None) if routing else None,  # Patch visual data for frontend animation
                         'response_id': response_msg_id,
                         'is_email': is_email,
                         'email': email_data,
-                        'crypto_chart': crypto_chart
+                        'crypto_chart': crypto_chart,
+                        'session_name': stream_session_name
                     }
-                    logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, crypto_chart={crypto_chart is not None}")
+                    _pvd = getattr(routing, '_patch_visual_data', None) if routing else None
+                    logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, has_patches={_pvd is not None}, patch_count={len(_pvd.get('patches',[])) if _pvd else 0}, session_name={repr(stream_session_name)}")
 
                     # Save to history and persist artifact
                     if session_id and user_id and not guest_mode:
                         try:
-                            # Update session title if missing
-                            try:
-                                session_ref = db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
-                                session_doc = session_ref.get()
-                                session_data = session_doc.to_dict() if session_doc.exists else {}
-                                update_session_title_if_missing(user_id, session_id, session_data, chat_summary, prompt)
-                            except Exception as title_err:
-                                logger.warning(f"Failed to update session title in streaming: {title_err}")
 
                             artifact_ref = None
 
@@ -744,10 +1038,20 @@ def chat_stream():
                                     )
                                     if persisted:
                                         logger.info(f"✅ Stream artifact persisted: {persisted.get('artifactId')}")
-                                        # Update artifact_data with persisted IDs
+                                        # Update artifact_data with persisted IDs and version info
                                         artifact_data['artifactId'] = persisted.get('artifactId', artifact_data.get('artifactId'))
+                                        artifact_data['title'] = persisted.get('title', artifact_data.get('title'))
                                         if persisted.get('activeVersion'):
                                             artifact_data['activeVersion']['versionId'] = persisted['activeVersion'].get('versionId')
+                                            artifact_data['activeVersion']['versionNumber'] = persisted['activeVersion'].get('versionNumber', 1)
+                                        # Update versions array with all versions
+                                        version_count = persisted.get('versionCount', 1)
+                                        artifact_data['versionCount'] = version_count
+                                        if persisted.get('activeVersion'):
+                                            artifact_data['versions'] = [{
+                                                'versionId': persisted['activeVersion'].get('versionId'),
+                                                'versionNumber': persisted['activeVersion'].get('versionNumber', version_count)
+                                            }]
 
                                         artifact_ref = {
                                             'artifactId': persisted.get('artifactId'),
@@ -782,6 +1086,28 @@ def chat_stream():
                                         'pending': True
                                     }
 
+                            # Build turn metadata for Smart Context
+                            action_type = parsed_action.action if parsed_action is not None else "chat"
+                            had_error = bool(artifact_error)
+                            art_mutation = None
+                            if artifact_ref:
+                                art_mutation = {
+                                    "artifact_id": artifact_ref.get('artifactId'),
+                                    "from_version": None,
+                                    "to_version": artifact_ref.get('versionId'),
+                                    "files_changed": [f.get('path', '') for f in
+                                                      (routing.artifact_payload or {}).get('files', [])],
+                                }
+                            stream_turn_metadata = extract_turn_metadata(
+                                turn_number=len(previous_messages) + 1,
+                                user_message=prompt,
+                                action_type=action_type,
+                                had_error=had_error,
+                                artifact_mutation=art_mutation,
+                                error_detail=artifact_error,
+                                model=stream_model,
+                            )
+
                             logger.info(f"📦 Saving stream interaction: render_mode={render_mode}, artifact_ref={artifact_ref is not None}, artifact_id={artifact_ref.get('artifactId') if artifact_ref else None}, pending={artifact_ref.get('pending') if artifact_ref else 'N/A'}")
                             save_interaction(
                                 user_id=user_id,
@@ -796,7 +1122,8 @@ def chat_stream():
                                 render_mode=render_mode,
                                 artifact_reference=artifact_ref,
                                 reasoning=full_reasoning if full_reasoning else None,
-                                crypto_chart=crypto_chart
+                                crypto_chart=crypto_chart,
+                                turn_metadata=stream_turn_metadata,
                             )
                             logger.info(f"Streaming response saved to history for session {session_id}")
 
@@ -1137,10 +1464,8 @@ def chat():
                 )
             except Exception:
                 pass
-            # Cap messages in memory — only recent ones are needed for context
-            if len(previous_messages) > 20:
-                logger.debug(f"Trimming {len(previous_messages)} messages to last 20")
-                previous_messages = previous_messages[-20:]
+            # Smart Context: load full history (Context Builder handles compression)
+            logger.debug(f"Loaded {len(previous_messages)} messages (full history for Context Builder)")
 
         # Check if user requests an image (now with chat history for better accuracy)
         if is_image_request(user_prompt, previous_messages):
@@ -1379,20 +1704,8 @@ def chat():
                     logger.debug(f"Overriding stateless - has {len(previous_messages)} messages of history")
 
             # Increase token budget when there's file content to analyze
-            prompt_max_tokens = 16000 if extracted_text else 4096
+            prompt_max_tokens = 16000 if extracted_text else MAX_TOKENS
             is_recipe_request = False  # Default, updated below if recipe intent detected
-
-            # Claude-inspired: Inject current artifact context when user asks to fix/update
-            artifact_context = None
-            if detect_artifact_update_intent(user_prompt):
-                logger.info(f"🔧 Artifact update intent detected: '{user_prompt[:50]}...'")
-                artifact_context = load_current_artifact_context(user_id, session_id)
-                if artifact_context:
-                    logger.info(f"📦 Injected {len(artifact_context)} chars of artifact context")
-                    # Increase token budget for artifact context
-                    prompt_max_tokens = max(prompt_max_tokens, 24000)
-                else:
-                    logger.debug("No active artifact found to inject")
 
             # Intent-based format enforcement for recipes
             # Classify intent and inject focused format reminder when recipe is detected
@@ -1422,24 +1735,59 @@ def chat():
                 user_prompt = recipe_format_reminder + "User request: " + user_prompt
                 logger.info(f"🍳 Injected recipe format reminder for: {user_prompt[:80]}...")
 
-            full_prompt = build_prompt(
-                user_prompt=user_prompt,
-                extracted_text=extracted_text,
-                search_results=search_results,
-                previous_messages=prev_msgs_for_prompt,
-                user_prefs=user_preferences,
-                session_prefs=session_preferences,
-                session_summary=session_summary_text,
-                relevant_messages=relevant_msgs,
-                system_instructions=SYSTEM_INSTRUCTIONS,
-                developer_instructions=DEVELOPER_INSTRUCTIONS,
-                long_term_memory=long_term_memory,
-                pending_steps=pending_steps_list,
-                canonical_context=artifact_context,  # Claude-style artifact injection
-                encoding_name="cl100k_base",
-                max_tokens=prompt_max_tokens,
-                response_token_buffer=512
+            # --- Smart Context Window: build prompt via ContextBuilder ---
+            artifact_tracker = None
+            try:
+                store = artifact_store
+                artifacts_data = store.list_artifacts(user_id, session_id)
+                artifacts = artifacts_data.get('artifacts', [])
+                active = next((a for a in artifacts if a.get('isActive')), artifacts[0] if artifacts else None)
+                if active:
+                    full_art = store.get_artifact(user_id, session_id, active['artifactId'])
+                    if full_art and full_art.get('activeVersion'):
+                        version = full_art['activeVersion']
+                        files = version.get('files', [])
+                        artifact_tracker = get_tracker(
+                            session_id,
+                            active['artifactId'],
+                            version.get('versionId', ''),
+                        )
+                        artifact_tracker.sync_from_files(files, preserve_sent_hashes=True)
+            except Exception as e:
+                logger.warning(f"Failed to load artifact state: {e}")
+
+            # Always inject artifact context when an active artifact exists.
+            # The model needs all files to produce correct patches.
+            should_inject_artifact = artifact_tracker is not None and len(artifact_tracker.files) > 0
+
+            from app.model_catalog import get_model_context_limit
+            model_context = get_model_context_limit(model)
+            context_builder = ContextBuilder(token_budget=model_context)
+
+            # Include extracted text, search results in user message
+            enriched_prompt = user_prompt
+            if extracted_text:
+                max_extract = min(len(extracted_text), 30000)
+                enriched_prompt = f"Uploaded file content:\n{extracted_text[:max_extract]}\n\nUser request: {enriched_prompt}"
+            if search_results:
+                search_parts = []
+                for r in search_results[:5]:
+                    search_parts.append(f"[{r.title}]({r.link})\n{r.snippet}")
+                search_text = "Web search results:\n" + "\n\n".join(search_parts)
+                enriched_prompt = f"{search_text}\n\n{enriched_prompt}"
+
+            built_context = context_builder.build(
+                system_prompt=SYSTEM_INSTRUCTIONS + "\n" + DEVELOPER_INSTRUCTIONS,
+                full_history=prev_msgs_for_prompt,
+                artifact_state=artifact_tracker if should_inject_artifact else None,
+                user_message=enriched_prompt,
+                memory_context=long_term_memory or None,
             )
+            full_prompt = built_context.prompt
+            prompt_max_tokens = model_context
+            logger.info(f"Context built: {built_context.token_estimate} tokens, "
+                        f"level={built_context.compression_level}, "
+                        f"artifact_files={len(built_context.artifact_files)}")
         except TokenLimitError:
             logger.warning("Input exceeds maximum token limit.")
             return jsonify({'error': 'Input exceeds maximum token limit.'}), 400
@@ -1613,6 +1961,7 @@ def chat():
 
         # Strip HTML tags that some models (like Llama) may output despite instructions
         raw_model_response = strip_html_from_response(raw_model_response)
+        parsed_action = None
 
         if not raw_model_response.strip():
             logger.error(f"AI model returned an empty response for user {user_id}.")
@@ -1646,15 +1995,108 @@ def chat():
         except Exception as e:
             logger.debug(f"Response validation failed: {e}")
 
-        structured_response = parse_structured_response(raw_model_response)
-        routing_decision = artifact_router.route(
-            structured_response,
-            user_prompt,
-            provider_flagged_code=provider_flagged_code
-        )
+        parsed_action = ActionParser.parse(raw_model_response)
+        logger.info(f"ActionParser: action={parsed_action.action}, "
+                     f"has_artifact={parsed_action.artifact_payload is not None}, "
+                     f"has_patch={parsed_action.patch_payload is not None}, "
+                     f"fallback={parsed_action.used_fallback}")
+
+        structured_response = None  # Only set in fallback path
+        if parsed_action.action == "create_artifact" and parsed_action.artifact_payload:
+            routing_decision = ArtifactDecision(
+                render_mode="artifact",
+                chat_payload=parsed_action.chat_text,
+                artifact_payload=parsed_action.artifact_payload,
+                contains_code=True,
+                desired_action=ArtifactPreference.UPDATE,
+            )
+        elif parsed_action.action == "create_artifact" and not parsed_action.artifact_payload:
+            # ACTION said create_artifact but no valid artifact JSON — model produced
+            # regular code blocks instead of ```artifact fence. Use the old router which
+            # has _construct_artifact_from_code_blocks() fallback for this case.
+            logger.info("ActionParser: create_artifact without payload, falling back to code block extraction")
+            fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else raw_model_response
+            structured_response = parse_structured_response(fallback_text)
+            # Force the structured response meta to indicate artifact intent
+            if structured_response.meta is None or not structured_response.meta:
+                structured_response = StructuredResponse(
+                    meta={"output_mode": "artifact", "contains_code": True},
+                    chat=structured_response.chat,
+                    artifact=structured_response.artifact,
+                    remainder=structured_response.remainder,
+                )
+            else:
+                structured_response.meta["output_mode"] = "artifact"
+                structured_response.meta["contains_code"] = True
+            routing_decision = artifact_router.route(
+                structured_response,
+                user_prompt,
+                provider_flagged_code=True,
+            )
+        elif parsed_action.action == "patch_artifact" and parsed_action.patch_payload:
+            routing_decision = ArtifactDecision(
+                render_mode="artifact_patch",
+                chat_payload=parsed_action.chat_text,
+                artifact_payload=parsed_action.patch_payload,
+                contains_code=True,
+                desired_action=ArtifactPreference.UPDATE,
+            )
+        elif parsed_action.action == "patch_artifact" and not parsed_action.patch_payload:
+            # ACTION said patch_artifact but JSON parse failed. Regenerate full artifact.
+            logger.info("ActionParser: patch_artifact without valid payload, requesting full regeneration")
+            try:
+                store = artifact_store
+                artifacts_data = store.list_artifacts(user_id, session_id)
+                artifacts = artifacts_data.get('artifacts', [])
+                active = next((a for a in artifacts if a.get('isActive')), artifacts[0] if artifacts else None)
+                if active:
+                    full_art = store.get_artifact(user_id, session_id, active['artifactId'])
+                    if full_art and full_art.get('activeVersion'):
+                        regen_files = full_art['activeVersion'].get('files', [])
+                        regen_parts = ["The artifact_patch JSON was malformed. "
+                                       "Please regenerate the COMPLETE artifact with the changes applied.\n\n"
+                                       "Current files:\n"]
+                        for cf in regen_files:
+                            lang = cf.get('language', 'text')
+                            regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
+                        regen_parts.append(f"\nUser request: {user_prompt}\n\n"
+                                          "Respond with ACTION: create_artifact and a complete ```artifact block "
+                                          "containing ALL files with the changes applied.")
+                        regen_prompt = "\n".join(regen_parts)
+                        regen_response, _, _ = get_ai_response(regen_prompt, model)
+                        regen_parsed = ActionParser.parse(regen_response)
+                        if regen_parsed.artifact_payload:
+                            routing_decision = ArtifactDecision(
+                                render_mode="artifact",
+                                chat_payload=regen_parsed.chat_text or parsed_action.chat_text,
+                                artifact_payload=regen_parsed.artifact_payload,
+                                contains_code=True,
+                                desired_action=ArtifactPreference.UPDATE,
+                            )
+                            logger.info(f"Regeneration succeeded with {len(regen_parsed.artifact_payload.get('files',[]))} files")
+                        else:
+                            raise ValueError("Regeneration produced no artifact")
+                    else:
+                        raise ValueError("No active version")
+                else:
+                    raise ValueError("No active artifact")
+            except Exception as regen_err:
+                logger.warning(f"Regeneration failed: {regen_err}, falling back to old router")
+                fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else raw_model_response
+                structured_response = parse_structured_response(fallback_text)
+                routing_decision = artifact_router.route(structured_response, user_prompt, provider_flagged_code=provider_flagged_code)
+        else:
+            # Use chat_text (ACTION line already stripped) for the old parser fallback
+            fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else raw_model_response
+            structured_response = parse_structured_response(fallback_text)
+            routing_decision = artifact_router.route(
+                structured_response,
+                user_prompt,
+                provider_flagged_code=provider_flagged_code,
+            )
         # Determine response text based on render mode
         chat_payload = routing_decision.chat_payload or ""
-        remainder = structured_response.remainder or ""
+        remainder = (structured_response.remainder if structured_response else parsed_action.chat_text) or ""
 
         # For code_window mode: verify code actually exists
         has_code_anywhere = "```" in chat_payload or "```" in remainder or "```" in raw_model_response
@@ -1714,12 +2156,107 @@ def chat():
         logger.info(f"🔍 ARTIFACT DEBUG: AI render_mode={routing_decision.render_mode}, effective={effective_render_mode}")
         logger.info(f"🔍 ARTIFACT DEBUG: AI contains_code={routing_decision.contains_code}, effective={effective_contains_code}")
         logger.info(f"🔍 ARTIFACT DEBUG: has_code_anywhere={has_code_anywhere}")
-        logger.info(f"🔍 ARTIFACT DEBUG: meta={structured_response.meta}")
+        logger.info(f"🔍 ARTIFACT DEBUG: meta={structured_response.meta if structured_response else 'N/A (ActionParser path)'}")
         logger.info(f"🔍 ARTIFACT DEBUG: response_text_preview={response_text[:200] if response_text else 'EMPTY'}...")
 
         artifact_payload = None
         artifact_reference = None
         artifact_status = None
+
+        # Handle artifact_patch — apply patches to current artifact
+        if routing_decision.render_mode == 'artifact_patch' and routing_decision.artifact_payload:
+            patch_data = routing_decision.artifact_payload
+            current_files = None
+            full_artifact_data = None
+            try:
+                store = artifact_store
+                artifacts_data = store.list_artifacts(user_id, session_id)
+                artifacts = artifacts_data.get('artifacts', [])
+                active = next((a for a in artifacts if a.get('isActive')), artifacts[0] if artifacts else None)
+                if active:
+                    full_artifact_data = store.get_artifact(user_id, session_id, active['artifactId'])
+                    if full_artifact_data and full_artifact_data.get('activeVersion'):
+                        current_files = full_artifact_data['activeVersion'].get('files', [])
+            except Exception as e:
+                logger.warning(f"Failed to load artifact for patching: {e}")
+
+            if current_files:
+                patched_files, patch_results = apply_patches(current_files, patch_data.get('patches', []))
+                applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
+                failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
+                logger.info(f"🩹 [NonStream] Patch results: {applied_count} applied, {failed_count} failed")
+
+                if failed_count > 0 and applied_count == 0:
+                    logger.info(f"🔄 [NonStream] Patch failed ({failed_count} failures), requesting full regeneration")
+                    regen_parts = ["The artifact_patch could not be applied. "
+                                   "Please regenerate the COMPLETE artifact with the changes applied.\n\n"
+                                   "Current files:\n"]
+                    for cf in current_files:
+                        lang = cf.get('language', 'text')
+                        regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
+                    regen_parts.append(f"\nUser request: {user_prompt}\n\n"
+                                      "Respond with ACTION: create_artifact and a complete ```artifact block "
+                                      "containing ALL files with the changes applied.")
+                    regen_prompt = "\n".join(regen_parts)
+                    try:
+                        regen_response, _, _ = get_ai_response(regen_prompt, model)
+                        regen_parsed = ActionParser.parse(regen_response)
+                        if regen_parsed.artifact_payload:
+                            patched_files = regen_parsed.artifact_payload.get('files', [])
+                            applied_count = len(patched_files)
+                            failed_count = 0
+                            response_text = regen_parsed.chat_text or routing_decision.chat_payload
+                            routing_decision = ArtifactDecision(
+                                render_mode="artifact",
+                                chat_payload=response_text,
+                                artifact_payload=regen_parsed.artifact_payload,
+                                contains_code=True,
+                                desired_action=ArtifactPreference.UPDATE,
+                            )
+                            logger.info(f"🔄 [NonStream] Full regeneration succeeded: {applied_count} files")
+                        elif regen_parsed.patch_payload:
+                            patched_files, patch_results = apply_patches(
+                                current_files, regen_parsed.patch_payload.get('patches', [])
+                            )
+                            applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
+                            failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
+                            if applied_count > 0:
+                                response_text = regen_parsed.chat_text or routing_decision.chat_payload
+                                logger.info(f"🔄 [NonStream] Retry patch succeeded: {applied_count} applied")
+                    except Exception as retry_err:
+                        logger.warning(f"🔄 [NonStream] Regeneration retry failed: {retry_err}")
+
+                if applied_count > 0:
+                    primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
+                    routing_decision = ArtifactDecision(
+                        render_mode='artifact',
+                        chat_payload=routing_decision.chat_payload,
+                        artifact_payload={
+                            'title': full_artifact_data.get('title', 'Patched Artifact') if full_artifact_data else 'Patched Artifact',
+                            'type': full_artifact_data.get('type', 'project') if full_artifact_data else 'project',
+                            'primaryLanguage': primary_lang,
+                            'files': patched_files,
+                        },
+                        contains_code=True,
+                        desired_action=ArtifactPreference.UPDATE,
+                    )
+                    if applied_count > 0 and artifact_tracker:
+                        for pf in patched_files:
+                            artifact_tracker.mark_mutated(pf['path'], pf.get('content', ''))
+                else:
+                    # All patches failed — clear payload so no broken artifact gets created
+                    routing_decision = ArtifactDecision(
+                        render_mode='inline',
+                        chat_payload=routing_decision.chat_payload,
+                        artifact_payload=None,
+                        contains_code=False,
+                        desired_action=ArtifactPreference.NONE,
+                    )
+
+                if failed_count > 0:
+                    failed_msgs = [r['reason'] for r in patch_results if r['status'] == 'failed']
+                    routing_decision.error_message = f"{failed_count} patch(es) failed: {'; '.join(failed_msgs)}"
+
         if routing_decision.render_mode != "inline" and routing_decision.artifact_payload:
             draft_payload = routing_decision.artifact_payload.copy()
             persisted_artifact = None
@@ -1801,6 +2338,28 @@ def chat():
             else:
                 title = session_data.get('session_name') or "Offline Session"
 
+            # Build turn metadata for Smart Context
+            chat_action_type = parsed_action.action if parsed_action is not None else "chat"
+            chat_had_error = getattr(routing_decision, 'error_message', None) is not None
+            chat_art_mutation = None
+            if artifact_reference:
+                chat_art_mutation = {
+                    "artifact_id": artifact_reference.get('artifactId'),
+                    "from_version": None,
+                    "to_version": artifact_reference.get('versionId'),
+                    "files_changed": [f.get('path', '') for f in
+                                      (routing_decision.artifact_payload or {}).get('files', [])],
+                }
+            chat_turn_metadata = extract_turn_metadata(
+                turn_number=len(previous_messages) + 1,
+                user_message=user_prompt,
+                action_type=chat_action_type,
+                had_error=chat_had_error,
+                artifact_mutation=chat_art_mutation,
+                error_detail=getattr(routing_decision, 'error_message', None),
+                model=selected_model_id or model,
+            )
+
             # Save this interaction (offline cache if persistence fails)
             chat_data, persisted = save_interaction(
                 user_id=user_id,
@@ -1821,6 +2380,7 @@ def chat():
                 model_id=selected_model_id or model,
                 task_type=selected_task_type,
                 auto_selected=bool(smart_routing_enabled) or (session.get('selected_model') == AUTO_MODEL),
+                turn_metadata=chat_turn_metadata,
             )
             if artifact_payload and not persisted:
                 chat_data['artifact_draft'] = artifact_payload
@@ -1851,14 +2411,11 @@ def chat():
                 except Exception as exc:
                     logger.warning(f"Failed to update active page for session {session_id}: {exc}")
 
-            # Update rolling session summary when Firestore is reachable
+            # Update rolling session summary when Firestore is reachable (non-critical)
             if firestore_available:
                 try:
                     _update_session_summary(user_id, session_id, session_data, user_prompt, response_text)
                 except Exception as e:
-                    firestore_available = False
-                    if not offline_reason:
-                        offline_reason = 'summary_update_failed'
                     logger.warning(f"Failed to update session summary for user {user_id}: {e}")
 
             # Track credit usage only when persistence succeeded
@@ -1879,7 +2436,14 @@ def chat():
         logger.info(f"🧠 Memory V2: skip_reflection={skip_reflection}, skip_memory_write={skip_memory_write}, guest={guest_mode}, firestore={firestore_available}")
 
         if not guest_mode and firestore_available and not (skip_reflection and skip_memory_write):
-            from .reflection import reflect_on_response, get_memory_candidates, get_next_steps_for_session
+            try:
+                from .reflection import reflect_on_response, get_memory_candidates, get_next_steps_for_session
+            except ImportError:
+                reflect_on_response = None
+                get_memory_candidates = None
+                get_next_steps_for_session = None
+                logger.warning("Reflection module not available, skipping reflection")
+                skip_reflection = True
 
             try:
                 # Run reflection and memory V2 post_turn in parallel (conditionally)
@@ -1941,6 +2505,48 @@ def chat():
                     except Exception as e:
                         logger.error(f"🧠 Memory V2 post_turn FAILED: {e}", exc_info=True)
 
+                # Dream: background memory consolidation (fire-and-forget)
+                if not guest_mode:
+                    try:
+                        user_prefs_for_dream = session.get('user', {}).get('preferences', {})
+                        import threading
+                        dream_thread = threading.Thread(
+                            target=dream_maybe_consolidate,
+                            args=(db, user_id, user_prefs_for_dream),
+                            daemon=True,
+                        )
+                        dream_thread.start()
+                    except Exception as e:
+                        logger.debug(f"Dream trigger skipped: {e}")
+
+                # Smart suggestions: trigger refresh after enough new conversations
+                if not guest_mode:
+                    try:
+                        from app.services.smart_suggestions import (
+                            get_pool_metadata, should_refresh_pool, refresh_pool_background,
+                        )
+                        metadata = get_pool_metadata(db, user_id)
+                        convos_since = 0
+                        last_refresh = metadata.get("last_refresh")
+                        if last_refresh:
+                            sessions_ref = db.collection("users").document(user_id).collection("chat_sessions")
+                            from google.cloud.firestore_v1 import FieldFilter
+                            try:
+                                recent = sessions_ref.where(filter=FieldFilter("updated_at", ">", last_refresh)).count().get()
+                                convos_since = recent[0][0].value if recent else 0
+                            except Exception:
+                                convos_since = 0
+
+                        if should_refresh_pool(metadata, conversations_since=convos_since):
+                            import threading
+                            threading.Thread(
+                                target=refresh_pool_background,
+                                args=(db, user_id, "conversations"),
+                                daemon=True,
+                            ).start()
+                    except Exception as e:
+                        logger.debug(f"Smart suggestions refresh check skipped: {e}")
+
                 # Process reflection results
                 if reflection_result and reflection_result.has_actionable_items():
                     # NOTE: Reflection memory candidates are now handled by Memory V2's
@@ -1979,6 +2585,17 @@ def chat():
             email_data = parse_email_from_response(response_text)
             logger.info(f"Email detected, parsed: subject='{email_data.get('subject', '')[:30]}...'")
 
+        # Check for pending dream notification
+        dream_notification = None
+        if not guest_mode and firestore_available:
+            try:
+                ds = get_dream_state(db, user_id)
+                if ds.get('pending_notification'):
+                    dream_notification = ds['pending_notification']
+                    update_dream_state(db, user_id, {'pending_notification': None})
+            except Exception:
+                pass
+
         response_data = {
             'response': response_text,
             'is_code': is_code_response,
@@ -2000,6 +2617,7 @@ def chat():
             'offline_reason': offline_reason if offline_active else None,
             'offline_cached_messages': cached_unsynced,
             'memory_updated': memory_updated,
+            'dream_notification': dream_notification,
             'next_steps': next_steps if next_steps else None,
             # Guest mode info
             'guest_mode': guest_mode,

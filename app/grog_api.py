@@ -517,196 +517,205 @@ Return ONLY the JSON array, no explanation."""
         """
         import random
 
-        # Options organized by category for smart personalization
+        # Options organized by category — specific, actionable prompts
+        # that produce immediate results (no follow-up questions needed)
         categorized_options = {
             'coding': [
                 TaskOption(
-                    title="Help with my code",
-                    subtitle="Debug, explain, or improve",
+                    title="Build me a landing page",
+                    subtitle="HTML, CSS, responsive",
                     difficulty="Easy",
-                    estimated_time="5 mins",
-                    action="sendMessage('I need help with my code')",
+                    estimated_time="2 mins",
+                    action="sendMessage('Build me a modern responsive landing page for a SaaS product with a hero section, features grid, pricing table, and footer')",
                     icon="code"
                 ),
                 TaskOption(
-                    title="Explain this error",
-                    subtitle="Understand what went wrong",
+                    title="Build a REST API",
+                    subtitle="Flask or Express starter",
                     difficulty="Easy",
-                    estimated_time="5 mins",
-                    action="sendMessage('Can you explain this error I\\'m getting?')",
-                    icon="info"
+                    estimated_time="2 mins",
+                    action="sendMessage('Build me a REST API with user authentication, CRUD endpoints, and JWT tokens using Flask')",
+                    icon="code"
                 ),
                 TaskOption(
-                    title="Review my code",
-                    subtitle="Get feedback and suggestions",
+                    title="Create a dashboard",
+                    subtitle="Charts, stats, dark theme",
                     difficulty="Easy",
-                    estimated_time="10 mins",
-                    action="sendMessage('Can you review my code and suggest improvements?')",
+                    estimated_time="2 mins",
+                    action="sendMessage('Build me an analytics dashboard with charts, stat cards, and a dark theme using HTML/CSS/JS')",
                     icon="search"
                 ),
                 TaskOption(
-                    title="How do I build this?",
-                    subtitle="Step-by-step guidance",
+                    title="Build a calculator app",
+                    subtitle="Interactive, clean UI",
                     difficulty="Easy",
-                    estimated_time="10 mins",
-                    action="sendMessage('How do I build this feature?')",
+                    estimated_time="1 min",
+                    action="sendMessage('Build me a beautiful calculator app with a clean UI, keyboard support, and history')",
                     icon="lightbulb"
                 ),
             ],
             'writing': [
                 TaskOption(
-                    title="Write an email",
-                    subtitle="Professional, casual, or creative",
+                    title="Draft a resignation letter",
+                    subtitle="Professional, ready to send",
                     difficulty="Easy",
-                    estimated_time="5 mins",
-                    action="sendMessage('Help me write an email')",
+                    estimated_time="1 min",
+                    action="sendMessage('Write me a professional resignation letter giving two weeks notice. Keep it graceful and positive.')",
                     icon="edit"
                 ),
                 TaskOption(
-                    title="Improve my writing",
-                    subtitle="Make it clearer and better",
+                    title="Write a cold outreach email",
+                    subtitle="Compelling, gets replies",
                     difficulty="Easy",
-                    estimated_time="5 mins",
-                    action="sendMessage('Can you help improve my writing?')",
+                    estimated_time="1 min",
+                    action="sendMessage('Write me a cold outreach email for a B2B SaaS product that gets replies. Short, specific, no fluff.')",
                     icon="edit"
                 ),
                 TaskOption(
-                    title="Summarize this",
-                    subtitle="Get the key points fast",
+                    title="Rewrite this professionally",
+                    subtitle="Paste your draft, get polish",
                     difficulty="Easy",
-                    estimated_time="2 mins",
-                    action="sendMessage('I need help summarizing something')",
+                    estimated_time="1 min",
+                    action="sendMessage('Rewrite the following text to be more professional and clear: [paste your text here]')",
+                    icon="edit"
+                ),
+                TaskOption(
+                    title="Write a LinkedIn post",
+                    subtitle="Engaging, not cringe",
+                    difficulty="Easy",
+                    estimated_time="1 min",
+                    action="sendMessage('Write me a LinkedIn post about a career lesson I learned. Make it authentic, not corporate. Hook in the first line.')",
                     icon="book"
                 ),
             ],
             'planning': [
                 TaskOption(
-                    title="Help me plan my week",
-                    subtitle="Get organized in 5 minutes",
+                    title="Plan my week",
+                    subtitle="Time-blocked schedule",
                     difficulty="Easy",
-                    estimated_time="5 mins",
-                    action="sendMessage('Help me plan my week and get organized')",
+                    estimated_time="2 mins",
+                    action="sendMessage('Create a time-blocked weekly schedule for me. I work 9-5, want to exercise 3x/week, learn coding in the evenings, and keep weekends mostly free.')",
                     icon="calendar"
                 ),
                 TaskOption(
-                    title="Break down this project",
-                    subtitle="Step-by-step action plan",
+                    title="Create a project plan",
+                    subtitle="Milestones, tasks, timeline",
                     difficulty="Easy",
-                    estimated_time="10 mins",
-                    action="sendMessage('Help me break down this project into steps')",
+                    estimated_time="2 mins",
+                    action="sendMessage('Create a 4-week project plan with milestones and weekly deliverables for launching a personal website')",
                     icon="calendar"
                 ),
                 TaskOption(
-                    title="Plan a trip",
-                    subtitle="Your next adventure starts here",
+                    title="Plan a 7-day trip",
+                    subtitle="Day-by-day itinerary",
                     difficulty="Easy",
-                    estimated_time="15 mins",
-                    action="sendMessage('Help me plan a trip')",
+                    estimated_time="2 mins",
+                    action="sendMessage('Plan a 7-day trip to Japan. Day-by-day itinerary covering Tokyo, Kyoto, and Osaka. Include food spots and transport tips.')",
                     icon="globe"
                 ),
             ],
             'learning': [
                 TaskOption(
-                    title="Explain it simply",
-                    subtitle="Make complex things clear",
+                    title="Explain like I'm 10",
+                    subtitle="Any topic, made simple",
                     difficulty="Easy",
-                    estimated_time="5 mins",
-                    action="sendMessage('Can you explain something to me in simple terms?')",
+                    estimated_time="1 min",
+                    action="sendMessage('Explain how the stock market works like I\\'m 10 years old')",
                     icon="info"
                 ),
                 TaskOption(
-                    title="Learn something new",
-                    subtitle="Pick up a skill today",
+                    title="Give me a study plan",
+                    subtitle="Structured learning path",
                     difficulty="Easy",
-                    estimated_time="10 mins",
-                    action="sendMessage('I want to learn something new. What do you suggest?')",
+                    estimated_time="2 mins",
+                    action="sendMessage('Create a 30-day study plan to learn Python from scratch. Include daily goals, resources, and mini-projects.')",
                     icon="book"
                 ),
                 TaskOption(
-                    title="How does this work?",
-                    subtitle="Understand the concept",
+                    title="Compare these for me",
+                    subtitle="Pros, cons, verdict",
                     difficulty="Easy",
-                    estimated_time="5 mins",
-                    action="sendMessage('Can you explain how this works?')",
+                    estimated_time="1 min",
+                    action="sendMessage('Compare React vs Vue vs Svelte for building a modern web app. Give me a table with pros, cons, and your recommendation.')",
                     icon="lightbulb"
                 ),
             ],
             'creativity': [
                 TaskOption(
-                    title="Brainstorm ideas",
-                    subtitle="Creative thinking partner",
+                    title="Name my startup",
+                    subtitle="10 creative options",
                     difficulty="Easy",
-                    estimated_time="10 mins",
-                    action="sendMessage('Help me brainstorm some ideas')",
+                    estimated_time="1 min",
+                    action="sendMessage('Give me 10 creative startup name ideas for an AI-powered personal assistant app. Include available .com domain suggestions.')",
                     icon="sparkles"
                 ),
                 TaskOption(
-                    title="I can't decide",
-                    subtitle="Help me make a choice",
+                    title="Write me a short story",
+                    subtitle="Pick a genre, get a tale",
                     difficulty="Easy",
-                    estimated_time="5 mins",
-                    action="sendMessage('I can\\'t decide between some options. Help me choose')",
-                    icon="lightbulb"
+                    estimated_time="2 mins",
+                    action="sendMessage('Write me a 500-word sci-fi short story about the last human who discovers they\\'re not alone after all')",
+                    icon="sparkles"
                 ),
                 TaskOption(
-                    title="What's a good gift?",
-                    subtitle="Find the perfect present",
+                    title="Design a logo concept",
+                    subtitle="SVG, minimal, modern",
                     difficulty="Easy",
-                    estimated_time="5 mins",
-                    action="sendMessage('I need help finding a good gift for someone')",
-                    icon="gift"
+                    estimated_time="1 min",
+                    action="sendMessage('Create an SVG logo concept for a tech company called NovaByte. Minimal, geometric, modern. Show the code.')",
+                    icon="lightbulb"
                 ),
             ],
             'lifestyle': [
                 TaskOption(
-                    title="What should I cook?",
-                    subtitle="Quick recipes for tonight",
+                    title="Meal prep for the week",
+                    subtitle="Shopping list + recipes",
                     difficulty="Easy",
-                    estimated_time="5 mins",
-                    action="sendMessage('What should I cook tonight? Give me some quick recipe ideas')",
+                    estimated_time="2 mins",
+                    action="sendMessage('Plan 5 days of meal prep. Give me a shopping list and simple recipes I can cook on Sunday for the whole week. Budget-friendly.')",
                     icon="coffee"
                 ),
                 TaskOption(
-                    title="What should I watch?",
-                    subtitle="Movie or show recommendations",
+                    title="Build me a workout plan",
+                    subtitle="4-week progressive program",
                     difficulty="Easy",
                     estimated_time="2 mins",
-                    action="sendMessage('What should I watch tonight? Give me some recommendations')",
-                    icon="film"
+                    action="sendMessage('Create a 4-week workout plan. 4 days per week, mix of strength and cardio. I have dumbbells and a pull-up bar at home.')",
+                    icon="activity"
                 ),
                 TaskOption(
-                    title="I'm bored",
-                    subtitle="Get activity suggestions",
+                    title="What should I watch?",
+                    subtitle="Personalized picks",
                     difficulty="Easy",
-                    estimated_time="2 mins",
-                    action="sendMessage('I\\'m bored. What should I do?')",
-                    icon="sun"
+                    estimated_time="1 min",
+                    action="sendMessage('Recommend 5 movies and 5 TV shows I should watch. Mix of genres: thriller, sci-fi, comedy, drama. Only highly rated ones.')",
+                    icon="film"
                 ),
             ],
             'wellness': [
                 TaskOption(
-                    title="I'm stressed",
-                    subtitle="Quick relaxation techniques",
+                    title="Help me think through this",
+                    subtitle="Structured problem solving",
                     difficulty="Easy",
                     estimated_time="5 mins",
-                    action="sendMessage('I\\'m feeling stressed. Help me relax')",
+                    action="sendMessage('I need to make a big decision. Walk me through a structured pros/cons analysis framework I can fill in.')",
+                    icon="lightbulb"
+                ),
+                TaskOption(
+                    title="5-minute reset routine",
+                    subtitle="Breathing + grounding",
+                    difficulty="Easy",
+                    estimated_time="1 min",
+                    action="sendMessage('Give me a 5-minute stress reset routine I can do at my desk right now. Step by step with timing.')",
                     icon="heart"
                 ),
                 TaskOption(
-                    title="I need motivation",
-                    subtitle="Get a productivity boost",
+                    title="Daily journal prompts",
+                    subtitle="Reflection questions",
                     difficulty="Easy",
-                    estimated_time="2 mins",
-                    action="sendMessage('I need some motivation to get started')",
+                    estimated_time="1 min",
+                    action="sendMessage('Give me 7 thoughtful journal prompts, one for each day this week. Focus on gratitude, growth, and self-awareness.')",
                     icon="zap"
-                ),
-                TaskOption(
-                    title="I'm stuck",
-                    subtitle="Work through a problem",
-                    difficulty="Easy",
-                    estimated_time="10 mins",
-                    action="sendMessage('I\\'m stuck on something and need help thinking through it')",
-                    icon="lightbulb"
                 ),
             ],
         }

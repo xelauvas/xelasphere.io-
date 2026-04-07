@@ -311,7 +311,7 @@ class SidebarManager {
       } else {
         // Fallback to simple width check
         this.isMobile = window.innerWidth <= this.mobileBreakpoint;
-        this.isViewportMobile = !this.isMobile && window.innerWidth <= this.mobileBreakpoint;
+        this.isViewportMobile = window.innerWidth <= this.mobileBreakpoint;
         document.body.classList.toggle('is-mobile', this.isMobile);
       }
     }

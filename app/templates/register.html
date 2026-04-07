@@ -40,7 +40,7 @@
                             </svg>
                         {% endif %}
                     </span>
-                    <span class="flash-message">{{ message }}</span>
+                    <span class="flash-message">{{ message|e }}</span>
                     <button type="button" class="flash-close" aria-label="Close" data-dismiss="alert">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M13 1L1 13M1 1L13 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -55,17 +55,17 @@
         <!-- Social Login Options -->
         <div class="social-login-section">
             <div class="social-buttons">
-                <a href="#" class="social-btn" aria-label="Sign up with Apple" title="Sign up with Apple">
-                    <img src="{{ url_for('static', filename='images/apple.svg') }}" alt="" width="20" height="20">
-                </a>
-                <a href="{{ url_for('auth_routes.discord_login') }}" class="social-btn" aria-label="Sign up with Discord" title="Sign up with Discord">
+                <a href="{{ url_for('auth_routes.discord_login') }}" class="social-btn{% if not oauth_status.discord %} disabled{% endif %}" aria-label="Sign up with Discord" title="Sign up with Discord">
                     <img src="{{ url_for('static', filename='images/discord.svg') }}" alt="" width="20" height="20">
                 </a>
-                <a href="{{ url_for('auth_routes.google_login') }}" class="social-btn" aria-label="Sign up with Google" title="Sign up with Google">
+                <a href="{{ url_for('auth_routes.google_login') }}" class="social-btn{% if not oauth_status.google %} disabled{% endif %}" aria-label="Sign up with Google" title="Sign up with Google">
                     <img src="{{ url_for('static', filename='images/google.svg') }}" alt="" width="20" height="20">
                 </a>
-                <a href="{{ url_for('auth_routes.microsoft_login') }}" class="social-btn" aria-label="Sign up with Microsoft" title="Sign up with Microsoft">
+                <a href="{{ url_for('auth_routes.microsoft_login') }}" class="social-btn{% if not oauth_status.microsoft %} disabled{% endif %}" aria-label="Sign up with Microsoft" title="Sign up with Microsoft">
                     <img src="{{ url_for('static', filename='images/microsoft.svg') }}" alt="" width="20" height="20">
+                </a>
+                <a href="{{ url_for('auth_routes.facebook_login') }}" class="social-btn{% if not oauth_status.facebook %} disabled{% endif %}" aria-label="Sign up with Facebook" title="Sign up with Facebook">
+                    <img src="{{ url_for('static', filename='images/facebook.svg') }}" alt="" width="20" height="20">
                 </a>
             </div>
         </div>

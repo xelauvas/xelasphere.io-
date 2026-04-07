@@ -55,17 +55,17 @@
         <!-- Social Login Options -->
         <div class="social-login-section">
             <div class="social-buttons">
-                <a href="#" class="social-btn" aria-label="Sign in with Apple" title="Sign in with Apple">
-                    <img src="{{ url_for('static', filename='images/apple.svg') }}" alt="" width="20" height="20">
-                </a>
-                <a href="{{ url_for('auth_routes.discord_login') }}" class="social-btn" aria-label="Sign in with Discord" title="Sign in with Discord">
+                <a href="{{ url_for('auth_routes.discord_login') }}" class="social-btn{% if not oauth_status.discord %} disabled{% endif %}" aria-label="Sign in with Discord" title="Sign in with Discord">
                     <img src="{{ url_for('static', filename='images/discord.svg') }}" alt="" width="20" height="20">
                 </a>
-                <a href="{{ url_for('auth_routes.google_login') }}" class="social-btn" aria-label="Sign in with Google" title="Sign in with Google">
+                <a href="{{ url_for('auth_routes.google_login') }}" class="social-btn{% if not oauth_status.google %} disabled{% endif %}" aria-label="Sign in with Google" title="Sign in with Google">
                     <img src="{{ url_for('static', filename='images/google.svg') }}" alt="" width="20" height="20">
                 </a>
-                <a href="{{ url_for('auth_routes.microsoft_login') }}" class="social-btn" aria-label="Sign in with Microsoft" title="Sign in with Microsoft">
+                <a href="{{ url_for('auth_routes.microsoft_login') }}" class="social-btn{% if not oauth_status.microsoft %} disabled{% endif %}" aria-label="Sign in with Microsoft" title="Sign in with Microsoft">
                     <img src="{{ url_for('static', filename='images/microsoft.svg') }}" alt="" width="20" height="20">
+                </a>
+                <a href="{{ url_for('auth_routes.facebook_login') }}" class="social-btn{% if not oauth_status.facebook %} disabled{% endif %}" aria-label="Sign in with Facebook" title="Sign in with Facebook">
+                    <img src="{{ url_for('static', filename='images/facebook.svg') }}" alt="" width="20" height="20">
                 </a>
             </div>
         </div>

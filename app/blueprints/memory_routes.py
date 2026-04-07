@@ -5,6 +5,9 @@ Routes:
 - DELETE /user/memories - Clear all memories
 - DELETE /user/memories/item - Remove specific memory
 - POST /user/memories/pin - Toggle pin status
+- GET/POST /user/dream-settings - Get or update dream consolidation settings
+- GET /user/memory-activity - Get dream consolidation activity log
+- POST /user/memory-activity/<log_id>/undo - Undo a consolidation
 """
 
 import logging
@@ -233,3 +236,172 @@ def toggle_memory_pin():
     except Exception as e:
         logger.error(f"Error toggling pin for user {user_id}: {e}")
         return jsonify({'error': 'Failed to update pin status.'}), 500
+
+
+@memory_bp.route('/user/dream-settings', methods=['GET'])
+@error_handler
+@login_required
+def get_dream_settings():
+    """Get dream consolidation settings."""
+    from app.config import db
+
+    user_id = session['user']['uid']
+    try:
+        doc = db.collection('users').document(user_id).get()
+        data = doc.to_dict() if doc.exists else {}
+        prefs = data.get('preferences', {})
+        return jsonify({'dream_enabled': prefs.get('dream_enabled', True)})
+    except Exception as e:
+        logger.error(f"Failed to get dream settings for {user_id}: {e}")
+        return jsonify({'dream_enabled': True})  # Default on
+
+
+@memory_bp.route('/user/dream-settings', methods=['POST'])
+@csrf_required
+@error_handler
+@login_required
+def update_dream_settings():
+    """Update dream consolidation settings."""
+    from app.config import db
+
+    user_id = session['user']['uid']
+    try:
+        body = request.get_json(force=True)
+        enabled = bool(body.get('dream_enabled', True))
+        db.collection('users').document(user_id).set(
+            {'preferences': {'dream_enabled': enabled}}, merge=True
+        )
+        return jsonify({'success': True, 'dream_enabled': enabled})
+    except Exception as e:
+        logger.error(f"Failed to update dream settings for {user_id}: {e}")
+        return jsonify({'error': 'Failed to update settings'}), 500
+
+
+@memory_bp.route('/user/dream-test', methods=['POST'])
+@csrf_required
+@error_handler
+@login_required
+def test_dream_consolidation():
+    """TEMPORARY: Force a dream consolidation cycle, bypassing gates. Remove after testing."""
+    from app.config import db
+    from app.memory_v2.dream import _run_consolidation
+    from app.memory_v2.dream.config import DreamConfig
+
+    user_id = session['user']['uid']
+    try:
+        config = DreamConfig()
+        config.min_active_memories = 1  # Lower threshold for testing
+        ran = _run_consolidation(db, user_id, config)
+        if ran:
+            return jsonify({'success': True, 'message': 'Dream consolidation completed. Check the Activity tab.'})
+        else:
+            return jsonify({'success': False, 'message': 'Not enough memories to consolidate (need at least 1 active memory).'})
+    except Exception as e:
+        logger.error(f"Test dream failed for {user_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@memory_bp.route('/user/memory-activity', methods=['GET'])
+@error_handler
+@login_required
+def get_memory_activity():
+    """Get dream consolidation activity log."""
+    from app.config import db
+    from google.cloud.firestore_v1 import Query
+
+    user_id = session['user']['uid']
+    try:
+        logs_ref = (
+            db.collection('users')
+            .document(user_id)
+            .collection('dream_logs')
+            .order_by('started_at', direction=Query.DESCENDING)
+            .limit(20)
+        )
+        logs = []
+        for doc in logs_ref.stream():
+            log_data = doc.to_dict()
+            log_data['id'] = doc.id
+            # Convert datetime fields to ISO strings for JSON
+            for field in ('started_at', 'completed_at'):
+                if log_data.get(field) and hasattr(log_data[field], 'isoformat'):
+                    log_data[field] = log_data[field].isoformat()
+            logs.append(log_data)
+        return jsonify({'logs': logs})
+    except Exception as e:
+        logger.error(f"Failed to get dream activity for {user_id}: {e}")
+        return jsonify({'error': 'Failed to load activity'}), 500
+
+
+@memory_bp.route('/user/memory-activity/<log_id>/undo', methods=['POST'])
+@limiter.limit("5 per minute")
+@csrf_required
+@error_handler
+@login_required
+def undo_memory_activity(log_id):
+    """Undo a dream consolidation cycle."""
+    from app.config import db
+    from app.memory_v2.store import MemoryStoreV2
+    from app.memory_v2.dream.report import DreamLog, DreamAction
+    from app.memory_v2.dream.executor import undo_dream_log
+    from datetime import datetime, timedelta
+
+    user_id = session['user']['uid']
+    try:
+        log_ref = (
+            db.collection('users')
+            .document(user_id)
+            .collection('dream_logs')
+            .document(log_id)
+        )
+        snapshot = log_ref.get()
+        if not snapshot.exists:
+            return jsonify({'error': 'Log not found'}), 404
+
+        log_data = snapshot.to_dict()
+
+        # Check undo window (7 days)
+        started = log_data.get('started_at')
+        if started and hasattr(started, 'timestamp'):
+            from datetime import datetime as dt
+            started = dt.fromtimestamp(started.timestamp())
+        if started and (datetime.utcnow() - started).days > 7:
+            return jsonify({'error': 'Undo window expired (7 days)'}), 400
+
+        # Check not already undone
+        if log_data.get('undone'):
+            return jsonify({'error': 'Already undone'}), 400
+
+        # Reconstruct DreamLog
+        def _actions_from_dicts(action_dicts):
+            return [
+                DreamAction(
+                    action_type=a.get('action_type', ''),
+                    memory_id=a.get('memory_id', ''),
+                    reason=a.get('reason', ''),
+                    phase=a.get('phase', 0),
+                    before_snapshot=a.get('before_snapshot'),
+                    related_ids=a.get('related_ids', []),
+                )
+                for a in (action_dicts or [])
+            ]
+
+        dream_log = DreamLog(
+            user_id=user_id,
+            started_at=started or datetime.utcnow(),
+            phase1_actions=_actions_from_dicts(log_data.get('phase1_actions')),
+            phase2_actions=_actions_from_dicts(log_data.get('phase2_actions')),
+        )
+
+        store = MemoryStoreV2(user_id)
+        success = undo_dream_log(db=db, store=store, dream_log=dream_log)
+
+        if success:
+            log_ref.update({'undone': True, 'undone_at': datetime.utcnow()})
+            return jsonify({'success': True, 'message': 'Dream actions undone'})
+        else:
+            return jsonify({'error': 'Nothing to undo'}), 400
+
+    except Exception as e:
+        logger.error(f"Failed to undo dream log {log_id} for {user_id}: {e}")
+        return jsonify({'error': 'Undo failed'}), 500

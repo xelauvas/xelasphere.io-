@@ -39,11 +39,20 @@ SECRET_PATTERNS = [
 ARTIFACT_FENCE_PATTERN = re.compile(r"```artifact\s*([\s\S]*?)\s*```", re.IGNORECASE)
 # Fallback pattern for unclosed artifact blocks (some models don't close with ```)
 ARTIFACT_UNCLOSED_PATTERN = re.compile(r"```artifact\s*([\s\S]+)", re.IGNORECASE)
+ARTIFACT_PATCH_FENCE_PATTERN = re.compile(r"```artifact_patch\s*([\s\S]*?)\s*```", re.IGNORECASE)
 MAX_ARTIFACT_FILES = 40
 MAX_ARTIFACT_TOTAL_BYTES = 800_000
 MAX_ARTIFACT_FILE_BYTES = 200_000
 DEFAULT_PRIMARY_LANGUAGE = "code"
 SAFE_TEXT_LANGUAGES = {"text", "plain", "markdown"}
+
+# Curly quote normalization for patch matching
+_CURLY_TO_STRAIGHT = str.maketrans({
+    '\u2018': "'",  # LEFT SINGLE QUOTATION MARK
+    '\u2019': "'",  # RIGHT SINGLE QUOTATION MARK
+    '\u201C': '"',  # LEFT DOUBLE QUOTATION MARK
+    '\u201D': '"',  # RIGHT DOUBLE QUOTATION MARK
+})
 
 
 class ArtifactParseError(ValueError):
@@ -493,6 +502,70 @@ def _repair_incomplete_artifact_json(raw_json: str, brace_count: int, in_string:
     return result
 
 
+def _recover_truncated_files_array(raw_json: str) -> Optional[str]:
+    """Last-resort recovery: find the last complete file object in the files array.
+
+    When AI output is truncated mid-file (e.g. CSS cut off), this finds the
+    last valid '},{ boundary in the files array and discards everything after.
+    Then closes the array and root object.
+    """
+    # Find "files" key and the opening bracket
+    files_match = re.search(r'"files"\s*:\s*\[', raw_json)
+    if not files_match:
+        return None
+
+    files_start = files_match.end()
+
+    # Find complete file objects by looking for },...{ patterns
+    # Each file object ends with } and the next starts with {
+    # We want the position of the last complete } before the truncation
+    last_complete_end = -1
+    in_string = False
+    escape_next = False
+    brace_depth = 0
+    i = files_start
+
+    while i < len(raw_json):
+        char = raw_json[i]
+        if escape_next:
+            escape_next = False
+            i += 1
+            continue
+        if char == '\\' and in_string:
+            escape_next = True
+            i += 1
+            continue
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            i += 1
+            continue
+        if in_string:
+            i += 1
+            continue
+
+        if char == '{':
+            brace_depth += 1
+        elif char == '}':
+            brace_depth -= 1
+            if brace_depth == 0:
+                # This is a complete file object
+                last_complete_end = i + 1
+        elif char == ']' and brace_depth == 0:
+            # Files array is actually complete — nothing to recover
+            return None
+
+        i += 1
+
+    if last_complete_end <= files_start:
+        return None
+
+    # Build the repaired JSON: everything up to last complete file + close array + close object
+    prefix = raw_json[:files_match.start()]
+    files_content = raw_json[files_start:last_complete_end]
+    result = prefix + '"files":[' + files_content + ']}'
+    return result
+
+
 def extract_artifact_block(text: str) -> Optional[Dict[str, Any]]:
     """Return a normalized artifact payload if a ```artifact block is present."""
     if not text:
@@ -571,14 +644,212 @@ def extract_artifact_block(text: str) -> Optional[Dict[str, Any]]:
         logger.info("Artifact JSON parsed successfully after aggressive cleanup")
         return normalize_artifact_payload(payload)
     except json.JSONDecodeError as exc:
-        # Log context around the error position for debugging
-        error_pos = exc.pos
-        start = max(0, error_pos - 50)
-        end = min(len(raw_json), error_pos + 50)
-        context = raw_json[start:end]
-        logger.warning(f"Artifact JSON parse error at position {error_pos}: {exc.msg}")
-        logger.warning(f"Context around error: ...{repr(context)}...")
-        raise ArtifactParseError("Artifact block must contain valid JSON.") from exc
+        logger.debug(f"Third JSON parse attempt failed at position {exc.pos}: {exc.msg}")
+
+    # Fourth attempt: truncation recovery — find last complete file object
+    # When AI output is cut off mid-file content, discard the truncated file
+    # and keep everything before it
+    try:
+        truncated = _recover_truncated_files_array(raw_json)
+        if truncated and truncated != raw_json:
+            payload = json.loads(truncated)
+            logger.info("Artifact JSON parsed after truncation recovery (dropped incomplete file)")
+            return normalize_artifact_payload(payload)
+    except json.JSONDecodeError:
+        pass
+
+    # All attempts failed
+    error_pos = 0
+    try:
+        json.loads(raw_json)
+    except json.JSONDecodeError as final_exc:
+        error_pos = final_exc.pos
+    start = max(0, error_pos - 50)
+    end = min(len(raw_json), error_pos + 50)
+    context = raw_json[start:end]
+    logger.warning(f"Artifact JSON parse error at position {error_pos}")
+    logger.warning(f"Context around error: ...{repr(context)}...")
+    raise ArtifactParseError("Artifact block must contain valid JSON.")
+
+
+def extract_artifact_patch_block(text: str) -> Optional[Dict[str, Any]]:
+    """Return parsed patch data if a ```artifact_patch block is present."""
+    if not text:
+        return None
+    match = ARTIFACT_PATCH_FENCE_PATTERN.search(text)
+    if not match:
+        return None
+    raw_json = match.group(1).strip()
+    if not raw_json:
+        return None
+    try:
+        payload = json.loads(raw_json)
+    except json.JSONDecodeError:
+        logger.warning("artifact_patch block contains invalid JSON")
+        return None
+    if not isinstance(payload, dict):
+        return None
+    patches = payload.get('patches')
+    if not isinstance(patches, list) or not patches:
+        return None
+    for patch in patches:
+        if not isinstance(patch, dict):
+            return None
+        if not patch.get('file') or not isinstance(patch.get('file'), str):
+            return None
+        if not isinstance(patch.get('old_string'), str) or not patch['old_string']:
+            return None
+        if not isinstance(patch.get('new_string'), str):
+            return None
+    return payload
+
+
+def apply_patches(
+    current_files: List[Dict[str, Any]],
+    patches: List[Dict[str, str]],
+) -> tuple:
+    """
+    Apply old_string/new_string patches to artifact files.
+
+    Returns:
+        (patched_files, results) where results is a list of
+        {"file": str, "status": "applied"|"failed", "reason": str}
+    """
+    import copy
+    patched_files = copy.deepcopy(current_files)
+    results = []
+
+    file_map = {f['path']: f for f in patched_files}
+
+    for patch in patches:
+        target_file = patch.get('file', '')
+        old_string = patch.get('old_string', '')
+        new_string = patch.get('new_string', '')
+
+        if target_file not in file_map:
+            available = list(file_map.keys())
+            logger.warning(f"🩹 Patch target '{target_file}' not in files: {available}")
+            # Fallback: if only one file, use it regardless of name
+            if len(file_map) == 1:
+                target_file = list(file_map.keys())[0]
+                logger.info(f"🩹 Single-file fallback: using '{target_file}'")
+            else:
+                results.append({'file': target_file, 'status': 'failed', 'reason': f'File "{target_file}" not found'})
+                continue
+
+        file_entry = file_map[target_file]
+        content = file_entry.get('content', '')
+
+        logger.debug(f"🩹 Patch target='{target_file}', old_string[:80]={repr(old_string[:80])}")
+        logger.debug(f"🩹 Content[:200]={repr(content[:200])}")
+
+        count = content.count(old_string)
+        if count == 0:
+            logger.info(f"🩹 Exact match failed for old_string ({len(old_string)} chars) in {target_file} ({len(content)} chars)")
+
+            # Try with normalized quotes (curly → straight)
+            old_norm_q = old_string.translate(_CURLY_TO_STRAIGHT)
+            content_norm_q = content.translate(_CURLY_TO_STRAIGHT)
+            if old_norm_q != old_string and content_norm_q.count(old_norm_q) == 1:
+                logger.info(f"🩹 Quote normalization matched!")
+                # Find the actual position in normalized content
+                norm_pos = content_norm_q.index(old_norm_q)
+                actual_old = content[norm_pos:norm_pos + len(old_norm_q)]
+                # Apply replacement preserving original content around the match
+                file_entry['content'] = content[:norm_pos] + new_string + content[norm_pos + len(actual_old):]
+                results.append({'file': target_file, 'status': 'applied'})
+                continue
+
+            # Try with per-line whitespace stripping (indentation mismatch)
+            line_strip_matched = False
+            old_lines = [l.strip() for l in old_string.splitlines()]
+            content_lines = content.splitlines()
+            # Sliding window match on stripped lines
+            old_stripped = '\n'.join(old_lines)
+            for start_idx in range(len(content_lines) - len(old_lines) + 1):
+                window = content_lines[start_idx:start_idx + len(old_lines)]
+                window_stripped = '\n'.join(l.strip() for l in window)
+                if window_stripped == old_stripped:
+                    # Found match with different indentation
+                    actual_start = sum(len(l) + 1 for l in content_lines[:start_idx])  # +1 for \n
+                    actual_end = actual_start + sum(len(l) + 1 for l in window) - 1  # -1 for last \n
+                    actual_old = content[actual_start:actual_end]
+                    # Preserve the original indentation pattern in new_string
+                    # Use the first matched line's indentation as reference
+                    if window and old_lines:
+                        original_indent = len(window[0]) - len(window[0].lstrip())
+                        old_indent = len(old_string.splitlines()[0]) - len(old_string.splitlines()[0].lstrip()) if old_string.splitlines() else 0
+                        indent_diff = original_indent - old_indent
+                        if indent_diff != 0:
+                            # Adjust new_string indentation to match actual file
+                            adjusted_lines = []
+                            for line in new_string.splitlines():
+                                if line.strip() and indent_diff > 0:
+                                    adjusted_lines.append(' ' * indent_diff + line)
+                                elif line.strip() and indent_diff < 0:
+                                    # Remove indentation (but don't go negative)
+                                    stripped = line.lstrip()
+                                    current_indent = len(line) - len(stripped)
+                                    new_indent = max(0, current_indent + indent_diff)
+                                    adjusted_lines.append(' ' * new_indent + stripped)
+                                else:
+                                    adjusted_lines.append(line)
+                            new_string = '\n'.join(adjusted_lines)
+                    file_entry['content'] = content[:actual_start] + new_string + content[actual_end:]
+                    logger.info(f"🩹 Line-strip matching succeeded (indent diff: {indent_diff if 'indent_diff' in dir() else 'N/A'})")
+                    results.append({'file': target_file, 'status': 'applied'})
+                    line_strip_matched = True
+                    break
+            if line_strip_matched:
+                continue
+
+            # Try with normalized line endings
+            old_norm_nl = old_string.replace('\r\n', '\n').replace('\r', '\n')
+            content_norm_nl = content.replace('\r\n', '\n').replace('\r', '\n')
+            if old_norm_nl != old_string and content_norm_nl.count(old_norm_nl) == 1:
+                logger.info(f"🩹 Line-ending normalization matched!")
+                file_entry['content'] = content_norm_nl.replace(old_norm_nl, new_string.replace('\r\n', '\n').replace('\r', '\n'), 1)
+                results.append({'file': target_file, 'status': 'applied'})
+                continue
+
+            # Fuzzy fallback: try whitespace-normalized matching
+            import re
+            norm_old = re.sub(r'\s+', ' ', old_string.strip())
+            norm_content = re.sub(r'\s+', ' ', content)
+            if norm_old in norm_content:
+                # Find the original position by matching normalized
+                # Walk through content finding the span that matches when normalized
+                best_start = -1
+                for i in range(len(content)):
+                    chunk = content[i:i+len(old_string)*2]  # search window
+                    if re.sub(r'\s+', ' ', chunk[:len(old_string)+50].strip()).startswith(norm_old):
+                        # Found approximate start, now find exact end
+                        accum = ''
+                        end = i
+                        while end < len(content) and re.sub(r'\s+', ' ', accum.strip()) != norm_old:
+                            accum += content[end]
+                            end += 1
+                            if len(accum) > len(old_string) * 3:
+                                break
+                        if re.sub(r'\s+', ' ', accum.strip()) == norm_old:
+                            old_string = accum  # Use the actual text from the file
+                            count = 1
+                            best_start = i
+                            break
+                if count == 0:
+                    results.append({'file': target_file, 'status': 'failed', 'reason': f'old_string not found in {target_file}'})
+                    continue
+            else:
+                results.append({'file': target_file, 'status': 'failed', 'reason': f'old_string not found in {target_file}'})
+                continue
+        if count > 1:
+            results.append({'file': target_file, 'status': 'failed', 'reason': f'old_string matches multiple locations in {target_file}'})
+            continue
+
+        file_entry['content'] = content.replace(old_string, new_string, 1)
+        results.append({'file': target_file, 'status': 'applied'})
+
+    return patched_files, results
 
 
 def normalize_artifact_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -1137,6 +1408,23 @@ class ArtifactRouter:
         artifact_block = None
         artifact_block_error = None
         artifact_block_user_error = None
+
+        # Check for artifact_patch block first (surgical updates)
+        search_text_early = structured.remainder or structured.chat or ""
+        patch_block = extract_artifact_patch_block(search_text_early)
+        if patch_block:
+            logger.info(f"🩹 Found artifact_patch block with {len(patch_block.get('patches', []))} patches")
+            chat_text = structured.chat.strip() or structured.remainder or ""
+            # Strip the patch fence from chat text
+            chat_text = ARTIFACT_PATCH_FENCE_PATTERN.sub("", chat_text).strip()
+            return ArtifactDecision(
+                render_mode="artifact_patch",
+                chat_payload=chat_text or "Applied code patches",
+                artifact_payload=patch_block,
+                contains_code=True,
+                desired_action=ArtifactPreference.UPDATE,
+            )
+
         try:
             search_text = structured.remainder or structured.chat or ""
             logger.info(f"🔍 Searching for artifact block in text (length={len(search_text)}): {search_text[:500]}...")
@@ -1568,7 +1856,7 @@ class ArtifactStore:
             "meta": payload.get("meta") or {},
             "createdAt": gc_firestore.SERVER_TIMESTAMP,
             "updatedAt": gc_firestore.SERVER_TIMESTAMP,
-            "versionCount": 0,
+            "versionCount": 1,
             "activeVersionId": version_id,
             "createdBy": created_by,
             "isActive": True,

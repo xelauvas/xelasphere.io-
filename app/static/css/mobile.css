@@ -1721,9 +1721,9 @@ body.is-ios .arrow-down {
         display: flex !important;
     }
 
-    /* Hide More button */
+    /* Show More button on mobile */
     .options .more-button {
-        display: none !important;
+        display: flex !important;
     }
 
     /* Enhanced button cards */

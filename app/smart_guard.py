@@ -325,16 +325,27 @@ class SmartGuard:
                 logger.debug(f"SmartGuard: '{user_input}' is continuation of {self._context.get_last_action_type()}")
                 return InterceptResult()  # Don't intercept - main LLM will understand
 
-            # Check if a required slot is missing - ONLY intercept in this case
+            # Check if a required slot is missing.
+            # But DON'T intercept if the LLM can fill in sensible defaults.
+            # Only intercept for truly critical missing info (e.g., recipient
+            # for a send action, target for a delete action).
             missing_slot = self._context.get_missing_slot(user_input)
             if missing_slot:
-                logger.info(f"SmartGuard: Missing slot '{missing_slot}' for input")
-                return InterceptResult(
-                    should_intercept=True,
-                    reason="missing_slot",
-                    clarification_prompt=f"What {missing_slot} would you like me to work with?",
-                    confidence="high"
-                )
+                # Let the LLM handle it — it can use memory, context, or
+                # sensible defaults. Only intercept for irreversible actions
+                # where guessing wrong would be harmful.
+                last_action = self._context.get_last_action_type() if self._context else ""
+                irreversible_actions = {"send", "delete", "publish", "submit", "transfer"}
+                if last_action in irreversible_actions:
+                    logger.info(f"SmartGuard: Missing slot '{missing_slot}' for irreversible action '{last_action}'")
+                    return InterceptResult(
+                        should_intercept=True,
+                        reason="missing_slot_irreversible",
+                        clarification_prompt=f"Before I {last_action}, I need to confirm: what {missing_slot}?",
+                        confidence="high"
+                    )
+                else:
+                    logger.debug(f"SmartGuard: Missing slot '{missing_slot}' but action is reversible, letting LLM handle")
 
         # =================================================================
         # STEP 2: Quick structural checks (no LLM needed)
@@ -441,53 +452,57 @@ class SmartGuard:
         """Simple regex fallback for obvious cases."""
         input_lower = user_input.lower().strip()
 
-        # Very short vague inputs
-        vague_patterns = [
+        # ACTION CONFIRMATIONS — these mean "do it", never intercept them.
+        # The user is telling us to proceed, not asking a vague question.
+        action_confirmations = [
             r"^yes\s*(?:please)?[.!]?$",
             r"^yeah?[.!]?$",
             r"^sure[.!]?$",
             r"^ok(?:ay)?[.!]?$",
             r"^go\s*(?:ahead|on)[.!]?$",
             r"^do\s*it[.!]?$",
-            r"^more[.!]?$",
-            r"^elaborate[.!]?$",
             r"^please[.!]?$",
             r"^continue[.!]?$",
             r"^proceed[.!]?$",
             r"^definitely[.!]?$",
             r"^absolutely[.!]?$",
+            r"^just\s*do\s*it[.!]?$",
+            r"^skip[.!]?$",
         ]
 
-        is_vague = False
-        for pattern in vague_patterns:
+        for pattern in action_confirmations:
             if re.match(pattern, input_lower):
-                is_vague = True
+                # User wants us to ACT. Never intercept action confirmations.
+                return InterceptResult(should_intercept=False, confidence="high")
+
+        # Only intercept truly vague single-word inputs that could mean
+        # multiple things AND the last response had a list with options.
+        vague_expansion_patterns = [
+            r"^more[.!]?$",
+            r"^elaborate[.!]?$",
+        ]
+
+        is_vague_expansion = False
+        for pattern in vague_expansion_patterns:
+            if re.match(pattern, input_lower):
+                is_vague_expansion = True
                 break
 
-        if is_vague:
-            # Check if last response had multiple items
+        if is_vague_expansion:
+            # Only intercept if the last response had 3+ distinct items
+            # where "more" is genuinely ambiguous about which item.
             items = self._extract_list_items(last_response)
 
-            if len(items) >= 2:
+            if len(items) >= 3:
                 options_text = "\n".join(f"- {item}" for item in items[:6])
                 return InterceptResult(
                     should_intercept=True,
-                    reason="vague_with_multiple_options",
+                    reason="vague_expansion_multiple_options",
                     clarification_prompt=f"Which would you like me to expand on?\n{options_text}",
                     options=items[:6],
                     confidence="medium"
                 )
-            elif len(items) == 0:
-                # No clear list but vague input - still ask for clarification
-                # Check if response mentions multiple things
-                if self._has_multiple_topics(last_response):
-                    return InterceptResult(
-                        should_intercept=True,
-                        reason="vague_affirmation_unclear",
-                        clarification_prompt="I covered several points. What specifically would you like me to expand on?",
-                        options=[],
-                        confidence="medium"
-                    )
+            # If fewer than 3 items, the intent is clear enough — don't intercept.
 
         return InterceptResult(should_intercept=False, confidence="low")
 

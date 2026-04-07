@@ -40,6 +40,8 @@ Rules:
 1. Only extract EXPLICIT statements, not assumptions
 2. Works in ANY language
 3. QUESTIONS are NOT facts - skip ALL questions ("what should I...", "how do I...", "can you...")
+4. NEGATIONS are NOT facts - if user says "not X", "I'm not X", "not ada price", do NOT extract X as a fact. Only extract what the user IS, not what they deny being
+5. CORRECTIONS: "I am X not Y" or "my name is X not Y" → extract ONLY X. The negated part (Y) is what they are rejecting
 4. OPT-OUT: If user says "dont remember", "off the record", "forget this", "between us", "private" - return EMPTY {"memories": []}
 5. CONSTRAINT KEY FORMAT: Use "no_[thing]" as key, context as value. Each constraint needs a UNIQUE key!
    - "never use var" → key=no_var, value=javascript
@@ -70,7 +72,11 @@ Examples:
 - "what's the weather" → nothing (question)
 - "help me debug this" → nothing (question)
 - "what tools should I use for my project?" → nothing (question, not a fact)
-- "can you recommend a framework?" → nothing (question)"""
+- "can you recommend a framework?" → nothing (question)
+- "i am xela not ada" → profile: name=Xela (NOT Ada — "not ada" is a negation)
+- "my name is alex not alice" → profile: name=Alex (NOT Alice)
+- "i'm not a designer" → nothing (negation, not an affirmation)
+- "that's not my timezone" → nothing (negation)"""
 
 
 @dataclass

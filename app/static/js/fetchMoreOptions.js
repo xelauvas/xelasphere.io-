@@ -326,27 +326,34 @@ You can learn the basics of almost anything in just 20 focused hours.
     };
 
     // Guest mode fallback options (no API call needed) - 6 options per set
+    // Pool of all suggestion options — "More" shuffles from these
     const GUEST_FALLBACK_OPTIONS = [
         [
-            { title: 'Quick Recipe Ideas', subtitle: 'Dinner in 30 mins or less', action: "sendMessage('Quick Recipe Ideas')", icon: 'coffee' },
-            { title: 'Plan My Week', subtitle: 'Organize your schedule', action: "sendMessage('Plan My Week')", icon: 'calendar' },
-            { title: 'Workout Routine', subtitle: 'Get a personalized plan', action: "sendMessage('Workout Routine')", icon: 'activity' },
-            { title: 'Budget Helper', subtitle: 'Track and save money', action: "sendMessage('Budget Helper')", icon: 'dollar' },
-            { title: 'Travel Planner', subtitle: 'Plan your next trip', action: "sendMessage('Travel Planner')", icon: 'globe' },
-            { title: 'Gift Ideas', subtitle: 'Find the perfect present', action: "sendMessage('Gift Ideas')", icon: 'gift' },
-            { title: 'More', subtitle: 'Load new tasks', action: 'fetchMoreOptions()', icon: 'more' }
+            { title: 'Build me a landing page', subtitle: 'Responsive, modern design', action: "sendMessage('Build me a modern responsive landing page for a SaaS product with hero, features, pricing, and footer')", icon: 'code' },
+            { title: 'Draft a resignation letter', subtitle: 'Professional, ready to send', action: "sendMessage('Write me a professional resignation letter giving two weeks notice. Keep it graceful and positive.')", icon: 'edit' },
+            { title: 'Plan my week', subtitle: 'Time-blocked schedule', action: "sendMessage('Create a time-blocked weekly schedule. I work 9-5, want to exercise 3x/week, learn coding evenings, weekends free.')", icon: 'calendar' },
         ],
         [
-            { title: 'Movie Night', subtitle: 'Get recommendations', action: "sendMessage('Movie Night')", icon: 'film' },
-            { title: 'Home Organization', subtitle: 'Declutter any space', action: "sendMessage('Home Organization')", icon: 'home' },
-            { title: 'Learn Something New', subtitle: 'Discover a new hobby', action: "sendMessage('Learn Something New')", icon: 'book' },
-            { title: 'Stress Relief', subtitle: 'Quick relaxation tips', action: "sendMessage('Stress Relief')", icon: 'heart' },
-            { title: 'Party Planning', subtitle: 'Plan a celebration', action: "sendMessage('Party Planning')", icon: 'sparkles' },
-            { title: 'Daily Motivation', subtitle: 'Get inspired today', action: "sendMessage('Daily Motivation')", icon: 'zap' },
-            { title: 'More', subtitle: 'Load new tasks', action: 'fetchMoreOptions()', icon: 'more' }
-        ]
+            { title: 'Write a cold email', subtitle: 'Gets replies, no fluff', action: "sendMessage('Write me a cold outreach email for a B2B SaaS product that gets replies. Short, specific, no fluff.')", icon: 'edit' },
+            { title: 'Compare React vs Vue', subtitle: 'Pros, cons, verdict', action: "sendMessage('Compare React vs Vue vs Svelte for building a modern web app. Table with pros, cons, and your recommendation.')", icon: 'lightbulb' },
+            { title: 'Meal prep for 5 days', subtitle: 'Shopping list + recipes', action: "sendMessage('Plan 5 days of meal prep. Shopping list and simple recipes I can cook on Sunday. Budget-friendly.')", icon: 'coffee' },
+        ],
+        [
+            { title: 'Name my startup', subtitle: '10 creative options', action: "sendMessage('Give me 10 creative startup name ideas for an AI-powered app. Include .com domain suggestions.')", icon: 'sparkles' },
+            { title: 'Build a workout plan', subtitle: '4-week program', action: "sendMessage('Create a 4-week workout plan. 4 days/week, strength and cardio. Dumbbells and pull-up bar at home.')", icon: 'activity' },
+            { title: 'Plan a trip to Japan', subtitle: '7-day itinerary', action: "sendMessage('Plan a 7-day trip to Japan. Day-by-day itinerary: Tokyo, Kyoto, Osaka. Food spots and transport tips.')", icon: 'globe' },
+        ],
+        [
+            { title: '30-day Python plan', subtitle: 'Zero to projects', action: "sendMessage('Create a 30-day study plan to learn Python from scratch. Daily goals, resources, and mini-projects.')", icon: 'book' },
+            { title: 'Write a short story', subtitle: 'Sci-fi, 500 words', action: "sendMessage('Write me a 500-word sci-fi short story about the last human who discovers they are not alone after all')", icon: 'sparkles' },
+            { title: 'Top 10 movies + shows', subtitle: 'Highly rated picks', action: "sendMessage('Recommend 5 movies and 5 TV shows. Mix: thriller, sci-fi, comedy, drama. Only highly rated ones.')", icon: 'film' },
+        ],
     ];
-    let guestOptionIndex = 0;
+    // Build a flat pool of ALL guest options (excluding "More" buttons)
+    const GUEST_OPTIONS_POOL = GUEST_FALLBACK_OPTIONS
+        .flat()
+        .filter(opt => opt.title !== 'More');
+    let guestShownTitles = new Set();
 
     // State management
     class FetchState {
@@ -372,11 +379,28 @@ You can learn the basics of almost anything in just 20 focused hours.
         return document.body.dataset.guestMode === 'true';
     }
 
-    // Get next guest fallback options (cycles through sets)
+    // Pick fresh random options from the pool — never repeat until all are shown
     function getNextGuestOptions() {
-        const options = GUEST_FALLBACK_OPTIONS[guestOptionIndex];
-        guestOptionIndex = (guestOptionIndex + 1) % GUEST_FALLBACK_OPTIONS.length;
-        return options;
+        // Filter out already-shown options
+        let available = GUEST_OPTIONS_POOL.filter(opt => !guestShownTitles.has(opt.title));
+
+        // If we've shown everything, reset
+        if (available.length < 6) {
+            guestShownTitles.clear();
+            available = [...GUEST_OPTIONS_POOL];
+        }
+
+        // Shuffle and pick 3 (so grid shows 3 + More = 4 total)
+        for (let i = available.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [available[i], available[j]] = [available[j], available[i]];
+        }
+        const picked = available.slice(0, 3);
+        picked.forEach(opt => guestShownTitles.add(opt.title));
+
+        // "More" is always the 4th button
+        picked.push({ title: 'More', subtitle: 'Load new ideas', action: 'fetchMoreOptions()', icon: 'more' });
+        return picked;
     }
 
     // Main function to fetch more options
@@ -492,16 +516,18 @@ You can learn the basics of almost anything in just 20 focused hours.
         // No-op
     }
 
-    // Animation and DOM manipulation
+    // Animation and DOM manipulation — lock height to prevent greeting from jumping
     async function animateAndRemoveOldOptions(container, duration) {
-        // Animate ALL buttons including More button
+        // Lock the container height before removing anything
+        const currentHeight = container.offsetHeight;
+        container.style.setProperty('--options-lock-height', currentHeight + 'px');
+
         const selector = CONFIG.SELECTORS.OPTIONS_BUTTON;
         await animateElementsOut(container, selector);
         clearOldOptions(container);
     }
 
     function clearOldOptions(container) {
-        // Remove ALL buttons including More button
         container.querySelectorAll(CONFIG.SELECTORS.OPTIONS_BUTTON)
             .forEach(option => option.remove());
     }
@@ -510,19 +536,12 @@ You can learn the basics of almost anything in just 20 focused hours.
         const elements = container.querySelectorAll(selector);
         if (elements.length === 0) return;
 
-        // Add fade-out class to all elements with staggered timing
-        const animations = Array.from(elements).map((element, index) => {
+        // Fade out all at once — no stagger on exit, feels snappier
+        const animations = Array.from(elements).map((element) => {
             return new Promise(resolve => {
-                // Stagger the exit animation
-                setTimeout(() => {
-                    element.classList.add('fade-out');
-                    // Listen for animation end
-                    element.addEventListener('animationend', () => {
-                        resolve();
-                    }, { once: true });
-                    // Fallback in case animationend doesn't fire
-                    setTimeout(resolve, 300);
-                }, index * 30); // Faster stagger for exit (30ms)
+                element.classList.add('fade-out');
+                element.addEventListener('animationend', () => resolve(), { once: true });
+                setTimeout(resolve, 260);
             });
         });
 
@@ -569,6 +588,11 @@ You can learn the basics of almost anything in just 20 focused hours.
             fragment.appendChild(button);
         });
         container.appendChild(fragment);
+
+        // Release the height lock after new options are laid out
+        requestAnimationFrame(() => {
+            container.style.removeProperty('--options-lock-height');
+        });
     }
 
     // Icon SVG map - matches the icons from TASK_ICONS in grog_api.py
@@ -613,6 +637,10 @@ You can learn the basics of almost anything in just 20 focused hours.
         if (option.action) {
             button.dataset.action = option.action;
         }
+
+        // Store metadata for click tracking
+        if (option.category) button.dataset.category = option.category;
+        if (option.slot_type) button.dataset.slotType = option.slot_type;
 
         // Use icon from server response, fallback to 'star' if not provided
         const iconName = option.icon || (isMoreButton ? 'more' : 'star');
@@ -712,6 +740,21 @@ You can learn the basics of almost anything in just 20 focused hours.
         }
     }
 
+    // Report suggestion click to backend for learning loop
+    function reportSuggestionClick(clickData) {
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) return;
+
+        fetch('/suggestion-click', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify(clickData),
+        }).catch(() => {}); // fire-and-forget
+    }
+
     function handleOptionClick(button) {
         const rawAction = button?.dataset?.action || '';
         const action = normalizeAction(rawAction);
@@ -720,6 +763,20 @@ You can learn the basics of almost anything in just 20 focused hours.
         if (action === 'fetchMoreOptions') {
             fetchMoreOptions();
             return;
+        }
+
+        // Report click for smart suggestions learning loop (fire-and-forget)
+        if (!isGuestMode()) {
+            const buttonText = button?.querySelector(CONFIG.SELECTORS.BUTTON_TEXT)?.textContent?.trim();
+            const subtitle = button?.querySelector('.subtitle')?.textContent?.trim();
+            const category = button?.dataset?.category || '';
+            const slotType = button?.dataset?.slotType || '';
+            reportSuggestionClick({
+                title: buttonText || '',
+                subtitle: subtitle || '',
+                category: category,
+                slot_type: slotType,
+            });
         }
 
         // Check for guest mode demo responses

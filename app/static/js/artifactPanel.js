@@ -297,41 +297,54 @@
                     return path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.tsx') || path.endsWith('.ts');
                 }) || [];
 
-                // Nuclear markdown cleanup for DeepSeek (embeds markdown in JSX)
+                // Markdown cleanup for DeepSeek (embeds markdown in JSX)
+                // Only runs if code actually contains markdown patterns to avoid
+                // corrupting valid code (e.g. stripping * multiply operators)
                 const cleanMd = (code) => {
                     if (!code) return '';
                     code = normalizeContent(code);
 
+                    // Detect if this code actually has markdown contamination
+                    // Look for ** at word boundaries (bold), or # at line starts (headings)
+                    const hasBoldMarkdown = /(?:^|[^\\*\w])\*\*\w/.test(code);
+                    const hasHeadingMarkdown = /^\s*#{1,6}\s+\w/m.test(code);
+                    const hasBulletMarkers = /^\s*[•·‣]\s+/m.test(code);
+
+                    if (!hasBoldMarkdown && !hasHeadingMarkdown && !hasBulletMarkers) {
+                        return code; // No markdown detected, return as-is
+                    }
+
                     // 1. Loop paired **bold** removal until stable (handles ****nested****)
-                    let prev, iter = 0;
-                    do {
-                        prev = code;
-                        code = code.replace(/\*\*(.+?)\*\*/g, '$1');
-                        iter++;
-                    } while (code !== prev && iter < 10);
+                    if (hasBoldMarkdown) {
+                        let prev, iter = 0;
+                        do {
+                            prev = code;
+                            code = code.replace(/\*\*(.+?)\*\*/g, '$1');
+                            iter++;
+                        } while (code !== prev && iter < 10);
 
-                    // 2. Strip remaining unpaired ** (broken markdown)
-                    // Keep ** only if it's between two word chars (exponentiation: a**b)
-                    code = code.replace(/\*{2,}/g, (match, offset, str) => {
-                        const before = offset > 0 ? str[offset - 1] : '';
-                        const after = offset + match.length < str.length ? str[offset + match.length] : '';
-                        if (/\w/.test(before) && /\w/.test(after)) return match;
-                        return '';
-                    });
+                        // 2. Strip remaining unpaired ** (broken markdown)
+                        code = code.replace(/\*{2,}/g, (match, offset, str) => {
+                            const before = offset > 0 ? str[offset - 1] : '';
+                            const after = offset + match.length < str.length ? str[offset + match.length] : '';
+                            if (/\w/.test(before) && /\w/.test(after)) return match;
+                            return '';
+                        });
+                    }
 
-                    // 3. Strip remaining single * that look like italic (not multiply/deref)
-                    // *text* where text doesn't contain * or newlines
-                    code = code.replace(/(?<![*\w/])\*([^*\n]{1,50}?)\*(?![*\w])/g, '$1');
+                    // 3. Convert markdown headings to JSX (skip comment lines)
+                    if (hasHeadingMarkdown) {
+                        code = code.replace(/^(\s*)#{1,6}\s+(.+)$/gm, (match, indent, text) => {
+                            if (match.trim().startsWith('//') || match.trim().startsWith('/*')) return match;
+                            const level = match.trim().match(/^#+/)[0].length;
+                            return `${indent}<h${level}>${text}</h${level}>`;
+                        });
+                    }
 
-                    // 4. Convert markdown headings to JSX (skip comment lines)
-                    code = code.replace(/^(\s*)#{1,6}\s+(.+)$/gm, (match, indent, text) => {
-                        if (match.trim().startsWith('//') || match.trim().startsWith('/*')) return match;
-                        const level = match.trim().match(/^#+/)[0].length;
-                        return `${indent}<h${level}>${text}</h${level}>`;
-                    });
-
-                    // 5. Strip bullet markers (•, ·, ‣)
-                    code = code.replace(/^\s*[•·‣]\s+/gm, '');
+                    // 4. Strip bullet markers (•, ·, ‣)
+                    if (hasBulletMarkers) {
+                        code = code.replace(/^\s*[•·‣]\s+/gm, '');
+                    }
 
                     return code;
                 };
@@ -401,6 +414,11 @@
         code = code.replace(/export\\s+default\\s+/g, 'var __defaultExport = ');
         code = code.replace(/export\\s+(const|let|var|function|class)\\s+/g, '$1 ');
 
+        // --- 4b. FIX MALFORMED JSX ---
+        // Self-closing + closing tag: <tag .../></tag> -> <tag ...></tag>
+        // Only match when /> is immediately followed by </tag> (no JSX content between)
+        code = code.replace(/\\/>\\s*<\\/([a-zA-Z][a-zA-Z0-9]*?)>/g, '></$1>');
+
         // --- 5. DETECT MAIN COMPONENT ---
         // Collect ALL PascalCase identifiers from functions, classes, and const/let/var assignments
         var componentName = null;
@@ -421,6 +439,7 @@
         // --- 6. TRANSFORM & RENDER ---
         function escErr(s) { var d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
         function showError(msg) { document.getElementById('root').innerHTML = '<pre style="padding:1rem;color:#ff6b6b;font-family:monospace;font-size:12px;white-space:pre-wrap;">' + escErr(msg) + '</pre>'; }
+        var lastRenderError = '';
 
         function tryRender(src, label) {
             try {
@@ -461,18 +480,18 @@
                     }, 500);
                     return true;
                 }
-                console.warn('[Artifact] ' + label + ': Component is', typeof Component);
+                lastRenderError = label + ': Component is ' + (typeof Component);
+                console.warn('[Artifact] ' + lastRenderError);
                 return false;
             } catch(e) {
+                lastRenderError = e.message;
                 console.warn('[Artifact] ' + label + ':', e.message);
                 return false;
             }
         }
 
-        // Try raw code first (already cleaned by outer cleanMd)
         if (!tryRender(code, 'direct')) {
             // Adjacent JSX error — wrap return(...) bodies in <> ... </>
-            // Uses paren-depth tracking to find the correct closing )
             var fragCode = code;
             var returnRe = /\\breturn\\s*\\(/g;
             var match;
@@ -499,7 +518,7 @@
             fragCode = parts.join('');
             console.log('[Artifact] Fragment-wrapped code (first 400):', fragCode.substring(0, 400));
             if (!tryRender(fragCode, 'fragment-wrapped')) {
-                showError('React Error: Could not render component. Check console for details.');
+                showError(lastRenderError || 'Could not render component');
             }
         }
     })();
@@ -667,6 +686,365 @@ ${escapeHtml(entry.content || '')}
             }
         },
         {
+            name: 'python',
+            matches: version => {
+                const entry = (version.entrypointPath || '').toLowerCase();
+                if (entry.endsWith('.py')) return true;
+                if (version.files?.some(f => (f.path || '').toLowerCase().endsWith('.py'))) return true;
+                return version.files?.some(f => (f.language || '').toLowerCase() === 'python');
+            },
+            render: (frame, version) => {
+                if (!frame) return;
+                const pyFile = version.files?.find(f =>
+                    (f.path || '').toLowerCase().endsWith('.py') || (f.language || '').toLowerCase() === 'python'
+                ) || version.files?.[0];
+                const code = pyFile?.content || '';
+
+                // Collect all .py files for multi-file support
+                const allFiles = {};
+                (version.files || []).forEach(f => {
+                    if ((f.path || '').endsWith('.py')) {
+                        allFiles[f.path] = f.content || '';
+                    }
+                });
+
+                const codePayload = JSON.stringify(code).replace(/<\/script/g, '<\\/script');
+                const filesPayload = JSON.stringify(allFiles).replace(/<\/script/g, '<\\/script');
+                const entryName = pyFile?.path || 'main.py';
+
+                frame.srcdoc = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#1e1e1e;color:#d4d4d4;font-family:'Söhne Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.6;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+#toolbar{padding:6px 12px;background:#181818;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:8px;flex-shrink:0;}
+#toolbar .file-name{color:rgba(255,255,255,0.4);font-size:11px;}
+.tool-btn{padding:3px 10px;font-size:11px;font-weight:500;color:#1e1e1e;background:#4ec9b0;border:none;border-radius:4px;cursor:pointer;transition:background .15s;}
+.tool-btn:hover{background:#5edfc4;}
+.tool-btn:disabled{opacity:0.4;cursor:wait;}
+.tool-btn.ghost{color:rgba(255,255,255,0.5);background:transparent;}
+.tool-btn.ghost:hover{color:rgba(255,255,255,0.8);background:rgba(255,255,255,0.06);}
+#status{font-size:11px;color:rgba(255,255,255,0.3);margin-left:auto;}
+#output-wrap{flex:1;overflow:auto;padding:8px 12px;}
+#output{white-space:pre-wrap;word-break:break-word;}
+.stdout{color:#d4d4d4;}
+.stderr{color:#f44747;}
+.repl-in{color:#4ec9b0;}
+.repl-prompt{color:#6a9955;}
+.plot-container{margin:8px 0;max-width:100%;border-radius:6px;overflow:hidden;}
+.plot-container img{max-width:100%;display:block;}
+#repl{flex-shrink:0;display:flex;align-items:center;padding:6px 12px;background:#181818;border-top:1px solid rgba(255,255,255,0.06);gap:6px;}
+#repl-prompt{color:#4ec9b0;font-size:13px;flex-shrink:0;}
+#repl-input{flex:1;background:transparent;border:none;color:#d4d4d4;font-family:inherit;font-size:13px;outline:none;caret-color:#4ec9b0;}
+#repl-input::placeholder{color:rgba(255,255,255,0.2);}
+</style>
+</head>
+<body>
+<div id="toolbar">
+    <button class="tool-btn" onclick="runScript()">&#9654; Run</button>
+    <button class="tool-btn ghost" onclick="clearOutput()">Clear</button>
+    <span class="file-name">${escapeHtml(entryName)}</span>
+    <span id="status"></span>
+</div>
+<div id="output-wrap">
+    <div id="output"></div>
+</div>
+<div id="repl">
+    <span id="repl-prompt">&gt;&gt;&gt;</span>
+    <input id="repl-input" type="text" placeholder="Type Python here..." autocomplete="off" spellcheck="false"/>
+</div>
+
+<script id="code-data" type="application/json">${codePayload}</script>
+<script id="files-data" type="application/json">${filesPayload}</script>
+
+<script>
+var pyodideReady = null;
+var pyodide = null;
+var history = [];
+var histIdx = -1;
+var ENTRY_NAME = '${entryName.replace(/'/g, "\\'")}';
+
+async function initPyodide() {
+    if (pyodideReady) return pyodideReady;
+    pyodideReady = (async () => {
+        setStatus('Loading Python...');
+        if (!window.loadPyodide) {
+            var s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js';
+            document.head.appendChild(s);
+            await new Promise((ok, fail) => { s.onload = ok; s.onerror = fail; });
+        }
+        pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/' });
+
+        // Redirect stdout/stderr
+        pyodide.runPython(
+            'import sys\\n' +
+            'class _Out:\\n' +
+            '    def __init__(self, cls):\\n' +
+            '        self.cls = cls\\n' +
+            '    def write(self, text):\\n' +
+            '        if text:\\n' +
+            '            from js import appendOutput\\n' +
+            '            appendOutput(text, self.cls)\\n' +
+            '    def flush(self):\\n' +
+            '        pass\\n' +
+            'sys.stdout = _Out("stdout")\\n' +
+            'sys.stderr = _Out("stderr")'
+        );
+
+        setStatus('Python 3.11 ready');
+        setTimeout(() => setStatus(''), 3000);
+        return pyodide;
+    })();
+    return pyodideReady;
+}
+
+function setStatus(t) { document.getElementById('status').textContent = t; }
+
+function appendOutput(text, cls) {
+    var el = document.getElementById('output');
+    var span = document.createElement('span');
+    span.className = cls || 'stdout';
+    span.textContent = text;
+    el.appendChild(span);
+    scrollBottom();
+}
+
+function appendHtml(html) {
+    var el = document.getElementById('output');
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    el.appendChild(div);
+    scrollBottom();
+}
+
+function scrollBottom() {
+    var w = document.getElementById('output-wrap');
+    w.scrollTop = w.scrollHeight;
+}
+
+function clearOutput() {
+    document.getElementById('output').innerHTML = '';
+}
+
+// Packages that need native Pyodide builds (not micropip)
+var BUILTIN_PKGS = ['numpy','pandas','matplotlib','scipy','scikit-learn','pillow','sympy','networkx','sqlalchemy'];
+// Packages that cannot work in browser
+var UNSUPPORTED = ['pygame','tkinter','cv2','opencv','flask','django','fastapi','socket','multiprocessing','subprocess'];
+
+async function loadPackagesFor(code) {
+    // Detect all "import X" and "from X import" statements
+    var importRe = /(?:^|\\n)\\s*(?:import|from)\\s+([a-zA-Z_][a-zA-Z0-9_]*)/g;
+    var match, detected = new Set();
+    while ((match = importRe.exec(code)) !== null) detected.add(match[1]);
+
+    // Check for unsupported packages — block execution if found
+    var blocked = [];
+    for (var u of UNSUPPORTED) {
+        if (detected.has(u)) {
+            blocked.push(u);
+            detected.delete(u);
+        }
+    }
+    if (blocked.length > 0) {
+        appendOutput('This script needs ' + blocked.join(', ') + ' which requires a server runtime.\\n\\n', 'stderr');
+        var srvBtn = document.createElement('button');
+        srvBtn.className = 'tool-btn';
+        srvBtn.style.margin = '8px 0';
+        srvBtn.textContent = '\\u25b6 Run on Server';
+        srvBtn.onclick = function() {
+            srvBtn.remove();
+            appendOutput('Starting server execution...\\n', 'repl-prompt');
+            var code = JSON.parse(document.getElementById('code-data').textContent);
+            var files = JSON.parse(document.getElementById('files-data').textContent);
+            // Try direct parent access first, fall back to postMessage
+            try {
+                if (window.parent && window.parent.artifactPanel && window.parent.artifactPanel._runOnServer) {
+                    window.parent.artifactPanel._runOnServer(code, files, ENTRY_NAME);
+                    return;
+                }
+            } catch(e) {
+                appendOutput('Direct access failed: ' + e.message + '\\n', 'stderr');
+            }
+            // Fallback: postMessage
+            try {
+                window.parent.postMessage({type: 'sandbox-needs-server', code: code, files: files, entry: ENTRY_NAME}, '*');
+                appendOutput('Waiting for server...\\n', 'repl-prompt');
+            } catch(e2) {
+                appendOutput('Cannot reach server: ' + e2.message + '\\n', 'stderr');
+            }
+        };
+        document.getElementById('output').appendChild(srvBtn);
+        return false;
+    }
+
+    // Load built-in Pyodide packages
+    var builtins = [];
+    for (var d of detected) {
+        var pkg = BUILTIN_PKGS.find(function(p) { return p === d || p.replace('-','') === d; });
+        if (pkg) { builtins.push(pkg); detected.delete(d); }
+    }
+    // Remove standard library modules
+    var stdlib = ['sys','os','io','json','math','random','re','collections','itertools','functools','datetime','time','string','pathlib','typing','abc','copy','hashlib','base64','struct','csv','textwrap','enum','dataclasses'];
+    for (var s of stdlib) detected.delete(s);
+
+    if (builtins.length > 0) {
+        setStatus('Loading ' + builtins.join(', ') + '...');
+        await pyodide.loadPackage(builtins);
+        setStatus('');
+    }
+
+    // Try micropip for remaining packages
+    var remaining = Array.from(detected);
+    if (remaining.length > 0) {
+        try {
+            await pyodide.loadPackage('micropip');
+            var micropip = pyodide.pyimport('micropip');
+            for (var pkg of remaining) {
+                try {
+                    setStatus('Installing ' + pkg + '...');
+                    await micropip.install(pkg);
+                    setStatus('');
+                } catch(e) {
+                    appendOutput('Could not install ' + pkg + ': ' + (e.message || e) + '\\n', 'stderr');
+                }
+            }
+            setStatus('');
+        } catch(e) {
+            setStatus('');
+        }
+    }
+    if (builtins.includes('matplotlib')) {
+        pyodide.runPython(
+            'import matplotlib; matplotlib.use("Agg")\\n' +
+            'import matplotlib.pyplot as _plt\\n' +
+            'def _inline_show(*a, **kw):\\n' +
+            '    import io, base64\\n' +
+            '    from js import appendHtml\\n' +
+            '    buf = io.BytesIO()\\n' +
+            '    _plt.savefig(buf, format="png", dpi=100, bbox_inches="tight", facecolor="#1e1e1e", edgecolor="none")\\n' +
+            '    buf.seek(0)\\n' +
+            '    b64 = base64.b64encode(buf.read()).decode()\\n' +
+            '    buf.close()\\n' +
+            '    appendHtml(\\'<div class="plot-container"><img src="data:image/png;base64,\\' + b64 + \\'"/></div>\\')\\n' +
+            '    _plt.close("all")\\n' +
+            '_plt.show = _inline_show'
+        );
+    }
+    return true;
+}
+
+async function runScript() {
+    var py = await initPyodide();
+    var code = JSON.parse(document.getElementById('code-data').textContent);
+    var files = JSON.parse(document.getElementById('files-data').textContent);
+
+    // Write aux files
+    for (var path in files) {
+        if (path !== '${entryName.replace(/'/g, "\\'")}') {
+            py.FS.writeFile('/home/pyodide/' + path, files[path]);
+        }
+    }
+
+    appendOutput('--- Running ${entryName.replace(/'/g, "\\'")} ---\\n', 'repl-prompt');
+
+    var canRun = await loadPackagesFor(code);
+    if (canRun === false) {
+        document.getElementById('repl-input').focus();
+        return;
+    }
+
+    try {
+        await py.runPythonAsync(code);
+    } catch (err) {
+        appendOutput(err.message || String(err), 'stderr');
+    }
+    appendOutput('\\n', 'stdout');
+    scrollBottom();
+    document.getElementById('repl-input').focus();
+}
+
+// REPL input handler
+var replInput = document.getElementById('repl-input');
+replInput.addEventListener('keydown', async function(e) {
+    if (e.key === 'Enter') {
+        var cmd = replInput.value;
+        replInput.value = '';
+        if (!cmd.trim()) return;
+        history.push(cmd);
+        histIdx = history.length;
+
+        appendOutput('>>> ' + cmd + '\\n', 'repl-in');
+
+        // Handle !pip install commands
+        if (cmd.trim().startsWith('!pip install') || cmd.trim().startsWith('pip install')) {
+            var pkgName = cmd.replace(/!?pip\\s+install\\s+/,'').trim();
+            if (pkgName) {
+                try {
+                    var py = await initPyodide();
+                    await py.loadPackage('micropip');
+                    var micropip = py.pyimport('micropip');
+                    setStatus('Installing ' + pkgName + '...');
+                    await micropip.install(pkgName);
+                    appendOutput('Successfully installed ' + pkgName + '\\n', 'stdout');
+                    setStatus('');
+                } catch(e) {
+                    appendOutput('Failed to install ' + pkgName + ': ' + (e.message || e) + '\\n', 'stderr');
+                    setStatus('');
+                }
+            }
+            scrollBottom();
+            return;
+        }
+
+        try {
+            var py = await initPyodide();
+            await loadPackagesFor(cmd);
+
+            // Pass command via globals to avoid quoting issues
+            py.globals.set('_repl_cmd', cmd);
+            var result = await py.runPythonAsync(
+                '_repl_result = None\\n' +
+                'try:\\n' +
+                '    _repl_code = compile(_repl_cmd, "<repl>", "eval")\\n' +
+                '    _repl_result = eval(_repl_code)\\n' +
+                'except SyntaxError:\\n' +
+                '    exec(compile(_repl_cmd, "<repl>", "exec"))\\n' +
+                '_repl_result'
+            );
+            if (result !== undefined && result !== null && String(result) !== 'None') {
+                appendOutput(String(result) + '\\n', 'stdout');
+            }
+        } catch (err) {
+            appendOutput(err.message || String(err), 'stderr');
+            appendOutput('\\n', 'stderr');
+        }
+        scrollBottom();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (histIdx > 0) { histIdx--; replInput.value = history[histIdx]; }
+    } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (histIdx < history.length - 1) { histIdx++; replInput.value = history[histIdx]; }
+        else { histIdx = history.length; replInput.value = ''; }
+    }
+});
+
+// Auto-run script on load, then focus REPL
+window.addEventListener('load', function() {
+    setTimeout(async function() {
+        await runScript();
+    }, 100);
+});
+</script>
+</body>
+</html>`;
+            }
+        },
+        {
             name: 'plain',
             matches: () => true,
             render: (frame, version) => {
@@ -698,6 +1076,7 @@ ${escapeHtml(entry.content || '')}
             this.closeBtn = document.getElementById('artifact-panel-close');
             this.downloadBtn = document.getElementById('artifact-download-btn');
             this.versionSelect = document.getElementById('artifact-version-select');
+            this.versionBadge = document.getElementById('artifact-version-badge');
             this.tabButtons = Array.from(document.querySelectorAll('[data-artifact-tab]'));
             this.tabPanels = Array.from(document.querySelectorAll('[data-artifact-panel]'));
             this.previewFrame = document.getElementById('artifact-preview-frame');
@@ -759,6 +1138,15 @@ ${escapeHtml(entry.content || '')}
             this.currentSessionId = null;
             this.activeTab = 'preview';
 
+            // Live streaming state
+            this.isStreaming = false;
+            this._streamBuffer = '';
+            this._contentFound = false;
+
+            // Live patch streaming state
+            this.isPatchStreaming = false;
+            this._patchQueue = Promise.resolve();
+
             // Edit state
             this.editingFile = null;
             this.editedFiles = new Map();  // Track edited file contents
@@ -780,7 +1168,35 @@ ${escapeHtml(entry.content || '')}
 
         bindEvents() {
             this.closeBtn?.addEventListener('click', () => this.close());
-            this.versionSelect?.addEventListener('change', () => this.handleVersionChange());
+
+            // Listen for sandbox messages from preview iframe
+            window.addEventListener('message', (e) => {
+                if (e.data?.type === 'sandbox-app' && e.data.url && this.previewFrame) {
+                    this.previewFrame.src = e.data.url;
+                    this.activeTab = 'preview';
+                    this.switchTab('preview');
+                } else if (e.data?.type === 'sandbox-vnc' && e.data.url && this.previewFrame) {
+                    this.previewFrame.src = e.data.url + 'vnc.html?autoconnect=true';
+                    this.activeTab = 'preview';
+                    this.switchTab('preview');
+                } else if (e.data?.type === 'sandbox-needs-server') {
+                    console.log('[Sandbox] Received sandbox-needs-server message', e.data);
+                    this._showRunOnServer(e.data);
+                }
+            });
+
+            // Also handle sandbox-stdout/stderr from server run
+            this._sandboxAbort = null;
+            this.versionSelect?.addEventListener('change', () => {
+                this.handleVersionChange();
+                if (this.versionBadge) this.versionBadge.value = this.versionSelect.value;
+            });
+            this.versionBadge?.addEventListener('change', () => {
+                if (this.versionSelect) {
+                    this.versionSelect.value = this.versionBadge.value;
+                    this.handleVersionChange();
+                }
+            });
             this.fileSelect?.addEventListener('change', () => this.handleFileSelectChange());
             this.downloadBtn?.addEventListener('click', () => this.downloadZip());
             this.copyFileBtn?.addEventListener('click', () => this.copyCurrentFile());
@@ -1289,7 +1705,7 @@ ${escapeHtml(entry.content || '')}
             }
         }
 
-        openArtifact(artifact, { sessionId = null, reference = null } = {}) {
+        openArtifact(artifact, { sessionId = null, reference = null, initialTab = 'preview' } = {}) {
             if (!artifact) return;
             this.currentArtifact = artifact;
             this.currentSessionId = sessionId || this.currentSessionId;
@@ -1310,8 +1726,8 @@ ${escapeHtml(entry.content || '')}
             if (this.currentVersion) {
                 this.renderVersion(this.currentVersion);
             }
-            this.activeTab = 'preview';
-            this.switchTab('preview');
+            this.activeTab = initialTab;
+            this.switchTab(initialTab);
             this.panel.classList.add('is-open');
             this.panel.setAttribute('aria-hidden', 'false');
             document.body.classList.add('artifact-panel-open');
@@ -1325,6 +1741,23 @@ ${escapeHtml(entry.content || '')}
             // Trigger composer width adjustment
             this.adjustComposerWidth(true);
 
+            // Fetch full artifact from server to get all versions for the dropdown
+            if (this.currentSessionId && artifact.artifactId) {
+                this.fetchArtifact(this.currentSessionId, artifact.artifactId, { force: true })
+                    .then(fullArtifact => {
+                        if (fullArtifact && fullArtifact.versions && fullArtifact.versions.length > 1) {
+                            this.populateVersionSelect(fullArtifact);
+                            // Cache all versions
+                            for (const v of fullArtifact.versions || []) {
+                                if (v.versionId && v.files) {
+                                    this.versionCache.set(v.versionId, v);
+                                }
+                            }
+                        }
+                    })
+                    .catch(() => {}); // silent — dropdown just won't have old versions
+            }
+
             // Mark corresponding pill as active if it exists
             if (reference && reference.artifactId) {
                 const pill = document.querySelector(`.artifact-chat-pill[data-artifact-id="${reference.artifactId}"]`);
@@ -1336,6 +1769,15 @@ ${escapeHtml(entry.content || '')}
 
         close() {
             if (!this.panel) return;
+
+            // Clean up streaming state if active
+            if (this.isStreaming) {
+                this.isStreaming = false;
+                this._streamBuffer = '';
+                this._contentFound = false;
+                this.panel.classList.remove('is-streaming');
+            }
+
             this.panel.classList.remove('is-open');
             this.panel.setAttribute('aria-hidden', 'true');
             document.body.classList.remove('artifact-panel-open', 'chat-area-wide');
@@ -1343,6 +1785,669 @@ ${escapeHtml(entry.content || '')}
             this.adjustComposerWidth(false);
             this.clearActivePills();
             this.activeTab = 'preview';
+        }
+
+        openStreaming() {
+            this.isStreaming = true;
+            this.streamingStartTime = Date.now();
+            this._streamBuffer = '';
+            this._contentFound = false;
+            this._contentStart = 0;
+            this._detectedLang = null;
+            this._detectedPath = null;
+            this._streamFiles = [];
+            this._lastParsePos = 0;
+            this._lastStreamContentLen = 0;
+            this._lastStreamFilePath = null;
+            this._lastStreamFileCount = 0;
+
+            if (this.titleEl) {
+                this.titleEl.textContent = 'Generating...';
+            }
+            if (this.languageBadge) {
+                this.languageBadge.textContent = '';
+            }
+            if (this.versionSelect) {
+                this.versionSelect.innerHTML = '';
+                this.versionSelect.disabled = true;
+            }
+            if (this.currentFileName) {
+                this.currentFileName.textContent = 'Streaming...';
+            }
+            if (this.fileSelect) {
+                this.fileSelect.innerHTML = '<option>Streaming...</option>';
+            }
+
+            // Init CodeMirror for streaming (read-only during stream)
+            this._ensureCodeMirror();
+            if (this.editCodeMirror) {
+                this.editCodeMirror.setValue('');
+                this.editCodeMirror.setOption('readOnly', true);
+                this.editCodeMirror.setOption('mode', 'jsx');
+            }
+
+            // Show CodeMirror, hide old code display
+            if (this.codeDisplay) this.codeDisplay.style.display = 'none';
+            if (this.editCodeMirrorContainer) this.editCodeMirrorContainer.style.display = 'block';
+
+            this.panel.classList.add('is-open', 'is-streaming');
+            this.panel.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('artifact-panel-open');
+            this.activeTab = 'code';
+            this.switchTab('code');
+            this.loadSavedSplit();
+            this.updateOffset(false);
+            this.adjustComposerWidth(true);
+
+            // Refresh after layout settles
+            setTimeout(() => this.editCodeMirror?.refresh(), 50);
+        }
+
+        _ensureCodeMirror() {
+            if (!this.editCodeMirror && typeof CodeMirror !== 'undefined') {
+                this.editCodeMirrorContainer.innerHTML = '';
+                this.editCodeMirror = CodeMirror(this.editCodeMirrorContainer, {
+                    lineNumbers: true,
+                    theme: 'material-darker',
+                    mode: 'javascript',
+                    matchBrackets: true,
+                    autoCloseBrackets: true,
+                    styleActiveLine: true,
+                    indentUnit: 4,
+                    tabSize: 4,
+                    indentWithTabs: false,
+                    lineWrapping: false
+                });
+                this.editCodeMirror.on('change', () => this.handleEditInput());
+            }
+        }
+
+        appendStreamingCode(text) {
+            if (!this.isStreaming) return;
+
+            this._streamBuffer += text;
+
+            // Debounce CodeMirror updates to avoid freezing the browser.
+            // Without this, every token-sized chunk (~5 chars) triggers a full
+            // CodeMirror setValue + re-render. For a 3KB artifact that's ~600
+            // synchronous re-renders. Debouncing to 80ms batches chunks and
+            // updates once per visual frame.
+            if (this._streamDebounce) clearTimeout(this._streamDebounce);
+            this._streamDebounce = setTimeout(() => {
+                this._parseAndDisplayStreamingFiles();
+            }, 150);
+        }
+
+        _parseAndDisplayStreamingFiles() {
+            // Extract all complete file entries from the streaming JSON buffer.
+            // Each file looks like: {"path":"App.jsx","language":"jsx","content":"...code..."}
+            // We find each "content":" and scan for the closing unescaped "
+
+            if (!this._streamFiles) this._streamFiles = [];
+
+            const buf = this._streamBuffer;
+            let searchFrom = this._lastParsePos || 0;
+
+            // Find all "path":"..." + "content":"..." pairs
+            while (searchFrom < buf.length) {
+                // Find next "path" key
+                const pathIdx = buf.indexOf('"path"', searchFrom);
+                if (pathIdx === -1) break;
+
+                // Extract path value
+                const pathValMatch = buf.slice(pathIdx).match(/"path"\s*:\s*"([^"]+)"/);
+                if (!pathValMatch) break;
+
+                // Find "language" near this path
+                const langSearch = buf.slice(pathIdx, pathIdx + 200);
+                const langMatch = langSearch.match(/"language"\s*:\s*"(\w+)"/);
+                const lang = langMatch ? langMatch[1] : 'text';
+
+                // Find "content":" after this path
+                const contentIdx = buf.indexOf('"content"', pathIdx);
+                if (contentIdx === -1) break;
+
+                const contentValMatch = buf.slice(contentIdx).match(/"content"\s*:\s*"/);
+                if (!contentValMatch) break;
+
+                const contentStart = contentIdx + contentValMatch[0].length;
+
+                // Scan for the closing unescaped " of the content value
+                let endIdx = -1;
+                for (let i = contentStart; i < buf.length; i++) {
+                    if (buf[i] === '\\') { i++; continue; }
+                    if (buf[i] === '"') { endIdx = i; break; }
+                }
+
+                const filePath = pathValMatch[1];
+                const isComplete = endIdx !== -1;
+                const rawContent = isComplete
+                    ? buf.slice(contentStart, endIdx)
+                    : buf.slice(contentStart);
+
+                // Update or add this file in our tracking array
+                const existing = this._streamFiles.find(f => f.path === filePath);
+                if (existing) {
+                    existing.content = rawContent;
+                    existing.complete = isComplete;
+                    existing.lang = lang;
+                } else {
+                    this._streamFiles.push({ path: filePath, content: rawContent, complete: isComplete, lang });
+                }
+
+                if (isComplete) {
+                    // Move past this file to look for the next one
+                    searchFrom = endIdx + 1;
+                    this._lastParsePos = searchFrom;
+                } else {
+                    // Content still streaming — stay here
+                    break;
+                }
+            }
+
+            // Display the LAST file that has content (the one currently streaming)
+            if (this._streamFiles.length === 0) return;
+
+            // Find the file currently being written (last incomplete, or last complete if all done)
+            let displayFile = this._streamFiles[this._streamFiles.length - 1];
+            for (let i = this._streamFiles.length - 1; i >= 0; i--) {
+                if (!this._streamFiles[i].complete) {
+                    displayFile = this._streamFiles[i];
+                    break;
+                }
+            }
+
+            // Update file dropdown — only when file list actually changes
+            const fileCount = this._streamFiles.length;
+            if (this.fileSelect && fileCount !== this._lastStreamFileCount) {
+                this._lastStreamFileCount = fileCount;
+                const options = this._streamFiles.map((f, i) =>
+                    `<option value="${i}" ${f.path === displayFile.path ? 'selected' : ''}>${f.path}${f.complete ? ' ✓' : ' ...'}</option>`
+                ).join('');
+                this.fileSelect.innerHTML = options;
+            }
+            if (this.currentFileName && this.currentFileName.textContent !== displayFile.path) {
+                this.currentFileName.textContent = displayFile.path;
+            }
+
+            // Display in CodeMirror: append delta instead of full replace
+            const content = this._unescapeJsonString(displayFile.content);
+            if (this.editCodeMirror && this.isStreaming) {
+                const mode = this.getCodeMirrorMode({ language: displayFile.lang, path: displayFile.path });
+                if (this.editCodeMirror.getOption('mode') !== mode) {
+                    this.editCodeMirror.setOption('mode', mode);
+                }
+
+                const prevLen = this._lastStreamContentLen || 0;
+                const currentVal = this.editCodeMirror.getValue();
+
+                if (displayFile.path !== this._lastStreamFilePath) {
+                    // File switched — full replace needed
+                    this.editCodeMirror.setValue(content);
+                    this._lastStreamFilePath = displayFile.path;
+                    this._lastStreamContentLen = content.length;
+                } else if (content.length > prevLen && currentVal.length === prevLen) {
+                    // Same file, content grew — append the delta only
+                    const delta = content.slice(prevLen);
+                    const lastLine = this.editCodeMirror.lastLine();
+                    const lastCh = this.editCodeMirror.getLine(lastLine).length;
+                    this.editCodeMirror.replaceRange(delta, { line: lastLine, ch: lastCh });
+                    this._lastStreamContentLen = content.length;
+                } else if (content !== currentVal) {
+                    // Content changed in unexpected way — full replace
+                    this.editCodeMirror.setValue(content);
+                    this._lastStreamContentLen = content.length;
+                }
+
+                // Auto-scroll to bottom
+                this.editCodeMirror.scrollIntoView({ line: this.editCodeMirror.lineCount() - 1, ch: 0 });
+            } else if (this.codeBlock) {
+                const prismLang = displayFile.lang === 'jsx' ? 'javascript' : displayFile.lang;
+                this.codeBlock.className = `language-${prismLang}`;
+                this.codeBlock.textContent = content;
+            }
+        }
+
+        _unescapeJsonString(str) {
+            // Process all JSON string escapes in one pass
+            return str.replace(/\\(n|t|r|"|\\|\/)/g, (match, ch) => {
+                switch (ch) {
+                    case 'n': return '\n';
+                    case 't': return '\t';
+                    case 'r': return '\r';
+                    case '"': return '"';
+                    case '\\': return '\\';
+                    case '/': return '/';
+                    default: return match;
+                }
+            });
+        }
+
+        finalizeStreaming(artifactData, { sessionId = null, reference = null } = {}) {
+            const doFinalize = () => {
+                // Flush any pending debounced update
+                if (this._streamDebounce) {
+                    clearTimeout(this._streamDebounce);
+                    this._streamDebounce = null;
+                    this._parseAndDisplayStreamingFiles();
+                }
+                this.isStreaming = false;
+                this.panel.classList.remove('is-streaming');
+                this._streamBuffer = '';
+                this._contentFound = false;
+
+                // Make CodeMirror editable now that streaming is done
+                if (this.editCodeMirror) {
+                    this.editCodeMirror.setOption('readOnly', false);
+                }
+
+                if (artifactData) {
+                    // openArtifact will render preview + populate code tab properly
+                    this.openArtifact(artifactData, { sessionId, reference });
+                } else {
+                    // Parsing failed — the streamed code stays visible in the code tab
+                    if (this.titleEl) {
+                        this.titleEl.textContent = 'Artifact (raw)';
+                    }
+                }
+            };
+
+            // Ensure user sees code streaming for at least 1.5s before switching to preview
+            const elapsed = Date.now() - (this.streamingStartTime || 0);
+            const minDisplayTime = 1500;
+            if (elapsed < minDisplayTime) {
+                setTimeout(doFinalize, minDisplayTime - elapsed);
+            } else {
+                doFinalize();
+            }
+        }
+
+        applyPatchesVisually(patches, patchResults, finalArtifact, { sessionId = null, reference = null } = {}) {
+            // Open patched artifact on code tab, highlight changed regions,
+            // scroll to first change, then transition to preview.
+            // "Make change visible, not theatrical."
+            if (!finalArtifact) return;
+
+            const applied = patches.filter((p, i) => !patchResults?.[i] || patchResults[i].status === 'applied');
+            const failed = patches.length - applied.length;
+
+            // Open directly on code tab — no flash from preview→code switch
+            this.openArtifact(finalArtifact, { sessionId, reference, initialTab: 'code' });
+
+            // Update title with patch summary
+            const savedTitle = finalArtifact.title;
+            if (this.titleEl) {
+                const summary = failed > 0
+                    ? `Updated (${applied.length} changes, ${failed} failed)`
+                    : `Updated (${applied.length} change${applied.length !== 1 ? 's' : ''})`;
+                this.titleEl.textContent = summary;
+            }
+
+            // Highlight changed regions — switch to the patched file first
+            if (this.codeBlock && applied.length > 0 && this.currentVersion?.files) {
+                // Find which file was patched (use first applied patch's target)
+                const patchedFileName = applied[0].file;
+                const patchedFile = this.currentVersion.files.find(f => f.path === patchedFileName);
+                if (patchedFile && this.currentFile?.path !== patchedFileName) {
+                    this.renderCodeViewer(this.currentVersion, patchedFile);
+                    // Update file dropdown to match
+                    if (this.fileSelect) {
+                        const idx = this.currentVersion.files.indexOf(patchedFile);
+                        if (idx >= 0) this.fileSelect.value = String(idx);
+                    }
+                }
+
+                // Wait two frames for Prism to finish highlighting
+                requestAnimationFrame(() => { requestAnimationFrame(() => {
+                    for (const patch of applied) {
+                        if (!patch.new_string) continue;
+                        // If patch targets a different file than currently shown, skip
+                        if (patch.file !== this.currentFile?.path) continue;
+                        this._highlightTextInElement(this.codeBlock, patch.new_string);
+                    }
+                    const firstMark = this.codeBlock.querySelector('.patch-highlight');
+                    if (firstMark) this._scrollToElement(firstMark);
+                }); });
+            }
+
+            // After 3s, fade highlights and switch to preview
+            setTimeout(() => {
+                if (this.codeBlock) {
+                    this.codeBlock.querySelectorAll('.patch-highlight').forEach(el => {
+                        el.classList.add('patch-highlight-fade');
+                    });
+                }
+                // Remove marks and switch tab after fade completes
+                setTimeout(() => {
+                    if (this.codeBlock) {
+                        this.codeBlock.querySelectorAll('.patch-highlight').forEach(el => {
+                            const parent = el.parentNode;
+                            while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                            parent.removeChild(el);
+                        });
+                    }
+                    this.activeTab = 'preview';
+                    this.switchTab('preview');
+                    if (this.titleEl && savedTitle) {
+                        this.titleEl.textContent = savedTitle;
+                    }
+                }, 400);
+            }, 3000);
+        }
+
+        openPatchStreaming() {
+            if (!this.currentVersion || !this.codeBlock) return;
+
+            this.isPatchStreaming = true;
+            this._patchQueue = Promise.resolve();
+
+            // Exit edit mode so patch animations show on the code display
+            if (this.isEditMode) {
+                this.exitEditMode();
+            }
+
+            // Switch to code tab showing current (pre-patch) code
+            this.activeTab = 'code';
+            this.switchTab('code');
+
+            if (this.titleEl) {
+                this.titleEl.textContent = 'Updating...';
+            }
+
+            // Ensure panel is open
+            if (!this.panel.classList.contains('is-open')) {
+                this.panel.classList.add('is-open');
+                this.panel.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('artifact-panel-open');
+                this.loadSavedSplit();
+                this.updateOffset(false);
+                this.adjustComposerWidth(true);
+            }
+        }
+
+        applyLivePatch(file, oldStr, newStr) {
+            if (!this.isPatchStreaming) return;
+            this._patchQueue = this._patchQueue.then(() => this._animatePatch(file, oldStr, newStr));
+        }
+
+        async _animatePatch(file, oldStr, newStr) {
+            if (!this.codeBlock) return;
+
+            // Switch to target file if needed
+            const needsSwitch = this.currentVersion?.files && this.currentFile?.path !== file;
+            if (needsSwitch) {
+                const targetFile = this.currentVersion.files.find(f => f.path === file);
+                if (targetFile) {
+                    // Clear previous file's marks before switching
+                    this.codeBlock.querySelectorAll('.patch-removing, .patch-added').forEach(el => {
+                        const parent = el.parentNode;
+                        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                        parent.removeChild(el);
+                    });
+                    this.renderCodeViewer(this.currentVersion, targetFile);
+                    if (this.fileSelect) {
+                        const idx = this.currentVersion.files.indexOf(targetFile);
+                        if (idx >= 0) this.fileSelect.value = String(idx);
+                    }
+                    // Extra frame wait for Prism highlight after file switch
+                    await new Promise(r => requestAnimationFrame(r));
+                }
+            }
+
+            // Wait a frame for render to settle
+            await new Promise(r => requestAnimationFrame(r));
+
+            const codeText = this.codeBlock.textContent || '';
+
+            // Normalize for matching (JSON may have literal \n)
+            let searchOld = oldStr;
+            if (!codeText.includes(searchOld)) {
+                searchOld = searchOld.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+            }
+            if (!codeText.includes(searchOld)) return; // can't find it, skip
+
+            // Highlight old code in red
+            this._highlightTextInElement(this.codeBlock, searchOld, 'patch-removing');
+            const removeMarks = this.codeBlock.querySelectorAll('.patch-removing');
+            if (removeMarks.length > 0) this._scrollToElement(removeMarks[0]);
+
+            // Pause so user sees the red highlight
+            await new Promise(r => setTimeout(r, 400));
+
+            // Replace all old marks with a single green mark containing new code
+            if (removeMarks.length > 0) {
+                const addMark = document.createElement('mark');
+                addMark.className = 'patch-added';
+                addMark.textContent = newStr;
+                removeMarks[0].parentNode.insertBefore(addMark, removeMarks[0]);
+                // Remove all old red marks
+                removeMarks.forEach(m => m.parentNode.removeChild(m));
+                // Scroll to follow the green replacement
+                this._scrollToElement(addMark);
+            }
+
+            // Update in-memory file content so subsequent patches match correctly
+            if (this.currentFile) {
+                this.currentFile.content = (this.currentFile.content || '').replace(oldStr, newStr);
+            }
+
+            // Brief pause to show green before next patch
+            await new Promise(r => setTimeout(r, 300));
+        }
+
+        finalizePatchStreaming(artifact, { sessionId = null, reference = null } = {}) {
+            if (!this.isPatchStreaming) return;
+
+            // Wait for animation queue to drain, then switch to final artifact
+            this._patchQueue.then(() => {
+                this.isPatchStreaming = false;
+
+                // Brief pause to show last green highlight
+                setTimeout(() => {
+                    // Remove all patch marks
+                    if (this.codeBlock) {
+                        this.codeBlock.querySelectorAll('.patch-removing, .patch-added').forEach(el => {
+                            const parent = el.parentNode;
+                            while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                            parent.removeChild(el);
+                        });
+                    }
+
+                    // Open the server-patched artifact (authoritative) on Preview
+                    if (artifact) {
+                        this.openArtifact(artifact, { sessionId, reference });
+                    }
+                }, 500);
+            });
+        }
+
+        _showRunOnServer(data) {
+            // Show a "Run on Server" button in the panel header
+            if (this._serverRunBtn) this._serverRunBtn.remove();
+            const btn = document.createElement('button');
+            btn.className = 'artifact-panel__header-action';
+            btn.style.cssText = 'color:#4ec9b0;font-weight:600;';
+            btn.textContent = '\u25b6 Run on Server';
+            btn.onclick = () => {
+                btn.remove();
+                this._serverRunBtn = null;
+                this._runOnServer(data.code, data.files, data.entry);
+            };
+            this._serverRunBtn = btn;
+            const headerRight = document.querySelector('#artifact-panel .artifact-panel__header-right')
+                || document.querySelector('.artifact-panel__header-right');
+            if (headerRight) {
+                headerRight.insertBefore(btn, headerRight.firstChild);
+            } else {
+                // Fallback: put it in the toolbar area of the iframe output
+                console.warn('No header-right found for Run on Server button');
+            }
+        }
+
+        async _runOnServer(code, filesObj, entry) {
+            // Stream output into the preview iframe's terminal
+            const iframe = this.previewFrame;
+            const iframeDoc = iframe?.contentDocument || iframe?.contentWindow?.document;
+            const output = iframeDoc?.getElementById('output');
+            const outputWrap = iframeDoc?.getElementById('output-wrap');
+
+            function append(text, cls) {
+                if (!output) return;
+                const span = iframeDoc.createElement('span');
+                span.className = cls || 'stdout';
+                span.textContent = text;
+                output.appendChild(span);
+                if (outputWrap) outputWrap.scrollTop = outputWrap.scrollHeight;
+            }
+
+            if (output) output.innerHTML = '';
+            append('Connecting to server...\n', 'repl-prompt');
+
+            const fileList = Object.keys(filesObj).map(p => ({path: p, content: filesObj[p]}));
+
+            try {
+                const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                const headers = {'Content-Type': 'application/json'};
+                if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
+
+                const resp = await fetch('/api/sandbox/run', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({code, files: fileList, entry}),
+                    credentials: 'same-origin'
+                });
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buf = '';
+
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    buf += decoder.decode(value, {stream: true});
+                    const lines = buf.split('\n\n');
+                    buf = lines.pop();
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const event = JSON.parse(line.slice(6));
+                            if (event.type === 'stdout') append(event.text, 'stdout');
+                            else if (event.type === 'stderr') append(event.text, 'stderr');
+                            else if (event.type === 'install') append(event.text + '\n', 'repl-prompt');
+                            else if (event.type === 'status') append(event.text + '\n', 'repl-prompt');
+                            else if (event.type === 'exit') append('\nProcess exited with code ' + event.code + '\n', 'repl-prompt');
+                            else if (event.type === 'error') append('Error: ' + event.text + '\n', 'stderr');
+                            else if (event.type === 'app' && event.url) {
+                                append('App running!\n', 'repl-prompt');
+                                this.previewFrame.removeAttribute('srcdoc');
+                                this.previewFrame.src = event.url;
+                                this.activeTab = 'preview';
+                                this.switchTab('preview');
+                            }
+                            else if (event.type === 'vnc' && event.vnc_port) {
+                                append('GUI running! Loading display...\n', 'repl-prompt');
+                                // Clear srcdoc first — srcdoc takes priority over src in browsers
+                                this.previewFrame.removeAttribute('srcdoc');
+                                this.previewFrame.src = '/sandbox-vnc/' + event.vnc_port + '/vnc_lite.html?autoconnect=true&resize=scale&path=sandbox-vnc/' + event.vnc_port + '/websockify';
+                                this.activeTab = 'preview';
+                                this.switchTab('preview');
+                            }
+                        } catch(e) {}
+                    }
+                }
+            } catch (err) {
+                append('Server error: ' + err.message + '\n', 'stderr');
+            }
+        }
+
+        /**
+         * Highlight a substring within an element by wrapping matching text nodes
+         * in <mark> tags — preserves existing DOM structure (Prism spans, etc.)
+         */
+        _highlightTextInElement(root, searchStr, className = 'patch-highlight') {
+            if (!searchStr || !root) return;
+            const normalized = searchStr.replace(/\r\n/g, '\n');
+
+            // Collect all text nodes in order
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            const textNodes = [];
+            let node;
+            while ((node = walker.nextNode())) textNodes.push(node);
+
+            // Build concatenated text with node index mapping
+            let fullText = '';
+            const map = []; // map[charIndex] = { node, offset }
+            for (const tn of textNodes) {
+                const text = tn.nodeValue;
+                for (let i = 0; i < text.length; i++) {
+                    map.push({ node: tn, offset: i });
+                }
+                fullText += text;
+            }
+
+            // Find the substring in the concatenated text
+            const idx = fullText.indexOf(normalized);
+            if (idx === -1) return;
+
+            // Determine which text nodes are spanned by the match
+            const startEntry = map[idx];
+            const endEntry = map[idx + normalized.length - 1];
+            if (!startEntry || !endEntry) return;
+
+            // Collect unique nodes involved in the match
+            const startNode = startEntry.node;
+            const startOffset = startEntry.offset;
+            const endNode = endEntry.node;
+            const endOffset = endEntry.offset;
+
+            // Use Range to wrap the match
+            try {
+                const range = document.createRange();
+                range.setStart(startNode, startOffset);
+                range.setEnd(endNode, endOffset + 1);
+
+                const mark = document.createElement('mark');
+                mark.className = className;
+                range.surroundContents(mark);
+            } catch (e) {
+                // surroundContents fails if range crosses element boundaries.
+                // Fallback: wrap each line's text nodes individually.
+                const lines = normalized.split('\n');
+                let searchPos = idx;
+                for (const line of lines) {
+                    if (!line) { searchPos += 1; continue; } // skip newline char
+                    const lineStart = map[searchPos];
+                    const lineEnd = map[searchPos + line.length - 1];
+                    if (lineStart && lineEnd) {
+                        try {
+                            const r = document.createRange();
+                            r.setStart(lineStart.node, lineStart.offset);
+                            r.setEnd(lineEnd.node, lineEnd.offset + 1);
+                            const m = document.createElement('mark');
+                            m.className = className;
+                            r.surroundContents(m);
+                        } catch (_) { /* skip this line */ }
+                    }
+                    searchPos += line.length + 1; // +1 for newline
+                }
+            }
+        }
+
+        _scrollToElement(el) {
+            // Scroll within the code section only — don't use scrollIntoView
+            // which scrolls ALL ancestor containers including the panel
+            const codeSection = document.getElementById('artifact-code-panel');
+            if (!codeSection || !el) return;
+            const sectionRect = codeSection.getBoundingClientRect();
+            const elRect = el.getBoundingClientRect();
+            const offset = elRect.top - sectionRect.top - (sectionRect.height / 2) + (elRect.height / 2);
+            codeSection.scrollBy({ top: offset, behavior: 'smooth' });
+        }
+
+        _escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
         }
 
         adjustComposerWidth(isOpen) {
@@ -1409,16 +2514,45 @@ ${escapeHtml(entry.content || '')}
         populateVersionSelect(artifact) {
             if (!this.versionSelect) return;
             this.versionSelect.innerHTML = '';
-            (artifact.versions || []).forEach(version => {
-                const option = document.createElement('option');
-                option.value = version.versionId;
-                option.textContent = `v${version.versionNumber}`;
-                if (artifact.activeVersionId === version.versionId) {
-                    option.selected = true;
+
+            const versions = artifact.versions || [];
+            const versionCount = artifact.versionCount || versions.length || 1;
+
+            // If we only have the active version but know there are more,
+            // build placeholder entries so the dropdown isn't disabled
+            if (versions.length <= 1 && versionCount > 1) {
+                for (let i = 1; i <= versionCount; i++) {
+                    const option = document.createElement('option');
+                    if (i === versionCount && versions.length === 1) {
+                        option.value = versions[0].versionId;
+                        option.textContent = `v${i}`;
+                        option.selected = true;
+                    } else {
+                        option.value = `placeholder-v${i}`;
+                        option.textContent = `v${i}`;
+                    }
+                    this.versionSelect.appendChild(option);
                 }
-                this.versionSelect.appendChild(option);
-            });
-            this.versionSelect.disabled = (artifact.versions || []).length <= 1;
+            } else {
+                versions.forEach(version => {
+                    const option = document.createElement('option');
+                    option.value = version.versionId;
+                    option.textContent = `v${version.versionNumber}`;
+                    if (artifact.activeVersionId === version.versionId) {
+                        option.selected = true;
+                    }
+                    this.versionSelect.appendChild(option);
+                });
+            }
+
+            this.versionSelect.disabled = versionCount <= 1;
+
+            // Sync header version badge
+            if (this.versionBadge) {
+                this.versionBadge.innerHTML = this.versionSelect.innerHTML;
+                this.versionBadge.value = this.versionSelect.value;
+                this.versionBadge.disabled = this.versionSelect.disabled;
+            }
         }
 
         updateHeader(artifact) {
@@ -1622,7 +2756,11 @@ ${escapeHtml(entry.content || '')}
             if (isNaN(selectedIndex) || selectedIndex < 0) return;
             const file = this.currentVersion.files[selectedIndex];
             if (file) {
-                this.renderCodeViewer(this.currentVersion, file);
+                if (this.isEditMode && this.editCodeMirror) {
+                    this.loadFileForEditing(file);
+                } else {
+                    this.renderCodeViewer(this.currentVersion, file);
+                }
             }
         }
 
@@ -1807,10 +2945,15 @@ ${escapeHtml(entry.content || '')}
             });
 
             // Initialize tab content when switching
+            clearTimeout(this._autoEditTimer);
             if (target === 'code' && this.currentVersion) {
-                // Exit edit mode if switching to code tab
-                if (this.isEditMode) {
-                    this.exitEditMode();
+                // Auto-enter edit mode when switching to code tab (not during streaming)
+                if (!this.isEditMode && !this.isPatchStreaming && !this.isStreaming) {
+                    this._autoEditTimer = setTimeout(() => {
+                        if (!this.isStreaming && !this.isPatchStreaming) {
+                            this.enterEditMode();
+                        }
+                    }, 50);
                 }
             } else if (target === 'diff' && this.currentArtifact) {
                 this.initializeDiffTab(this.currentArtifact);
@@ -2135,7 +3278,7 @@ ${escapeHtml(entry.content || '')}
         }
 
         loadFileForEditing(file) {
-            if (!file || !this.editCodeMirror || !this.editCurrentFileName) return;
+            if (!file || !this.editCodeMirror) return;
 
             this.editingFile = file;
             this.originalFileContent = file.content || '';
@@ -2150,7 +3293,7 @@ ${escapeHtml(entry.content || '')}
             const mode = this.getCodeMirrorMode(file);
             this.editCodeMirror.setOption('mode', mode);
 
-            this.editCurrentFileName.textContent = file.path || 'File';
+            if (this.currentFileName) this.currentFileName.textContent = file.path || 'File';
 
             // Update button states
             const hasChanges = this.editedFiles.has(file.path);
@@ -2214,9 +3357,13 @@ ${escapeHtml(entry.content || '')}
             if (currentContent !== originalContent) {
                 this.editedFiles.set(this.editingFile.path, currentContent);
                 this.updateEditButtons(true);
+                // Auto-save after 2s of inactivity
+                clearTimeout(this._autoSaveTimer);
+                this._autoSaveTimer = setTimeout(() => this.saveEdits(), 2000);
             } else {
                 this.editedFiles.delete(this.editingFile.path);
                 this.updateEditButtons(this.editedFiles.size > 0);
+                clearTimeout(this._autoSaveTimer);
             }
         }
 
@@ -2320,24 +3467,9 @@ ${escapeHtml(entry.content || '')}
 
             this.isEditMode = true;
 
-            // Initialize CodeMirror if not already created
-            if (!this.editCodeMirror && typeof CodeMirror !== 'undefined') {
-                this.editCodeMirrorContainer.innerHTML = ''; // Clear container
-                this.editCodeMirror = CodeMirror(this.editCodeMirrorContainer, {
-                    lineNumbers: true,
-                    theme: 'material-darker',
-                    mode: 'javascript',
-                    matchBrackets: true,
-                    autoCloseBrackets: true,
-                    styleActiveLine: true,
-                    indentUnit: 4,
-                    tabSize: 4,
-                    indentWithTabs: false,
-                    lineWrapping: false
-                });
-
-                // Listen for changes
-                this.editCodeMirror.on('change', () => this.handleEditInput());
+            this._ensureCodeMirror();
+            if (this.editCodeMirror) {
+                this.editCodeMirror.setOption('readOnly', false);
             }
 
             // Get current file from code viewer

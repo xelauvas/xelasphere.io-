@@ -130,6 +130,43 @@ class MemoryExtractor:
             (r"(?:must not|should never|prohibited)\s+(.+?)(?:\.|$)",
              "no_{0}", 0.90),
         ],
+        MemoryType.FEEDBACK: [
+            # User corrections - "no not that", "that's wrong", "I meant X"
+            (r"(?:no,?\s+)?(?:not that|that'?s (?:wrong|not (?:right|what i (?:meant|wanted))))\s*[,.]?\s*(?:i (?:meant|want(?:ed)?)|it should be)\s+(.+?)(?:\.|$)",
+             "correction", 0.85),
+            # "Don't do X" / "stop doing X" (behavioral feedback, not constraints)
+            (r"(?:stop|quit|don't keep|please (?:stop|don't))\s+(ask(?:ing)?|repeat(?:ing)?|summar(?:izing|ising)|explain(?:ing)?|adding|doing)\s*(.+?)(?:\.|$)",
+             "stop_{0}", 0.85),
+            # Positive feedback - "yes exactly", "perfect", "that's what I wanted"
+            (r"(?:yes,?\s+)?(?:exactly|perfect|that'?s (?:exactly )?(?:what i (?:wanted|meant|needed))|(?:great|good),?\s+(?:keep|do) (?:that|it) (?:like that|that way))",
+             "confirmed_approach", 0.80),
+            # "I prefer X over Y" / "X works better than Y" (approach preference)
+            (r"(?:i prefer|(?:that|x) (?:works|worked) (?:better|well)|(?:do|use) it (?:like|that) (?:way|this))\s*(.+?)(?:\.|$)",
+             "preferred_approach", 0.80),
+            # "Last time X didn't work" / "X caused problems"
+            (r"(?:last time|before|previously)\s+(?:that|it|this)\s+(?:didn'?t work|caused|broke|failed|was wrong)",
+             "past_failure", 0.80),
+            # Explicit "from now on" / "in the future" directives
+            (r"(?:from now on|in the future|going forward|next time)\s+(.+?)(?:\.|$)",
+             "directive", 0.90),
+        ],
+        MemoryType.REFERENCE: [
+            # URLs with context - "check X at url" / "X is at url"
+            (r"(?:check|see|look at|find (?:it|this) (?:at|on)|(?:it|this) is (?:at|on))\s+(https?://[^\s]+)",
+             "external_url", 0.85),
+            # Tool/service references - "we use X for Y"
+            (r"(?:we|i) use\s+([A-Za-z0-9\s]+?)\s+(?:for|to)\s+([a-zA-Z\s]+?)(?:\.|$)",
+             "tool_{0}", 0.80),
+            # "X is tracked in Y" / "bugs are in Y"
+            (r"(?:[a-zA-Z\s]+)\s+(?:is|are)\s+(?:tracked|managed|stored|logged|documented)\s+(?:in|on|at)\s+([A-Za-z0-9\s]+?)(?:\.|$)",
+             "tracker", 0.80),
+            # Documentation references - "docs are at X"
+            (r"(?:docs?|documentation|wiki|guide|manual)\s+(?:is|are)\s+(?:at|on|in)\s+(.+?)(?:\.|$)",
+             "docs_location", 0.85),
+            # Email/contact references
+            (r"(?:contact|reach|email|send (?:it )?to)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
+             "contact", 0.85),
+        ],
     }
 
     # Topics to extract from context
@@ -276,19 +313,42 @@ class MemoryExtractor:
             return []
 
         try:
-            prompt = f"""Extract any personal information, preferences, or facts the user is stating about themselves from this message.
+            prompt = f"""Extract facts, preferences, feedback, and references from this user message.
 
 User message: "{text}"
 
-For each fact found, provide:
-- type: one of [profile, preference, project, constraint]
-- key: a short label (e.g., "name", "timezone", "coding_style")
-- value: the extracted information
-- confidence: 0.0 to 1.0 (how certain are you?)
+MEMORY TYPES — extract into these categories:
+
+1. **profile** — User identity: name, role, timezone, location, expertise, background.
+   Save when: user states who they are. Example: "I'm a data scientist" → key: "role", value: "data scientist"
+
+2. **preference** — How the user wants things done: response style, format, tone, tools.
+   Save when: user states how they like things. Example: "keep answers short" → key: "response_length", value: "short"
+
+3. **project** — Current work, goals, tech stack, deadlines, team context.
+   Save when: user describes what they're working on. Example: "building a Flask chat app" → key: "current_project", value: "Flask chat app"
+
+4. **constraint** — Hard rules, allergies, prohibitions, safety limits.
+   Save when: user sets a boundary. Example: "never use jQuery" → key: "no_jquery", value: "avoid jQuery in all code"
+
+5. **feedback** — Corrections AND confirmations of your behavior. What worked, what didn't, approach preferences.
+   Save when: user corrects you ("no not that", "stop summarizing") OR confirms an approach ("yes exactly", "perfect, keep doing that").
+   IMPORTANT: Include WHY if the user gives a reason. Structure value as: "rule. Why: reason. How to apply: when/where."
+   Example: "stop asking clarifying questions when I give you enough info" → key: "stop_unnecessary_questions", value: "Act on requests when enough info is provided. Why: user finds excessive questions frustrating. How to apply: when task type and key details are clear, produce output instead of asking."
+
+6. **reference** — Pointers to external systems, URLs, tools, contacts, documentation.
+   Save when: user mentions where information lives. Example: "bugs are tracked in Linear" → key: "bug_tracker", value: "Linear"
+
+For each fact, provide:
+- type: one of [profile, preference, project, constraint, feedback, reference]
+- key: a short snake_case label
+- value: the extracted information (for feedback type, include Why/How if available)
+- confidence: 0.0 to 1.0
 - quote: the exact text this came from
 
 Return as JSON array. If nothing found, return [].
-Only extract EXPLICIT statements, not inferences."""
+Only extract EXPLICIT statements, not inferences.
+For feedback type, record BOTH corrections AND confirmations — not just mistakes."""
 
             # Call LLM (implementation depends on client)
             response = self.llm_client.extract_memory(prompt)

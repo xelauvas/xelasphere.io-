@@ -774,8 +774,17 @@ class ChatManager {
 
     handleTemporaryPromptSent() {
         if (!this.temporarySessionId || !this.temporaryCentered) return;
-        this.temporaryCentered = false;
-        this.updateTemporaryUiState();
+
+        // Animate the input from center to bottom (like ChatGPT)
+        // Step 1: Add animation class while still in centered state
+        document.body.classList.add('composer-animating-to-bottom');
+
+        // Step 2: After animation completes, switch to normal state
+        setTimeout(() => {
+            document.body.classList.remove('composer-animating-to-bottom');
+            this.temporaryCentered = false;
+            this.updateTemporaryUiState();
+        }, 420); // Match the 0.4s CSS transition
     }
     
     manageLoadMoreSpinner(show, type = 'default', position = 'bottom') {
@@ -3802,6 +3811,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 content: content,
                 originalPrompt: content, // Store original prompt
                 isHistory: true,
+                timestamp: message.timestamp,
                 attachments: userAttachments,
                 suppressText: !!message.suppress_text_user,
                 messageKey
@@ -3821,6 +3831,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 content: userPromptSource,
                 originalPrompt: userPromptSource,
                 isHistory: true,
+                timestamp: message.timestamp,
                 attachments: userAttachments,
                 suppressText: false,
                 messageKey
@@ -3852,6 +3863,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                     content: '',
                     isCode: false,
                     isHistory: true,
+                    timestamp: message.timestamp,
                     attachments: aiAttachments,
                     suppressText: true,
                     forceButtons: true,
@@ -3879,6 +3891,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 content: suppressAiText ? '' : aiContent,
                 isCode: message.is_code || false,
                 isHistory: true,
+                timestamp: message.timestamp,
                 attachments: aiAttachments,
                 suppressText: suppressAiText,
                 forceButtons: true,
@@ -4051,6 +4064,8 @@ async loadChatHistory(pageToken = null, limit = 10) {
         if (typeof sender === 'string') {
             messageDiv.dataset.sender = sender.toLowerCase();
         }
+        // Set timestamp: use original message time for history, current time for live
+        messageDiv.dataset.timestamp = timestamp || new Date().toISOString();
         if (messageKey) {
             messageDiv.dataset.messageKey = messageKey;
         } else if (!messageDiv.dataset.messageKey) {

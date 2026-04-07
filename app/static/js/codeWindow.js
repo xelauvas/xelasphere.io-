@@ -1,3 +1,86 @@
+// Typewriter animation for session titles (ChatGPT-style)
+function typewriteTitle(element, text, speed = 28) {
+    // Cancel any in-progress typewriter on this element
+    if (element._typewriteTimer) {
+        clearTimeout(element._typewriteTimer);
+        element._typewriteTimer = null;
+    }
+    element.textContent = '';
+    let i = 0;
+    function tick() {
+        if (i < text.length) {
+            element.textContent += text[i];
+            i++;
+            element._typewriteTimer = setTimeout(tick, speed);
+        } else {
+            element._typewriteTimer = null;
+        }
+    }
+    tick();
+}
+
+// Incremental JSON parser helpers for live patch streaming
+function scanClosingQuote(str, from) {
+    for (let i = from; i < str.length; i++) {
+        if (str[i] === '\\') { i++; continue; }
+        if (str[i] === '"') return i;
+    }
+    return -1;
+}
+
+function unescapePatchJsonString(str) {
+    return str.replace(/\\(n|t|r|"|\\|\/)/g, (_, ch) => {
+        switch (ch) {
+            case 'n': return '\n';
+            case 't': return '\t';
+            case 'r': return '\r';
+            case '"': return '"';
+            case '\\': return '\\';
+            case '/': return '/';
+            default: return _;
+        }
+    });
+}
+
+function extractCompletePatchesFromBuffer(buffer, skip) {
+    const patches = [];
+    let searchFrom = 0;
+
+    while (searchFrom < buffer.length) {
+        const fileIdx = buffer.indexOf('"file"', searchFrom);
+        if (fileIdx === -1) break;
+
+        const fileMatch = buffer.slice(fileIdx).match(/"file"\s*:\s*"([^"]+)"/);
+        if (!fileMatch) break;
+
+        const oldIdx = buffer.indexOf('"old_string"', fileIdx);
+        if (oldIdx === -1) break;
+
+        const oldColonQuote = buffer.indexOf('"', oldIdx + '"old_string"'.length + 1);
+        if (oldColonQuote === -1) break;
+        const oldEnd = scanClosingQuote(buffer, oldColonQuote + 1);
+        if (oldEnd === -1) break;
+
+        const newIdx = buffer.indexOf('"new_string"', oldEnd);
+        if (newIdx === -1) break;
+
+        const newColonQuote = buffer.indexOf('"', newIdx + '"new_string"'.length + 1);
+        if (newColonQuote === -1) break;
+        const newEnd = scanClosingQuote(buffer, newColonQuote + 1);
+        if (newEnd === -1) break;
+
+        patches.push({
+            file: fileMatch[1],
+            old_string: unescapePatchJsonString(buffer.slice(oldColonQuote + 1, oldEnd)),
+            new_string: unescapePatchJsonString(buffer.slice(newColonQuote + 1, newEnd)),
+        });
+
+        searchFrom = newEnd + 1;
+    }
+
+    return patches.slice(skip);
+}
+
 // Configuration object for constants
 const CONFIG = Object.freeze({
     ICONS: {
@@ -482,8 +565,8 @@ const ProgressiveTextDisplay = (() => {
 
                     // Auto-scroll (only if user is pinned to bottom)
                     if (window.scrollState?.isPinnedToBottom) {
-                        if (typeof scrollManager !== 'undefined' && scrollManager.scrollToBottom) {
-                            scrollManager.scrollToBottom(false); // Don't force - respect user scroll
+                        if (typeof window.scrollToBottom === 'function') {
+                            window.scrollToBottom(false);
                         }
                     }
                 }
@@ -849,8 +932,8 @@ const ThinkingIndicator = (() => {
 
         // Auto-scroll only if user is pinned to bottom
         if (window.scrollState?.isPinnedToBottom) {
-            if (typeof scrollManager !== 'undefined' && scrollManager.scrollToBottom) {
-                scrollManager.scrollToBottom(false);
+            if (typeof window.scrollToBottom === 'function') {
+                window.scrollToBottom(false);
             }
         }
     }
@@ -2252,6 +2335,7 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
         messageDiv.dataset.messageKey = messageId;
     }
     messageDiv.dataset.sender = normalizedSender;
+    messageDiv.dataset.timestamp = new Date().toISOString();
 
     if (Array.isArray(searchResults) && searchResults.length) {
         try {
@@ -2642,10 +2726,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             }
         }
 
-        // Scroll user message to top (ChatGPT-style) - only for existing conversations
-        // For first message in new chat, let normal scroll behavior handle it
-        if (primaryUserMessage && hasExistingHistory) {
-            window._keepMessageAtTop = true;
+        // Claude-style: keep view pinned to bottom, new messages appear below.
+        // No scroll-to-top — just ensure we're at the bottom showing the user's message.
+        if (primaryUserMessage) {
+            if (typeof window.scrollToBottom === 'function') {
+                window.scrollToBottom(true, true);
+            }
         }
 
         // Show indicator AFTER user message (so it appears below, where response will be)
@@ -2658,12 +2744,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         } else {
             // Show simple pulsing dot for non-DeepSeek models
             showSimplePulsingDot();
-        }
-
-        // Scroll user message to top (ChatGPT-style) - only if there's prior chat history
-        // For the first message in a new chat, don't scroll - message is already visible
-        if (primaryUserMessage && typeof window.scrollUserMessageToTop === 'function' && hasExistingHistory) {
-            window.scrollUserMessageToTop(primaryUserMessage);
         }
 
         // Bump session to top of sidebar (most recently active)
@@ -2716,8 +2796,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             formData.append('page_id', pageId);
         }
 
-        // Check if using a streamable model (DeepSeek or Moonshot/Kimi)
-        // Skip streaming when images are attached — vision needs the regular /chat endpoint
+        // Check if using a streamable model (DeepSeek or Moonshot/Kimi only)
+        // Auto mode uses /chat so the smart router picks the best model for the task.
+        // Skip streaming when images are attached — vision needs the regular /chat endpoint.
         const hasImages = attachments.some(a => a.isImage || a.type?.startsWith('image/'));
         const isDeepSeek = model.includes('deepseek');
         const isStreamable = (isDeepSeek || model.includes('kimi')) && !hasImages;
@@ -2770,7 +2851,19 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let streamIsEmail = false;
                 let streamEmailData = null;
                 let streamCryptoChart = null;
+                let streamMemoryUpdated = false;
+                let streamDreamNotification = null;
+                let streamArtifactPatches = null;
+                let patchStreamActive = false;
+                let patchStreamBuffer = '';
+                let patchParsedPatches = [];
+                let artifactStreamActive = false;
+                let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
+                // Use array to avoid O(n²) string concatenation per chunk.
+                // streamedContent is only built (joined) when needed.
+                const _contentChunks = [];
+                let _contentJoinedAt = 0;  // index up to which streamedContent is current
 
                 const processLine = (line) => {
                     if (!line.startsWith('data: ')) return;
@@ -2790,23 +2883,86 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             // If not, ThinkingIndicator is hidden anyway, so this is harmless
                             ThinkingIndicator.appendReasoning(chunk.text || '');
                         } else if (chunk.type === 'content') {
-                            // ChatGPT-style: on first content chunk, just enable scrolling
-                            // Don't remove spacer yet - let it stay to prevent jumps
-                            if (isFirstContentChunk) {
-                                isFirstContentChunk = false;
-                                // Signal that real content has arrived
-                                window.scrollState?.contentArrived?.();
+                            const chunkText = chunk.text || '';
+                            // Array push is O(1) vs string concat O(n)
+                            _contentChunks.push(chunkText);
+
+                            // Fast path: once artifact/patch streaming is active,
+                            // only forward to panel. No string joins, no regex, no DOM queries.
+                            if (artifactStreamActive) {
+                                if (window.artifactPanel) {
+                                    window.artifactPanel.appendStreamingCode(chunkText);
+                                }
+                                if (bgRequest) {
+                                    BackgroundRequestManager.appendContent(requestSessionId, chunkText);
+                                }
+                            } else if (patchStreamActive) {
+                                patchStreamBuffer += chunkText;
+                                const newPatches = extractCompletePatchesFromBuffer(patchStreamBuffer, patchParsedPatches.length);
+                                for (const patch of newPatches) {
+                                    patchParsedPatches.push(patch);
+                                    window.artifactPanel.applyLivePatch(patch.file, patch.old_string, patch.new_string);
+                                }
+                                if (bgRequest) {
+                                    BackgroundRequestManager.appendContent(requestSessionId, chunkText);
+                                }
+                            } else {
+                                // Detection phase: not yet in artifact/patch mode.
+                                // Only join the string when we need to run fence detection.
+                                if (isFirstContentChunk) {
+                                    isFirstContentChunk = false;
+                                    window.scrollState?.contentArrived?.();
+                                    ThinkingIndicator.setContentMode();
+                                }
+                                if (bgRequest) {
+                                    BackgroundRequestManager.appendContent(requestSessionId, chunkText);
+                                }
+
+                                // Only run fence detection if chunk contains backtick (cheap check)
+                                if (chunkText.includes('`')) {
+                                    // Rebuild streamedContent only when needed
+                                    streamedContent = _contentChunks.join('');
+                                    _contentJoinedAt = _contentChunks.length;
+
+                                    // --- Artifact fence detection ---
+                                    const panelHasArtifact = window.artifactPanel?.currentArtifact &&
+                                        window.artifactPanel?.panel?.classList.contains('is-open');
+
+                                    if (window.artifactPanel && !panelHasArtifact) {
+                                        const fenceMatch = streamedContent.match(/```artifact(?!_patch)/i);
+                                        if (fenceMatch) {
+                                            artifactStreamActive = true;
+                                            artifactFencePosition = fenceMatch.index;
+                                            window.artifactPanel.openStreaming();
+                                            const fenceEnd = streamedContent.indexOf('\n', fenceMatch.index);
+                                            if (fenceEnd !== -1) {
+                                                const afterFence = streamedContent.slice(fenceEnd + 1);
+                                                if (afterFence) {
+                                                    window.artifactPanel.appendStreamingCode(afterFence);
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // --- Patch fence detection ---
+                                    if (!artifactStreamActive) {
+                                        const patchFenceMatch = streamedContent.match(/```artifact_patch/i);
+                                        if (patchFenceMatch && window.artifactPanel?.currentArtifact) {
+                                            patchStreamActive = true;
+                                            patchStreamBuffer = streamedContent.slice(patchFenceMatch.index);
+                                            patchParsedPatches = [];
+                                            window.artifactPanel.openPatchStreaming();
+                                        }
+                                    }
+                                }
                             }
-                            streamedContent += chunk.text || '';
-                            // Buffer in BackgroundRequestManager
-                            if (bgRequest) {
-                                BackgroundRequestManager.appendContent(requestSessionId, chunk.text || '');
-                            }
-                            // ALWAYS try to update
-                            ThinkingIndicator.setContentMode();
                         } else if (chunk.type === 'done') {
                             console.log('Received done chunk:', chunk);
                             streamedReasoning = chunk.reasoning || streamedReasoning;
+                            // Join accumulated chunks if not already joined
+                            if (_contentChunks.length > _contentJoinedAt) {
+                                streamedContent = _contentChunks.join('');
+                            }
                             streamedContent = chunk.content || streamedContent;
                             streamChatSummary = chunk.chat_summary || streamedContent;
                             streamRenderMode = chunk.render_mode || 'inline';
@@ -2814,6 +2970,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             streamIsEmail = chunk.is_email || false;
                             streamEmailData = chunk.email || null;
                             streamCryptoChart = chunk.crypto_chart || null;
+                            streamMemoryUpdated = chunk.memory_updated || false;
+                            streamDreamNotification = chunk.dream_notification || null;
+                            streamArtifactPatches = chunk.artifact_patches || null;
                             // Use backend's response_id if available for consistency
                             if (chunk.response_id) {
                                 streamResponseId = chunk.response_id;
@@ -2821,9 +2980,36 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             console.log('Parsed artifact from done:', streamArtifact);
                             console.log('Parsed email from done:', streamIsEmail, streamEmailData);
                             if (streamCryptoChart) console.log('Parsed crypto chart:', streamCryptoChart);
+                            // Update session title in sidebar with typewriter animation
+                            if (chunk.session_name) {
+                                const titleName = chunk.session_name.trim();
+                                if (titleName && titleName.toLowerCase() !== 'new chat') {
+                                    // Defer slightly so tab DOM exists after session creation
+                                    setTimeout(() => {
+                                        const mgr = window.chatManager;
+                                        if (mgr && requestSessionId && mgr.chatHistory?.[requestSessionId]) {
+                                            const sess = mgr.chatHistory[requestSessionId];
+                                            if (sess.session_name !== titleName) {
+                                                sess.session_name = titleName;
+                                                sess.autoTitleEligible = false;
+                                                const tab = document.querySelector(`.chat-tab[data-session-id="${requestSessionId}"] .tab-name`);
+                                                if (tab) {
+                                                    typewriteTitle(tab, titleName);
+                                                } else if (typeof mgr.renderChatTabs === 'function') {
+                                                    mgr.renderChatTabs();
+                                                }
+                                            }
+                                        }
+                                    }, 100);
+                                }
+                            }
                         } else if (chunk.type === 'error') {
-                            // API key or other configuration error - show to user
                             const errorText = chunk.text || 'Streaming error';
+                            // If streaming isn't available for this model, fall back silently
+                            if (errorText.includes('Streaming only available')) {
+                                return 'fallback';
+                            }
+                            // API key or other configuration error - show to user
                             if (bgRequest) {
                                 BackgroundRequestManager.errorRequest(requestSessionId, errorText);
                             }
@@ -2853,7 +3039,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     buffer = lines.pop() || '';
 
                     for (const line of lines) {
-                        if (processLine(line) === 'error') return null;
+                        const result = processLine(line);
+                        if (result === 'error') return null;
+                        if (result === 'fallback') throw new Error('Stream fallback');
                     }
 
                     if (done) {
@@ -2983,6 +3171,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         title: streamArtifact.title,
                         type: streamArtifact.type,
                         primaryLanguage: streamArtifact.primaryLanguage,
+                        versionNumber: streamArtifact.activeVersion?.versionNumber || streamArtifact.versionCount || 1,
                         summary: displayContent
                     };
                 }
@@ -3023,6 +3212,53 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     }
                 }
 
+                // Handle artifact panel update
+                if (patchStreamActive && streamArtifact && window.artifactPanel) {
+                    // Live patch streaming was active — finalize with server result
+                    patchStreamActive = false;
+                    const artifactRef = streamArtifactRef || {
+                        artifactId: streamArtifact.artifactId,
+                        title: streamArtifact.title,
+                        type: streamArtifact.type,
+                        primaryLanguage: streamArtifact.primaryLanguage,
+                        summary: displayContent
+                    };
+                    window.artifactPanel.finalizePatchStreaming(streamArtifact, {
+                        sessionId: requestSessionId,
+                        reference: artifactRef
+                    });
+                } else if (streamArtifact && window.artifactPanel) {
+                    const artifactRef = streamArtifactRef || {
+                        artifactId: streamArtifact.artifactId,
+                        title: streamArtifact.title,
+                        type: streamArtifact.type,
+                        primaryLanguage: streamArtifact.primaryLanguage,
+                        summary: displayContent
+                    };
+
+                    if (streamArtifactPatches && streamArtifactPatches.patches && window.artifactPanel.applyPatchesVisually) {
+                        // Fallback: patches arrived but live streaming didn't activate
+                        window.artifactPanel.applyPatchesVisually(
+                            streamArtifactPatches.patches,
+                            streamArtifactPatches.patch_results,
+                            streamArtifact,
+                            { sessionId: requestSessionId, reference: artifactRef }
+                        );
+                    } else if (artifactStreamActive) {
+                        // New artifact was streaming — finalize and show preview
+                        window.artifactPanel.finalizeStreaming(streamArtifact, {
+                            sessionId: requestSessionId,
+                            reference: artifactRef
+                        });
+                    } else {
+                        // Non-streaming — just open the artifact
+                        window.artifactPanel.openArtifact(streamArtifact, {
+                            sessionId: requestSessionId,
+                            reference: artifactRef
+                        });
+                    }
+                }
+
                 // Attach artifact preview if present
                 console.log('Stream artifact data:', { streamArtifact, streamRenderMode, hasPanel: !!window.artifactPanel });
                 if (streamArtifact && messageContainer && window.artifactPanel) {
@@ -3039,7 +3275,34 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     });
                 }
 
-                await scrollManager.scrollToBottom(true);
+                // Show memory updated notice (streaming path)
+                if (streamMemoryUpdated && messageContainer) {
+                    const memoryNotice = document.createElement('div');
+                    memoryNotice.className = 'memory-updated-notice';
+                    memoryNotice.innerHTML = '<span class="memory-notice-icon">✓</span> Memory updated';
+                    messageContainer.before(memoryNotice);
+                    setTimeout(() => {
+                        memoryNotice.classList.add('fade-out');
+                        setTimeout(() => memoryNotice.remove(), 500);
+                    }, 3000);
+                }
+
+                // Dream consolidation notification (streaming path)
+                if (streamDreamNotification && typeof Toast !== 'undefined') {
+                    const dn = streamDreamNotification;
+                    const parts = [];
+                    if (dn.pruned) parts.push(`${dn.pruned} pruned`);
+                    if (dn.merged) parts.push(`${dn.merged} merged`);
+                    if (dn.promoted) parts.push(`${dn.promoted} promoted`);
+                    if (dn.synthesized) parts.push(`${dn.synthesized} new insight${dn.synthesized > 1 ? 's' : ''}`);
+                    if (parts.length > 0) {
+                        Toast.show({ message: `Memory improved: ${parts.join(', ')}`, type: 'info', duration: 5000 });
+                    }
+                }
+
+                if (typeof window.scrollToBottom === 'function') {
+                    window.scrollToBottom(true, true);
+                }
 
                 // Clear request from BackgroundRequestManager (successfully displayed)
                 if (bgRequest) {
@@ -3284,6 +3547,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             artifactPanel_exists: !!window.artifactPanel
         });
 
+        // Show toast if artifact parsing failed
+        if (data.artifact_error && window.Toast) {
+            window.Toast.warning('Artifact update failed: ' + data.artifact_error + '. Try asking again.', 6000);
+        }
+
         // Show artifact pill only for artifact modes, NOT for code_window or inline
         // code_window = small snippets displayed inline without artifact panel
         const showArtifactPill = data.render_mode &&
@@ -3305,6 +3573,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     sessionId,
                     payload: data.artifact
                 });
+                // Auto-open the artifact panel for non-streaming responses
+                if (data.artifact) {
+                    window.artifactPanel.openArtifact(data.artifact, {
+                        sessionId,
+                        reference: artifactRef
+                    });
+                }
             }
             if (manager?.updateLastAiMessage) {
                 manager.updateLastAiMessage({
@@ -3392,6 +3667,20 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             }, 3000);
         }
 
+        // Dream consolidation notification
+        if (data.dream_notification) {
+            const dn = data.dream_notification;
+            const parts = [];
+            if (dn.pruned) parts.push(`${dn.pruned} pruned`);
+            if (dn.merged) parts.push(`${dn.merged} merged`);
+            if (dn.promoted) parts.push(`${dn.promoted} promoted`);
+            if (dn.synthesized) parts.push(`${dn.synthesized} new insight${dn.synthesized > 1 ? 's' : ''}`);
+            if (dn.superseded) parts.push(`${dn.superseded} resolved`);
+            if (parts.length > 0 && window.Toast) {
+                window.Toast.info(`Memory improved: ${parts.join(', ')}`, { duration: 5000 });
+            }
+        }
+
         // Handle guest mode response data
         if (data.guest_mode) {
             // Update guest message count on frontend
@@ -3412,7 +3701,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     if (newName && session.session_name !== newName) {
                         session.session_name = newName;
                         session.autoTitleEligible = false;
-                        if (typeof manager.renderChatTabs === 'function') {
+                        const tab = document.querySelector(`.chat-tab[data-session-id="${sessionId}"] .tab-name`);
+                        if (tab) {
+                            typewriteTitle(tab, newName);
+                        } else if (typeof manager.renderChatTabs === 'function') {
                             manager.renderChatTabs();
                         }
                     }
@@ -3428,7 +3720,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             }
         }
 
-        await scrollManager.scrollToBottom(true);
+        if (typeof window.scrollToBottom === 'function') {
+            window.scrollToBottom(true, true);
+        }
 
         // Clear request from BackgroundRequestManager (response was displayed successfully)
         // Don't call completeRequest here - that's only for buffered responses
@@ -3462,8 +3756,24 @@ async function sendMessage(promptText, messageId = null, options = {}) {
     } finally {
         const stillActive = isSessionActive();
 
-        // ChatGPT-style: mark streaming ended
+        // ChatGPT-style: mark streaming ended and ensure scroll is at bottom
         window.scrollState?.setStreamingState?.(false);
+
+        // Reset scroll lock flags — response is done, scroll should be at bottom
+        if (window._keepMessageAtTop) {
+            window._keepMessageAtTop = false;
+            const chatDisplayEl = document.getElementById('chat-display');
+            if (chatDisplayEl) {
+                chatDisplayEl.classList.remove('scroll-padding-active');
+            }
+        }
+        if (window.scrollState) {
+            window.scrollState.isPinnedToBottom = true;
+        }
+        // Ensure we're at the bottom after response completes
+        if (typeof window.scrollToBottom === 'function') {
+            window.scrollToBottom(true, true);
+        }
 
         // Hide thinking indicator if session is still active
         if (stillActive) {

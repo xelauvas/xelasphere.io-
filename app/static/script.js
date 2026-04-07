@@ -1398,15 +1398,8 @@ function updateMessageContent(messageId, responseText) {
     }
 }
 
-// Handle messaging errors
-function handleMessageError(error, messageId) {
-    console.error('Message error:', error);
-    if (messageId) {
-        updateMessageContent(messageId, `Error: ${error.message}`);
-    } else {
-        displayMessage(`Error: ${error.message}`, 'system', 'text');
-    }
-}
+// NOTE: handleMessageError is defined earlier (~line 1156) with proper AbortError handling.
+// Duplicate removed to prevent silent overwrite.
 
 
 
@@ -1603,6 +1596,11 @@ if (voiceModeButton) {
 }
 
 function showTooltip(element) {
+    // Clean up any existing tooltip to prevent orphaned DOM nodes
+    if (element._tooltip) {
+        element._tooltip.remove();
+        element._tooltip = null;
+    }
     const tooltipText = element.getAttribute('data-tooltip');
     if (tooltipText) {
         const tooltip = document.createElement('div');
@@ -1654,7 +1652,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    fileInput.addEventListener('change', handleFileChange);
+    if (fileInput) fileInput.addEventListener('change', handleFileChange);
     sendButton.addEventListener('click', () => {
         // Mobile: Dismiss keyboard immediately
         dismissMobileKeyboard();
@@ -1666,7 +1664,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    stopIcon.addEventListener('click', abortMessage);
+    stopIcon.addEventListener('click', (e) => { e.stopPropagation(); abortMessage(); });
     if (actionsToggle && actionsMenu) {
         const closeActions = () => {
             actionsMenu.classList.remove('open');
@@ -2159,7 +2157,8 @@ function togglePause() {
 
 function toggleDropdown() {
     const dropdownMenu = document.querySelector('.dropdown-menu');
-    
+    if (!dropdownMenu) return;
+
     // Toggle the active class on the dropdown
     dropdownMenu.classList.toggle('active');
     
@@ -2175,7 +2174,8 @@ function toggleDropdown() {
 
 function handleClickOutside(event) {
     const dropdownMenu = document.querySelector('.dropdown-menu');
-    const profileHeader = document.querySelector('.profile-header'); // Assuming this is the trigger for the dropdown
+    const profileHeader = document.querySelector('.profile-header');
+    if (!profileHeader || !dropdownMenu) return;
 
     // If the click is outside the dropdown and the profile header (or trigger), close the dropdown
     if (!dropdownMenu.contains(event.target) && !profileHeader.contains(event.target)) {
@@ -2184,44 +2184,5 @@ function handleClickOutside(event) {
     }
 }
 
-document.addEventListener("DOMContentLoaded", function () {
-    const textareaContainer = document.querySelector(".textarea-container");
-    const downArrow = document.getElementById("downArrow");
-
-    // Function to toggle visibility of the arrow button
-    function toggleArrowVisibility() {
-        if (textareaContainer.scrollHeight > textareaContainer.clientHeight) {
-            // Show the arrow if the container is scrollable
-            downArrow.classList.add("visible");
-        } else {
-            // Hide the arrow if there's no overflow
-            downArrow.classList.remove("visible");
-        }
-    }
-
-    // Function to check if the user has scrolled to the bottom
-    function handleScroll() {
-        const isAtBottom =
-            textareaContainer.scrollHeight -
-            textareaContainer.scrollTop -
-            textareaContainer.clientHeight <=
-            1;
-
-        if (isAtBottom) {
-            // Hide the arrow when at the bottom
-            downArrow.classList.remove("visible");
-        } else {
-            // Show the arrow otherwise
-            downArrow.classList.add("visible");
-        }
-    }
-
-    // Attach event listeners
-    textareaContainer.addEventListener("scroll", handleScroll);
-
-    // Initialize on load
-    toggleArrowVisibility();
-
-    // Recheck on window resize
-    window.addEventListener("resize", toggleArrowVisibility);
-});
+// Down arrow visibility is handled by scrollState.js via style.display.
+// Removed dead code that toggled a nonexistent .visible CSS class.

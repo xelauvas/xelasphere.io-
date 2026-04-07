@@ -68,7 +68,7 @@ function initScrollState() {
                 scrollToBottom("auto");
                 setTimeout(() => {
                     isProgrammaticScroll = false;
-                }, 50);
+                }, 150);  // Allow smooth scroll animations to complete
             });
         });
     }
@@ -235,6 +235,20 @@ function initScrollState() {
         if (isStreaming) {
             hideDownArrow();
         } else {
+            // Streaming ended — ensure we're in a clean state
+            // If we were in "keep at top" mode, release it now
+            if (waitingForContent) {
+                waitingForContent = false;
+            }
+            if (window._keepMessageAtTop) {
+                window._keepMessageAtTop = false;
+                const chatDisplayEl = document.getElementById('chat-display');
+                if (chatDisplayEl) {
+                    chatDisplayEl.classList.remove('scroll-padding-active');
+                }
+            }
+            // Re-pin to bottom after streaming completes
+            isPinnedToBottom = true;
             updateArrowVisibility();
         }
     };
@@ -280,7 +294,28 @@ function initScrollState() {
     };
 
     window.scrollState.contentArrived = function() {
-        // Keep waitingForContent true to preserve user message at top
+        // When first content arrives during streaming, transition from
+        // "user message at top" to "following the response" mode.
+        // This is how ChatGPT/Claude work: the user message scrolls up,
+        // then once the response starts, the view follows the new content.
+        if (waitingForContent) {
+            waitingForContent = false;
+        }
+        // Re-enable pinned scroll so MutationObserver can keep up with streaming
+        if (isStreaming && !isPinnedToBottom) {
+            // Remove the scroll-to-top padding since we're now following content
+            window._keepMessageAtTop = false;
+            const chatDisplayEl = document.getElementById('chat-display');
+            if (chatDisplayEl) {
+                chatDisplayEl.classList.remove('scroll-padding-active');
+            }
+            isPinnedToBottom = true;
+            isProgrammaticScroll = true;
+            scrollToBottom("auto");
+            setTimeout(() => {
+                isProgrammaticScroll = false;
+            }, 100);
+        }
     };
 
     window.scrollState.setWaitingForContent = function(state) {

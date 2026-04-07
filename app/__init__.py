@@ -90,7 +90,7 @@ def create_app():
         # Content Security Policy (CSP)
         csp_directives = [
             "default-src 'self'",
-            "script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com 'unsafe-inline'",
+            "script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com 'unsafe-inline' 'unsafe-eval'",
             "style-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com 'unsafe-inline'",
             "img-src 'self' data: https:",
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net",
@@ -184,6 +184,10 @@ def create_app():
     app.register_blueprint(chat_bp)
     app.register_blueprint(auth_routes)
     app.register_blueprint(crypto_bp)
+
+    from app.blueprints.sandbox_routes import sandbox_bp
+    app.register_blueprint(sandbox_bp)
+    csrf.exempt(sandbox_bp)
 
     # Configure logging
     if not os.path.exists('logs'):

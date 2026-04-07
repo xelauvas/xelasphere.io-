@@ -18,6 +18,8 @@ class MemoryType(str, Enum):
     PROJECT = "project"           # Multi, evolving (current work, stack, goals)
     CONSTRAINT = "constraint"     # Safety/do-not rules (applied deterministically)
     TEMPORARY = "temporary"       # Short TTL, working memory traces
+    FEEDBACK = "feedback"         # User corrections AND confirmations (what worked/didn't)
+    REFERENCE = "reference"       # Pointers to external systems (URLs, tools, dashboards)
 
 
 class MemoryStatus(str, Enum):
@@ -398,6 +400,8 @@ DECAY_HALF_LIFE_DAYS = {
     MemoryType.PROJECT: 60,         # Decay faster
     MemoryType.CONSTRAINT: None,    # No decay (safety-critical)
     MemoryType.TEMPORARY: 7,        # Rapid decay
+    MemoryType.FEEDBACK: 120,       # Feedback stays relevant ~4 months
+    MemoryType.REFERENCE: 90,       # External references may go stale
 }
 
 # Allowed constraint keys (controlled keyspace for safety constraints)
@@ -440,6 +444,8 @@ TYPE_WEIGHTS = {
     MemoryType.PROJECT: 1.1,
     MemoryType.CONSTRAINT: 1.5,    # Constraints are safety-critical
     MemoryType.TEMPORARY: 0.8,
+    MemoryType.FEEDBACK: 1.4,      # High weight - user corrections guide behavior
+    MemoryType.REFERENCE: 0.9,     # Lower weight - contextual pointers
 }
 
 

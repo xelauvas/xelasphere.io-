@@ -77,20 +77,7 @@
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-left: env(safe-area-inset-left, 0px);
 
-    /* ===== Z-INDEX SCALE (Organized) ===== */
-    --z-below: -1;
-    --z-base: 0;
-    --z-dropdown: 100;
-    --z-sticky: 200;
-    --z-fixed: 300;
-    --z-sidebar: 400;
-    --z-header: 500;
-    --z-overlay: 600;
-    --z-modal: 700;
-    --z-popover: 800;
-    --z-tooltip: 900;
-    --z-toast: 1000;
-    --z-max: 9999;
+    /* Z-INDEX SCALE: defined in design-tokens.css (single source of truth) */
 }
 
 /* ===== SCROLLBAR WIDTH DETECTION ===== */
