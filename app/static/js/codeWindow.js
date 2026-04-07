@@ -2933,21 +2933,47 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     streamedContent = _contentChunks.join('');
                                     _contentJoinedAt = _contentChunks.length;
 
-                                    // --- Artifact fence detection ---
+                                    // --- Artifact fence detection (new fenced format + old fallback) ---
                                     const panelHasArtifact = window.artifactPanel?.currentArtifact &&
                                         window.artifactPanel?.panel?.classList.contains('is-open');
 
-                                    if (window.artifactPanel && !panelHasArtifact) {
-                                        const fenceMatch = streamedContent.match(/```artifact(?!_patch)/i);
-                                        if (fenceMatch) {
-                                            artifactStreamActive = true;
-                                            artifactFencePosition = fenceMatch.index;
-                                            window.artifactPanel.openStreaming();
-                                            const fenceEnd = streamedContent.indexOf('\n', fenceMatch.index);
-                                            if (fenceEnd !== -1) {
-                                                const afterFence = streamedContent.slice(fenceEnd + 1);
-                                                if (afterFence) {
-                                                    window.artifactPanel.appendStreamingCode(afterFence);
+                                    if (window.artifactPanel && !panelHasArtifact && !artifactStreamActive) {
+                                        // New format: artifact-meta signals start
+                                        const metaMatch = streamedContent.match(/```artifact-meta\s*\n/i);
+                                        if (metaMatch) {
+                                            // Check if meta block is closed and first file block started
+                                            const fileMatch = streamedContent.match(/```artifact-file:([^:]+):(\w+)\s*\n/i);
+                                            if (fileMatch) {
+                                                artifactStreamActive = true;
+                                                artifactFencePosition = metaMatch.index;
+                                                window.artifactPanel.openStreaming();
+                                                // Send code after the first file fence opening
+                                                const fileContentStart = streamedContent.indexOf('\n', fileMatch.index) + 1;
+                                                if (fileContentStart > 0) {
+                                                    const afterFence = streamedContent.slice(fileContentStart);
+                                                    // Strip closing fence if present in same chunk
+                                                    const closeFence = afterFence.indexOf('\n```');
+                                                    const codeChunk = closeFence !== -1 ? afterFence.slice(0, closeFence) : afterFence;
+                                                    if (codeChunk) {
+                                                        window.artifactPanel.appendStreamingCode(codeChunk);
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Fallback: old JSON format detection
+                                        if (!artifactStreamActive) {
+                                            const fenceMatch = streamedContent.match(/```artifact(?![-_])/i);
+                                            if (fenceMatch) {
+                                                artifactStreamActive = true;
+                                                artifactFencePosition = fenceMatch.index;
+                                                window.artifactPanel.openStreaming();
+                                                const fenceEnd = streamedContent.indexOf('\n', fenceMatch.index);
+                                                if (fenceEnd !== -1) {
+                                                    const afterFence = streamedContent.slice(fenceEnd + 1);
+                                                    if (afterFence) {
+                                                        window.artifactPanel.appendStreamingCode(afterFence);
+                                                    }
                                                 }
                                             }
                                         }
