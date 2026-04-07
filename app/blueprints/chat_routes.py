@@ -40,6 +40,7 @@ from app.blueprints.shared import (
 )
 from app.services.chat_engine import (
     SYSTEM_INSTRUCTIONS, DEVELOPER_INSTRUCTIONS, get_developer_instructions,
+    ARTIFACT_MODEL_CASCADE,
     MAX_TOKENS, RESPONSE_TOKEN_BUFFER,
     FRIENDLY_AI_ERROR_MESSAGES, PROVIDER_SPECIFIC_MESSAGES,
     classify_user_intent, detect_crypto_price_query,
@@ -751,20 +752,45 @@ def chat_stream():
                                 desired_action=ArtifactPreference.UPDATE,
                             )
                         elif parsed_action.action == "create_artifact" and not parsed_action.artifact_payload:
-                            # ACTION said create_artifact but no valid artifact JSON —
-                            # model produced regular code blocks. Use old router with
-                            # code block extraction fallback.
-                            logger.info("Stream ActionParser: create_artifact without payload, falling back to code block extraction")
-                            fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else full_content
-                            structured = parse_structured_response(fallback_text)
-                            structured = StructuredResponse(
-                                meta={"output_mode": "artifact", "contains_code": True},
-                                chat=structured.chat,
-                                artifact=structured.artifact,
-                                remainder=structured.remainder,
-                            )
-                            routing = artifact_router.route(structured, prompt, provider_flagged_code=True)
-                            logger.info(f"Stream fallback routing: render_mode={routing.render_mode}, has_payload={routing.artifact_payload is not None}")
+                            # ACTION said create_artifact but JSON was malformed.
+                            # Try cascade: retry with next capable model.
+                            logger.info("Stream: create_artifact without payload, trying model cascade")
+                            cascade_success = False
+                            for cascade_model in ARTIFACT_MODEL_CASCADE:
+                                if cascade_model == stream_model:
+                                    continue  # Skip the model that already failed
+                                logger.info(f"Stream: cascade retry with {cascade_model}")
+                                try:
+                                    retry_resp, _, _ = get_ai_response(enhanced_prompt, cascade_model)
+                                    retry_parsed = ActionParser.parse(retry_resp)
+                                    if retry_parsed.artifact_payload:
+                                        routing = ArtifactDecision(
+                                            render_mode="artifact",
+                                            chat_payload=retry_parsed.chat_text or parsed_action.chat_text,
+                                            artifact_payload=retry_parsed.artifact_payload,
+                                            contains_code=True,
+                                            desired_action=ArtifactPreference.UPDATE,
+                                        )
+                                        chat_summary = routing.chat_payload
+                                        logger.info(f"Stream: cascade succeeded with {cascade_model}, {len(retry_parsed.artifact_payload.get('files',[]))} files")
+                                        cascade_success = True
+                                        break
+                                    else:
+                                        logger.info(f"Stream: cascade {cascade_model} also failed to produce artifact payload")
+                                except Exception as cascade_err:
+                                    logger.warning(f"Stream: cascade {cascade_model} error: {cascade_err}")
+                            if not cascade_success:
+                                # All cascade models failed — fall back to code block extraction
+                                logger.info("Stream: all cascade models failed, falling back to code block extraction")
+                                fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else full_content
+                                structured = parse_structured_response(fallback_text)
+                                structured = StructuredResponse(
+                                    meta={"output_mode": "artifact", "contains_code": True},
+                                    chat=structured.chat,
+                                    artifact=structured.artifact,
+                                    remainder=structured.remainder,
+                                )
+                                routing = artifact_router.route(structured, prompt, provider_flagged_code=True)
                         elif parsed_action.action == "patch_artifact" and parsed_action.patch_payload:
                             routing = ArtifactDecision(
                                 render_mode="artifact_patch",
@@ -787,32 +813,34 @@ def chat_stream():
                                     lang = cf.get('language', 'text')
                                     regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
                                 regen_parts.append(f"\nUser request: {prompt}\n\n"
-                                                  "Respond with ACTION: create_artifact and a complete ```artifact block "
-                                                  "containing ALL files with the changes applied.")
+                                                  "Respond with ACTION: create_artifact, then a ```artifact-meta block with title/type/primaryLanguage JSON, "
+                                                  "then each file in its own ```artifact-file:path:language block with raw code. Include ALL files.")
                                 regen_prompt = "\n".join(regen_parts)
-                                try:
-                                    regen_response, _, _ = get_ai_response(regen_prompt, stream_model)
-                                    regen_parsed = ActionParser.parse(regen_response)
-                                    if regen_parsed.artifact_payload:
-                                        routing = ArtifactDecision(
-                                            render_mode="artifact",
-                                            chat_payload=regen_parsed.chat_text or parsed_action.chat_text,
-                                            artifact_payload=regen_parsed.artifact_payload,
-                                            contains_code=True,
-                                            desired_action=ArtifactPreference.UPDATE,
-                                        )
-                                        chat_summary = routing.chat_payload
-                                        logger.info(f"Stream: regeneration succeeded with {len(regen_parsed.artifact_payload.get('files',[]))} files")
-                                    else:
-                                        routing = ArtifactDecision(
-                                            render_mode="inline",
-                                            chat_payload=parsed_action.chat_text,
-                                            artifact_payload=None,
-                                            contains_code=False,
-                                            desired_action=ArtifactPreference.NONE,
-                                        )
-                                except Exception as regen_err:
-                                    logger.warning(f"Stream: regeneration failed: {regen_err}")
+                                # Try regen with current model first, then cascade
+                                regen_models = [stream_model] + [m for m in ARTIFACT_MODEL_CASCADE if m != stream_model]
+                                regen_success = False
+                                for regen_model in regen_models:
+                                    try:
+                                        logger.info(f"Stream: patch regen trying {regen_model}")
+                                        regen_response, _, _ = get_ai_response(regen_prompt, regen_model)
+                                        regen_parsed = ActionParser.parse(regen_response)
+                                        if regen_parsed.artifact_payload:
+                                            routing = ArtifactDecision(
+                                                render_mode="artifact",
+                                                chat_payload=regen_parsed.chat_text or parsed_action.chat_text,
+                                                artifact_payload=regen_parsed.artifact_payload,
+                                                contains_code=True,
+                                                desired_action=ArtifactPreference.UPDATE,
+                                            )
+                                            chat_summary = routing.chat_payload
+                                            logger.info(f"Stream: regen succeeded with {regen_model}, {len(regen_parsed.artifact_payload.get('files',[]))} files")
+                                            regen_success = True
+                                            break
+                                        else:
+                                            logger.info(f"Stream: regen {regen_model} failed to produce artifact payload")
+                                    except Exception as regen_err:
+                                        logger.warning(f"Stream: regen {regen_model} error: {regen_err}")
+                                if not regen_success:
                                     routing = ArtifactDecision(
                                         render_mode="inline",
                                         chat_payload=parsed_action.chat_text,
@@ -872,36 +900,32 @@ def chat_stream():
                                                           "Respond with ACTION: create_artifact and a complete ```artifact block "
                                                           "containing ALL files with the changes applied.")
                                         regen_prompt = "\n".join(regen_parts)
-                                        try:
-                                            regen_response, _, _ = get_ai_response(regen_prompt, stream_model)
-                                            regen_parsed = ActionParser.parse(regen_response)
-                                            if regen_parsed.artifact_payload:
-                                                patched_files = regen_parsed.artifact_payload.get('files', [])
-                                                applied_count = len(patched_files)
-                                                failed_count = 0
-                                                chat_summary = regen_parsed.chat_text or parsed_action.chat_text
-                                                # Switch routing to artifact create
-                                                routing = ArtifactDecision(
-                                                    render_mode="artifact",
-                                                    chat_payload=chat_summary,
-                                                    artifact_payload=regen_parsed.artifact_payload,
-                                                    contains_code=True,
-                                                    desired_action=ArtifactPreference.UPDATE,
-                                                )
-                                                render_mode = 'artifact'
-                                                logger.info(f"🔄 Full regeneration succeeded: {applied_count} files")
-                                            elif regen_parsed.patch_payload:
-                                                # Model sent another patch, try to apply it
-                                                patched_files, patch_results = apply_patches(
-                                                    current_files, regen_parsed.patch_payload.get('patches', [])
-                                                )
-                                                applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
-                                                failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
-                                                if applied_count > 0:
+                                        # Try current model first, then cascade
+                                        regen_models = [stream_model] + [m for m in ARTIFACT_MODEL_CASCADE if m != stream_model]
+                                        for regen_model in regen_models:
+                                            try:
+                                                logger.info(f"🔄 Regen trying {regen_model}")
+                                                regen_response, _, _ = get_ai_response(regen_prompt, regen_model)
+                                                regen_parsed = ActionParser.parse(regen_response)
+                                                if regen_parsed.artifact_payload:
+                                                    patched_files = regen_parsed.artifact_payload.get('files', [])
+                                                    applied_count = len(patched_files)
+                                                    failed_count = 0
                                                     chat_summary = regen_parsed.chat_text or parsed_action.chat_text
-                                                    logger.info(f"🔄 Retry patch succeeded: {applied_count} applied")
-                                        except Exception as retry_err:
-                                            logger.warning(f"🔄 Regeneration retry failed: {retry_err}")
+                                                    routing = ArtifactDecision(
+                                                        render_mode="artifact",
+                                                        chat_payload=chat_summary,
+                                                        artifact_payload=regen_parsed.artifact_payload,
+                                                        contains_code=True,
+                                                        desired_action=ArtifactPreference.UPDATE,
+                                                    )
+                                                    render_mode = 'artifact'
+                                                    logger.info(f"🔄 Regen succeeded with {regen_model}: {applied_count} files")
+                                                    break
+                                                else:
+                                                    logger.info(f"🔄 Regen {regen_model} failed to produce artifact payload")
+                                            except Exception as retry_err:
+                                                logger.warning(f"🔄 Regen {regen_model} error: {retry_err}")
 
                                     if applied_count > 0:
                                         primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
@@ -2012,28 +2036,52 @@ def chat():
                 desired_action=ArtifactPreference.UPDATE,
             )
         elif parsed_action.action == "create_artifact" and not parsed_action.artifact_payload:
-            # ACTION said create_artifact but no valid artifact JSON — model produced
-            # regular code blocks instead of ```artifact fence. Use the old router which
-            # has _construct_artifact_from_code_blocks() fallback for this case.
-            logger.info("ActionParser: create_artifact without payload, falling back to code block extraction")
-            fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else raw_model_response
-            structured_response = parse_structured_response(fallback_text)
-            # Force the structured response meta to indicate artifact intent
-            if structured_response.meta is None or not structured_response.meta:
-                structured_response = StructuredResponse(
-                    meta={"output_mode": "artifact", "contains_code": True},
-                    chat=structured_response.chat,
-                    artifact=structured_response.artifact,
-                    remainder=structured_response.remainder,
+            # ACTION said create_artifact but JSON was malformed.
+            # Try cascade: retry with next capable model.
+            logger.info("[NonStream] create_artifact without payload, trying model cascade")
+            cascade_success = False
+            for cascade_model in ARTIFACT_MODEL_CASCADE:
+                if cascade_model == model:
+                    continue
+                logger.info(f"[NonStream] cascade retry with {cascade_model}")
+                try:
+                    retry_resp, _, _ = get_ai_response(full_prompt, cascade_model)
+                    retry_parsed = ActionParser.parse(retry_resp)
+                    if retry_parsed.artifact_payload:
+                        routing_decision = ArtifactDecision(
+                            render_mode="artifact",
+                            chat_payload=retry_parsed.chat_text or parsed_action.chat_text,
+                            artifact_payload=retry_parsed.artifact_payload,
+                            contains_code=True,
+                            desired_action=ArtifactPreference.UPDATE,
+                        )
+                        logger.info(f"[NonStream] cascade succeeded with {cascade_model}, {len(retry_parsed.artifact_payload.get('files',[]))} files")
+                        cascade_success = True
+                        break
+                    else:
+                        logger.info(f"[NonStream] cascade {cascade_model} also failed")
+                except Exception as cascade_err:
+                    logger.warning(f"[NonStream] cascade {cascade_model} error: {cascade_err}")
+            if not cascade_success:
+                # All cascade models failed — fall back to code block extraction
+                logger.info("[NonStream] all cascade models failed, falling back to code block extraction")
+                fallback_text = parsed_action.chat_text if not parsed_action.used_fallback else raw_model_response
+                structured_response = parse_structured_response(fallback_text)
+                if structured_response.meta is None or not structured_response.meta:
+                    structured_response = StructuredResponse(
+                        meta={"output_mode": "artifact", "contains_code": True},
+                        chat=structured_response.chat,
+                        artifact=structured_response.artifact,
+                        remainder=structured_response.remainder,
+                    )
+                else:
+                    structured_response.meta["output_mode"] = "artifact"
+                    structured_response.meta["contains_code"] = True
+                routing_decision = artifact_router.route(
+                    structured_response,
+                    user_prompt,
+                    provider_flagged_code=True,
                 )
-            else:
-                structured_response.meta["output_mode"] = "artifact"
-                structured_response.meta["contains_code"] = True
-            routing_decision = artifact_router.route(
-                structured_response,
-                user_prompt,
-                provider_flagged_code=True,
-            )
         elif parsed_action.action == "patch_artifact" and parsed_action.patch_payload:
             routing_decision = ArtifactDecision(
                 render_mode="artifact_patch",
@@ -2199,33 +2247,41 @@ def chat():
                                       "Respond with ACTION: create_artifact and a complete ```artifact block "
                                       "containing ALL files with the changes applied.")
                     regen_prompt = "\n".join(regen_parts)
-                    try:
-                        regen_response, _, _ = get_ai_response(regen_prompt, model)
-                        regen_parsed = ActionParser.parse(regen_response)
-                        if regen_parsed.artifact_payload:
-                            patched_files = regen_parsed.artifact_payload.get('files', [])
-                            applied_count = len(patched_files)
-                            failed_count = 0
-                            response_text = regen_parsed.chat_text or routing_decision.chat_payload
-                            routing_decision = ArtifactDecision(
-                                render_mode="artifact",
-                                chat_payload=response_text,
-                                artifact_payload=regen_parsed.artifact_payload,
-                                contains_code=True,
-                                desired_action=ArtifactPreference.UPDATE,
-                            )
-                            logger.info(f"🔄 [NonStream] Full regeneration succeeded: {applied_count} files")
-                        elif regen_parsed.patch_payload:
-                            patched_files, patch_results = apply_patches(
-                                current_files, regen_parsed.patch_payload.get('patches', [])
-                            )
-                            applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
-                            failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
-                            if applied_count > 0:
+                    # Try current model first, then cascade through capable models
+                    regen_models = [model] + [m for m in ARTIFACT_MODEL_CASCADE if m != model]
+                    for regen_model in regen_models:
+                        try:
+                            logger.info(f"🔄 [NonStream] Regen trying {regen_model}")
+                            regen_response, _, _ = get_ai_response(regen_prompt, regen_model)
+                            regen_parsed = ActionParser.parse(regen_response)
+                            if regen_parsed.artifact_payload:
+                                patched_files = regen_parsed.artifact_payload.get('files', [])
+                                applied_count = len(patched_files)
+                                failed_count = 0
                                 response_text = regen_parsed.chat_text or routing_decision.chat_payload
-                                logger.info(f"🔄 [NonStream] Retry patch succeeded: {applied_count} applied")
-                    except Exception as retry_err:
-                        logger.warning(f"🔄 [NonStream] Regeneration retry failed: {retry_err}")
+                                routing_decision = ArtifactDecision(
+                                    render_mode="artifact",
+                                    chat_payload=response_text,
+                                    artifact_payload=regen_parsed.artifact_payload,
+                                    contains_code=True,
+                                    desired_action=ArtifactPreference.UPDATE,
+                                )
+                                logger.info(f"🔄 [NonStream] Regen succeeded with {regen_model}: {applied_count} files")
+                                break
+                            elif regen_parsed.patch_payload:
+                                patched_files, patch_results = apply_patches(
+                                    current_files, regen_parsed.patch_payload.get('patches', [])
+                                )
+                                applied_count = sum(1 for r in patch_results if r['status'] == 'applied')
+                                failed_count = sum(1 for r in patch_results if r['status'] == 'failed')
+                                if applied_count > 0:
+                                    response_text = regen_parsed.chat_text or routing_decision.chat_payload
+                                    logger.info(f"🔄 [NonStream] Retry patch with {regen_model} succeeded: {applied_count} applied")
+                                    break
+                            else:
+                                logger.info(f"🔄 [NonStream] {regen_model} failed to produce artifact payload")
+                        except Exception as retry_err:
+                            logger.warning(f"🔄 [NonStream] {regen_model} regen failed: {retry_err}")
 
                 if applied_count > 0:
                     primary_lang = patched_files[0].get('language', 'code') if patched_files else 'code'
