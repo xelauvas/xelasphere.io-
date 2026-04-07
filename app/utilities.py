@@ -782,7 +782,7 @@ For simple questions or explanations, just respond normally without artifacts.""
     }
 
     try:
-        response = requests.post(url, json=data, headers=headers, stream=True, timeout=120)
+        response = requests.post(url, json=data, headers=headers, stream=True, timeout=(10, 90))
         response.raise_for_status()
 
         for line in response.iter_lines():
