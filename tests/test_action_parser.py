@@ -131,3 +131,53 @@ class TestStreamingBuffer:
         result = buf.feed("Just some text\nMore text")
         assert result == "chat"  # Default fallback
         assert "Just some text" in buf.remainder
+
+
+class TestFencedFormatParsing:
+    """Tests for ActionParser handling the new fenced artifact format."""
+
+    def test_parse_create_artifact_fenced_format(self):
+        from app.context.action_parser import ActionParser
+        response = (
+            "ACTION: create_artifact\n\n"
+            "Here's your app.\n\n"
+            '```artifact-meta\n{"title": "Todo", "primaryLanguage": "jsx"}\n```\n\n'
+            "```artifact-file:App.jsx:jsx\nimport React from 'react';\n"
+            "export default function App() { return <div>Hi</div>; }\n```\n\n"
+            "```artifact-file:style.css:css\nbody { margin: 0; }\n```"
+        )
+        result = ActionParser.parse(response)
+        assert result.action == "create_artifact"
+        assert result.artifact_payload is not None
+        assert len(result.artifact_payload["files"]) == 2
+        assert result.artifact_payload["title"] == "Todo"
+        assert "Here's your app" in result.chat_text
+
+    def test_chat_text_strips_fenced_blocks(self):
+        from app.context.action_parser import ActionParser
+        response = (
+            "ACTION: create_artifact\n\n"
+            "Built it for you.\n\n"
+            '```artifact-meta\n{"title": "X"}\n```\n\n'
+            "```artifact-file:a.py:python\npass\n```\n\n"
+            "Let me know!"
+        )
+        result = ActionParser.parse(response)
+        assert "artifact-meta" not in result.chat_text
+        assert "artifact-file" not in result.chat_text
+        assert "Built it for you" in result.chat_text
+        assert "Let me know" in result.chat_text
+
+    def test_old_format_still_works(self):
+        from app.context.action_parser import ActionParser
+        response = (
+            "ACTION: create_artifact\n\n"
+            "Here it is.\n\n"
+            '```artifact\n'
+            '{"title": "Old", "files": [{"path": "a.py", "language": "python", "content": "pass"}]}\n'
+            '```'
+        )
+        result = ActionParser.parse(response)
+        assert result.action == "create_artifact"
+        assert result.artifact_payload is not None
+        assert result.artifact_payload["title"] == "Old"

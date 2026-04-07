@@ -107,9 +107,20 @@ class ActionParser:
 
 
 def _extract_artifact(text: str):
-    """Extract artifact JSON from fenced block. Returns (payload, chat_text)."""
-    from app.artifacts import extract_artifact_block, ARTIFACT_FENCE_PATTERN
+    """Extract artifact from fenced blocks. Tries new format first, falls back to old JSON.
+    Returns (payload, chat_text)."""
+    from app.artifacts import extract_fenced_artifact, extract_artifact_block
+    from app.artifacts import FENCED_META_RE, FENCED_FILE_RE, ARTIFACT_FENCE_PATTERN
 
+    # Try new fenced format first (artifact-meta + artifact-file blocks)
+    payload = extract_fenced_artifact(text)
+    if payload:
+        # Strip all artifact blocks from chat text
+        chat_text = FENCED_META_RE.sub("", text)
+        chat_text = FENCED_FILE_RE.sub("", chat_text).strip()
+        return payload, chat_text
+
+    # Fall back to old JSON format
     try:
         payload = extract_artifact_block(text)
     except Exception as exc:
