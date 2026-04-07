@@ -149,6 +149,15 @@ PROVIDER_SPECIFIC_MESSAGES = {
 }
 
 
+# Ordered list of models to try for artifact generation.
+# When one fails to produce valid artifact JSON, try the next.
+ARTIFACT_MODEL_CASCADE = [
+    "deepseek-chat",
+    "qwen/qwen3-32b",
+    "kimi-k2.5",
+    "llama-3.3-70b-versatile",
+]
+
 # Models capable of producing well-formed artifact JSON.
 # Small/fast models should only get chat instructions — they can't reliably
 # follow the ACTION protocol with artifact fences.
@@ -632,13 +641,22 @@ DEVELOPER_INSTRUCTIONS = (
 
     "EXAMPLE for creating artifacts:\n"
     "ACTION: create_artifact\n"
-    "[brief explanation]\n"
-    "```artifact\n"
-    "{\"title\":\"App Name\",\"type\":\"project\",\"primaryLanguage\":\"jsx\","
-    "\"files\":[{\"path\":\"App.jsx\",\"language\":\"jsx\",\"content\":\"...\"},"
-    "{\"path\":\"style.css\",\"language\":\"css\",\"content\":\"...\"}]}\n"
+    "[brief explanation]\n\n"
+    "```artifact-meta\n"
+    "{\"title\":\"App Name\",\"type\":\"project\",\"primaryLanguage\":\"jsx\"}\n"
     "```\n\n"
-
+    "```artifact-file:App.jsx:jsx\n"
+    "import React from 'react';\n"
+    "export default function App() {\n"
+    "  return <div>Hello World</div>;\n"
+    "}\n"
+    "```\n\n"
+    "```artifact-file:style.css:css\n"
+    "body { margin: 0; font-family: sans-serif; }\n"
+    "```\n\n"
+    "IMPORTANT: Each file goes in its own ```artifact-file:path:language block.\n"
+    "  Code goes DIRECTLY in the block — NO JSON wrapping, NO escaping.\n"
+    "  The ```artifact-meta block has ONLY the title/type/language metadata as JSON.\n\n"
     "For React apps: Use App.jsx as entrypoint + style.css. DO NOT create index.html.\n"
     "  The preview system auto-loads React 18 + Babel. Just write JSX directly.\n"
     "  IMPORTANT: return() MUST have a SINGLE root element.\n"
