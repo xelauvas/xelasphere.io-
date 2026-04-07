@@ -668,6 +668,11 @@ const ProgressiveTextDisplay = (() => {
             this.chunkIndex = this.chunks.length;
             this.isComplete = true;
             this.destroyObserver();
+            // Fire onComplete so pending Promises resolve (e.g. handleComplexMessage chain)
+            if (this.onComplete) {
+                this.onComplete();
+                this.onComplete = null;
+            }
         }
 
         // Pause the display
@@ -2331,6 +2336,9 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
 
     messageDiv.dataset.originalPrompt = originalPrompt;
     messageDiv.dataset.messageId = messageId;
+    if (!messageDiv.dataset.timestamp) {
+        messageDiv.dataset.timestamp = new Date().toISOString();
+    }
     if (!messageDiv.dataset.messageKey) {
         messageDiv.dataset.messageKey = messageId;
     }
@@ -2796,12 +2804,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             formData.append('page_id', pageId);
         }
 
-        // Check if using a streamable model (DeepSeek or Moonshot/Kimi only)
-        // Auto mode uses /chat so the smart router picks the best model for the task.
+        // Check if using a streamable model (DeepSeek, Moonshot/Kimi, or Auto)
+        // Auto mode routes to a streaming-capable model server-side.
         // Skip streaming when images are attached — vision needs the regular /chat endpoint.
         const hasImages = attachments.some(a => a.isImage || a.type?.startsWith('image/'));
         const isDeepSeek = model.includes('deepseek');
-        const isStreamable = (isDeepSeek || model.includes('kimi')) && !hasImages;
+        const isAuto = !model || model === 'auto';
+        const isStreamable = (isDeepSeek || model.includes('kimi') || isAuto) && !hasImages;
         const isDeepSeekR1 = model === 'deepseek-reasoner';
 
         // ThinkingIndicator is now shown immediately after user message (see above)

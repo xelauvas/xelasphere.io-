@@ -3223,6 +3223,14 @@ body.is-ios .arrow-down {
         animation: mobileMenuSlideUp 0.15s ease-out;
     }
 
+    .action-more-menu-header {
+        padding: 12px 16px 10px !important;
+        font-size: 12px !important;
+        color: rgba(255, 255, 255, 0.6) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+        margin-bottom: 2px !important;
+    }
+
     @keyframes mobileMenuSlideUp {
         from {
             opacity: 0;

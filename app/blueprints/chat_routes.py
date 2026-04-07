@@ -39,7 +39,7 @@ from app.blueprints.shared import (
     task_generator,
 )
 from app.services.chat_engine import (
-    SYSTEM_INSTRUCTIONS, DEVELOPER_INSTRUCTIONS,
+    SYSTEM_INSTRUCTIONS, DEVELOPER_INSTRUCTIONS, get_developer_instructions,
     MAX_TOKENS, RESPONSE_TOKEN_BUFFER,
     FRIENDLY_AI_ERROR_MESSAGES, PROVIDER_SPECIFIC_MESSAGES,
     classify_user_intent, detect_crypto_price_query,
@@ -636,7 +636,7 @@ def chat_stream():
     model_context = get_model_context_limit(stream_model)
     context_builder = ContextBuilder(token_budget=model_context)
     built_context = context_builder.build(
-        system_prompt=SYSTEM_INSTRUCTIONS + "\n" + DEVELOPER_INSTRUCTIONS,
+        system_prompt=SYSTEM_INSTRUCTIONS + "\n" + get_developer_instructions(stream_model),
         full_history=previous_messages,
         artifact_state=artifact_tracker if should_inject_artifact else None,
         user_message=prompt,
@@ -764,6 +764,7 @@ def chat_stream():
                                 remainder=structured.remainder,
                             )
                             routing = artifact_router.route(structured, prompt, provider_flagged_code=True)
+                            logger.info(f"Stream fallback routing: render_mode={routing.render_mode}, has_payload={routing.artifact_payload is not None}")
                         elif parsed_action.action == "patch_artifact" and parsed_action.patch_payload:
                             routing = ArtifactDecision(
                                 render_mode="artifact_patch",
@@ -1777,7 +1778,7 @@ def chat():
                 enriched_prompt = f"{search_text}\n\n{enriched_prompt}"
 
             built_context = context_builder.build(
-                system_prompt=SYSTEM_INSTRUCTIONS + "\n" + DEVELOPER_INSTRUCTIONS,
+                system_prompt=SYSTEM_INSTRUCTIONS + "\n" + get_developer_instructions(model),
                 full_history=prev_msgs_for_prompt,
                 artifact_state=artifact_tracker if should_inject_artifact else None,
                 user_message=enriched_prompt,

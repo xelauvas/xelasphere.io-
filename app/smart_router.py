@@ -108,8 +108,11 @@ def _estimate_conversation_tokens(
 
 CODING_PATTERNS = [
     r'\b(code|coding|program|function|class|method|api|debug|fix\s+(?:the\s+)?bug)\b',
-    r'\b(python|javascript|typescript|java|rust|go|c\+\+|html|css|sql|react|node)\b',
+    r'\b(python|javascript|typescript|java|rust|go|c\+\+|html|css|sql|react|node|vue|angular|svelte|flask|django|express)\b',
     r'\b(implement|refactor|optimize|write\s+(?:a\s+)?(?:script|program|function))\b',
+    r'\b(build|create|make|clone)\s+.{0,30}\b(app|application|website|webpage|page|component|widget|dashboard|landing|todo|calculator|game|clone)\b',
+    r'\b(todo|calculator|snake|tetris|tic.?tac.?toe|weather|chat|dashboard|landing\s*page|portfolio)\s*(app|application|list|game|page|site)?\b',
+    r'\b(app|application|website|game|calculator|todo)\s+in\s+\w+',  # "app in react", "game in python"
     r'```\w*\n',  # Code block in input
     r'\b(error|exception|traceback|stack\s*trace)\b',
 ]

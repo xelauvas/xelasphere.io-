@@ -149,6 +149,38 @@ PROVIDER_SPECIFIC_MESSAGES = {
 }
 
 
+# Models capable of producing well-formed artifact JSON.
+# Small/fast models should only get chat instructions — they can't reliably
+# follow the ACTION protocol with artifact fences.
+ARTIFACT_CAPABLE_MODELS = {
+    "deepseek-chat", "deepseek-reasoner",
+    "qwen/qwen3-32b", "qwen/qwq-32b",
+    "kimi-k2.5", "kimi-latest",
+    "llama-3.3-70b-versatile",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "openai/gpt-oss-120b",
+}
+
+
+def get_developer_instructions(model: str = "") -> str:
+    """Return DEVELOPER_INSTRUCTIONS, stripping artifact/patch sections for incapable models."""
+    from app.model_catalog import resolve_model_id
+    resolved = resolve_model_id(model) if model else ""
+    if resolved in ARTIFACT_CAPABLE_MODELS or model in ARTIFACT_CAPABLE_MODELS:
+        return DEVELOPER_INSTRUCTIONS
+    # Strip everything from ACTION PROTOCOL onward — small models just get chat rules
+    marker = "RESPONSE FORMAT - ACTION PROTOCOL"
+    idx = DEVELOPER_INSTRUCTIONS.find(marker)
+    if idx > 0:
+        return DEVELOPER_INSTRUCTIONS[:idx] + (
+            "RESPONSE FORMAT\n"
+            "===============\n"
+            "Respond in plain Markdown. Use code blocks (```) for any code.\n"
+            "Do NOT use ACTION: lines or artifact blocks.\n"
+        )
+    return DEVELOPER_INSTRUCTIONS
+
+
 DEVELOPER_INSTRUCTIONS = (
     "Act as a helpful backend assistant for this application. "
     "Follow the UI tone, keep reasoning internal, and never leak secrets.\n\n"
@@ -579,11 +611,13 @@ DEVELOPER_INSTRUCTIONS = (
     "  belong in chat, not an artifact.\n\n"
 
     "ACTION: create_artifact\n"
-    "  Use when: the user asks you to BUILD, CREATE, or MAKE something that is a\n"
-    "  complete, runnable deliverable (app, game, tool, page, script). The result\n"
-    "  must be self-contained code that a user would want to run, preview, or\n"
-    "  download. Do NOT create an artifact for partial code, pseudocode, or\n"
-    "  explanations with code examples.\n\n"
+    "  Use when the user asks to BUILD, CREATE, or MAKE a complete application.\n"
+    "  ALWAYS use create_artifact for:\n"
+    "  - React/JSX apps, HTML/CSS/JS pages, interactive web apps\n"
+    "  - Python apps, games, visualizations, tools (we have a Python runtime)\n"
+    "  - Any request like 'build me X', 'create X app', 'make X in Y language'\n"
+    "  Do NOT use for: short code snippets, explanations with examples,\n"
+    "  partial code, or utility functions. Those belong in chat.\n\n"
 
     "ACTION: patch_artifact\n"
     "  Use when: the user asks you to FIX, UPDATE, CHANGE, MODIFY, or IMPROVE\n"
