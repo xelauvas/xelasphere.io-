@@ -631,8 +631,8 @@ def send_prompt(prompt, model="llama-3.1-70b-versatile"):
         else:
             logger.warning(f"{fallback_provider} fallback also failed: {error_payload}")
 
-    # If rate limited and we have a Cerebras fallback, try it
-    elif status_code == 429 and provider == "groq" and resolved_model in FALLBACK_MODELS:
+    # If rate limited or payload too large and we have a Cerebras fallback, try it
+    elif status_code in (429, 413) and provider == "groq" and resolved_model in FALLBACK_MODELS:
         fallback_model = FALLBACK_MODELS[resolved_model]
         logger.info(f"Groq rate limited, falling back to Cerebras model: {fallback_model}")
 
