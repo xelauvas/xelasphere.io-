@@ -2796,11 +2796,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             formData.append('page_id', pageId);
         }
 
-        // Check if using a streamable model (DeepSeek, Moonshot/Kimi, or auto which routes to DeepSeek)
-        // Skip streaming when images are attached — vision needs the regular /chat endpoint
+        // Check if using a streamable model (DeepSeek or Moonshot/Kimi only)
+        // Auto mode uses /chat so the smart router picks the best model for the task.
+        // Skip streaming when images are attached — vision needs the regular /chat endpoint.
         const hasImages = attachments.some(a => a.isImage || a.type?.startsWith('image/'));
         const isDeepSeek = model.includes('deepseek');
-        const isStreamable = (isDeepSeek || model.includes('kimi') || model === 'auto') && !hasImages;
+        const isStreamable = (isDeepSeek || model.includes('kimi')) && !hasImages;
         const isDeepSeekR1 = model === 'deepseek-reasoner';
 
         // ThinkingIndicator is now shown immediately after user message (see above)
