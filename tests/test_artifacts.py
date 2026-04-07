@@ -610,3 +610,105 @@ class TestApplyPatches:
         assert patched[0]['content'] == 'const x = 2;'
         assert results[0]['status'] == 'applied'
         assert results[1]['status'] == 'failed'
+
+
+class TestExtractFencedArtifact:
+    """Tests for the new fenced artifact format parser."""
+
+    def test_parse_basic_fenced_artifact(self):
+        from app.artifacts import extract_fenced_artifact
+        raw = (
+            "Here's your app.\n\n"
+            "```artifact-meta\n"
+            '{"title": "Todo App", "type": "project", "primaryLanguage": "jsx"}\n'
+            "```\n\n"
+            "```artifact-file:App.jsx:jsx\n"
+            "import React from 'react';\n"
+            "export default function App() {\n"
+            "  return <div>Hello</div>;\n"
+            "}\n"
+            "```\n\n"
+            "```artifact-file:style.css:css\n"
+            "body { margin: 0; }\n"
+            "```"
+        )
+        payload = extract_fenced_artifact(raw)
+        assert payload is not None
+        assert payload["title"] == "Todo App"
+        assert payload["type"] == "project"
+        assert payload["primaryLanguage"] == "jsx"
+        assert len(payload["files"]) == 2
+        assert payload["files"][0]["path"] == "App.jsx"
+        assert payload["files"][0]["language"] == "jsx"
+        assert "import React" in payload["files"][0]["content"]
+        assert payload["files"][1]["path"] == "style.css"
+        assert "body { margin: 0; }" in payload["files"][1]["content"]
+
+    def test_returns_none_without_meta(self):
+        from app.artifacts import extract_fenced_artifact
+        assert extract_fenced_artifact("```artifact-file:App.jsx:jsx\ncode\n```") is None
+
+    def test_returns_none_without_files(self):
+        from app.artifacts import extract_fenced_artifact
+        assert extract_fenced_artifact('```artifact-meta\n{"title": "X"}\n```\nSome chat text.') is None
+
+    def test_preserves_code_with_quotes_and_special_chars(self):
+        from app.artifacts import extract_fenced_artifact
+        code = 'const msg = "Hello \\"world\\"";\nconst obj = {a: 1, b: "two"};\n'
+        raw = (
+            "```artifact-meta\n"
+            '{"title": "Test"}\n'
+            "```\n\n"
+            f"```artifact-file:app.js:javascript\n{code}```"
+        )
+        payload = extract_fenced_artifact(raw)
+        assert payload is not None
+        assert payload["files"][0]["content"] == code.rstrip("\n")
+
+    def test_meta_defaults(self):
+        from app.artifacts import extract_fenced_artifact
+        raw = '```artifact-meta\n{"title": "X"}\n```\n```artifact-file:main.py:python\nprint("hi")\n```'
+        payload = extract_fenced_artifact(raw)
+        assert payload["type"] == "project"
+        assert payload["primaryLanguage"] == "python"
+
+    def test_chat_text_before_between_after(self):
+        from app.artifacts import extract_fenced_artifact
+        raw = (
+            "Here's the app I built:\n\n"
+            '```artifact-meta\n{"title": "App"}\n```\n\n'
+            "First file:\n\n"
+            "```artifact-file:a.js:javascript\nlet x = 1;\n```\n\n"
+            "And the styles:\n\n"
+            "```artifact-file:b.css:css\nbody {}\n```\n\n"
+            "Let me know if you want changes!"
+        )
+        payload = extract_fenced_artifact(raw)
+        assert payload is not None
+        assert len(payload["files"]) == 2
+
+    def test_case_insensitive_fences(self):
+        from app.artifacts import extract_fenced_artifact
+        raw = '```Artifact-Meta\n{"title": "X"}\n```\n```Artifact-File:app.py:python\npass\n```'
+        payload = extract_fenced_artifact(raw)
+        assert payload is not None
+
+
+class TestExtractArtifactAnyFormat:
+    def test_prefers_new_format(self):
+        from app.artifacts import extract_artifact_any_format
+        raw = '```artifact-meta\n{"title": "New"}\n```\n```artifact-file:app.py:python\nprint("new")\n```'
+        payload = extract_artifact_any_format(raw)
+        assert payload is not None
+        assert payload["title"] == "New"
+
+    def test_falls_back_to_old_format(self):
+        from app.artifacts import extract_artifact_any_format
+        raw = '```artifact\n{"title": "Old", "files": [{"path": "a.py", "language": "python", "content": "pass"}]}\n```'
+        payload = extract_artifact_any_format(raw)
+        assert payload is not None
+        assert payload["title"] == "Old"
+
+    def test_returns_none_for_neither_format(self):
+        from app.artifacts import extract_artifact_any_format
+        assert extract_artifact_any_format("just some chat text") is None

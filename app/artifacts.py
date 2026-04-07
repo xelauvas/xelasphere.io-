@@ -40,6 +40,9 @@ ARTIFACT_FENCE_PATTERN = re.compile(r"```artifact\s*([\s\S]*?)\s*```", re.IGNORE
 # Fallback pattern for unclosed artifact blocks (some models don't close with ```)
 ARTIFACT_UNCLOSED_PATTERN = re.compile(r"```artifact\s*([\s\S]+)", re.IGNORECASE)
 ARTIFACT_PATCH_FENCE_PATTERN = re.compile(r"```artifact_patch\s*([\s\S]*?)\s*```", re.IGNORECASE)
+# New fenced format patterns (artifact-meta + artifact-file blocks)
+FENCED_META_RE = re.compile(r"```artifact-meta\s*\n(.*?)\n\s*```", re.DOTALL | re.IGNORECASE)
+FENCED_FILE_RE = re.compile(r"```artifact-file:([^:]+):(\w+)\s*\n([\s\S]*?)```", re.IGNORECASE)
 MAX_ARTIFACT_FILES = 40
 MAX_ARTIFACT_TOTAL_BYTES = 800_000
 MAX_ARTIFACT_FILE_BYTES = 200_000
@@ -670,6 +673,61 @@ def extract_artifact_block(text: str) -> Optional[Dict[str, Any]]:
     logger.warning(f"Artifact JSON parse error at position {error_pos}")
     logger.warning(f"Context around error: ...{repr(context)}...")
     raise ArtifactParseError("Artifact block must contain valid JSON.")
+
+
+def extract_fenced_artifact(text: str) -> Optional[dict]:
+    """Parse the new fenced artifact format (artifact-meta + artifact-file blocks).
+    Returns normalized artifact payload dict, or None if format not found.
+    """
+    meta_match = FENCED_META_RE.search(text)
+    if not meta_match:
+        return None
+
+    meta_json = meta_match.group(1).strip()
+    try:
+        meta = json.loads(meta_json)
+    except json.JSONDecodeError:
+        logger.warning(f"Fenced artifact: meta JSON parse failed: {meta_json[:100]}")
+        return None
+
+    files = []
+    for file_match in FENCED_FILE_RE.finditer(text):
+        path = file_match.group(1).strip()
+        language = file_match.group(2).strip()
+        content = file_match.group(3)
+        if content.endswith('\n'):
+            content = content[:-1]
+        files.append({
+            'path': path,
+            'language': language,
+            'content': content,
+            'isBinary': False,
+            'byteSize': len(content.encode('utf-8')),
+        })
+
+    if not files:
+        return None
+
+    artifact_type = meta.get('type', 'project')
+    primary_lang = meta.get('primaryLanguage', files[0]['language'])
+
+    result = normalize_artifact_payload({
+        'title': meta.get('title', 'Artifact'),
+        'primaryLanguage': primary_lang,
+        'files': files,
+    })
+    result['type'] = artifact_type
+    result['primaryLanguage'] = primary_lang
+    return result
+
+
+def extract_artifact_any_format(text: str) -> Optional[dict]:
+    """Try new fenced format first, fall back to old JSON format."""
+    result = extract_fenced_artifact(text)
+    if result:
+        logger.info(f"Fenced artifact parsed: {len(result.get('files', []))} files")
+        return result
+    return extract_artifact_block(text)
 
 
 def extract_artifact_patch_block(text: str) -> Optional[Dict[str, Any]]:
