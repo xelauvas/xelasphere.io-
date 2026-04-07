@@ -312,6 +312,10 @@ switchStreamingFile(path, language) {
 
 ---
 
+## Known Limitations
+
+- **Triple-backtick inside file content.** If a file contains markdown with code blocks (e.g., a README.md with ` ``` ` fences), `FENCED_FILE_RE` will match the inner fence as the closing boundary, truncating the file. This is an edge case — artifact files are typically JSX/CSS/Python, not markdown. Can be handled later with a smarter parser (e.g., counting fence depth) if it comes up in production.
+
 ## What Does NOT Change
 
 - `extract_artifact_patch_block()` — patches stay JSON
