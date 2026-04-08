@@ -22,6 +22,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install Python dependencies
+        run: pip install -r requirements-cpu.txt
+
       # ── 1. Python syntax check ──────────────────────────────
       - name: Python syntax check
         run: |
@@ -92,9 +95,6 @@ jobs:
           "
 
       # ── 4. Flask app boot check ─────────────────────────────
-      - name: Install dependencies
-        run: pip install -r requirements-cpu.txt
-
       - name: Flask app boot check
         env:
           FLASK_ENV: testing
