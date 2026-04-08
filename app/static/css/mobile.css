@@ -322,45 +322,89 @@ body.is-ios .mobile-header-bar {
     height: var(--mobile-header-height);
     padding: 0 4px;
     padding-top: env(safe-area-inset-top, 0px);
-    background: #000 !important;
+    background: #212121 !important;
     border-bottom: none;
     z-index: 9999 !important;
     box-sizing: content-box;
 }
 
-/* Burger menu button - ChatGPT Style */
+/* Burger button — full line + half line */
 .mobile-header-burger {
-    position: relative;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    align-items: center;
-    width: 44px;
-    height: 44px;
-    padding: 0;
-    background: transparent;
-    border: none;
+    align-items: flex-start;
+    width: 40px;
+    height: 40px;
+    padding: 0 9px;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
     cursor: pointer;
     flex-shrink: 0;
-    gap: 6px;
+    gap: 5px;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-appearance: none;
+    appearance: none;
 }
 
 .mobile-header-burger:active {
-    transform: scale(0.95);
+    opacity: 0.6;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
 }
 
-/* Two clean lines - ChatGPT style */
+.mobile-header-burger:focus,
+.mobile-header-burger:focus-visible,
+.mobile-header-burger:hover {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Sidebar close/toggle button — same clean treatment */
+.sidebar-toggle-button {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sidebar-toggle-button:active {
+    opacity: 0.6;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.sidebar-toggle-button:focus,
+.sidebar-toggle-button:focus-visible,
+.sidebar-toggle-button:hover {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
 .mobile-header-burger span {
     display: block;
-    width: 22px;
     height: 2px;
-    background: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.8);
     border-radius: 1px;
 }
 
-/* Hide third line */
-.mobile-header-burger span:nth-child(3) {
-    display: none;
+.mobile-header-burger span:first-child {
+    width: 20px;
+}
+
+.mobile-header-burger span:last-child {
+    width: 12px;
 }
 
 /* Ghost button */
@@ -1452,20 +1496,20 @@ body.is-ios .arrow-down {
    ============================================ */
 
 @media (max-width: 1024px) {
-    /* Override CSS variables for black theme on mobile */
+    /* Override CSS variables for dark theme on mobile */
     :root,
     body {
-        --background-dark: #000;
-        --background-darker: #000;
-        --card-bg: rgba(20, 20, 20, 0.9);
-        --card-bg-hover: rgba(30, 30, 30, 0.95);
-        --input-row-bg: #000;
-        --input-row-bg-focus: #000;
+        --background-dark: #212121;
+        --background-darker: #1a1a1a;
+        --card-bg: rgba(33, 33, 33, 0.9);
+        --card-bg-hover: rgba(40, 40, 40, 0.95);
+        --input-row-bg: #2d2d2d;
+        --input-row-bg-focus: #333;
     }
 
     body, html {
-        background: #000;
-        background-color: #000;
+        background: #212121;
+        background-color: #212121;
     }
 
     /* Header area */
@@ -1483,8 +1527,8 @@ body.is-ios .arrow-down {
     .message-input-container,
     .composer-container,
     .chat-shell__composer {
-        background: #000;
-        background-color: #000;
+        background: #212121;
+        background-color: #212121;
         border: none;
     }
 
@@ -1499,8 +1543,8 @@ body.is-ios .arrow-down {
     .input-container,
     .chat-shell__composer,
     .options {
-        background: #000;
-        background-color: #000;
+        background: #212121;
+        background-color: #212121;
         border: none;
         border-top: none;
         border-bottom: none;
@@ -1579,7 +1623,7 @@ body.is-ios .arrow-down {
         text-align: center;
         padding: 0 0.5rem;
         z-index: 10;
-        background: #000;
+        background: #212121;
     }
 
     /* Logo container */
@@ -3907,7 +3951,7 @@ body.viewport-mobile:not(.has-messages) .greeting-container {
     text-align: center !important;
     padding: 0 0.5rem !important;
     z-index: 10 !important;
-    background: #000 !important;
+    background: #212121 !important;
 }
 
 /* Hide empty elements between greeting and options */
@@ -4264,7 +4308,7 @@ body.viewport-mobile .mobile-header-bar {
     right: 0 !important;
     height: var(--mobile-header-height) !important;
     padding: 0 4px !important;
-    background: #000 !important;
+    background: #212121 !important;
     border-bottom: none !important;
     z-index: 9999 !important;
     box-sizing: content-box !important;
