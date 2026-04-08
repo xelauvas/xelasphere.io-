@@ -35,6 +35,8 @@ case "$MODE" in
         EXIT_CODE=$?
         echo ""
         echo "SANDBOX_EVENT:{\"type\":\"exit\",\"code\":$EXIT_CODE}"
+        # Keep container alive for subsequent runs via docker exec
+        sleep infinity
         ;;
 
     app)
