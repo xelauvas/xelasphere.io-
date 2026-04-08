@@ -719,7 +719,8 @@ You can learn the basics of almost anything in just 20 focused hours.
         }
 
         // Add has-messages class to body
-        document.body.classList.add('has-messages');
+        if (window.setHasMessages) window.setHasMessages(true);
+        else document.body.classList.add('has-messages');
 
         // Display user message
         if (typeof window.displayMessage === 'function') {

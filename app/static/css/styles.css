@@ -3443,6 +3443,7 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     max-width: var(--composer-shell-max-width);
     margin: 0 auto;
     padding: var(--space-5);
+    padding-top: var(--space-7); /* Extra clearance so first message isn't clipped at top */
     padding-bottom: calc(var(--space-6) + var(--composer-reserved-height, 150px)); /* Spațiu pentru composer */
     border-radius: 0;
     border: none;
@@ -3530,7 +3531,12 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     box-shadow: none;
     border-top: none;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    pointer-events: none; /* Allow clicks through transparent area */
+    /* FOOTGUN: pointer-events: none makes this container click-through so
+       the transparent space above the input doesn't block the chat.
+       Every INTERACTIVE child (tooltips, popovers, file previews, etc.)
+       MUST explicitly set pointer-events: auto or clicks won't register.
+       See .chat-shell__composer > * rule below for the default reset. */
+    pointer-events: none;
 }
 
 

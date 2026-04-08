@@ -611,7 +611,8 @@ class ChatManager {
 
     prepareTemporaryChatUi() {
         // Remove has-messages class for fresh chat layout
-        document.body.classList.remove('has-messages');
+        if (window.setHasMessages) window.setHasMessages(false);
+        else document.body.classList.remove('has-messages');
 
         if (typeof window !== 'undefined' && typeof window.clearChat === 'function') {
             window.clearChat({ force: true });
@@ -650,7 +651,8 @@ class ChatManager {
         if (window.artifactPanel?.close) window.artifactPanel.close();
 
         // Remove has-messages class for home page layout
-        document.body.classList.remove('has-messages');
+        if (window.setHasMessages) window.setHasMessages(false);
+        else document.body.classList.remove('has-messages');
 
         // Reset scroll state (hides down arrow) when entering home view
         if (typeof window.resetScrollState === 'function') {

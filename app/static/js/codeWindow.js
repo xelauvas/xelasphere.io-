@@ -2326,6 +2326,10 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
 
     let messageDiv = document.getElementById(messageId);
     if (!messageDiv) {
+        // Set has-messages BEFORE append so the layout flips to chat mode
+        // in the same frame — prevents a flash of centered-greeting layout.
+        if (window.setHasMessages) window.setHasMessages(true);
+        else document.body.classList.add('has-messages');
         messageDiv = createMessageDiv(messageId, sender);
         chatDisplay.appendChild(messageDiv);
     } else {
@@ -2810,7 +2814,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         const hasImages = attachments.some(a => a.isImage || a.type?.startsWith('image/'));
         const isDeepSeek = model.includes('deepseek');
         const isAuto = !model || model === 'auto';
-        const isStreamable = (isDeepSeek || model.includes('kimi') || isAuto) && !hasImages;
+        const isOpenAI = model.includes('gpt-');
+        const isStreamable = (isDeepSeek || model.includes('kimi') || isOpenAI || isAuto) && !hasImages;
         const isDeepSeekR1 = model === 'deepseek-reasoner';
 
         // ThinkingIndicator is now shown immediately after user message (see above)
@@ -2906,7 +2911,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     let buf = window._artifactStreamBuf;
 
                                     // Check for file boundary: closing ``` + new artifact-file:
-                                    const fileSwitchRe = /```\s*\n*```artifact-file:([^:]+):(\w+)\s*\n?/gi;
+                                    if (buf.includes('artifact-file:')) {
+                                        console.log('[STREAM-BUF] File fence found in buffer! len=' + buf.length, 'snippet=' + buf.substring(buf.indexOf('artifact-file:') - 20, buf.indexOf('artifact-file:') + 40));
+                                    }
+                                    const fileSwitchRe = /```\s*\n*```artifact-file:([^:]+):(\w+)\s*\n/gi;
                                     let switchMatch;
                                     let lastEnd = 0;
                                     let processed = '';
@@ -2931,13 +2939,22 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     // Strip standalone fence markers (``` on its own line)
                                     processed = processed.replace(/^```artifact-meta\s*\n[\s\S]*?```\s*\n?/i, '');
                                     processed = processed.replace(/^```artifact-file:[^\n]*\n/i, '');
-                                    // Strip closing fences that aren't part of a file switch
-                                    processed = processed.replace(/\n```\s*$/m, '');
 
-                                    if (processed) {
-                                        window.artifactPanel.appendStreamingCode(processed);
+                                    // Keep last 60 chars in buffer for cross-chunk fence detection
+                                    // Only send the safe portion before that
+                                    const KEEP = 60;
+                                    if (processed.length > KEEP) {
+                                        const toSend = processed.slice(0, processed.length - KEEP);
+                                        // Strip closing fences from what we send
+                                        const cleaned = toSend.replace(/\n```\s*$/m, '');
+                                        if (cleaned) {
+                                            window.artifactPanel.appendStreamingCode(cleaned);
+                                        }
+                                        window._artifactStreamBuf = processed.slice(processed.length - KEEP);
+                                    } else {
+                                        // Not enough data yet — keep buffering
+                                        window._artifactStreamBuf = processed;
                                     }
-                                    window._artifactStreamBuf = '';
                                 }
                                 if (bgRequest) {
                                     BackgroundRequestManager.appendContent(requestSessionId, chunkText);
@@ -2996,16 +3013,17 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                                 artifactStreamActive = true;
                                                 artifactFencePosition = metaMatch.index;
                                                 window.artifactPanel.openStreaming();
-                                                // Send code after the first file fence opening
+                                                // Switch to first file
+                                                const firstPath = fileMatch[1].trim();
+                                                const firstLang = fileMatch[2].trim();
+                                                if (window.artifactPanel.switchStreamingFile) {
+                                                    window.artifactPanel.switchStreamingFile(firstPath, firstLang);
+                                                }
+                                                // Seed the streaming buffer with all code after the first file fence
+                                                // The regular streaming path will handle file switches within it
                                                 const fileContentStart = streamedContent.indexOf('\n', fileMatch.index) + 1;
                                                 if (fileContentStart > 0) {
-                                                    const afterFence = streamedContent.slice(fileContentStart);
-                                                    // Strip closing fence if present in same chunk
-                                                    const closeFence = afterFence.indexOf('\n```');
-                                                    const codeChunk = closeFence !== -1 ? afterFence.slice(0, closeFence) : afterFence;
-                                                    if (codeChunk) {
-                                                        window.artifactPanel.appendStreamingCode(codeChunk);
-                                                    }
+                                                    window._artifactStreamBuf = streamedContent.slice(fileContentStart);
                                                 }
                                             }
                                         }
@@ -3142,8 +3160,20 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     ThinkingIndicator.hide(); hideSimplePulsingDot();
                 }
 
-                // Prepare completion data
-                const displayContent = streamChatSummary || streamedContent;
+                // Prepare completion data — strip internal protocol lines and artifact fences
+                let displayContent = streamChatSummary || streamedContent;
+                // Strip ACTION: routing line if it leaked through
+                if (displayContent) {
+                    displayContent = displayContent.replace(/^\s*[-*]*\s*ACTION:\s*\w+\s*\n*/i, '');
+                }
+                if (displayContent && (displayContent.includes('```artifact-meta') || displayContent.includes('```artifact-file:') || displayContent.includes('```artifact_patch'))) {
+                    displayContent = displayContent
+                        .replace(/```artifact-meta\s*\n[\s\S]*?```\s*\n?/gi, '')
+                        .replace(/```artifact-file:[^\n]*\n[\s\S]*?```\s*\n?/gi, '')
+                        .replace(/```artifact_patch[\s\S]*?```\s*\n?/gi, '')
+                        .replace(/```artifact(?![-_])[\s\S]*?```\s*\n?/gi, '')
+                        .trim();
+                }
                 const completionData = {
                     reasoning: streamedReasoning,
                     content: streamedContent,
@@ -3307,10 +3337,31 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         primaryLanguage: streamArtifact.primaryLanguage,
                         summary: displayContent
                     };
-                    window.artifactPanel.finalizePatchStreaming(streamArtifact, {
-                        sessionId: requestSessionId,
-                        reference: artifactRef
-                    });
+                    if (window.artifactPanel.isPatchStreaming) {
+                        window.artifactPanel.finalizePatchStreaming(streamArtifact, {
+                            sessionId: requestSessionId,
+                            reference: artifactRef
+                        });
+                    } else {
+                        // Patch streaming didn't activate — clear streaming state and show in CodeMirror
+                        const panel = window.artifactPanel;
+                        if (panel.isStreaming) {
+                            panel.isStreaming = false;
+                            panel._streamBuffer = '';
+                            panel.panel.classList.remove('is-streaming');
+                        }
+                        panel.openArtifact(streamArtifact, {
+                            sessionId: requestSessionId,
+                            reference: artifactRef,
+                            initialTab: 'code'
+                        });
+                        // Auto-enter edit mode so user sees CodeMirror editor
+                        setTimeout(() => {
+                            if (panel.currentVersion && !panel.isEditMode) {
+                                panel.enterEditMode();
+                            }
+                        }, 300);
+                    }
                 } else if (streamArtifact && window.artifactPanel) {
                     const artifactRef = streamArtifactRef || {
                         artifactId: streamArtifact.artifactId,
@@ -3329,17 +3380,87 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             { sessionId: requestSessionId, reference: artifactRef }
                         );
                     } else if (artifactStreamActive) {
-                        // New artifact was streaming — finalize and show preview
+                        // Live streaming was active — flush remaining buffer and finalize
+                        if (window._artifactStreamBuf) {
+                            const remaining = window._artifactStreamBuf.replace(/\n```\s*$/, '').replace(/```\s*$/, '');
+                            if (remaining) window.artifactPanel.appendStreamingCode(remaining);
+                            window._artifactStreamBuf = '';
+                        }
                         window.artifactPanel.finalizeStreaming(streamArtifact, {
                             sessionId: requestSessionId,
                             reference: artifactRef
                         });
                     } else {
-                        // Non-streaming — just open the artifact
-                        window.artifactPanel.openArtifact(streamArtifact, {
-                            sessionId: requestSessionId,
-                            reference: artifactRef
-                        });
+                        // Live streaming didn't activate — progressive typing into empty panel
+                        const panel = window.artifactPanel;
+                        const files = streamArtifact.activeVersion?.files || streamArtifact.files || [];
+                        if (files.length > 0) {
+                            panel.openStreaming();
+                            // Set title immediately
+                            if (panel.titleEl) panel.titleEl.textContent = streamArtifact.title || 'Artifact';
+                            setTimeout(() => {
+                                if (!panel.editCodeMirror) panel._ensureCodeMirror();
+                                if (!panel.editCodeMirror) {
+                                    panel.openArtifact(streamArtifact, { sessionId: requestSessionId, reference: artifactRef });
+                                    return;
+                                }
+                                panel.editCodeMirror.setValue('');
+                                panel.editCodeMirror.setOption('readOnly', true);
+                                const modeMap = { jsx: 'jsx', javascript: 'javascript', js: 'javascript', css: 'css', html: 'htmlmixed', python: 'python' };
+                                let fileIdx = 0, charIdx = 0;
+                                const CHARS_PER_TICK = 35;
+                                const TICK_MS = 14;
+
+                                // Init first file
+                                panel.editCodeMirror.setOption('mode', modeMap[files[0].language] || files[0].language);
+                                if (panel.currentFileName) panel.currentFileName.textContent = files[0].path;
+                                if (panel.fileSelect) {
+                                    panel.fileSelect.innerHTML = '';
+                                    files.forEach(f => {
+                                        const opt = document.createElement('option');
+                                        opt.value = f.path;
+                                        opt.textContent = f.path;
+                                        panel.fileSelect.appendChild(opt);
+                                    });
+                                }
+
+                                console.log('[PROGRESSIVE] files:', files.map(f => ({ path: f.path, lang: f.language, len: (f.content||'').length })));
+                                const tick = () => {
+                                    const file = files[fileIdx];
+                                    const content = file.content || '';
+                                    const end = Math.min(charIdx + CHARS_PER_TICK, content.length);
+                                    const chunk = content.slice(charIdx, end);
+                                    if (chunk) {
+                                        const doc = panel.editCodeMirror.getDoc();
+                                        const last = doc.lastLine();
+                                        doc.replaceRange(chunk, { line: last, ch: doc.getLine(last).length });
+                                        panel.editCodeMirror.scrollIntoView({ line: doc.lastLine(), ch: 0 });
+                                    }
+                                    charIdx = end;
+                                    if (charIdx >= content.length) {
+                                        fileIdx++;
+                                        charIdx = 0;
+                                        if (fileIdx < files.length) {
+                                            panel.editCodeMirror.setValue('');
+                                            panel.editCodeMirror.setOption('mode', modeMap[files[fileIdx].language] || files[fileIdx].language);
+                                            if (panel.currentFileName) panel.currentFileName.textContent = files[fileIdx].path;
+                                            if (panel.fileSelect) panel.fileSelect.value = files[fileIdx].path;
+                                        }
+                                    }
+                                    if (fileIdx < files.length) {
+                                        setTimeout(tick, TICK_MS);
+                                    } else {
+                                        panel.isStreaming = false;
+                                        panel.panel.classList.remove('is-streaming');
+                                        if (panel.editCodeMirror) panel.editCodeMirror.setOption('readOnly', false);
+                                        panel.openArtifact(streamArtifact, { sessionId: requestSessionId, reference: artifactRef });
+                                    }
+                                };
+                                setTimeout(tick, 50);
+                            }, 100);
+                        } else {
+                            panel.openArtifact(streamArtifact, { sessionId: requestSessionId, reference: artifactRef });
+                        }
                     }
                 }
 

@@ -517,6 +517,16 @@ class SidebarManager {
     document.addEventListener('messages-loaded', checkHasMessages);
     document.addEventListener('message-added', checkHasMessages);
 
+    // Canonical setter — call this instead of toggling the class directly.
+    // Accepts an explicit boolean, or omit to re-derive from DOM.
+    window.setHasMessages = (value) => {
+      if (typeof value === 'boolean') {
+        document.body.classList.toggle('has-messages', value);
+      } else {
+        checkHasMessages();
+      }
+    };
+
     // Make function globally available
     window.checkHasMessages = checkHasMessages;
 

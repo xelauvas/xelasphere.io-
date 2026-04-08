@@ -1386,6 +1386,40 @@ if (promptInput && sendButton) {
     });
 }
 
+// --- Composer ResizeObserver ---
+// Dynamically updates --composer-reserved-height so the conversation panel's
+// bottom padding always matches the actual composer height.  This replaces the
+// static 150px fallback and eliminates hardcoded mobile overrides.
+(function initComposerResizeObserver() {
+    const composer = document.querySelector('.chat-shell__composer');
+    if (!composer || typeof ResizeObserver === 'undefined') return;
+
+    const root = document.documentElement;
+    let lastHeight = 0;
+
+    const update = () => {
+        // Use the visible height (input-container) rather than the full fixed
+        // footer which includes transparent click-through space above it.
+        const container = composer.querySelector('.input-container');
+        const measured = container ? container.getBoundingClientRect().height : composer.offsetHeight;
+        // Add breathing room so the last message isn't flush against the composer
+        const reserved = Math.ceil(measured) + 24;
+        if (reserved !== lastHeight) {
+            lastHeight = reserved;
+            root.style.setProperty('--composer-reserved-height', reserved + 'px');
+        }
+    };
+
+    const ro = new ResizeObserver(update);
+    ro.observe(composer);
+    // Also observe the input-container directly for textarea grow/shrink
+    const container = composer.querySelector('.input-container');
+    if (container) ro.observe(container);
+
+    // Initial measurement
+    update();
+})();
+
 
 
 

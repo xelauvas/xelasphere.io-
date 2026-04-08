@@ -624,11 +624,11 @@ def chat_stream():
         )
         stream_model = routed_model
         logger.info(f"🔀 [Stream] Smart routing: {task_type} -> {stream_model}")
-        # Stream endpoint only supports DeepSeek/Moonshot — force deepseek-chat if needed
+        # Stream endpoint only supports DeepSeek/Moonshot/OpenAI — force deepseek-chat if needed
         from app.model_catalog import resolve_model_id, MODEL_PROVIDERS
         resolved = resolve_model_id(stream_model)
         provider = MODEL_PROVIDERS.get(resolved, "")
-        if provider not in ("deepseek", "moonshot"):
+        if provider not in ("deepseek", "moonshot", "openai"):
             stream_model = "deepseek-chat"
             logger.info(f"🔀 [Stream] Overriding non-streaming model to deepseek-chat")
 
@@ -698,7 +698,11 @@ def chat_stream():
         action_resolved = False
 
         try:
-            for chunk in stream_deepseek_response(enhanced_prompt, stream_model):
+            # Extract system prompt from built context for proper streaming
+            _sys_prompt = None
+            if built_context.messages and built_context.messages[0].get('role') == 'system':
+                _sys_prompt = built_context.messages[0]['content']
+            for chunk in stream_deepseek_response(enhanced_prompt, stream_model, system_prompt_override=_sys_prompt):
                 chunk_type = chunk.get('type')
 
                 if chunk_type == 'reasoning':
@@ -908,8 +912,14 @@ def chat_stream():
                                             lang = cf.get('language', 'text')
                                             regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
                                         regen_parts.append(f"\nUser request: {prompt}\n\n"
-                                                          "Respond with ACTION: create_artifact and a complete ```artifact block "
-                                                          "containing ALL files with the changes applied.")
+                                                          "Respond with ACTION: create_artifact and regenerate ALL files using the fenced format:\n"
+                                                          "```artifact-meta\n"
+                                                          '{"title":"...","type":"project","primaryLanguage":"..."}\n'
+                                                          "```\n"
+                                                          "```artifact-file:filename.ext:language\n"
+                                                          "...file content...\n"
+                                                          "```\n"
+                                                          "Include ALL files with the requested changes applied.")
                                         regen_prompt = "\n".join(regen_parts)
                                         # Try current model first, then cascade
                                         regen_models = [stream_model] + [m for m in ARTIFACT_MODEL_CASCADE if m != stream_model]
@@ -1037,6 +1047,10 @@ def chat_stream():
                     if parsed_action is not None and not parsed_action.used_fallback:
                         # ACTION line was parsed — use chat_text (stripped) as display content
                         display_content = parsed_action.chat_text
+                        # Also update chat_summary for inline mode (it still has
+                        # the raw ACTION: line otherwise, which leaks into the UI)
+                        if render_mode == 'inline':
+                            chat_summary = parsed_action.chat_text
 
                     done_payload = {
                         'type': 'done',
@@ -2120,8 +2134,14 @@ def chat():
                             lang = cf.get('language', 'text')
                             regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
                         regen_parts.append(f"\nUser request: {user_prompt}\n\n"
-                                          "Respond with ACTION: create_artifact and a complete ```artifact block "
-                                          "containing ALL files with the changes applied.")
+                                          "Respond with ACTION: create_artifact and regenerate ALL files using the fenced format:\n"
+                                          "```artifact-meta\n"
+                                          '{"title":"...","type":"project","primaryLanguage":"..."}\n'
+                                          "```\n"
+                                          "```artifact-file:filename.ext:language\n"
+                                          "...file content...\n"
+                                          "```\n"
+                                          "Include ALL files with the requested changes applied.")
                         regen_prompt = "\n".join(regen_parts)
                         regen_response, _, _ = get_ai_response(regen_prompt, model)
                         regen_parsed = ActionParser.parse(regen_response)
@@ -2255,8 +2275,14 @@ def chat():
                         lang = cf.get('language', 'text')
                         regen_parts.append(f"\n{cf['path']} ({lang}):\n```{lang}\n{cf.get('content','')}\n```\n")
                     regen_parts.append(f"\nUser request: {user_prompt}\n\n"
-                                      "Respond with ACTION: create_artifact and a complete ```artifact block "
-                                      "containing ALL files with the changes applied.")
+                                      "Respond with ACTION: create_artifact and regenerate ALL files using the fenced format:\n"
+                                      "```artifact-meta\n"
+                                      '{"title":"...","type":"project","primaryLanguage":"..."}\n'
+                                      "```\n"
+                                      "```artifact-file:filename.ext:language\n"
+                                      "...file content...\n"
+                                      "```\n"
+                                      "Include ALL files with the requested changes applied.")
                     regen_prompt = "\n".join(regen_parts)
                     # Try current model first, then cascade through capable models
                     regen_models = [model] + [m for m in ARTIFACT_MODEL_CASCADE if m != model]

@@ -472,30 +472,34 @@ body.is-standalone .page-wrapper::before {
    Tablet: Can use drawer or collapsible
    ============================================ */
 
-/* Phone sidebar - always drawer */
+/* Phone sidebar - sliding drawer */
 body.device-phone .left-sidebar {
     position: fixed;
     top: 0;
     left: 0;
-    width: var(--mobile-sidebar-width, 280px) !important;
+    width: 260px !important;
     height: 100vh;
     height: 100dvh;
     transform: translateX(-100%);
     z-index: var(--z-sidebar, 1000);
     box-shadow: none;
     visibility: hidden;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.3s;
-    background: var(--sidebar-bg, #0b0b10);
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
+                visibility 0s linear 0.5s,
+                box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1);
+    background: #212121;
     will-change: transform;
 }
 
 body.device-phone.mobile-sidebar-open .left-sidebar {
     transform: translateX(0);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.35);
     visibility: visible;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0s;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
+                visibility 0s linear 0s,
+                box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1);
 }
 
 body.device-phone .content-wrapper {
@@ -511,18 +515,17 @@ body.device-phone.mobile-sidebar-open {
 body.device-phone .mobile-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.5);
     z-index: var(--z-overlay, 900);
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
+    transition: opacity 0.5s ease, visibility 0s linear 0.5s;
 }
 
 body.device-phone .mobile-overlay.active {
     opacity: 1;
     visibility: visible;
+    transition: opacity 0.5s ease, visibility 0s linear 0s;
 }
 
 /* Tablet - can use either drawer or collapsible */
@@ -707,13 +710,11 @@ body.is-ios .chat-stage {
 body.device-phone #chat-scroll-region,
 body.device-phone .chat-display {
     padding: 0 8px;
-    padding-bottom: calc(var(--composer-reserved-height, 80px) + var(--safe-area-bottom, 0px));
 }
 
 body.device-tablet #chat-scroll-region,
 body.device-tablet .chat-display {
     padding: 0 16px;
-    padding-bottom: calc(var(--composer-reserved-height, 100px) + var(--safe-area-bottom, 0px));
 }
 
 /* Touch devices - swipe to reveal actions */
@@ -840,7 +841,7 @@ body.is-ios .arrow-down {
     position: fixed !important;
     width: 44px !important;
     height: 44px !important;
-    bottom: calc(100px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(var(--composer-reserved-height, 100px) + env(safe-area-inset-bottom, 0px) + 8px) !important;
     left: 50% !important;
     right: auto !important;
     top: auto !important;
@@ -906,7 +907,7 @@ body.is-ios .arrow-down {
 /* --- CSS Variables --- */
 :root {
     --header-height: 56px;
-    --mobile-sidebar-width: 280px;
+    --mobile-sidebar-width: min(300px, 80vw);
     --mobile-header-height: 56px;
 
     /* Z-Index Hierarchy (mobile)
@@ -1009,37 +1010,42 @@ body.is-ios .arrow-down {
         visibility: visible;
     }
 
-    /* --- Left Sidebar as Drawer --- */
+    /* --- Left Sidebar as Drawer — sliding door --- */
     .left-sidebar {
         position: fixed;
         top: 0;
         left: 0;
-        width: var(--mobile-sidebar-width) !important;
+        width: 260px !important;
         height: 100vh;
-        height: 100dvh; /* Dynamic viewport height for mobile */
+        height: 100dvh;
         transform: translateX(-100%);
         transition: none; /* No transition on initial load */
         z-index: var(--z-sidebar, 1000);
         box-shadow: none;
-        min-height: 0; /* Allow flex shrinking */
-        visibility: hidden; /* Hidden until opened */
+        min-height: 0;
+        visibility: hidden;
+        background: #212121;
     }
 
     /* Enable transitions only after page is ready */
     body.mobile-ready .left-sidebar {
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.3s;
+        transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
+                    visibility 0s linear 0.5s,
+                    box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1);
     }
 
     /* Sidebar open state on mobile */
     body.mobile-sidebar-open .left-sidebar {
         transform: translateX(0);
-        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+        box-shadow: 10px 0 30px rgba(0, 0, 0, 0.35);
         pointer-events: auto;
         overflow-y: auto;
         overflow-x: hidden;
         -webkit-overflow-scrolling: touch;
         visibility: visible;
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0s;
+        transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
+                    visibility 0s linear 0s,
+                    box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1);
     }
 
     /* Override the collapsed state on mobile - we use drawer instead */
@@ -1318,7 +1324,7 @@ body.is-ios .arrow-down {
 
     .left-sidebar {
         width: var(--mobile-sidebar-width) !important;
-        max-width: 320px;
+        max-width: 340px;
     }
 
     .toggle-button {
@@ -1839,7 +1845,7 @@ body.is-ios .arrow-down {
 
     /* Chat shell messages area (IS #chat-scroll-region - preserve scroll!) */
     .chat-shell__messages {
-        padding-bottom: calc(var(--space-4) + var(--composer-reserved-height, 150px));
+        padding-bottom: calc(var(--space-4) + var(--composer-reserved-height, 80px));
         /* overflow-y: auto is set via #chat-scroll-region rule */
     }
 
@@ -2415,9 +2421,9 @@ body.is-ios .arrow-down {
         min-height: 0;
     }
 
-    /* Messages container - proper bottom padding for input */
+    /* Messages container — single source of truth for composer clearance on mobile */
     body.has-messages .chat-shell__messages {
-        padding-bottom: calc(var(--space-4, 1rem) + var(--composer-reserved-height, 150px)) !important;
+        padding-bottom: calc(var(--space-4, 1rem) + var(--composer-reserved-height, 80px)) !important;
         gap: 0.5rem;
     }
 
@@ -2566,7 +2572,7 @@ body.is-ios .arrow-down {
     }
 
     body.has-messages .chat-shell__messages {
-        padding-bottom: calc(var(--space-4, 1rem) + var(--composer-reserved-height, 150px)) !important;
+        padding-bottom: calc(var(--space-4, 1rem) + var(--composer-reserved-height, 80px)) !important;
     }
 
     body.has-messages .conversation-panel {
@@ -2863,14 +2869,13 @@ body.is-ios .arrow-down {
     /* === Chat Area - NO scroll here, only #chat-scroll-region scrolls === */
     .chat-shell .chat-area,
     .chat-shell .container.chat-area {
-        padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
         overflow: hidden !important;
     }
 
     /* === Messages Display === */
+    /* Bottom clearance for composer is on #chat-scroll-region only — not here. */
     #chat-display {
         padding: 0.5rem !important;
-        padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)) !important;
         display: flex !important;
         flex-direction: column !important;
         gap: 0.75rem !important;
@@ -3475,7 +3480,7 @@ body.is-ios .arrow-down {
     .arrow-down {
         width: 40px !important;
         height: 40px !important;
-        bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important;
+        bottom: calc(var(--composer-reserved-height, 90px) + env(safe-area-inset-bottom, 0px) + 8px) !important;
         right: 12px !important;
         border-radius: 50% !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
@@ -3604,7 +3609,7 @@ body.is-ios .arrow-down {
     .arrow-down {
         width: 36px !important;
         height: 36px !important;
-        bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important;
+        bottom: calc(var(--composer-reserved-height, 80px) + env(safe-area-inset-bottom, 0px) + 8px) !important;
         right: 8px !important;
     }
 }
@@ -3615,17 +3620,11 @@ body.is-ios .arrow-down {
         padding: 6px 16px !important;
     }
 
-    .chat-area {
-        padding-bottom: 70px !important;
-    }
-
-    #chat-display {
-        padding-bottom: 80px !important;
-    }
+    /* Composer clearance is on #chat-scroll-region via --composer-reserved-height */
 
     .scroll-to-bottom,
     .arrow-down {
-        bottom: 75px !important;
+        bottom: calc(var(--composer-reserved-height, 75px) + 8px) !important;
     }
 }
 
@@ -4196,24 +4195,29 @@ body.viewport-mobile .left-sidebar {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
-    width: 280px !important;
+    width: min(300px, 80vw) !important;
     height: 100vh !important;
     height: 100dvh !important;
     z-index: 1000 !important;
     transform: translateX(-100%) !important;
     visibility: hidden;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.3s !important;
-    background: var(--sidebar-bg, #0b0b10) !important;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
+                visibility 0s linear 0.5s,
+                box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1) !important;
+    background: #171717 !important;
     will-change: transform;
+    box-shadow: none !important;
 }
 
-/* Show sidebar when open */
+/* Show sidebar when open — slides in like a door */
 body.viewport-mobile.mobile-sidebar-open .left-sidebar {
     transform: translateX(0) !important;
     visibility: visible !important;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.35) !important;
     overflow-y: auto !important;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0s !important;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
+                visibility 0s linear 0s,
+                box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1) !important;
 }
 
 /* Overlay backdrop */
@@ -4224,7 +4228,7 @@ body.viewport-mobile .mobile-overlay {
     z-index: 900 !important;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s ease !important;
+    transition: opacity 0.3s cubic-bezier(0, 0, 0.2, 1), visibility 0.3s ease !important;
     will-change: opacity, visibility;
 }
 
@@ -4738,4 +4742,33 @@ body.viewport-mobile *:hover > .toggle-tooltip {
         line-height: 1;
         margin-top: -2px;
     }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SIDEBAR SLIDE ANIMATION — FINAL OVERRIDE (phones only)
+   Only targets real mobile devices, not resized desktop browsers.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Closed state — off-screen left */
+body.device-phone .left-sidebar,
+body.device-tablet .left-sidebar {
+    width: 280px !important;
+    transform: translateX(-100%) !important;
+    background: #212121 !important;
+    transition: transform 0.5s ease !important;
+    box-shadow: none !important;
+}
+
+/* Open state — slides in */
+body.device-phone.mobile-sidebar-open .left-sidebar,
+body.device-tablet.mobile-sidebar-open .left-sidebar {
+    transform: translateX(0) !important;
+    box-shadow: 6px 0 20px rgba(0, 0, 0, 0.3) !important;
+    transition: transform 0.5s ease !important;
+}
+
+/* Overlay synced */
+body.device-phone .mobile-overlay,
+body.device-tablet .mobile-overlay {
+    transition: opacity 0.5s ease !important;
 }
