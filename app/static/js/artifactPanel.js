@@ -872,8 +872,8 @@ function clearOutput() {
 
 // Packages that need native Pyodide builds (not micropip)
 var BUILTIN_PKGS = ['numpy','pandas','matplotlib','scipy','scikit-learn','pillow','sympy','networkx','sqlalchemy'];
-// Packages that cannot work in browser
-var UNSUPPORTED = ['pygame','tkinter','cv2','opencv','flask','django','fastapi','socket','multiprocessing','subprocess'];
+// Packages that need the Docker server sandbox (GUI, networking, native libs)
+var SERVER_ONLY = ['pygame','tkinter','turtle','cv2','opencv','flask','django','fastapi','socket','multiprocessing','subprocess','PyQt5','PyQt6','wx','kivy','scrapy','selenium','playwright','celery','redis','psycopg2','mysqldb','uvicorn','gunicorn','tornado','aiohttp','twisted','paramiko','fabric'];
 
 async function loadPackagesFor(code) {
     // Detect all "import X" and "from X import" statements
@@ -881,16 +881,16 @@ async function loadPackagesFor(code) {
     var match, detected = new Set();
     while ((match = importRe.exec(code)) !== null) detected.add(match[1]);
 
-    // Check for unsupported packages — block execution if found
+    // Check for server-only packages — show Run on Server button
     var blocked = [];
-    for (var u of UNSUPPORTED) {
+    for (var u of SERVER_ONLY) {
         if (detected.has(u)) {
             blocked.push(u);
             detected.delete(u);
         }
     }
     if (blocked.length > 0) {
-        appendOutput('This script needs ' + blocked.join(', ') + ' which requires a server runtime.\\n\\n', 'stderr');
+        appendOutput('This script uses ' + blocked.join(', ') + ' — click below to run on the server.\\n\\n', 'repl-prompt');
         var srvBtn = document.createElement('button');
         srvBtn.className = 'tool-btn';
         srvBtn.style.margin = '8px 0';
@@ -2417,6 +2417,62 @@ window.addEventListener('load', function() {
             }
 
             if (output) output.innerHTML = '';
+
+            // Preflight: check what packages are needed
+            try {
+                const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                const pfHeaders = {'Content-Type': 'application/json'};
+                if (csrfMeta) pfHeaders['X-CSRFToken'] = csrfMeta.content;
+
+                const pfResp = await fetch('/api/sandbox/preflight', {
+                    method: 'POST',
+                    headers: pfHeaders,
+                    body: JSON.stringify({code}),
+                    credentials: 'same-origin'
+                });
+                if (pfResp.ok) {
+                    const pf = await pfResp.json();
+                    if (pf.extra_packages && pf.extra_packages.length > 0) {
+                        const pkgList = pf.extra_packages.join(', ');
+                        append(`This script needs: ${pkgList}\n`, 'repl-prompt');
+                        append(`Mode: ${pf.mode}\n\n`, 'repl-prompt');
+
+                        // Show install confirmation
+                        const confirmed = await new Promise(resolve => {
+                            const btnWrap = iframeDoc.createElement('div');
+                            btnWrap.style.cssText = 'margin: 8px 0; display: flex; gap: 8px;';
+
+                            const installBtn = iframeDoc.createElement('button');
+                            installBtn.className = 'tool-btn';
+                            installBtn.textContent = '\u2705 Install & Run';
+                            installBtn.onclick = () => { btnWrap.remove(); resolve(true); };
+
+                            const cancelBtn = iframeDoc.createElement('button');
+                            cancelBtn.className = 'tool-btn';
+                            cancelBtn.style.opacity = '0.7';
+                            cancelBtn.textContent = '\u274c Cancel';
+                            cancelBtn.onclick = () => { btnWrap.remove(); resolve(false); };
+
+                            btnWrap.appendChild(installBtn);
+                            btnWrap.appendChild(cancelBtn);
+                            output.appendChild(btnWrap);
+                            if (outputWrap) outputWrap.scrollTop = outputWrap.scrollHeight;
+                        });
+
+                        if (!confirmed) {
+                            append('Cancelled.\n', 'repl-prompt');
+                            return;
+                        }
+                        append('Installing dependencies...\n', 'repl-prompt');
+                    } else {
+                        append(`Running (${pf.mode} mode)...\n`, 'repl-prompt');
+                    }
+                }
+            } catch(e) {
+                // Preflight failed — proceed anyway
+                console.warn('Preflight check failed:', e);
+            }
+
             append('Connecting to server...\n', 'repl-prompt');
 
             const fileList = Object.keys(filesObj).map(p => ({path: p, content: filesObj[p]}));

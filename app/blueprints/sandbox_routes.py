@@ -8,11 +8,33 @@ import logging
 import requests as http_requests
 from flask import Blueprint, request, Response, stream_with_context, session, jsonify
 
-from app.services.sandbox_manager import sandbox_manager
+from app.services.sandbox_manager import sandbox_manager, detect_mode, detect_extra_packages, PREINSTALLED
 
 logger = logging.getLogger(__name__)
 
 sandbox_bp = Blueprint('sandbox', __name__)
+
+
+@sandbox_bp.route('/api/sandbox/preflight', methods=['POST'])
+def sandbox_preflight():
+    """Check what a script needs before running. Returns mode + extra packages."""
+    user_id = session.get('user', {}).get('uid') if session.get('user') else None
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.get_json()
+    if not data or not data.get('code'):
+        return jsonify({"error": "No code provided"}), 400
+
+    code = data['code']
+    mode = detect_mode(code)
+    extra = detect_extra_packages(code)
+
+    return jsonify({
+        "mode": mode,
+        "extra_packages": extra,
+        "preinstalled": len(extra) == 0,
+    })
 
 
 @sandbox_bp.route('/api/sandbox/run', methods=['POST'])

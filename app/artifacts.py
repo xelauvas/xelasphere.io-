@@ -1877,6 +1877,31 @@ class ArtifactStore:
             logger.error(f"Error in set_active_version: {e}", exc_info=True)
             raise
 
+    def save_artifact(
+        self,
+        user_id: str,
+        session_id: str,
+        artifact_id: str,
+        payload: Dict[str, Any],
+        title: str = "Edited Artifact",
+        description: str = "User-edited version",
+    ) -> Optional[Dict[str, Any]]:
+        """Save edited artifact files as a new version (called from the edit endpoint)."""
+        logger = logging.getLogger(__name__)
+        active_snapshot = self._get_active_snapshot(user_id, session_id)
+
+        # Ensure payload has the artifact ID and title
+        payload["artifactId"] = artifact_id
+        if title:
+            payload["title"] = title
+
+        if active_snapshot and active_snapshot.id == artifact_id:
+            logger.info(f"save_artifact: Appending version to existing artifact {artifact_id}")
+            return self._append_version(active_snapshot, payload, source_message_id=None)
+        else:
+            logger.info(f"save_artifact: Creating new artifact {artifact_id}")
+            return self._create_artifact(user_id, session_id, payload, source_message_id=None, created_by="user")
+
     def persist_decision(
         self,
         user_id: str,

@@ -59,7 +59,7 @@ class ContainerInfo:
 
 def detect_mode(code: str) -> str:
     """Detect execution mode from Python source code."""
-    gui_patterns = ['pygame.init', 'pygame.display', 'import tkinter', 'from tkinter', 'Tk()']
+    gui_patterns = ['pygame.init', 'pygame.display', 'import tkinter', 'from tkinter', 'Tk()', 'import turtle', 'from turtle', 'turtle.Screen', 'turtle.Turtle']
     app_patterns = ['Flask(__name__)', 'app.run(', 'uvicorn.run', 'import streamlit', 'from streamlit']
 
     for p in gui_patterns:

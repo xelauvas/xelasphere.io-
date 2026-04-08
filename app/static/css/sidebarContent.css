@@ -1104,12 +1104,12 @@ body.sidebar-collapsed .left-sidebar .sidebar-toggle-button::after {
 
 .chat-tab.active-tab .tab-name {
     position: relative;
-    animation: typeTitle 1.2s steps(18, end) 1;
+    animation: typeTitle 0.8s ease-out 1;
 }
 
 @keyframes typeTitle {
-    from { width: 0; }
-    to { width: 100%; }
+    from { max-width: 0; overflow: hidden; }
+    to { max-width: 100%; }
 }
 
 .title-fade {

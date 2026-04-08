@@ -413,14 +413,16 @@ class LanguageDetector {
                     /\bcase\s+.+\s+in/,
                     /#.*$/,                         // Single-line comments
                     /<<[-]?['"]?(\w+)['"]?/,        // Here documents
+                    /^\s*(?:pip|pip3|python|python3|npm|npx|yarn|pnpm|node|docker|curl|wget|git|brew|apt|apt-get|sudo|cd|ls|mkdir|rm|cp|mv|cat|chmod|chown|ssh|scp|tar|grep|find|make|cargo|go|ruby|gem|composer|php|dotnet|java|javac|gcc|g\+\+|cmake|rustc)\b/m,  // Common CLI commands
                 ],
                 keywords: new Set([
                     'echo', 'function', 'if', 'then', 'else', 'elif', 'fi', 'for', 'in',
                     'do', 'done', 'while', 'case', 'esac', 'select', 'until', 'break',
                     'continue', 'return', 'declare', 'typeset', 'readonly', 'export',
-                    'source', '.', '&&', '||', '!', '<<', '>>', '>|', '<&', '>&'
+                    'source', 'install', 'run', 'build', 'start', 'test', 'init',
+                    '&&', '||', '!', '<<', '>>', '>|', '<&', '>&'
                 ]),
-                minMatches: 2
+                minMatches: 1
             }],
             ['sql', {
                 patterns: [

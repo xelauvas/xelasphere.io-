@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
     libsdl2-ttf-dev libfreetype6-dev libportmidi-dev \
     novnc websockify x11vnc \
+    python3-tk \
     && rm -rf /var/lib/apt/lists/*
 
 # Pre-install common Python packages
