@@ -3221,6 +3221,22 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     delete window._handleImageConfirm;
                                 };
                             }
+                        } else if (chunk.type === 'search_started' || chunk.type === 'search_web_results' ||
+                                   chunk.type === 'search_images' || chunk.type === 'search_videos' ||
+                                   chunk.type === 'search_content' || chunk.type === 'search_complete') {
+                            if (isSessionActive()) {
+                                ThinkingIndicator.hide(); hideSimplePulsingDot();
+                                let searchMsgEl = document.getElementById(placeholderId || aiMsgId);
+                                if (!searchMsgEl) {
+                                    const id = placeholderId || generateMessageId();
+                                    displayMessage('', 'ai', 'text', prompt, true, id);
+                                    searchMsgEl = document.getElementById(id);
+                                }
+                                const searchContent = searchMsgEl?.querySelector('.message-content');
+                                if (searchContent && window.SearchResults) {
+                                    window.SearchResults.handleSearchEvent(searchContent, chunk.type, chunk);
+                                }
+                            }
                         } else if (chunk.type === 'done') {
                             console.log('Received done chunk:', chunk);
                             streamedReasoning = chunk.reasoning || streamedReasoning;
@@ -3247,6 +3263,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             console.log('Parsed artifact from done:', streamArtifact);
                             console.log('Parsed email from done:', streamIsEmail, streamEmailData);
                             if (streamCryptoChart) console.log('Parsed crypto chart:', streamCryptoChart);
+                            // Store search results for post-stream rendering
+                            if (chunk.search_results || chunk.embed_video) {
+                                window._streamSearchResults = chunk.search_results;
+                                window._streamEmbedVideo = chunk.embed_video;
+                                window._streamFetchedUrls = chunk.fetched_urls || [];
+                            }
                             // Handle image from generate_image ACTION path
                             if (chunk.image_url && window._pendingImagePlaceholderId) {
                                 replacePlaceholderWithImage(window._pendingImagePlaceholderId, chunk.image_url, prompt);
@@ -3440,6 +3462,19 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 // Add reasoning section if available (only for R1 model)
                 if (isDeepSeekR1 && streamedReasoning && messageContainer) {
                     ReasoningDisplay.create(streamedReasoning, messageContainer);
+                }
+
+                // Render inline search results (sources, video cards, citations)
+                if (window._streamSearchResults && window.SearchResults) {
+                    window.SearchResults.renderFinalResults(
+                        messageContainer || document.getElementById(aiMsgId),
+                        window._streamSearchResults,
+                        window._streamEmbedVideo,
+                        window._streamFetchedUrls
+                    );
+                    delete window._streamSearchResults;
+                    delete window._streamEmbedVideo;
+                    delete window._streamFetchedUrls;
                 }
 
                 // Handle email composer for streamed responses (backend flag)
@@ -4291,93 +4326,6 @@ function abortMessage() {
 // Expose abortMessage globally for other modules (e.g., typewriter stop)
 if (typeof window !== 'undefined') {
     window.abortMessage = abortMessage;
-}
-
-function populateRightSidebar(searchResults) {
-    const resultsContainer = document.getElementById("search-results-container");
-    if (!resultsContainer) {
-        console.error("Search results container not found.");
-        return;
-    }
-
-    // Clear existing results
-    resultsContainer.innerHTML = "";
-
-    if (searchResults && searchResults.length > 0) {
-        const searchSection = document.createElement("div");
-        searchSection.className = "search-results-section";
-
-        const searchHeader = document.createElement("div");
-        searchHeader.className = "search-header";
-        searchHeader.innerHTML = `
-            <div class="search-title">
-                <i class="fas fa-search"></i>
-                <span>Search Results</span>
-            </div>
-        `;
-        searchSection.appendChild(searchHeader);
-
-        const resultsList = document.createElement("div");
-        resultsList.className = "search-results-list";
-
-        searchResults.forEach((result) => {
-            const resultDiv = document.createElement("div");
-            resultDiv.className = "search-result";
-
-            if (result.website_name || result.source_domain) {
-                const sourceDiv = document.createElement("div");
-                sourceDiv.className = "result-source";
-
-                const favicon = document.createElement("img");
-                favicon.src = `https://www.google.com/s2/favicons?domain=${result.source_domain}`;
-                favicon.alt = `${result.website_name || result.source_domain} favicon`;
-                favicon.className = "result-favicon";
-                sourceDiv.appendChild(favicon);
-
-                const sourceText = document.createElement("span");
-                sourceText.textContent = result.website_name || result.source_domain;
-                sourceDiv.appendChild(sourceText);
-
-                resultDiv.appendChild(sourceDiv);
-            }
-
-            if (result.title && result.link) {
-                const titleLink = document.createElement("a");
-                titleLink.href = result.link;
-                titleLink.target = "_blank";
-                titleLink.rel = "noopener noreferrer";
-                titleLink.className = "result-title";
-                titleLink.textContent = result.title;
-                resultDiv.appendChild(titleLink);
-            }
-
-            if (result.snippet) {
-                const snippetDiv = document.createElement("div");
-                snippetDiv.className = "result-snippet";
-                snippetDiv.textContent = result.snippet;
-                resultDiv.appendChild(snippetDiv);
-            }
-
-            resultsList.appendChild(resultDiv);
-        });
-
-        searchSection.appendChild(resultsList);
-        resultsContainer.appendChild(searchSection);
-
-        // Update favicons in the "Sources" button
-        updateSourcesButton(searchResults);
-
-        toggleRightSidebar(true);
-    } else {
-        const noResults = document.createElement("div");
-        noResults.className = "no-results";
-        noResults.textContent = "No search results found.";
-        resultsContainer.appendChild(noResults);
-        if (typeof updateSourcesButton === 'function') {
-            updateSourcesButton([]);
-        }
-        toggleRightSidebar(true);
-    }
 }
 
 // Loader to indicate the debugging process with fading animation
