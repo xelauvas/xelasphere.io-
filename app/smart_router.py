@@ -45,6 +45,8 @@ def _has_provider_key(provider: str) -> bool:
         return bool(getattr(Config, "OPENROUTER_API_KEY", None))
     if provider == "cerebras":
         return bool(getattr(Config, "CEREBRAS_API_KEY", None))
+    if provider == "openai":
+        return bool(getattr(Config, "OPENAI_API_KEY", None))
     # groq is default
     return bool(getattr(Config, "GROQ_API_KEY", None))
 

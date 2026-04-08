@@ -1327,8 +1327,8 @@ function renderMathInMessage(element) {
             delimiters: [
                 { left: '$$', right: '$$', display: true },
                 { left: '\\[', right: '\\]', display: true },
-                { left: '\\(', right: '\\)', display: false },
-                { left: '$', right: '$', display: false }
+                { left: '\\(', right: '\\)', display: false }
+                // Single $ removed — too aggressive, catches currency like $7
             ],
             throwOnError: false
         });
@@ -2504,9 +2504,9 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
         }
     }
 
-    // Ghost Model: add "via ModelName" attribution to AI messages
-    if (normalizedSender === 'ai' && modelMeta && typeof window.addModelAttribution === 'function') {
-        window.addModelAttribution(messageDiv, modelMeta);
+    // Ghost Model: store modelMeta on DOM for attribution after typing completes
+    if (normalizedSender === 'ai' && modelMeta) {
+        messageDiv._modelMeta = modelMeta;
     }
 
     // Scroll is handled by scrollState.js (MutationObserver + scrollUserMessageToTop)
@@ -2900,7 +2900,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         const isDeepSeek = model.includes('deepseek');
         const isAuto = !model || model === 'auto';
         const isOpenAI = model.includes('gpt-');
-        const isStreamable = (isDeepSeek || model.includes('kimi') || isOpenAI || isAuto) && !hasImages;
+        const isGroq = model.includes('llama') || model.includes('qwen') || model.includes('gpt-oss') || model.includes('gemma');
+        const isStreamable = (isDeepSeek || model.includes('kimi') || isOpenAI || isGroq || isAuto) && !hasImages;
         const isDeepSeekR1 = model === 'deepseek-reasoner';
 
         // ThinkingIndicator is now shown immediately after user message (see above)
@@ -2953,6 +2954,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let streamMemoryUpdated = false;
                 let streamDreamNotification = null;
                 let streamArtifactPatches = null;
+                let streamModelMeta = null;
                 let patchStreamActive = false;
                 let patchStreamBuffer = '';
                 let patchParsedPatches = [];
@@ -3160,6 +3162,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             streamMemoryUpdated = chunk.memory_updated || false;
                             streamDreamNotification = chunk.dream_notification || null;
                             streamArtifactPatches = chunk.artifact_patches || null;
+                            // Model attribution (hoisted via var for access after loop)
+                            streamModelMeta = chunk.model_meta || null;
                             // Use backend's response_id if available for consistency
                             if (chunk.response_id) {
                                 streamResponseId = chunk.response_id;
@@ -3293,7 +3297,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     hasCode ? 'code' : 'text',
                     prompt,
                     true,
-                    aiMsgId
+                    aiMsgId,
+                    null,  // attachmentsMeta
+                    null,  // searchResults
+                    streamModelMeta
                 );
 
                 // Add reasoning section if available (only for R1 model)
@@ -3385,7 +3392,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         reasoning: streamedReasoning || null,
                         email: streamEmailData || null,
                         artifact_reference: streamArtifactRef,
-                        crypto_chart: streamCryptoChart || null
+                        crypto_chart: streamCryptoChart || null,
+                        model_meta: streamModelMeta || null
                     });
                     // Also update with artifact fields via updateLastAiMessage for full persistence
                     if (streamArtifactRef && manager.updateLastAiMessage) {
@@ -4814,10 +4822,20 @@ function appendTextMessage(container, text, isUserMessage, messageId, isHistory 
     const htmlContent = marked.parse(text);
     const sanitizedHtmlContent = DOMPurify.sanitize(htmlContent);
 
+    // Helper: apply model attribution after text is rendered
+    const applyAttribution = () => {
+        const msgDiv = messageElement.closest('.message');
+        if (msgDiv && msgDiv._modelMeta && typeof window.addModelAttribution === 'function') {
+            window.addModelAttribution(msgDiv, msgDiv._modelMeta);
+            delete msgDiv._modelMeta;
+        }
+    };
+
     if (isHistory) {
         // For historical messages, skip typing animation and render immediately
         messageElement.innerHTML = sanitizedHtmlContent;
         renderMathInMessage(messageElement);
+        applyAttribution();
         return Promise.resolve();
     } else {
         // For real-time messages, always use ProgressiveTextDisplay for background-aware animation
@@ -4828,6 +4846,7 @@ function appendTextMessage(container, text, isUserMessage, messageId, isHistory 
                 isCode: false,
                 onComplete: () => {
                     renderMathInMessage(messageElement);
+                    applyAttribution();
                     resolve();
                 }
             });

@@ -628,7 +628,7 @@ def chat_stream():
         from app.model_catalog import resolve_model_id, MODEL_PROVIDERS
         resolved = resolve_model_id(stream_model)
         provider = MODEL_PROVIDERS.get(resolved, "")
-        if provider not in ("deepseek", "moonshot", "openai"):
+        if provider not in ("deepseek", "moonshot", "openai", "groq"):
             stream_model = "deepseek-chat"
             logger.info(f"🔀 [Stream] Overriding non-streaming model to deepseek-chat")
 
@@ -1052,6 +1052,16 @@ def chat_stream():
                         if render_mode == 'inline':
                             chat_summary = parsed_action.chat_text
 
+                    # Model attribution for ghost label
+                    _resolved_model = resolve_model_id(stream_model)
+                    _model_meta = {
+                        'model_id': _resolved_model,
+                        'model_label': MODEL_LABELS.get(_resolved_model, stream_model),
+                        'model_provider': MODEL_PROVIDERS.get(_resolved_model, ''),
+                        'auto_selected': (model == 'auto' or not model),
+                        'task_type': task_type if (model == 'auto' or not model) else None,
+                    }
+
                     done_payload = {
                         'type': 'done',
                         'reasoning': full_reasoning,
@@ -1060,12 +1070,13 @@ def chat_stream():
                         'render_mode': render_mode,
                         'artifact': artifact_data,
                         'artifact_error': artifact_error,
-                        'artifact_patches': getattr(routing, '_patch_visual_data', None) if routing else None,  # Patch visual data for frontend animation
+                        'artifact_patches': getattr(routing, '_patch_visual_data', None) if routing else None,
                         'response_id': response_msg_id,
                         'is_email': is_email,
                         'email': email_data,
                         'crypto_chart': crypto_chart,
-                        'session_name': stream_session_name
+                        'session_name': stream_session_name,
+                        'model_meta': _model_meta
                     }
                     _pvd = getattr(routing, '_patch_visual_data', None) if routing else None
                     logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, has_patches={_pvd is not None}, patch_count={len(_pvd.get('patches',[])) if _pvd else 0}, session_name={repr(stream_session_name)}")

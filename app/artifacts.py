@@ -733,31 +733,40 @@ def extract_artifact_any_format(text: str) -> Optional[dict]:
 def extract_artifact_patch_block(text: str) -> Optional[Dict[str, Any]]:
     """Return parsed patch data if a ```artifact_patch block is present."""
     if not text:
+        logger.warning("extract_artifact_patch_block: empty text")
         return None
     match = ARTIFACT_PATCH_FENCE_PATTERN.search(text)
     if not match:
+        logger.warning("extract_artifact_patch_block: no fence match in %d chars", len(text))
         return None
     raw_json = match.group(1).strip()
     if not raw_json:
+        logger.warning("extract_artifact_patch_block: empty JSON inside fence")
         return None
     try:
         payload = json.loads(raw_json)
-    except json.JSONDecodeError:
-        logger.warning("artifact_patch block contains invalid JSON")
+    except json.JSONDecodeError as e:
+        logger.warning("artifact_patch block contains invalid JSON: %s (first 200 chars: %s)", e, raw_json[:200])
         return None
     if not isinstance(payload, dict):
+        logger.warning("extract_artifact_patch_block: payload is not dict: %s", type(payload))
         return None
     patches = payload.get('patches')
     if not isinstance(patches, list) or not patches:
+        logger.warning("extract_artifact_patch_block: patches missing or empty")
         return None
-    for patch in patches:
+    for i, patch in enumerate(patches):
         if not isinstance(patch, dict):
+            logger.warning("extract_artifact_patch_block: patch[%d] is not dict", i)
             return None
         if not patch.get('file') or not isinstance(patch.get('file'), str):
+            logger.warning("extract_artifact_patch_block: patch[%d] missing file", i)
             return None
         if not isinstance(patch.get('old_string'), str) or not patch['old_string']:
+            logger.warning("extract_artifact_patch_block: patch[%d] missing/empty old_string", i)
             return None
         if not isinstance(patch.get('new_string'), str):
+            logger.warning("extract_artifact_patch_block: patch[%d] missing new_string", i)
             return None
     return payload
 
@@ -1000,6 +1009,34 @@ def normalize_artifact_file(entry: Dict[str, Any], index: int) -> Dict[str, Any]
         language = str(language).strip().lower()
     else:
         language = guess_language_from_path(path)
+
+    # Auto-fix JSX void elements: <img ...> → <img ... />, <input ...> → <input ... />, etc.
+    # Uses line-by-line scan to handle multiline tags with => in attributes.
+    if language in ('jsx', 'tsx') or path.lower().endswith(('.jsx', '.tsx')):
+        import re
+        _VOID_RE = re.compile(r'^\s*<(?:img|input|br|hr|meta|link|source|track|wbr|area|base|col|embed|param)\b', re.IGNORECASE)
+        lines = content.split('\n')
+        in_void = False
+        for i, line in enumerate(lines):
+            if _VOID_RE.match(line):
+                if '/>' in line:
+                    in_void = False
+                elif '>' in line:
+                    trimmed = line.rstrip()
+                    if trimmed.endswith('>') and not trimmed.endswith('=>'):
+                        lines[i] = trimmed[:-1] + ' />'
+                    else:
+                        in_void = True
+                else:
+                    in_void = True
+            elif in_void:
+                if '/>' in line:
+                    in_void = False
+                elif re.match(r'^(\s*)>(.*)', line):
+                    lines[i] = re.sub(r'^(\s*)>(.*)', r'\1/>\2', line)
+                    in_void = False
+        content = '\n'.join(lines)
+        byte_size = len(content.encode("utf-8"))
 
     mime = entry.get("mime")
     if mime:

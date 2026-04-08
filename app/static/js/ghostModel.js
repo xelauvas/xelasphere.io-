@@ -12,17 +12,24 @@
     // ============================================
 
     const MODELS = [
-        { id: 'auto', label: 'Auto', icon: '⚡', note: 'smart routing' },
-        { id: 'llama-3.3-70b-versatile', label: 'Llama 70B', icon: '🦙', note: 'fast all-rounder' },
-        { id: 'qwen/qwen3-32b', label: 'Qwen 32B', icon: '🧠', note: 'coding & math' },
-        { id: 'qwen-3-235b-a22b-instruct-2507', label: 'Qwen 235B', icon: '🧠', note: 'complex reasoning' },
-        { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', icon: '🤖', note: 'large model' },
-        { id: 'deepseek-chat', label: 'DeepSeek V3', icon: '💻', note: 'top-tier coding' },
-        { id: 'deepseek-reasoner', label: 'DeepSeek R1', icon: '💻', note: 'reasoning' },
-        { id: 'dolphin3', label: 'Dolphin 3', icon: '🔓', note: 'uncensored local' },
-        { id: 'kimi-k2.5', label: 'Kimi K2.5', icon: '📚', note: 'reasoning' },
-        { id: 'kimi-latest', label: 'Kimi Latest', icon: '📚', note: 'long context' },
-        { id: 'gemma4:e2b', label: 'Gemma 4', icon: '🏠', note: 'local model' },
+        { id: 'auto', label: 'Auto', icon: '⚡', note: 'smart routing', host: '' },
+        // OpenAI
+        { id: 'gpt-4.1', label: 'GPT-4.1', icon: '✨', note: 'best coding', host: 'OpenAI' },
+        { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', icon: '✨', note: 'fast & smart', host: 'OpenAI' },
+        // DeepSeek
+        { id: 'deepseek-chat', label: 'DeepSeek V3', icon: '💻', note: 'top-tier coding', host: 'DeepSeek' },
+        { id: 'deepseek-reasoner', label: 'DeepSeek R1', icon: '💻', note: 'deep reasoning', host: 'DeepSeek' },
+        // Groq Cloud
+        { id: 'llama-3.3-70b-versatile', label: 'Llama 70B', icon: '🦙', note: 'fast all-rounder', host: 'Groq' },
+        { id: 'qwen/qwen3-32b', label: 'Qwen 32B', icon: '🧠', note: 'coding & math', host: 'Groq' },
+        { id: 'qwen-3-235b-a22b-instruct-2507', label: 'Qwen 235B', icon: '🧠', note: 'complex reasoning', host: 'Groq' },
+        { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', icon: '🤖', note: 'large model', host: 'Groq' },
+        // Moonshot
+        { id: 'kimi-k2.5', label: 'Kimi K2.5', icon: '📚', note: 'reasoning', host: 'Moonshot' },
+        { id: 'kimi-latest', label: 'Kimi Latest', icon: '📚', note: 'long context', host: 'Moonshot' },
+        // Local
+        { id: 'dolphin3', label: 'Dolphin 3', icon: '🔓', note: 'uncensored', host: 'Local' },
+        { id: 'gemma4:e2b', label: 'Gemma 4', icon: '🏠', note: 'on-device', host: 'Local' },
     ];
 
     const TASK_ICON_MAP = {
@@ -247,14 +254,29 @@
             if (!this.pillsEl) return;
             this.pillsEl.innerHTML = '';
 
+            const activeModelId = this.getDisplayModel();
+            let lastHost = '';
+
             MODELS.forEach(model => {
+                if (model.id === activeModelId) return;
+
+                // Provider group divider
+                if (model.host && model.host !== lastHost) {
+                    const divider = document.createElement('div');
+                    divider.className = 'ghost-pill__group';
+                    divider.textContent = model.host;
+                    this.pillsEl.appendChild(divider);
+                    lastHost = model.host;
+                }
+
                 const pill = document.createElement('button');
                 pill.className = 'ghost-pill';
                 pill.dataset.model = model.id;
-                pill.textContent = model.label;
                 pill.title = model.note;
                 pill.setAttribute('role', 'option');
                 pill.setAttribute('tabindex', '-1');
+
+                pill.innerHTML = `<span class="ghost-pill__icon">${model.icon}</span><span class="ghost-pill__label">${model.label}</span><span class="ghost-pill__note">${model.note}</span>`;
 
                 pill.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -310,11 +332,16 @@
             if (!this.sheetGrid) return;
             this.sheetGrid.innerHTML = '';
 
+            const activeModelId = this.getDisplayModel();
+
             MODELS.forEach(model => {
+                // Hide the currently selected model from the list
+                if (model.id === activeModelId) return;
+
                 const option = document.createElement('div');
                 option.className = 'ghost-bottom-sheet__option';
                 option.dataset.model = model.id;
-                option.innerHTML = `<span>${model.icon}</span><span>${model.label}</span>`;
+                option.innerHTML = `<span>${model.icon}</span><span>${model.label}</span><span class="ghost-bottom-sheet__host">${model.host}</span>`;
 
                 option.addEventListener('click', () => {
                     this.lockModel(model.id);
@@ -359,6 +386,7 @@
                 this.overrideModel = modelId;
             }
             this.closePills();
+            this.buildPills();
             this.crossfadeGhost();
         }
 
@@ -374,6 +402,7 @@
             }
             this.closePills();
             this.closeSheet();
+            this.buildPills();
             this.crossfadeGhost();
         }
 
@@ -382,6 +411,7 @@
             this.overrideModel = null;
             localStorage.removeItem('ghostLockedModel');
             this.detectAndUpdate();
+            this.buildPills();
             this.crossfadeGhost();
         }
 
@@ -413,15 +443,29 @@
         const label = modelMeta.model_label || modelMeta.model_id;
         if (!label) return;
 
-        const attr = document.createElement('div');
-        attr.className = 'message-model-attribution';
-
         let text = `via ${label}`;
         if (modelMeta.is_fallback) {
             text += ' (fallback)';
         }
+
+        const attr = document.createElement('span');
+        attr.className = 'message-model-attribution';
         attr.textContent = text;
 
+        // Try to append inline at the end of the last text element
+        const textMsg = messageDiv.querySelector('.text-message');
+        if (textMsg) {
+            // Find the last block-level child (p, li, h1-h6, div, etc.)
+            const blocks = textMsg.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, div, blockquote');
+            const lastBlock = blocks.length ? blocks[blocks.length - 1] : null;
+            if (lastBlock) {
+                lastBlock.appendChild(document.createTextNode(' '));
+                lastBlock.appendChild(attr);
+                return;
+            }
+        }
+
+        // Fallback: append to message div
         messageDiv.appendChild(attr);
     }
 

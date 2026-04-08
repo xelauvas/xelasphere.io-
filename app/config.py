@@ -32,6 +32,9 @@ class Config:
     # Cerebras API configuration (rate-limit fallback)
     CEREBRAS_API_KEY = os.getenv('CEREBRAS_API_KEY')
     CEREBRAS_API_URL = os.getenv('CEREBRAS_API_URL', 'https://api.cerebras.ai/v1/chat/completions')
+    # OpenAI API configuration (GPT-4.1)
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    OPENAI_API_URL = os.getenv('OPENAI_API_URL', 'https://api.openai.com/v1/chat/completions')
     # Ollama local model configuration (no API key required)
     OLLAMA_API_URL = os.getenv('OLLAMA_API_URL', 'http://127.0.0.1:11434/v1/chat/completions')
     OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma4:e2b')
@@ -52,6 +55,9 @@ class Config:
 
     # Finnhub API for stock news
     FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY', '')
+
+    # GNews API for home page news headlines
+    GNEWS_API_KEY = os.getenv('GNEWS_API_KEY', '')
     SEARCH_BLOCKED_DOMAINS = os.getenv('SEARCH_BLOCKED_DOMAINS', 'zhihu.com,baidu.com,weibo.com,qq.com').split(',')
     options_sets = []
 

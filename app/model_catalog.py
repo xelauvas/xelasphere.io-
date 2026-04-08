@@ -149,6 +149,7 @@ MODEL_CATALOG = {
         "selectable": True,
         "speed": "medium",
         "coding": True,
+        "context": 128000,
     },
     "deepseek-reasoner": {
         "label": "DeepSeek R1 (Reasoning)",
@@ -157,6 +158,7 @@ MODEL_CATALOG = {
         "speed": "slow",
         "coding": True,
         "reasoning": True,
+        "context": 128000,
     },
 
     # ============================================
@@ -177,6 +179,34 @@ MODEL_CATALOG = {
         "selectable": True,
         "speed": "medium",
         "context": 131072,
+    },
+
+    # ============================================
+    # OPENAI MODELS
+    # ============================================
+
+    "gpt-4.1": {
+        "label": "GPT-4.1 (Best Coding)",
+        "provider": "openai",
+        "selectable": True,
+        "speed": "medium",
+        "coding": True,
+        "context": 1047576,
+    },
+    "gpt-4.1-mini": {
+        "label": "GPT-4.1 Mini (Fast)",
+        "provider": "openai",
+        "selectable": True,
+        "speed": "fast",
+        "coding": True,
+        "context": 1047576,
+    },
+    "gpt-4.1-nano": {
+        "label": "GPT-4.1 Nano",
+        "provider": "openai",
+        "selectable": True,
+        "speed": "fast",
+        "context": 1047576,
     },
 
     # ============================================
@@ -275,6 +305,10 @@ MODEL_ALIASES = {
     "kimi-k2.5": "kimi-k2.5",
     "kimi-latest": "kimi-latest",
     "qwen-235b": "qwen-3-235b-a22b-instruct-2507",
+    "gpt4": "gpt-4.1",
+    "gpt-4": "gpt-4.1",
+    "gpt": "gpt-4.1",
+    "openai": "gpt-4.1",
     "auto": "auto",  # Special case for smart routing
 }
 

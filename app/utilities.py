@@ -431,7 +431,7 @@ def _get_provider_config(provider: str, resolved_model: str, api_overrides: Dict
     Get API configuration for a provider.
     Returns (url, headers, timeout, provider_label) or raises ValueError if not configured.
     """
-    provider_labels = {"openrouter": "OpenRouter", "deepseek": "DeepSeek", "groq": "Groq", "cerebras": "Cerebras", "moonshot": "Moonshot", "ollama": "Ollama"}
+    provider_labels = {"openrouter": "OpenRouter", "deepseek": "DeepSeek", "groq": "Groq", "cerebras": "Cerebras", "moonshot": "Moonshot", "openai": "OpenAI", "ollama": "Ollama"}
     provider_label = provider_labels.get(provider, "Groq")
 
     if provider == "ollama":
@@ -484,6 +484,16 @@ def _get_provider_config(provider: str, resolved_model: str, api_overrides: Dict
             "Content-Type": "application/json"
         }
         timeout = 60  # Kimi models may need longer for reasoning
+    elif provider == "openai":
+        effective_key = (api_overrides.get('openai') if api_overrides else None) or Config.OPENAI_API_KEY
+        if not effective_key:
+            raise ValueError(f'{provider_label} API key is not configured.')
+        url = Config.OPENAI_API_URL
+        headers = {
+            "Authorization": f"Bearer {effective_key}",
+            "Content-Type": "application/json"
+        }
+        timeout = 60
     else:  # groq
         effective_key = (api_overrides.get('groq') if api_overrides else None) or Config.GROQ_API_KEY
         if not effective_key:
@@ -650,9 +660,14 @@ def send_prompt(prompt, model="llama-3.1-70b-versatile"):
     return error_payload, False
 
 
-def stream_deepseek_response(prompt: str, model: str = "deepseek-reasoner"):
+def stream_deepseek_response(prompt: str, model: str = "deepseek-reasoner", system_prompt_override: str = None):
     """
-    Stream response from DeepSeek or Moonshot API with real-time content.
+    Stream response from DeepSeek, Moonshot, or OpenAI API with real-time content.
+
+    Args:
+        prompt: The user prompt (may include context from ContextBuilder)
+        model: Model identifier
+        system_prompt_override: If provided, replaces the default system prompt
 
     Yields:
         dict with 'type' ('reasoning', 'content', 'done', 'error') and 'text' or 'data'
@@ -665,9 +680,9 @@ def stream_deepseek_response(prompt: str, model: str = "deepseek-reasoner"):
     resolved_model = resolve_model_id(model)
     provider = MODEL_PROVIDERS.get(resolved_model, "groq")
 
-    # Only DeepSeek and Moonshot models support streaming
-    if provider not in ("deepseek", "moonshot"):
-        yield {'type': 'error', 'text': 'Streaming only available for DeepSeek and Moonshot models'}
+    # Streaming supported for OpenAI-compatible providers
+    if provider not in ("deepseek", "moonshot", "openai", "groq"):
+        yield {'type': 'error', 'text': 'Streaming not available for this provider'}
         return
 
     api_overrides = {}
@@ -682,93 +697,16 @@ def stream_deepseek_response(prompt: str, model: str = "deepseek-reasoner"):
         yield {'type': 'error', 'text': str(e)}
         return
 
-    # System prompt to guide artifact formatting
-    system_prompt = """You are XelaSphere AI, a helpful coding assistant.
-
-CRITICAL OUTPUT FORMAT RULE:
-NEVER use HTML tags like <p>, <div>, <span>, <br>, <h1>, etc. in your responses.
-Use plain text and Markdown formatting ONLY. No HTML whatsoever.
-
-WHEN TO USE ARTIFACTS (MANDATORY):
-When the user asks you to BUILD, CREATE, or MAKE any of the following, you MUST output a ```artifact block:
-- Apps, games, tools, calculators, visualizations
-- Interactive components (React, HTML+JS, etc.)
-- Websites, landing pages, dashboards
-- Diagrams (Mermaid), SVG graphics
-- Any code that is meant to be RUN or PREVIEWED
-
-This includes SINGLE-FILE projects. Even a single React component or HTML page gets an artifact.
-
-ARTIFACT FORMAT (EXACT):
-```artifact
-{
-  "title": "Project Title",
-  "type": "project",
-  "primaryLanguage": "javascript",
-  "files": [
-    {"path": "index.html", "language": "html", "content": "<!DOCTYPE html>\\n<html>..."},
-    {"path": "style.css", "language": "css", "content": "body { ... }"},
-    {"path": "App.jsx", "language": "jsx", "content": "function App() { ... }"}
-  ]
-}
-```
-
-RULES for artifact blocks:
-- The entire artifact must be valid JSON inside the code fence
-- Use "files" array with objects containing "path", "language", and "content"
-- Escape newlines as \\n and quotes as \\" in the content strings
-- Keep each file's content as a single-line escaped string
-- Always close the artifact block with ```
-- For React apps: DO NOT create index.html. ALWAYS create BOTH App.jsx AND style.css as separate files.
-  The preview system auto-loads React 18 + Babel. Just write the JSX component directly.
-  IMPORTANT: The component's return statement MUST have a SINGLE root element. Wrap in <div> or use React Fragment (<>...</>). NEVER return adjacent sibling elements without a wrapper.
-  IMPORTANT: NEVER put CSS inline in JSX. ALL styles MUST go in style.css as a separate file.
-  IMPORTANT: App.jsx MUST use `export default function App()` or `export default` at the end.
-  IMPORTANT: JSX must use proper nested structure with className attributes that match the CSS selectors. For example, if CSS has `.calculator-container`, `.display`, `.buttons`, then JSX MUST have `<div className="calculator-container"><div className="display">...</div><div className="buttons">...</div></div>`. NEVER render a flat list of elements without container divs.
-  CRITICAL: Inside artifact code content, NEVER use markdown formatting like **bold**, *italic*, # headings, or bullet points (•). Write ONLY valid JavaScript/JSX code. Button text should be plain text like "AC" not "**AC**". Headings in JSX must use <h1>, <h2> etc, NOT # markdown syntax.
-  Example: {"title":"My App","type":"project","primaryLanguage":"jsx","files":[{"path":"App.jsx","language":"jsx","content":"import React, { useState } from 'react';\\nimport './style.css';\\n\\nexport default function App() {\\n  return <div>Hello</div>;\\n}"},{"path":"style.css","language":"css","content":"body { margin: 0; }"}]}
-- For HTML apps (no React): split into index.html, style.css, script.js when >30 lines
-- NEVER mix index.html with .jsx files - use EITHER React (jsx only) OR plain HTML
-
-WHEN NOT TO USE ARTIFACTS:
-- Explaining a concept with a code snippet
-- Answering "how do I..." with a small example
-- Code reviews, debugging explanations
-- Any non-runnable code (config files, pseudocode)
-
-🔧 ARTIFACT UPDATES & BUG FIXES (MANDATORY FORMAT):
-When you see "CURRENT ARTIFACT" in the user's message, you MUST follow this EXACT format.
-DO NOT explain the code. DO NOT say "the code looks correct". DO NOT regenerate the full artifact.
-You MUST output a ```artifact_patch block. This is NOT optional.
-
-STEP 1: Write a 1-2 sentence summary of what you're changing.
-STEP 2: Output EXACTLY this format (nothing else):
-```artifact_patch
-{"patches":[{"file":"App.jsx","old_string":"COPY EXACT LINES FROM THE CODE ABOVE","new_string":"THE FIXED VERSION OF THOSE LINES"}]}
-```
-
-RULES:
-- old_string MUST be copied EXACTLY from the CURRENT ARTIFACT code (character-for-character, including whitespace)
-- Include 2-4 surrounding lines in old_string so it matches uniquely
-- new_string is the replacement with the fix applied
-- Multiple patches: {"patches":[{...},{...}]}
-- For CSS changes, use "file":"style.css"
-- NEVER output a ```artifact block — ONLY ```artifact_patch
-- NEVER say "the code looks correct" — if the user reports an error, FIX IT
-- NEVER output just text explaining the fix — you MUST include the patch block
-
-⚠️ CRITICAL: DO NOT ASK EXCESSIVE QUESTIONS
-When user asks you to BUILD or CREATE something:
-- DO NOT ask clarifying questions - just BUILD IT immediately
-- Use sensible defaults for missing details
-- If user says "just do it", "skip", or "go ahead" → PRODUCE OUTPUT NOW
-- It's better to produce a complete working result than to ask questions
-- The user can always ask for changes after seeing the output
-
-For simple questions or explanations, just respond normally without artifacts."""
+    # Use override system prompt if provided (from ContextBuilder), otherwise use default
+    if system_prompt_override:
+        system_prompt = system_prompt_override
+    else:
+        system_prompt = "You are XelaSphere AI, a helpful assistant."
 
     # Some reasoning models (e.g. Kimi K2.5) only accept temperature=1
     temperature = 1.0 if resolved_model in ("kimi-k2.5",) else 0.7
+
+    max_tokens = 16384 if provider == "openai" else 8192
 
     data = {
         "messages": [
@@ -776,7 +714,7 @@ For simple questions or explanations, just respond normally without artifacts.""
             {"role": "user", "content": prompt}
         ],
         "model": resolved_model,
-        "max_tokens": 8192,
+        "max_tokens": max_tokens,
         "temperature": temperature,
         "stream": True
     }

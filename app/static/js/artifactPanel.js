@@ -419,6 +419,46 @@
         // Only match when /> is immediately followed by </tag> (no JSX content between)
         code = code.replace(/\\/>\\s*<\\/([a-zA-Z][a-zA-Z0-9]*?)>/g, '></$1>');
 
+        // --- 4c. FIX UNCLOSED VOID ELEMENTS ---
+        // Handle multiline void tags: <input\\n  attr={e => val}\\n> → .../>
+        // Regex fails on => inside attrs, so use line-by-line scan instead.
+        (function() {
+            var voidRe = /^\\s*<(img|input|br|hr|meta|link|source|track|wbr|area|base|col|embed|param)\\b/i;
+            var selfCloseRe = /\\/\\>\\s*$/;
+            var loneCloseRe = /^(\\s*)>(.*)$/;
+            var lines = code.split('\\n');
+            var inVoid = false;
+            for (var i = 0; i < lines.length; i++) {
+                if (voidRe.test(lines[i])) {
+                    // Single-line void tag: <input type="text">
+                    if (lines[i].includes('>')) {
+                        if (selfCloseRe.test(lines[i])) {
+                            inVoid = false; // already self-closed
+                        } else {
+                            // Check if > is at the end (not inside => or attributes)
+                            var trimmed = lines[i].trimEnd();
+                            if (trimmed.endsWith('>') && !trimmed.endsWith('=>')) {
+                                lines[i] = trimmed.slice(0, -1) + ' />' ;
+                            } else {
+                                inVoid = true; // > is inside attrs, closing > is on a later line
+                            }
+                        }
+                    } else {
+                        inVoid = true; // multiline tag
+                    }
+                } else if (inVoid) {
+                    if (selfCloseRe.test(lines[i])) {
+                        inVoid = false;
+                    } else if (loneCloseRe.test(lines[i])) {
+                        // Line is just whitespace + > + maybe more content
+                        lines[i] = lines[i].replace(loneCloseRe, '$1/>$2');
+                        inVoid = false;
+                    }
+                }
+            }
+            code = lines.join('\\n');
+        })();
+
         // --- 5. DETECT MAIN COMPONENT ---
         // Collect ALL PascalCase identifiers from functions, classes, and const/let/var assignments
         var componentName = null;
@@ -2190,19 +2230,23 @@ window.addEventListener('load', function() {
         }
 
         openPatchStreaming() {
-            if (!this.currentVersion || !this.codeBlock) return;
+            if (!this.currentVersion) return;
 
             this.isPatchStreaming = true;
             this._patchQueue = Promise.resolve();
+            this._patchMarks = [];
 
-            // Exit edit mode so patch animations show on the code display
-            if (this.isEditMode) {
-                this.exitEditMode();
-            }
-
-            // Switch to code tab showing current (pre-patch) code
+            // Switch to code tab
             this.activeTab = 'code';
             this.switchTab('code');
+
+            // Enter edit mode so patches show in CodeMirror
+            if (!this.isEditMode) {
+                this.enterEditMode();
+            }
+            if (this.editCodeMirror) {
+                this.editCodeMirror.setOption('readOnly', true);
+            }
 
             if (this.titleEl) {
                 this.titleEl.textContent = 'Updating...';
@@ -2225,68 +2269,87 @@ window.addEventListener('load', function() {
         }
 
         async _animatePatch(file, oldStr, newStr) {
-            if (!this.codeBlock) return;
+            const cm = this.editCodeMirror;
+            if (!cm) return;
 
             // Switch to target file if needed
-            const needsSwitch = this.currentVersion?.files && this.currentFile?.path !== file;
-            if (needsSwitch) {
+            const currentFilePath = this.editingFile?.path || this.currentFile?.path;
+            if (file !== currentFilePath && this.currentVersion?.files) {
                 const targetFile = this.currentVersion.files.find(f => f.path === file);
                 if (targetFile) {
-                    // Clear previous file's marks before switching
-                    this.codeBlock.querySelectorAll('.patch-removing, .patch-added').forEach(el => {
-                        const parent = el.parentNode;
-                        while (el.firstChild) parent.insertBefore(el.firstChild, el);
-                        parent.removeChild(el);
-                    });
-                    this.renderCodeViewer(this.currentVersion, targetFile);
+                    // Clear previous marks
+                    this._clearPatchMarks();
+                    // Load target file into CodeMirror
+                    this.editingFile = targetFile;
+                    cm.setValue(targetFile.content || '');
+                    const modeMap = { jsx: 'jsx', javascript: 'javascript', js: 'javascript', css: 'css', html: 'htmlmixed', python: 'python' };
+                    cm.setOption('mode', modeMap[targetFile.language] || targetFile.language);
+                    if (this.currentFileName) this.currentFileName.textContent = targetFile.path;
                     if (this.fileSelect) {
                         const idx = this.currentVersion.files.indexOf(targetFile);
                         if (idx >= 0) this.fileSelect.value = String(idx);
                     }
-                    // Extra frame wait for Prism highlight after file switch
                     await new Promise(r => requestAnimationFrame(r));
                 }
             }
 
-            // Wait a frame for render to settle
             await new Promise(r => requestAnimationFrame(r));
 
-            const codeText = this.codeBlock.textContent || '';
-
-            // Normalize for matching (JSON may have literal \n)
+            const content = cm.getValue();
             let searchOld = oldStr;
-            if (!codeText.includes(searchOld)) {
+            if (!content.includes(searchOld)) {
                 searchOld = searchOld.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
             }
-            if (!codeText.includes(searchOld)) return; // can't find it, skip
-
-            // Highlight old code in red
-            this._highlightTextInElement(this.codeBlock, searchOld, 'patch-removing');
-            const removeMarks = this.codeBlock.querySelectorAll('.patch-removing');
-            if (removeMarks.length > 0) this._scrollToElement(removeMarks[0]);
-
-            // Pause so user sees the red highlight
-            await new Promise(r => setTimeout(r, 400));
-
-            // Replace all old marks with a single green mark containing new code
-            if (removeMarks.length > 0) {
-                const addMark = document.createElement('mark');
-                addMark.className = 'patch-added';
-                addMark.textContent = newStr;
-                removeMarks[0].parentNode.insertBefore(addMark, removeMarks[0]);
-                // Remove all old red marks
-                removeMarks.forEach(m => m.parentNode.removeChild(m));
-                // Scroll to follow the green replacement
-                this._scrollToElement(addMark);
+            const pos = content.indexOf(searchOld);
+            if (pos === -1) {
+                console.warn('[PATCH-CM] old_string not found in editor, skipping');
+                return;
             }
 
-            // Update in-memory file content so subsequent patches match correctly
-            if (this.currentFile) {
-                this.currentFile.content = (this.currentFile.content || '').replace(oldStr, newStr);
+            // Find start/end positions in CodeMirror
+            const fromPos = cm.posFromIndex(pos);
+            const toPos = cm.posFromIndex(pos + searchOld.length);
+
+            // Highlight old code in red
+            const redMark = cm.markText(fromPos, toPos, {
+                className: 'cm-patch-removing',
+                clearOnEnter: false
+            });
+            this._patchMarks.push(redMark);
+            cm.scrollIntoView(fromPos, 100);
+
+            // Pause so user sees the red highlight
+            await new Promise(r => setTimeout(r, 500));
+
+            // Replace with new code
+            redMark.clear();
+            cm.replaceRange(newStr, fromPos, toPos);
+
+            // Highlight new code in green
+            const newToPos = cm.posFromIndex(pos + newStr.length);
+            const greenMark = cm.markText(fromPos, newToPos, {
+                className: 'cm-patch-added',
+                clearOnEnter: false
+            });
+            this._patchMarks.push(greenMark);
+            cm.scrollIntoView(fromPos, 100);
+
+            // Update in-memory file content so subsequent patches match
+            if (this.editingFile) {
+                this.editingFile.content = cm.getValue();
+            } else if (this.currentFile) {
+                this.currentFile.content = cm.getValue();
             }
 
             // Brief pause to show green before next patch
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, 400));
+        }
+
+        _clearPatchMarks() {
+            if (this._patchMarks) {
+                this._patchMarks.forEach(m => m.clear());
+                this._patchMarks = [];
+            }
         }
 
         finalizePatchStreaming(artifact, { sessionId = null, reference = null } = {}) {
@@ -2298,13 +2361,12 @@ window.addEventListener('load', function() {
 
                 // Brief pause to show last green highlight
                 setTimeout(() => {
-                    // Remove all patch marks
-                    if (this.codeBlock) {
-                        this.codeBlock.querySelectorAll('.patch-removing, .patch-added').forEach(el => {
-                            const parent = el.parentNode;
-                            while (el.firstChild) parent.insertBefore(el.firstChild, el);
-                            parent.removeChild(el);
-                        });
+                    // Clear CodeMirror patch marks
+                    this._clearPatchMarks();
+
+                    // Make editor editable again
+                    if (this.editCodeMirror) {
+                        this.editCodeMirror.setOption('readOnly', false);
                     }
 
                     // Open the server-patched artifact (authoritative) on Preview

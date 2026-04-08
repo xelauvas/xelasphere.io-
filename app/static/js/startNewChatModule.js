@@ -3396,6 +3396,15 @@ async loadChatHistory(pageToken = null, limit = 10) {
             msg && (msg.response_id === messageData.response_id || msg.id === messageData.response_id)
         );
 
+        // Extract model meta (from streaming path or flat fields)
+        const mm = messageData.model_meta || {};
+        const modelId = mm.model_id || messageData.model_id || null;
+        const modelLabel = mm.model_label || messageData.model_label || null;
+        const modelProvider = mm.model_provider || messageData.model_provider || null;
+        const modelProviderLabel = mm.model_provider_label || messageData.model_provider_label || null;
+        const autoSelected = mm.auto_selected || messageData.auto_selected || false;
+        const taskType = mm.task_type || messageData.task_type || null;
+
         const messageEntry = {
             sender: 'AI',
             content: messageData.content || '',
@@ -3407,7 +3416,14 @@ async loadChatHistory(pageToken = null, limit = 10) {
             render_mode: messageData.render_mode || 'inline',
             reasoning: messageData.reasoning || null,
             email: messageData.email || null,
-            crypto_chart: messageData.crypto_chart || null
+            crypto_chart: messageData.crypto_chart || null,
+            // Model attribution — persists to Firestore
+            model_id: modelId,
+            model_label: modelLabel,
+            model_provider: modelProvider,
+            model_provider_label: modelProviderLabel,
+            auto_selected: autoSelected,
+            task_type: taskType
         };
 
         if (existingIndex >= 0) {
@@ -4150,6 +4166,10 @@ async loadChatHistory(pageToken = null, limit = 10) {
             }
         }
 
+        if (sender === 'ai' && modelMeta) {
+            // Store for inline attribution after text renders
+            messageDiv._modelMeta = modelMeta;
+        }
         if (sender === 'ai' && modelMeta && modelMeta.auto_selected) {
             // Store metadata on DOM; action-buttons renderer will display it in-theme.
             messageDiv.dataset.autoSelected = 'true';

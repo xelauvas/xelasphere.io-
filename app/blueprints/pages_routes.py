@@ -104,9 +104,18 @@ def index():
             session['guest_messages'] = []
             session.modified = True
 
+        # Fetch news headlines — personalized for logged-in users, generic for guests
+        from app.news import get_news_headlines
+        news_user_id = session['user']['uid'] if not guest_mode else None
+        news_headlines = get_news_headlines(
+            count=4, db=db if news_user_id else None, user_id=news_user_id
+        )
+
         # Mobile gets 7 suggestions (no More), desktop gets 3 + More = 4 (2x2 grid)
         mobile = _is_mobile()
-        num_suggestions = 6 if mobile else 3
+        # 1 slot reserved for news ticker card if headlines available
+        num_news_slots = 1 if news_headlines else 0
+        num_suggestions = max(1, (6 if mobile else 3) - num_news_slots)
 
         # Use fallback options for guests (no API call), full options for logged-in users
         if guest_mode:
@@ -178,6 +187,7 @@ def index():
         return render_template(
             'index.html',
             options=options,
+            news_headlines=news_headlines,
             shared_session_id=None,
             is_guest=guest_mode,
             guest_message_count=guest_count,

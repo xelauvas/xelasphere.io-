@@ -153,6 +153,7 @@ PROVIDER_SPECIFIC_MESSAGES = {
 # When one fails to produce valid artifact JSON, try the next.
 ARTIFACT_MODEL_CASCADE = [
     "deepseek-chat",
+    "gpt-4.1",
     "qwen/qwen3-32b",
     "kimi-k2.5",
     "llama-3.3-70b-versatile",
@@ -163,6 +164,7 @@ ARTIFACT_MODEL_CASCADE = [
 # follow the ACTION protocol with artifact fences.
 ARTIFACT_CAPABLE_MODELS = {
     "deepseek-chat", "deepseek-reasoner",
+    "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
     "qwen/qwen3-32b", "qwen/qwq-32b",
     "kimi-k2.5", "kimi-latest",
     "llama-3.3-70b-versatile",
