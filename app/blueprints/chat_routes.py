@@ -86,8 +86,8 @@ from app.utilities import (
 from app.search_client import (
     SearchResult, SearchBackend, SearchClient, SearchException,
     resolve_search_backend,
-    perform_web_search,
 )
+from app.services.search_orchestrator import search_orchestrator
 from app.blueprints.email_routes import is_email_request, looks_like_email, parse_email_from_response
 from app.model_catalog import MODEL_LABELS, MODEL_PROVIDERS, DEFAULT_MODEL, AUTO_MODEL, resolve_model_id, get_selectable_models
 from app.smart_router import smart_route, is_refusal_response, get_uncensored_model, check_prompt_injection
@@ -929,6 +929,18 @@ def chat_stream():
                                 else:
                                     yield f"data: {json.dumps({'type': 'image_generating', 'description': img_description})}\n\n"
 
+                            # web_search: fire progressive search
+                            if result == "web_search" and action_buffer.header_fields.get("query"):
+                                ws_query = action_buffer.header_fields["query"]
+                                ws_type = action_buffer.header_fields.get("search_type", "general")
+                                ws_reason = action_buffer.header_fields.get("reason", "")
+                                logger.info(f"[Stream] web_search: query='{ws_query}', type={ws_type}, reason='{ws_reason}'")
+
+                                yield f"data: {json.dumps({'type': 'search_started', 'query': ws_query, 'search_type': ws_type})}\n\n"
+
+                                for event in search_orchestrator.search_progressive(ws_query, ws_type, stream_model):
+                                    yield f"data: {json.dumps({'type': event.type, **event.data})}\n\n"
+
                             # Forward remainder after the ACTION line
                             if action_buffer.remainder:
                                 yield f"data: {json.dumps({'type': 'content', 'text': action_buffer.remainder})}\n\n"
@@ -949,6 +961,7 @@ def chat_stream():
                     chat_summary = full_content
                     routing = None
                     _image_done_data = {}  # populated by generate_image handler
+                    _search_done_data = {}  # populated by web_search handler
 
                     try:
                         parsed_action = ActionParser.parse(full_content)
@@ -1142,6 +1155,27 @@ def chat_stream():
                                     contains_code=False,
                                     desired_action=ArtifactPreference.NONE,
                                 )
+                        elif parsed_action.action == "web_search" and parsed_action.search_payload:
+                            search_context = search_orchestrator.get_context_for_ai(
+                                parsed_action.search_payload['query']
+                            )
+                            chat_summary = parsed_action.chat_text
+                            query_key = parsed_action.search_payload['query'].lower().strip()
+                            all_last = search_orchestrator._last_results.get(query_key, [])
+                            _search_done_data = {
+                                'web': [search_orchestrator._result_to_dict(r) for r in all_last if r.type == 'web'],
+                                'images': [search_orchestrator._result_to_dict(r) for r in all_last if r.type == 'image'],
+                                'videos': [search_orchestrator._result_to_dict(r) for r in all_last if r.type == 'video'],
+                                'fetched_urls': list(search_orchestrator.get_fetched_urls()),
+                                'embed_video': parsed_action.search_payload.get('embed_video'),
+                            }
+                            routing = ArtifactDecision(
+                                render_mode="inline",
+                                chat_payload=chat_summary,
+                                artifact_payload=None,
+                                contains_code=False,
+                                desired_action=ArtifactPreference.NONE,
+                            )
                         else:
                             routing = ArtifactDecision(
                                 render_mode="inline",
@@ -1368,6 +1402,11 @@ def chat_stream():
                     # Merge image data if generate_image produced an image
                     if _image_done_data:
                         done_payload.update(_image_done_data)
+                    # Merge search results if web_search was performed
+                    if _search_done_data:
+                        done_payload['search_results'] = _search_done_data
+                        done_payload['embed_video'] = _search_done_data.get('embed_video')
+                        done_payload['fetched_urls'] = _search_done_data.get('fetched_urls', [])
                     _pvd = getattr(routing, '_patch_visual_data', None) if routing else None
                     logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, has_patches={_pvd is not None}, patch_count={len(_pvd.get('patches',[])) if _pvd else 0}, session_name={repr(stream_session_name)}")
 
@@ -1707,10 +1746,7 @@ def chat():
         # NOTE: Image request check moved to after session/messages are loaded
         # so we can pass chat history for better detection accuracy
 
-        # TODO: replaced by SearchOrchestrator
         search_results: List[SearchResult] = []
-        # if enable_search and user_prompt:
-        #     search_results = perform_web_search(user_id, user_prompt, backend=backend)
 
         # Fetch content from URLs in the message (for summarization/analysis)
         url_content = ""

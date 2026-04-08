@@ -26,10 +26,10 @@ _ARTIFACT_FENCE_RE = re.compile(r"```artifact\s*([\s\S]*?)\s*```", re.IGNORECASE
 _ARTIFACT_UNCLOSED_RE = re.compile(r"```artifact\s*([\s\S]+)", re.IGNORECASE)
 _PATCH_FENCE_RE = re.compile(r"```artifact_patch\s*([\s\S]*?)\s*```", re.IGNORECASE)
 
-_VALID_ACTIONS = {"chat", "create_artifact", "patch_artifact", "show_chart", "generate_image"}
+_VALID_ACTIONS = {"chat", "create_artifact", "patch_artifact", "show_chart", "generate_image", "web_search"}
 
 # Actions that use multi-line header mode (key: value pairs after the ACTION line)
-_MULTILINE_HEADER_ACTIONS = {"generate_image"}
+_MULTILINE_HEADER_ACTIONS = {"generate_image", "web_search"}
 
 # Regex for key-value header lines: "description: some text" or "source: explicit"
 _HEADER_KV_RE = re.compile(r"^\s*(\w+)\s*:\s*(.+?)\s*$")
@@ -39,12 +39,13 @@ _HEADER_KV_RE = re.compile(r"^\s*(\w+)\s*:\s*(.+?)\s*$")
 class ParsedAction:
     """Result of parsing a model response."""
 
-    action: str  # 'chat' | 'create_artifact' | 'patch_artifact' | 'show_chart' | 'generate_image'
+    action: str  # 'chat' | 'create_artifact' | 'patch_artifact' | 'show_chart' | 'generate_image' | 'web_search'
     chat_text: str  # Everything except artifact/patch fence
     artifact_payload: Optional[Dict[str, Any]]  # Parsed artifact JSON (if create)
     patch_payload: Optional[Dict[str, Any]]  # Parsed patch JSON (if patch)
     chart_payload: Optional[Dict[str, Any]] = None  # Parsed chart info (if show_chart)
     image_payload: Optional[Dict[str, str]] = None  # {description, source} (if generate_image)
+    search_payload: Optional[Dict[str, str]] = None  # {query, search_type, reason, embed_video} (if web_search)
     raw_response: str = ""  # Full unmodified response
     used_fallback: bool = False  # True if ACTION line was missing
 
@@ -118,6 +119,7 @@ class ActionParser:
         patch_payload = None
         chart_payload = None
         image_payload = None
+        search_payload = None
         chat_text = response_text
 
         if action == "create_artifact":
@@ -138,6 +140,18 @@ class ActionParser:
             else:
                 logger.warning("generate_image ACTION missing description, falling back to chat")
                 action = "chat"
+        elif action == "web_search":
+            query = header_fields.get("query", "").strip()
+            if query:
+                search_payload = {
+                    "query": query,
+                    "search_type": header_fields.get("search_type", "general").strip(),
+                    "reason": header_fields.get("reason", "").strip(),
+                    "embed_video": header_fields.get("embed_video", "").strip() or None,
+                }
+            else:
+                logger.warning("web_search ACTION missing query, falling back to chat")
+                action = "chat"
 
         return ParsedAction(
             action=action,
@@ -146,6 +160,7 @@ class ActionParser:
             patch_payload=patch_payload,
             chart_payload=chart_payload,
             image_payload=image_payload,
+            search_payload=search_payload,
             raw_response=raw,
             used_fallback=used_fallback,
         )
@@ -270,8 +285,8 @@ class StreamingActionBuffer:
         if self._in_header_mode:
             elapsed = time.time() - self._header_start_time
             if elapsed > self.HEADER_TIMEOUT_MS / 1000:
-                # Timeout: flush buffer as plain text, abort image path
-                logger.warning("generate_image header timeout — falling back to chat")
+                # Timeout: flush buffer as plain text, abort multiline header path
+                logger.warning(f"{self.action} header timeout — falling back to chat")
                 self.action = "chat"
                 self.remainder = self.buffer
                 self._resolved = True
