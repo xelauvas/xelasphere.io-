@@ -49,6 +49,7 @@ jobs:
           # Direct import to avoid app/__init__.py triggering Firebase config
           spec = importlib.util.spec_from_file_location('action_parser', 'app/context/action_parser.py')
           mod = importlib.util.module_from_spec(spec)
+          sys.modules['action_parser'] = mod
           spec.loader.exec_module(mod)
           ActionParser = mod.ActionParser
           StreamingActionBuffer = mod.StreamingActionBuffer
