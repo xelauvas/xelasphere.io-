@@ -35,10 +35,14 @@ def sandbox_preflight():
     mode = detect_mode(code)
     extra = detect_extra_packages(code, local_files=local_files)
 
+    # If user already has a running container, packages are likely installed
+    has_container = sandbox_manager._find_running_container(user_id) is not None
+
     return jsonify({
         "mode": mode,
-        "extra_packages": extra,
-        "preinstalled": len(extra) == 0,
+        "extra_packages": extra if not has_container else [],
+        "preinstalled": len(extra) == 0 or has_container,
+        "has_container": has_container,
     })
 
 

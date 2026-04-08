@@ -105,47 +105,40 @@ class SandboxManager:
             self.available = False
             logger.warning(f"SandboxManager: Docker not available: {e}")
 
-    def _has_active_container(self, user_id: str) -> bool:
-        """Check if user has a running container."""
-        with self._lock:
-            info = self.active.get(user_id)
-        if not info:
-            return False
+    def _find_running_container(self, user_id: str) -> Optional[object]:
+        """Find a running sandbox container for this user via Docker labels.
+        Works across gunicorn workers since it queries Docker directly."""
         try:
-            info.container.reload()
-            return info.container.status == 'running'
-        except Exception:
-            return False
+            containers = self.client.containers.list(
+                filters={
+                    'label': [f'xelasphere.user={user_id}', 'xelasphere.sandbox=true'],
+                    'status': 'running'
+                }
+            )
+            if containers:
+                container = containers[0]
+                # Ensure it's tracked locally too
+                with self._lock:
+                    if user_id not in self.active:
+                        self.active[user_id] = ContainerInfo(
+                            container_id=container.id[:12],
+                            user_id=user_id,
+                            mode='script',
+                            created_at=time.time(),
+                            container=container,
+                        )
+                return container
+        except Exception as e:
+            logger.warning(f"Sandbox: container lookup failed: {e}")
+        return None
 
-    def _exec_in_container(self, user_id: str, files: Dict[str, str],
+    def _exec_in_container(self, container, files: Dict[str, str],
                            entry: str) -> Generator[dict, None, None]:
         """Execute a script in an existing running container via docker exec."""
-        with self._lock:
-            info = self.active.get(user_id)
-        if not info:
-            yield {"type": "error", "text": "No active container"}
-            return
-
         # Update files in container
-        files_json = json.dumps(files)
         try:
-            info.container.exec_run(
-                ['python3', '-c',
-                 'import json,sys,os\n'
-                 'files=json.loads(sys.stdin.read())\n'
-                 'for p,c in files.items():\n'
-                 ' d=os.path.dirname(p)\n'
-                 ' if d: os.makedirs(d,exist_ok=True)\n'
-                 ' open(p,"w").write(c)\n'],
-                stdin=True,
-                socket=False,
-                workdir='/home/sandbox',
-                environment={'PYTHONUNBUFFERED': '1'},
-                demux=False,
-            )
-            # Write files via a temp script
             write_script = 'import json,os\nfiles=' + repr(files) + '\nfor p,c in files.items():\n d=os.path.dirname(p)\n if d: os.makedirs(d,exist_ok=True)\n open(p,"w").write(c)\n'
-            info.container.exec_run(['python3', '-c', write_script], workdir='/home/sandbox')
+            container.exec_run(['python3', '-c', write_script], workdir='/home/sandbox')
         except Exception as e:
             logger.warning(f"Sandbox: failed to update files: {e}")
 
@@ -153,7 +146,7 @@ class SandboxManager:
 
         # Execute the script
         try:
-            exit_code, output = info.container.exec_run(
+            exit_code, output = container.exec_run(
                 ['python3', '-u', entry],
                 workdir='/home/sandbox',
                 environment={'PYTHONUNBUFFERED': '1', 'DISPLAY': ':99', 'SDL_AUDIODRIVER': 'dummy'},
@@ -169,9 +162,6 @@ class SandboxManager:
         except Exception as e:
             yield {"type": "error", "text": str(e)}
 
-        # Refresh timestamp so cleanup doesn't kill it too soon
-        info.created_at = time.time()
-
     def run_code(self, user_id: str, code: str, files: Dict[str, str],
                  entry: str = 'main.py') -> Generator[dict, None, None]:
         """
@@ -182,11 +172,15 @@ class SandboxManager:
             yield {"type": "error", "text": "Docker not available on this server"}
             return
 
-        # Reuse existing container if still running
-        if self._has_active_container(user_id):
+        # Reuse existing container if still running (works across gunicorn workers)
+        existing = self._find_running_container(user_id)
+        if existing:
             yield {"type": "status", "text": "Reusing existing container..."}
-            yield from self._exec_in_container(user_id, files, entry)
+            yield from self._exec_in_container(existing, files, entry)
             return
+
+        # Kill any tracked (but stopped) containers
+        self.kill(user_id)
 
         mode = detect_mode(code)
         extra_packages = detect_extra_packages(code, local_files=files)
@@ -212,6 +206,10 @@ class SandboxManager:
                 nano_cpus=500000000,  # 0.5 CPU
                 network_mode='bridge',
                 user='sandbox',
+                labels={
+                    'xelasphere.sandbox': 'true',
+                    'xelasphere.user': user_id,
+                },
                 environment={
                     'MODE': mode,
                     'ENTRY': entry,
@@ -293,7 +291,7 @@ class SandboxManager:
         # kill() on next run, or cleanup_expired() on timeout
 
     def kill(self, user_id: str):
-        """Kill and remove a user's active container."""
+        """Kill and remove a user's active container (checks Docker labels too)."""
         with self._lock:
             info = self.active.pop(user_id, None)
         if info:
@@ -302,6 +300,19 @@ class SandboxManager:
                 logger.info(f"Sandbox: killed {info.container_id} for {user_id}")
             except Exception as e:
                 logger.warning(f"Sandbox: kill failed: {e}")
+        # Also kill any containers found via Docker labels (cross-worker)
+        try:
+            for c in self.client.containers.list(
+                all=True,
+                filters={'label': [f'xelasphere.user={user_id}', 'xelasphere.sandbox=true']}
+            ):
+                try:
+                    c.remove(force=True)
+                    logger.info(f"Sandbox: killed labeled container {c.id[:12]} for {user_id}")
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _remove(self, user_id: str):
         with self._lock:
