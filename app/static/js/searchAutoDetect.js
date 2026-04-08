@@ -176,139 +176,27 @@
 
     // === UI Elements ===
 
-    let searchIndicator = null;
-    let isIndicatorVisible = false;
-    let userOverride = null; // null = auto, true = force on, false = force off
+    // Search auto-detection — silently toggles the hidden checkbox, no UI popup
 
     /**
-     * Create the search indicator element
-     */
-    function createSearchIndicator() {
-        if (searchIndicator) return searchIndicator;
-
-        const indicator = document.createElement('div');
-        indicator.className = 'search-auto-indicator';
-        indicator.innerHTML = `
-            <div class="search-auto-indicator-content">
-                <i class="fas fa-globe"></i>
-                <span class="search-auto-indicator-text">Web search</span>
-                <button class="search-auto-indicator-toggle" title="Click to toggle">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        `;
-
-        // Toggle button click handler
-        indicator.querySelector('.search-auto-indicator-toggle').addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleSearchOverride();
-        });
-
-        // Insert before the input-row
-        const inputRow = document.querySelector('.input-row');
-        const inputContainer = document.querySelector('.input-container');
-        if (inputRow && inputContainer) {
-            inputContainer.insertBefore(indicator, inputRow);
-        }
-
-        searchIndicator = indicator;
-        return indicator;
-    }
-
-    /**
-     * Show the search indicator
-     */
-    function showIndicator(reason = 'Web search') {
-        // No popup — just silently enable the search checkbox
-        isIndicatorVisible = false;
-
-        const searchCheckbox = document.getElementById('enable-search');
-        if (searchCheckbox && userOverride !== false) {
-            searchCheckbox.checked = true;
-        }
-    }
-
-    /**
-     * Hide the search indicator
-     */
-    function hideIndicator() {
-        if (searchIndicator) {
-            searchIndicator.classList.remove('visible');
-            isIndicatorVisible = false;
-        }
-
-        // Reset the checkbox if we're in auto mode
-        if (userOverride === null) {
-            const searchCheckbox = document.getElementById('enable-search');
-            if (searchCheckbox) {
-                searchCheckbox.checked = false;
-            }
-        }
-    }
-
-    /**
-     * Show indicator in disabled/override state
-     */
-    function showDisabledIndicator() {
-        isIndicatorVisible = false;
-
-        const searchCheckbox = document.getElementById('enable-search');
-        if (searchCheckbox) {
-            searchCheckbox.checked = false;
-        }
-    }
-
-    /**
-     * Toggle between auto/force-off states
-     */
-    function toggleSearchOverride() {
-        if (userOverride === false) {
-            // Was forced off, go back to auto
-            userOverride = null;
-            // Re-evaluate current prompt
-            const promptInput = document.getElementById('prompt');
-            if (promptInput) {
-                updateSearchIndicator(promptInput.value);
-            }
-        } else {
-            // Force off
-            userOverride = false;
-            showDisabledIndicator();
-        }
-    }
-
-    /**
-     * Update the search indicator based on prompt content
+     * Silently enable/disable search checkbox based on prompt content
      */
     function updateSearchIndicator(prompt) {
-        // If user has forced search off, show disabled state
-        if (userOverride === false) {
-            showDisabledIndicator();
-            return;
-        }
+        if (document.body.dataset.guestMode === 'true') return;
 
-        // Check if guest mode (no search for guests)
-        if (document.body.dataset.guestMode === 'true') {
-            hideIndicator();
-            return;
-        }
+        const searchCheckbox = document.getElementById('enable-search');
+        if (!searchCheckbox) return;
 
         const result = detectSearchNeeded(prompt);
-
-        if (result.shouldSearch) {
-            showIndicator(result.reason || 'Web search');
-        } else {
-            hideIndicator();
-        }
+        searchCheckbox.checked = result.shouldSearch;
     }
 
     /**
-     * Reset override when message is sent
+     * Reset checkbox when message is sent
      */
     function resetOverride() {
-        userOverride = null;
-        hideIndicator();
+        const searchCheckbox = document.getElementById('enable-search');
+        if (searchCheckbox) searchCheckbox.checked = false;
     }
 
     // === Debounce helper ===
@@ -324,9 +212,6 @@
     function init() {
         const promptInput = document.getElementById('prompt');
         if (!promptInput) return;
-
-        // Create indicator element
-        createSearchIndicator();
 
         // Listen for input changes with debounce
         const debouncedUpdate = debounce((e) => {
