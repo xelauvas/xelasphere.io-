@@ -71,12 +71,26 @@ def detect_mode(code: str) -> str:
     return 'script'
 
 
-def detect_extra_packages(code: str) -> List[str]:
-    """Detect imported packages not pre-installed in the sandbox image."""
+def detect_extra_packages(code: str, local_files: Optional[Dict[str, str]] = None) -> List[str]:
+    """Detect imported packages not pre-installed in the sandbox image.
+    Filters out local project imports (directories/files in the artifact)."""
     imports = set()
     for match in re.finditer(r'(?:^|\n)\s*(?:import|from)\s+([a-zA-Z_][a-zA-Z0-9_]*)', code):
         imports.add(match.group(1))
-    return [p for p in imports if p.lower() not in {s.lower() for s in PREINSTALLED}]
+
+    # Build set of local module names from artifact files
+    local_modules = set()
+    if local_files:
+        for path in local_files:
+            # "scraper_project/items.py" → "scraper_project"
+            top = path.split('/')[0].replace('.py', '')
+            if top:
+                local_modules.add(top.lower())
+
+    preinstalled_lower = {s.lower() for s in PREINSTALLED}
+    return [p for p in imports
+            if p.lower() not in preinstalled_lower
+            and p.lower() not in local_modules]
 
 
 class SandboxManager:
@@ -91,21 +105,91 @@ class SandboxManager:
             self.available = False
             logger.warning(f"SandboxManager: Docker not available: {e}")
 
+    def _has_active_container(self, user_id: str) -> bool:
+        """Check if user has a running container."""
+        with self._lock:
+            info = self.active.get(user_id)
+        if not info:
+            return False
+        try:
+            info.container.reload()
+            return info.container.status == 'running'
+        except Exception:
+            return False
+
+    def _exec_in_container(self, user_id: str, files: Dict[str, str],
+                           entry: str) -> Generator[dict, None, None]:
+        """Execute a script in an existing running container via docker exec."""
+        with self._lock:
+            info = self.active.get(user_id)
+        if not info:
+            yield {"type": "error", "text": "No active container"}
+            return
+
+        # Update files in container
+        files_json = json.dumps(files)
+        try:
+            info.container.exec_run(
+                ['python3', '-c',
+                 'import json,sys,os\n'
+                 'files=json.loads(sys.stdin.read())\n'
+                 'for p,c in files.items():\n'
+                 ' d=os.path.dirname(p)\n'
+                 ' if d: os.makedirs(d,exist_ok=True)\n'
+                 ' open(p,"w").write(c)\n'],
+                stdin=True,
+                socket=False,
+                workdir='/home/sandbox',
+                environment={'PYTHONUNBUFFERED': '1'},
+                demux=False,
+            )
+            # Write files via a temp script
+            write_script = 'import json,os\nfiles=' + repr(files) + '\nfor p,c in files.items():\n d=os.path.dirname(p)\n if d: os.makedirs(d,exist_ok=True)\n open(p,"w").write(c)\n'
+            info.container.exec_run(['python3', '-c', write_script], workdir='/home/sandbox')
+        except Exception as e:
+            logger.warning(f"Sandbox: failed to update files: {e}")
+
+        yield {"type": "status", "text": f"Running {entry}..."}
+
+        # Execute the script
+        try:
+            exit_code, output = info.container.exec_run(
+                ['python3', '-u', entry],
+                workdir='/home/sandbox',
+                environment={'PYTHONUNBUFFERED': '1', 'DISPLAY': ':99', 'SDL_AUDIODRIVER': 'dummy'},
+                demux=True,
+            )
+            if output:
+                stdout_data, stderr_data = output
+                if stdout_data:
+                    yield {"type": "stdout", "text": stdout_data.decode('utf-8', errors='replace')}
+                if stderr_data:
+                    yield {"type": "stderr", "text": stderr_data.decode('utf-8', errors='replace')}
+            yield {"type": "exit", "code": exit_code}
+        except Exception as e:
+            yield {"type": "error", "text": str(e)}
+
+        # Refresh timestamp so cleanup doesn't kill it too soon
+        info.created_at = time.time()
+
     def run_code(self, user_id: str, code: str, files: Dict[str, str],
                  entry: str = 'main.py') -> Generator[dict, None, None]:
         """
         Run Python code in a sandbox container.
-        Yields SSE event dicts: {"type": "...", "text": "..."}
+        Reuses existing container if available. Yields SSE event dicts.
         """
         if not self.available:
             yield {"type": "error", "text": "Docker not available on this server"}
             return
 
-        # Kill existing container for this user
-        self.kill(user_id)
+        # Reuse existing container if still running
+        if self._has_active_container(user_id):
+            yield {"type": "status", "text": "Reusing existing container..."}
+            yield from self._exec_in_container(user_id, files, entry)
+            return
 
         mode = detect_mode(code)
-        extra_packages = detect_extra_packages(code)
+        extra_packages = detect_extra_packages(code, local_files=files)
         packages_str = ' '.join(extra_packages) if extra_packages else ''
 
         yield {"type": "status", "text": f"Creating container ({mode} mode)..."}

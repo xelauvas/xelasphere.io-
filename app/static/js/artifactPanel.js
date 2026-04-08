@@ -2448,6 +2448,8 @@ window.addEventListener('load', function() {
 
             if (output) output.innerHTML = '';
 
+            const fileList = Object.keys(filesObj).map(p => ({path: p, content: filesObj[p]}));
+
             // Preflight: check what packages are needed
             try {
                 const csrfMeta = document.querySelector('meta[name="csrf-token"]');
@@ -2457,7 +2459,7 @@ window.addEventListener('load', function() {
                 const pfResp = await fetch('/api/sandbox/preflight', {
                     method: 'POST',
                     headers: pfHeaders,
-                    body: JSON.stringify({code}),
+                    body: JSON.stringify({code, files: fileList}),
                     credentials: 'same-origin'
                 });
                 if (pfResp.ok) {
@@ -2504,8 +2506,6 @@ window.addEventListener('load', function() {
             }
 
             append('Connecting to server...\n', 'repl-prompt');
-
-            const fileList = Object.keys(filesObj).map(p => ({path: p, content: filesObj[p]}));
 
             try {
                 const csrfMeta = document.querySelector('meta[name="csrf-token"]');

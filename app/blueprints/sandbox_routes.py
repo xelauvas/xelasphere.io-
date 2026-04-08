@@ -27,8 +27,13 @@ def sandbox_preflight():
         return jsonify({"error": "No code provided"}), 400
 
     code = data['code']
+    # Build local files dict for filtering local imports
+    local_files = {}
+    if data.get('files'):
+        for f in data['files']:
+            local_files[f['path']] = f.get('content', '')
     mode = detect_mode(code)
-    extra = detect_extra_packages(code)
+    extra = detect_extra_packages(code, local_files=local_files)
 
     return jsonify({
         "mode": mode,
