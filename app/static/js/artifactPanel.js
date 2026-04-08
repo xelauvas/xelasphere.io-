@@ -809,7 +809,7 @@ ${pyFileNames.map(f => '<option value="' + escapeHtml(f) + '"' + (f === entryNam
 <script>
 var pyodideReady = null;
 var pyodide = null;
-var history = [];
+var cmdHistory = [];
 var histIdx = -1;
 var DEFAULT_ENTRY = '${entryName.replace(/'/g, "\\'")}';
 
@@ -1047,8 +1047,8 @@ replInput.addEventListener('keydown', function(e) {
         var cmd = replInput.value;
         replInput.value = '';
         if (!cmd.trim()) return;
-        history.push(cmd);
-        histIdx = history.length;
+        cmdHistory.push(cmd);
+        histIdx = cmdHistory.length;
 
         appendOutput('$ ' + cmd + '\\n', 'repl-in');
         replInput.disabled = true;
@@ -1069,11 +1069,11 @@ replInput.addEventListener('keydown', function(e) {
         }
     } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        if (histIdx > 0) { histIdx--; replInput.value = history[histIdx]; }
+        if (histIdx > 0) { histIdx--; replInput.value = cmdHistory[histIdx]; }
     } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        if (histIdx < history.length - 1) { histIdx++; replInput.value = history[histIdx]; }
-        else { histIdx = history.length; replInput.value = ''; }
+        if (histIdx < cmdHistory.length - 1) { histIdx++; replInput.value = cmdHistory[histIdx]; }
+        else { histIdx = cmdHistory.length; replInput.value = ''; }
     }
 });
 
