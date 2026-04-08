@@ -1054,9 +1054,14 @@ replInput.addEventListener('keydown', function(e) {
         replInput.disabled = true;
         setStatus('Running...');
 
-        // Send to parent — parent handles the API call and responds
+        // Call parent directly — parent handles the API call
         try {
-            window.parent.postMessage({type: 'sandbox-exec', command: cmd.trim()}, '*');
+            if (window.parent && window.parent.artifactPanel && window.parent.artifactPanel._handleExec) {
+                window.parent.artifactPanel._handleExec(cmd.trim());
+            } else {
+                // Fallback: postMessage
+                window.parent.postMessage({type: 'sandbox-exec', command: cmd.trim()}, '*');
+            }
         } catch(err) {
             appendOutput('Cannot reach parent: ' + err.message + '\\n', 'stderr');
             replInput.disabled = false;
