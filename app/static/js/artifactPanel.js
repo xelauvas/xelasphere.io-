@@ -800,7 +800,7 @@ ${pyFileNames.map(f => '<option value="' + escapeHtml(f) + '"' + (f === entryNam
 </div>
 <div id="repl">
     <span id="repl-prompt">$</span>
-    <input id="repl-input" type="text" placeholder="python run_scraper.py books_toscrape, pip install X, ls..." autocomplete="off" spellcheck="false"/>
+    <input id="repl-input" type="text" placeholder="Shell command (python, pip, ls...)" autocomplete="off" spellcheck="false"/>
 </div>
 
 <script id="code-data" type="application/json">${codePayload}</script>
