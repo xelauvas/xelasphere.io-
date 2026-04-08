@@ -3883,16 +3883,17 @@ async loadChatHistory(pageToken = null, limit = 10) {
             console.log('[Chart History] Message has crypto_chart:', !!message.crypto_chart, message.crypto_chart);
 
             if (hasAiImages) {
+                const imageCaption = message.response || message.content || '';
                 this.renderMessage({
                     id: `ai-${messageId}`,
                     sender: 'ai',
-                    content: '',
+                    content: imageCaption,
                     timestamp: message.timestamp || null,
                     isCode: false,
                     isHistory: true,
                     timestamp: message.timestamp,
                     attachments: aiAttachments,
-                    suppressText: true,
+                    suppressText: !imageCaption,
                     forceButtons: true,
                     originalPrompt: userPromptSource,
                     sources,

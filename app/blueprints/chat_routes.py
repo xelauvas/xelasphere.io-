@@ -78,8 +78,9 @@ from app.user_preferences import (
 )
 from app.image_generator import generate_image_result
 from app.utilities import (
-    categorize_sessions, count_tokens, send_prompt, send_prompt_with_images,
-    tokenize_sentences, is_image_request, generate_fallback_response,
+    categorize_sessions, classify_confirmation_response, count_tokens,
+    send_prompt, send_prompt_with_images,
+    tokenize_sentences, generate_fallback_response,
     strip_html_from_response,
 )
 from app.search_client import (
@@ -493,6 +494,187 @@ def chat_stream():
             logger.warning(f"Failed to load session for streaming: {e}")
 
     # ============================================================
+    # Path A: /image command — explicit, zero-latency
+    # ============================================================
+    prompt_lower = user_prompt_raw.strip().lower()
+    if prompt_lower.startswith('/image ') or prompt_lower.startswith('/img '):
+        logger.info(f"[Stream] /image command detected, routing to image generator")
+        try:
+            image_prompt = re.sub(r'^/(?:image|img)\s+', '', user_prompt_raw.strip(), flags=re.IGNORECASE)
+            result = generate_image_result(user_id, image_prompt)
+            if result and result.get('image_url'):
+                img_session_id = session_id or (load_or_create_session(user_id)[0] if user_id else None)
+                session['current_session_id'] = img_session_id
+                local_path = result.get('local_path')
+                response_id = f"msg_{uuid.uuid4().hex}"
+                filename = os.path.basename(local_path) if local_path else None
+                model_name = result.get('model')
+                model_label = result.get('model_label') or model_name
+                attachment = {
+                    'name': 'AI generated image',
+                    'original_filename': filename,
+                    'isImage': True,
+                    'url': result['image_url'],
+                    'seed': result['seed'],
+                    'provider': result.get('provider'),
+                    'model': model_name,
+                    'model_label': model_label,
+                    'local_path': local_path,
+                }
+                if local_path:
+                    attachment['url'] = url_for('upload.serve_uploaded_file',
+                                                requested_path=local_path, _external=False)
+                chat_data = {
+                    'prompt': user_prompt_raw,
+                    'response': '',
+                    'timestamp': datetime.utcnow().isoformat(),
+                    'sentiment': 'neutral',
+                    'is_code': False,
+                    'attachments': [attachment],
+                    'response_id': response_id,
+                    'suppress_text': True,
+                    'sender': 'AI',
+                    'message_type': 'image'
+                }
+                if img_session_id and user_id and not guest_mode:
+                    chat_session.save_messages(user_id, img_session_id, [chat_data],
+                                               is_active_session=True)
+                return jsonify({
+                    'image_url': attachment['url'],
+                    'seed': result['seed'],
+                    'prompt': user_prompt_raw,
+                    'provider': result.get('provider'),
+                    'model': model_name,
+                    'model_label': model_label,
+                    'attachments': [attachment],
+                    'session_id': img_session_id,
+                    'message_id': response_id,
+                    'suppress_text': True
+                }), 200
+        except Exception as img_err:
+            logger.error(f"[Stream] /image generation failed: {img_err}")
+            # Fall through to normal streaming on failure
+
+    # ============================================================
+    # Pending image confirmation: intercept yes/no before normal routing
+    # ============================================================
+    pending = session.pop('pending_image_confirmation', None)
+    if pending and pending.get('type') == 'generate_image':
+        if time.time() - pending.get('timestamp', 0) < 300:  # 5-minute TTL
+            bucket = classify_confirmation_response(user_prompt_raw, pending['description'])
+            logger.info(f"[Stream] Image confirmation: bucket={bucket}, desc={pending['description'][:60]}")
+            if bucket == 'confirm':
+                # Generate with the original description
+                try:
+                    img_result = generate_image_result(user_id, pending['description'])
+                    if img_result and img_result.get('image_url'):
+                        img_session_id = session_id or (load_or_create_session(user_id)[0] if user_id else None)
+                        local_path = img_result.get('local_path')
+                        response_id = f"msg_{uuid.uuid4().hex}"
+                        filename = os.path.basename(local_path) if local_path else None
+                        model_name = img_result.get('model')
+                        model_label = img_result.get('model_label') or model_name
+                        attachment = {
+                            'name': 'AI generated image',
+                            'original_filename': filename,
+                            'isImage': True,
+                            'url': img_result['image_url'],
+                            'seed': img_result['seed'],
+                            'provider': img_result.get('provider'),
+                            'model': model_name,
+                            'model_label': model_label,
+                            'local_path': local_path,
+                        }
+                        if local_path:
+                            attachment['url'] = url_for('upload.serve_uploaded_file',
+                                                        requested_path=local_path, _external=False)
+                        if img_session_id and user_id and not guest_mode:
+                            chat_data = {
+                                'prompt': user_prompt_raw,
+                                'response': '',
+                                'timestamp': datetime.utcnow().isoformat(),
+                                'sentiment': 'neutral',
+                                'is_code': False,
+                                'attachments': [attachment],
+                                'response_id': response_id,
+                                'suppress_text': True,
+                                'sender': 'AI',
+                                'message_type': 'image'
+                            }
+                            chat_session.save_messages(user_id, img_session_id, [chat_data],
+                                                       is_active_session=True)
+                        return jsonify({
+                            'image_url': attachment['url'],
+                            'seed': img_result['seed'],
+                            'prompt': user_prompt_raw,
+                            'provider': img_result.get('provider'),
+                            'model': model_name,
+                            'model_label': model_label,
+                            'attachments': [attachment],
+                            'session_id': img_session_id,
+                            'message_id': response_id,
+                            'suppress_text': True
+                        }), 200
+                except Exception as img_err:
+                    logger.error(f"[Stream] Confirmed image generation failed: {img_err}")
+                    # Fall through to normal routing
+            elif bucket == 'correction':
+                # User provided a better description — generate with their text
+                try:
+                    img_result = generate_image_result(user_id, user_prompt_raw)
+                    if img_result and img_result.get('image_url'):
+                        img_session_id = session_id or (load_or_create_session(user_id)[0] if user_id else None)
+                        local_path = img_result.get('local_path')
+                        response_id = f"msg_{uuid.uuid4().hex}"
+                        filename = os.path.basename(local_path) if local_path else None
+                        model_name = img_result.get('model')
+                        model_label = img_result.get('model_label') or model_name
+                        attachment = {
+                            'name': 'AI generated image',
+                            'original_filename': filename,
+                            'isImage': True,
+                            'url': img_result['image_url'],
+                            'seed': img_result['seed'],
+                            'provider': img_result.get('provider'),
+                            'model': model_name,
+                            'model_label': model_label,
+                            'local_path': local_path,
+                        }
+                        if local_path:
+                            attachment['url'] = url_for('upload.serve_uploaded_file',
+                                                        requested_path=local_path, _external=False)
+                        if img_session_id and user_id and not guest_mode:
+                            chat_data = {
+                                'prompt': user_prompt_raw,
+                                'response': '',
+                                'timestamp': datetime.utcnow().isoformat(),
+                                'sentiment': 'neutral',
+                                'is_code': False,
+                                'attachments': [attachment],
+                                'response_id': response_id,
+                                'suppress_text': True,
+                                'sender': 'AI',
+                                'message_type': 'image'
+                            }
+                            chat_session.save_messages(user_id, img_session_id, [chat_data],
+                                                       is_active_session=True)
+                        return jsonify({
+                            'image_url': attachment['url'],
+                            'seed': img_result['seed'],
+                            'prompt': user_prompt_raw,
+                            'provider': img_result.get('provider'),
+                            'model': model_name,
+                            'model_label': model_label,
+                            'attachments': [attachment],
+                            'session_id': img_session_id,
+                            'message_id': response_id,
+                            'suppress_text': True
+                        }), 200
+                except Exception as img_err:
+                    logger.error(f"[Stream] Correction image generation failed: {img_err}")
+            # bucket == 'reject' or failure: fall through to normal routing
+
+    # ============================================================
     # Memory V2: Get memory context via orchestrator (streaming)
     # ============================================================
     memory_orchestrator_stream = None
@@ -729,6 +911,24 @@ def chat_stream():
                         result = action_buffer.feed(text)
                         if result is not None:
                             action_resolved = True
+
+                            # generate_image: send SSE event immediately
+                            if result == "generate_image" and action_buffer.header_fields.get("description"):
+                                img_description = action_buffer.header_fields["description"]
+                                img_source = action_buffer.header_fields.get("source", "explicit").lower()
+                                if img_source not in ("explicit", "inferred"):
+                                    img_source = "explicit"
+
+                                if img_source == "inferred":
+                                    yield f"data: {json.dumps({'type': 'image_confirm', 'description': img_description})}\n\n"
+                                    session['pending_image_confirmation'] = {
+                                        'type': 'generate_image',
+                                        'description': img_description,
+                                        'timestamp': time.time()
+                                    }
+                                else:
+                                    yield f"data: {json.dumps({'type': 'image_generating', 'description': img_description})}\n\n"
+
                             # Forward remainder after the ACTION line
                             if action_buffer.remainder:
                                 yield f"data: {json.dumps({'type': 'content', 'text': action_buffer.remainder})}\n\n"
@@ -748,6 +948,7 @@ def chat_stream():
                     render_mode = 'inline'
                     chat_summary = full_content
                     routing = None
+                    _image_done_data = {}  # populated by generate_image handler
 
                     try:
                         parsed_action = ActionParser.parse(full_content)
@@ -876,6 +1077,67 @@ def chat_stream():
                                 routing = ArtifactDecision(
                                     render_mode="inline",
                                     chat_payload=parsed_action.chat_text,
+                                    artifact_payload=None,
+                                    contains_code=False,
+                                    desired_action=ArtifactPreference.NONE,
+                                )
+                        elif parsed_action.action == "generate_image" and parsed_action.image_payload:
+                            img_desc = parsed_action.image_payload["description"]
+                            img_src = parsed_action.image_payload.get("source", "explicit")
+                            chat_summary = parsed_action.chat_text
+
+                            # Store image data for the done payload (used by both explicit and fallback)
+                            _image_done_data = {}
+
+                            if img_src == "explicit":
+                                # Generate image immediately
+                                try:
+                                    img_result = generate_image_result(user_id, img_desc)
+                                    if img_result and img_result.get('image_url'):
+                                        local_path = img_result.get('local_path')
+                                        filename = os.path.basename(local_path) if local_path else None
+                                        model_name = img_result.get('model')
+                                        model_label_img = img_result.get('model_label') or model_name
+                                        attachment = {
+                                            'name': 'AI generated image',
+                                            'original_filename': filename,
+                                            'isImage': True,
+                                            'url': img_result['image_url'],
+                                            'seed': img_result['seed'],
+                                            'provider': img_result.get('provider'),
+                                            'model': model_name,
+                                            'model_label': model_label_img,
+                                            'local_path': local_path,
+                                        }
+                                        if local_path:
+                                            attachment['url'] = f'/uploads/{local_path}'
+                                        _image_done_data = {
+                                            'image_url': attachment['url'],
+                                            'image_seed': img_result['seed'],
+                                            'image_provider': img_result.get('provider'),
+                                            'image_model': model_label_img,
+                                            'attachments': [attachment],
+                                            'message_type': 'image',
+                                        }
+                                    else:
+                                        raise RuntimeError("No image URL returned")
+                                except Exception as img_err:
+                                    logger.error(f"Image generation failed after ACTION: {img_err}")
+                                    chat_summary += f'\n\n*Image generation failed — try `/image {img_desc[:50]}` to retry.*'
+
+                            # Fall through to normal routing — save_interaction handles persistence
+                            routing = ArtifactDecision(
+                                render_mode="inline",
+                                chat_payload=chat_summary,
+                                artifact_payload=None,
+                                contains_code=False,
+                                desired_action=ArtifactPreference.NONE,
+                            )
+                            if img_src != "explicit":
+                                # Inferred: confirmation already sent via SSE, just render chat text
+                                routing = ArtifactDecision(
+                                    render_mode="inline",
+                                    chat_payload=chat_summary,
                                     artifact_payload=None,
                                     contains_code=False,
                                     desired_action=ArtifactPreference.NONE,
@@ -1103,6 +1365,9 @@ def chat_stream():
                         'session_name': stream_session_name,
                         'model_meta': _model_meta
                     }
+                    # Merge image data if generate_image produced an image
+                    if _image_done_data:
+                        done_payload.update(_image_done_data)
                     _pvd = getattr(routing, '_patch_visual_data', None) if routing else None
                     logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, has_patches={_pvd is not None}, patch_count={len(_pvd.get('patches',[])) if _pvd else 0}, session_name={repr(stream_session_name)}")
 
@@ -1210,6 +1475,8 @@ def chat_stream():
                                 reasoning=full_reasoning if full_reasoning else None,
                                 crypto_chart=crypto_chart,
                                 turn_metadata=stream_turn_metadata,
+                                ai_attachments=_image_done_data.get('attachments') if _image_done_data else None,
+                                message_type=_image_done_data.get('message_type') if _image_done_data else None,
                             )
                             logger.info(f"Streaming response saved to history for session {session_id}")
 
@@ -1553,8 +1820,9 @@ def chat():
             # Smart Context: load full history (Context Builder handles compression)
             logger.debug(f"Loaded {len(previous_messages)} messages (full history for Context Builder)")
 
-        # Check if user requests an image (now with chat history for better accuracy)
-        if is_image_request(user_prompt, previous_messages):
+        # Path A: /image command — explicit, zero-latency
+        prompt_lower_ns = user_prompt.strip().lower()
+        if prompt_lower_ns.startswith('/image ') or prompt_lower_ns.startswith('/img '):
             return handle_image_request(user_id, user_prompt, requested_page_id)
 
         # Resolve pointer references (e.g., "tell me about #10" → explicit item)

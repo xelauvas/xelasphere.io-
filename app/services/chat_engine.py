@@ -649,6 +649,28 @@ DEVELOPER_INSTRUCTIONS = (
     "  For follow-up questions like 'what is the price for it', resolve the pronoun\n"
     "  from conversation context and use the actual asset name.\n\n"
 
+    "ACTION: generate_image\n"
+    "  description: <detailed, standalone description for the image generator>\n"
+    "  source: explicit | inferred\n\n"
+    "  Use when: the user wants you to CREATE/GENERATE an actual image.\n\n"
+    "  source values:\n"
+    "  - explicit: user's message contains a clear image request — ANY of these patterns:\n"
+    "    'draw me X', 'draw a X', 'image of X', 'create a picture of X', 'photo of X',\n"
+    "    'paint X', 'sketch X', 'generate an image of X', 'make me an image of X'.\n"
+    "    If the user describes WHAT they want drawn, it is ALWAYS explicit.\n"
+    "  - inferred: ONLY when the user references prior context with pronouns and you must\n"
+    "    guess what they mean ('make one of those', 'create it', 'do that but as an image').\n"
+    "    If the message itself describes the subject, use explicit, NOT inferred.\n\n"
+    "  The description MUST be a complete, standalone prompt for an image generator.\n"
+    "  Resolve ALL pronouns — 'it', 'that', 'this' — into concrete descriptions using\n"
+    "  conversation context. Never pass pronouns to the image generator.\n\n"
+    "  NEVER use generate_image for:\n"
+    "  - Code, artifacts, or app creation ('create a React app' = create_artifact)\n"
+    "  - Charts or financial data ('show me bitcoin' = show_chart)\n"
+    "  - Explanations about images ('explain how DALL-E works' = chat)\n"
+    "  - Figurative language ('picture this scenario', 'draw a conclusion' = chat)\n"
+    "  - Discussing existing images ('the image shows...' = chat)\n\n"
+
     "After the ACTION line, write your response.\n\n"
 
     "EXAMPLE for chat responses:\n"
@@ -693,7 +715,26 @@ DEVELOPER_INSTRUCTIONS = (
     "- Multiple patches allowed in one block\n"
     "- Write a brief summary of what you changed before the patch block\n\n"
 
-    "Triggers for patch: 'fix', 'update', 'correct', 'change', 'modify', 'edit', 'improve'\n"
+    "Triggers for patch: 'fix', 'update', 'correct', 'change', 'modify', 'edit', 'improve'\n\n"
+
+    "EXAMPLE for generating images:\n"
+    "ACTION: generate_image\n"
+    "description: a vibrant sunset over snow-capped mountains with a mirror-like lake reflecting orange and purple sky colors\n"
+    "source: explicit\n\n"
+    "Here's a sunset with warm golden light washing over snow-capped peaks, reflected in a still mountain lake.\n\n"
+
+    "EXAMPLE (inferred context):\n"
+    "ACTION: generate_image\n"
+    "description: traditional Japanese pagoda temple surrounded by cherry blossom trees with Mount Fuji in the background\n"
+    "source: inferred\n\n"
+    "Based on our discussion, here's a traditional Japanese scene with cherry blossoms and Mount Fuji.\n\n"
+
+    "IMPORTANT for generate_image chat text:\n"
+    "  - Write a SHORT, natural sentence presenting the image (1-2 sentences max)\n"
+    "  - Describe what's IN the image, not the process of making it\n"
+    "  - NEVER say 'I created a description', 'I sent to an image generator', or mention the pipeline\n"
+    "  - Good: 'Here's a golden sunset over the mountains.'\n"
+    "  - Bad: 'I've created a description for an image generator to produce a sunset.'\n"
 )
 
 
@@ -1442,6 +1483,8 @@ def save_interaction(
     task_type: Optional[str] = None,
     auto_selected: bool = False,
     turn_metadata: Optional[Dict[str, Any]] = None,
+    ai_attachments: Optional[List[Dict[str, Any]]] = None,
+    message_type: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], bool]:
     """Save the current user-assistant interaction to the database.
 
@@ -1545,6 +1588,10 @@ def save_interaction(
 
     if user_attachments:
         chat_data['user_attachments'] = user_attachments
+    if ai_attachments:
+        chat_data['attachments'] = ai_attachments
+    if message_type:
+        chat_data['message_type'] = message_type
 
     if not persist:
         return chat_data, False

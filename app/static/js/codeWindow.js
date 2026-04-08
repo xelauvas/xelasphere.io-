@@ -2674,9 +2674,9 @@ function replacePlaceholderWithImage(placeholderId, imageUrl, promptText) {
 }
 
 function isImagePrompt(prompt = '') {
-    const p = prompt.toLowerCase();
-    const keywords = ['image of', 'draw', 'picture of', 'photo of', 'generate', 'illustrate', 'visualize'];
-    return keywords.some(k => p.includes(k));
+    const p = prompt.trim().toLowerCase();
+    return p.startsWith('/image ') || p.startsWith('/image\n') || p === '/image'
+        || p.startsWith('/img ') || p.startsWith('/img\n') || p === '/img';
 }
 
 // Enhanced message sending function
@@ -2942,6 +2942,47 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     throw new Error(`Stream request failed: ${streamResponse.status}`);
                 }
 
+                // Check if the response is a JSON image result (not SSE stream)
+                const contentType = streamResponse.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    const data = await streamResponse.json();
+                    if (data.image_url) {
+                        console.log('[Stream] Image response intercepted:', data.image_url);
+                        // Replace placeholder with image or display image
+                        const aiMsgId = placeholderId || generateMessageId();
+                        if (placeholderId && document.getElementById(placeholderId)) {
+                            replacePlaceholderWithImage(placeholderId, data.image_url, prompt);
+                        } else {
+                            displayMessage('', 'ai', 'image-placeholder', prompt, true, aiMsgId);
+                            placeholderTimestamps.set(aiMsgId, Date.now());
+                            replacePlaceholderWithImage(aiMsgId, data.image_url, prompt);
+                        }
+                        // Save to chat history
+                        if (manager?.addOrUpdateAiMessage) {
+                            manager.addOrUpdateAiMessage({
+                                response_id: data.message_id || aiMsgId,
+                                content: '',
+                                prompt: prompt,
+                                is_code: false,
+                                render_mode: 'inline',
+                                attachments: data.attachments || [{
+                                    isImage: true,
+                                    url: data.image_url,
+                                    name: 'AI generated image'
+                                }]
+                            });
+                        }
+                        // Update session name if provided
+                        if (data.session_name && manager?.activeSessionId) {
+                            manager.updateSessionName(manager.activeSessionId, data.session_name);
+                        }
+                        if (bgRequest) {
+                            BackgroundRequestManager.completeRequest(requestSessionId);
+                        }
+                        return;
+                    }
+                }
+
                 const reader = streamResponse.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
@@ -3145,6 +3186,43 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     }
                                 }
                             }
+                        } else if (chunk.type === 'image_generating') {
+                            // Explicit image request: show placeholder immediately
+                            console.log('[Stream] image_generating:', chunk.description);
+                            if (isSessionActive()) {
+                                ThinkingIndicator.hide(); hideSimplePulsingDot();
+                                const imgPlaceholderId = generateMessageId();
+                                displayMessage('', 'ai', 'image-placeholder', chunk.description || prompt, true, imgPlaceholderId);
+                                placeholderTimestamps.set(imgPlaceholderId, Date.now());
+                                // Store for done handler to replace
+                                window._pendingImagePlaceholderId = imgPlaceholderId;
+                            }
+                        } else if (chunk.type === 'image_confirm') {
+                            // Inferred image request: show confirmation UI
+                            console.log('[Stream] image_confirm:', chunk.description);
+                            if (isSessionActive()) {
+                                ThinkingIndicator.hide(); hideSimplePulsingDot();
+                                const confirmId = generateMessageId();
+                                const desc = chunk.description || '';
+                                const confirmHtml = `<div class="image-confirm" data-description="${desc.replace(/"/g, '&quot;')}">
+                                    <p>Generate image: <em>"${desc}"</em> — is that right?</p>
+                                    <div class="image-confirm__actions">
+                                        <button class="image-confirm__btn image-confirm__btn--yes" onclick="window._handleImageConfirm(true)">Yes</button>
+                                        <button class="image-confirm__btn image-confirm__btn--no" onclick="window._handleImageConfirm(false)">No</button>
+                                    </div>
+                                </div>`;
+                                displayMessage(confirmHtml, 'ai', 'text', prompt, false, confirmId);
+                                window._handleImageConfirm = (confirmed) => {
+                                    const btns = document.querySelectorAll('.image-confirm__actions');
+                                    btns.forEach(b => b.remove());
+                                    if (confirmed) {
+                                        sendMessage('yes');
+                                    } else {
+                                        sendMessage('no');
+                                    }
+                                    delete window._handleImageConfirm;
+                                };
+                            }
                         } else if (chunk.type === 'done') {
                             console.log('Received done chunk:', chunk);
                             streamedReasoning = chunk.reasoning || streamedReasoning;
@@ -3171,6 +3249,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             console.log('Parsed artifact from done:', streamArtifact);
                             console.log('Parsed email from done:', streamIsEmail, streamEmailData);
                             if (streamCryptoChart) console.log('Parsed crypto chart:', streamCryptoChart);
+                            // Handle image from generate_image ACTION path
+                            if (chunk.image_url && window._pendingImagePlaceholderId) {
+                                replacePlaceholderWithImage(window._pendingImagePlaceholderId, chunk.image_url, prompt);
+                                // Store for post-stream save (don't delete placeholder ID yet — needed by save)
+                                window._streamDoneImageUrl = chunk.image_url;
+                                window._streamDoneAttachments = chunk.attachments || [{ isImage: true, url: chunk.image_url, name: 'AI generated image' }];
+                            }
                             // Update session title in sidebar with typewriter animation
                             if (chunk.session_name) {
                                 const titleName = chunk.session_name.trim();
@@ -3251,9 +3336,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                 // Prepare completion data — strip internal protocol lines and artifact fences
                 let displayContent = streamChatSummary || streamedContent;
-                // Strip ACTION: routing line if it leaked through
+                // Strip ACTION: routing line and multi-line headers if leaked through
                 if (displayContent) {
-                    displayContent = displayContent.replace(/^\s*[-*]*\s*ACTION:\s*\w+\s*\n*/i, '');
+                    displayContent = displayContent
+                        .replace(/^\s*[-*]*\s*ACTION:\s*\w+\s*\n*/i, '')
+                        .replace(/^\s*description:\s*.+\n?/im, '')
+                        .replace(/^\s*source:\s*.+\n?/im, '')
+                        .trim();
                 }
                 if (displayContent && (displayContent.includes('```artifact-meta') || displayContent.includes('```artifact-file:') || displayContent.includes('```artifact_patch'))) {
                     displayContent = displayContent
@@ -3288,6 +3377,53 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                 // Create the AI message container - prefer backend's response_id for consistency
                 const aiMsgId = streamResponseId || placeholderId || generateMessageId();
+
+                // generate_image done: placeholder already replaced, show chat text below image and save
+                if (window._streamDoneImageUrl) {
+                    const imgUrl = window._streamDoneImageUrl;
+                    const imgAttachments = window._streamDoneAttachments || [{ isImage: true, url: imgUrl, name: 'AI generated image' }];
+                    delete window._streamDoneImageUrl;
+                    delete window._streamDoneAttachments;
+                    const imgMsgId = window._pendingImagePlaceholderId || aiMsgId;
+                    delete window._pendingImagePlaceholderId;
+
+                    // Append chat text below the image
+                    if (displayContent && displayContent.trim()) {
+                        const imgMsgDiv = document.getElementById(imgMsgId);
+                        if (imgMsgDiv) {
+                            const msgContent = imgMsgDiv.querySelector('.message-content');
+                            if (msgContent) {
+                                const captionEl = document.createElement('div');
+                                captionEl.className = 'image-caption';
+                                captionEl.innerHTML = typeof marked !== 'undefined'
+                                    ? DOMPurify.sanitize(marked.parse(displayContent))
+                                    : displayContent;
+                                msgContent.appendChild(captionEl);
+                            }
+                        }
+                    }
+
+                    const imgManager = window.chatManager;
+                    if (imgManager?.addOrUpdateAiMessage) {
+                        imgManager.addOrUpdateAiMessage({
+                            response_id: imgMsgId,
+                            content: displayContent || '',
+                            prompt: prompt,
+                            is_code: false,
+                            render_mode: 'inline',
+                            attachments: imgAttachments,
+                            message_type: 'image',
+                            model_meta: streamModelMeta || null
+                        });
+                    }
+                    if (imgManager?.updateLastAiMessage) {
+                        imgManager.updateLastAiMessage({
+                            attachments: imgAttachments,
+                            messageType: 'image'
+                        });
+                    }
+                    return aiMsgId;
+                }
 
                 const hasCode = displayContent.includes('```');
 

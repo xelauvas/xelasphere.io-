@@ -143,181 +143,24 @@ class NLTKSetup:
             return False
 
 
-def _strong_image_rules(user_input: str) -> bool:
-    """Fast path: obvious image intent via commands or strong keywords."""
-    if not user_input:
-        return False
-    text = user_input.strip().lower()
-    # Explicitly avoid when user asks for a prompt (crafting text, not the image)
-    prompt_guard_patterns = [
-        "prompt for an image",
-        "image prompt",
-        "prompt for a picture",
-        "prompt for art",
-        "write a prompt",
-        "create a prompt",
-        "create me a prompt",
-        "generate a prompt",
-    ]
-    if any(pat in text for pat in prompt_guard_patterns):
-        return False
-    # Explicitly avoid artifact-related requests (from composer panel)
-    artifact_guard_patterns = [
-        "update the artifact",
-        "revise the artifact",
-        "edit the artifact",
-        "```artifact",
-        "artifact block",
-        "current artifact code",
-        "complete updated artifact",
-        "current code to revise",
-        "please provide the complete",
-    ]
-    if any(pat in text for pat in artifact_guard_patterns):
-        return False
-    # Command prefixes
-    if text.startswith('/image') or text.startswith('img:') or text.startswith('/img'):
-        return True
+def classify_confirmation_response(user_response: str, pending_description: str) -> str:
+    """Classify user's response to an image confirmation.
+    Returns: 'confirm' | 'reject' | 'correction'"""
+    prompt = f'''The user was asked to confirm generating this image:
+"{pending_description}"
 
-    verbs = ["draw", "render", "create", "generate", "illustrate", "visualize", "paint", "make"]
-    nouns = ["image", "picture", "photo", "art", "visual", "illustration", "rendering"]
-    modifiers = ["4k", "high res", "photorealistic", "cartoon", "anime", "concept art", "digital painting"]
+They responded: "{user_response}"
 
-    has_verb = any(v in text for v in verbs)
-    has_noun = any(n in text for n in nouns)
-    has_mod = any(m in text for m in modifiers)
+Classify their response as exactly one of:
+- CONFIRM: they agree (yes, sure, go ahead, perfect, do it, exactly, looks good, etc.)
+- REJECT: they decline (no, nevermind, cancel, stop, etc.)
+- CORRECTION: they want a different image (they described something else or modified the description)
 
-    # Pattern: "picture of X", "image of X", "photo of X" (noun phrase without verb)
-    noun_phrase_pattern = r'\b(picture|image|photo|illustration|art)\s+(of|showing|depicting|with)\s+\w+'
-    if re.search(noun_phrase_pattern, text):
-        return True
+Reply with ONLY one word: CONFIRM, REJECT, or CORRECTION'''
 
-    return (has_verb and has_noun) or (has_verb and has_mod)
-
-
-def classify_image_intent_llm(user_input: str, chat_history: list = None, model: str = None) -> bool:
-    """
-    AI-powered intent classifier with high accuracy (~99%).
-    Analyzes user input AND chat history context to determine if user wants an image generated.
-    """
-    if not user_input:
-        return False
-
-    try:
-        chosen_model = model or getattr(Config, "INTENT_MODEL", None) or "llama-3.3-70b-versatile"
-
-        # Build context from chat history (last 3 messages for context)
-        history_context = ""
-        if chat_history and isinstance(chat_history, list):
-            recent = chat_history[-3:] if len(chat_history) > 3 else chat_history
-            history_lines = []
-            for msg in recent:
-                role = msg.get('role', 'user')
-                content = msg.get('content', msg.get('prompt', ''))[:150]
-                if content:
-                    history_lines.append(f"{role}: {content}")
-            if history_lines:
-                history_context = "Recent conversation:\n" + "\n".join(history_lines) + "\n\n"
-
-        prompt = f"""You are a precise intent classifier. Determine if the user wants to GENERATE an actual image file.
-
-{history_context}Current message: "{user_input}"
-
-NOT IMAGE (return TEXT):
-- "write a prompt for an image" → wants prompt text, not image
-- "explain how to create images" → wants explanation
-- "picture this scenario" → figurative language
-- "draw a conclusion" → figurative
-- "create a function/app/code" → code request
-- "update the artifact" → code request
-- "the image shows..." → talking about existing image
-- "in the picture I see..." → describing existing image
-
-IMAGE (return IMAGE):
-- "generate an image of X" → wants image
-- "draw me a cat" → wants image
-- "create a picture of mountains" → wants image
-- "/image sunset" → wants image
-- "picture of a sunset" → wants image (simple noun phrase = generation request)
-- "image of a dog" → wants image
-- "photo of a beach" → wants image
-- "sunset picture" → wants image
-- Short descriptions like "a cat sitting" → likely wants image
-
-RULE: If the message is just describing something visual (e.g., "picture of X", "image of Y", "a beautiful sunset"), assume the user wants an image generated.
-
-Reply with ONLY: IMAGE or TEXT"""
-
-        resp, _ = send_prompt(prompt, model=chosen_model)
-
-        if isinstance(resp, dict) and resp.get("error"):
-            return False
-        if not isinstance(resp, str):
-            return False
-
-        answer = resp.strip().upper().split()[0] if resp.strip() else "TEXT"
-        is_image = answer == "IMAGE"
-
-        if is_image:
-            logger.info(f"AI classified as IMAGE: '{user_input[:50]}...'")
-
-        return is_image
-
-    except Exception as e:
-        logger.warning(f"LLM intent check failed: {e}")
-        return False
-
-
-def is_image_request(user_input: str, chat_history: list = None) -> bool:
-    """
-    High-accuracy image request detection (~99%).
-
-    Strategy:
-    1) Quick rejection of obvious non-image requests
-    2) Fast path for explicit commands (/image, img:)
-    3) AI analysis with chat context for ambiguous cases
-    """
-    if not user_input:
-        return False
-
-    text = user_input.strip().lower()
-
-    # === QUICK REJECTION: Definitely NOT image requests ===
-    rejection_patterns = [
-        # Code/programming
-        "write code", "write a function", "create a function", "build an app",
-        "make an app", "implement", "```", "function(", "def ", "class ",
-        # Prompt crafting
-        "prompt for", "write a prompt", "create a prompt", "image prompt",
-        # Artifacts
-        "artifact", "update the", "revise the", "edit the",
-        # Figurative language
-        "picture this", "draw a conclusion", "draw attention",
-        # Existing images
-        "can't see the image", "the image shows", "in this image",
-        # Explanations
-        "explain how", "how to create", "how do i", "tell me about",
-    ]
-
-    if any(pat in text for pat in rejection_patterns):
-        return False
-
-    # === FAST PATH: Explicit commands ===
-    if text.startswith('/image ') or text.startswith('img:') or text.startswith('/img '):
-        return True
-
-    # === STRONG RULES + AI VERIFICATION ===
-    if _strong_image_rules(user_input):
-        return classify_image_intent_llm(user_input, chat_history)
-
-    # === AI FALLBACK: Only if there's a hint ===
-    image_hints = ["image", "picture", "photo", "draw", "render", "visual",
-                   "illustration", "generate", "create"]
-
-    if any(hint in text for hint in image_hints):
-        return classify_image_intent_llm(user_input, chat_history)
-
-    return False
+    resp, _ = send_prompt(prompt, model='llama-3.1-8b-instant')
+    answer = resp.strip().upper().split()[0] if isinstance(resp, str) and resp.strip() else 'REJECT'
+    return answer.lower() if answer in ('CONFIRM', 'REJECT', 'CORRECTION') else 'reject'
 
 
 def count_tokens(text: str, encoding_name: str = "cl100k_base") -> int:

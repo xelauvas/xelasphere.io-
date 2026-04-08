@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -25,18 +26,25 @@ _ARTIFACT_FENCE_RE = re.compile(r"```artifact\s*([\s\S]*?)\s*```", re.IGNORECASE
 _ARTIFACT_UNCLOSED_RE = re.compile(r"```artifact\s*([\s\S]+)", re.IGNORECASE)
 _PATCH_FENCE_RE = re.compile(r"```artifact_patch\s*([\s\S]*?)\s*```", re.IGNORECASE)
 
-_VALID_ACTIONS = {"chat", "create_artifact", "patch_artifact", "show_chart"}
+_VALID_ACTIONS = {"chat", "create_artifact", "patch_artifact", "show_chart", "generate_image"}
+
+# Actions that use multi-line header mode (key: value pairs after the ACTION line)
+_MULTILINE_HEADER_ACTIONS = {"generate_image"}
+
+# Regex for key-value header lines: "description: some text" or "source: explicit"
+_HEADER_KV_RE = re.compile(r"^\s*(\w+)\s*:\s*(.+?)\s*$")
 
 
 @dataclass
 class ParsedAction:
     """Result of parsing a model response."""
 
-    action: str  # 'chat' | 'create_artifact' | 'patch_artifact' | 'show_chart'
+    action: str  # 'chat' | 'create_artifact' | 'patch_artifact' | 'show_chart' | 'generate_image'
     chat_text: str  # Everything except artifact/patch fence
     artifact_payload: Optional[Dict[str, Any]]  # Parsed artifact JSON (if create)
     patch_payload: Optional[Dict[str, Any]]  # Parsed patch JSON (if patch)
     chart_payload: Optional[Dict[str, Any]] = None  # Parsed chart info (if show_chart)
+    image_payload: Optional[Dict[str, str]] = None  # {description, source} (if generate_image)
     raw_response: str = ""  # Full unmodified response
     used_fallback: bool = False  # True if ACTION line was missing
 
@@ -66,6 +74,7 @@ class ActionParser:
         match = _ACTION_LINE_RE.match(first_line)
 
         action_params = None
+        header_fields = {}
         if match:
             keyword = match.group(1).lower()
             if keyword in _VALID_ACTIONS:
@@ -73,6 +82,20 @@ class ActionParser:
                 action_params = match.group(2).strip() if match.group(2) else None
                 response_text = lines[1] if len(lines) > 1 else ""
                 response_text = response_text.lstrip("\n")
+
+                # Multi-line header parsing for generate_image
+                if action in _MULTILINE_HEADER_ACTIONS:
+                    remaining_lines = response_text.split("\n")
+                    header_end = 0
+                    for i, line in enumerate(remaining_lines):
+                        kv = _HEADER_KV_RE.match(line)
+                        if kv:
+                            header_fields[kv.group(1).lower()] = kv.group(2)
+                            header_end = i + 1
+                        else:
+                            # Blank line or non-kv line terminates header
+                            break
+                    response_text = "\n".join(remaining_lines[header_end:]).lstrip("\n")
 
         # Step 2: If no ACTION line, use fence-detection fallback
         if action is None:
@@ -94,6 +117,7 @@ class ActionParser:
         artifact_payload = None
         patch_payload = None
         chart_payload = None
+        image_payload = None
         chat_text = response_text
 
         if action == "create_artifact":
@@ -102,9 +126,18 @@ class ActionParser:
             patch_payload, chat_text = _extract_patch(response_text)
         elif action == "show_chart":
             chart_payload = _extract_chart(action_params)
-            # show_chart acts like chat with a chart widget attached
             if not chart_payload:
-                action = "chat"  # fallback if we can't parse chart params
+                action = "chat"
+        elif action == "generate_image":
+            description = header_fields.get("description", "").strip()
+            source = header_fields.get("source", "explicit").strip().lower()
+            if source not in ("explicit", "inferred"):
+                source = "explicit"
+            if description:
+                image_payload = {"description": description, "source": source}
+            else:
+                logger.warning("generate_image ACTION missing description, falling back to chat")
+                action = "chat"
 
         return ParsedAction(
             action=action,
@@ -112,6 +145,7 @@ class ActionParser:
             artifact_payload=artifact_payload,
             patch_payload=patch_payload,
             chart_payload=chart_payload,
+            image_payload=image_payload,
             raw_response=raw,
             used_fallback=used_fallback,
         )
@@ -207,14 +241,23 @@ class StreamingActionBuffer:
     Streaming chunks don't respect line boundaries. This buffer
     accumulates chunks until the first newline, then parses the
     ACTION line.
+
+    For multi-line header actions (generate_image), continues buffering
+    key-value pairs until a blank line or timeout (3s).
     """
+
+    HEADER_TIMEOUT_MS = 3000  # 3 seconds
 
     def __init__(self) -> None:
         self.buffer = ""
         self.action: Optional[str] = None
         self.action_params: Optional[str] = None  # e.g. "bitcoin" for show_chart
+        self.header_fields: Dict[str, str] = {}  # multi-line header key-value pairs
         self.remainder: str = ""
         self._resolved = False
+        self._in_header_mode = False
+        self._header_start_time: float = 0.0
+        self._header_lines: list = []
 
     def feed(self, chunk: str) -> Optional[str]:
         """Feed a chunk. Returns action string when resolved, else None."""
@@ -223,6 +266,42 @@ class StreamingActionBuffer:
 
         self.buffer += chunk
 
+        # Multi-line header mode: parsing key-value pairs after ACTION: generate_image
+        if self._in_header_mode:
+            elapsed = time.time() - self._header_start_time
+            if elapsed > self.HEADER_TIMEOUT_MS / 1000:
+                # Timeout: flush buffer as plain text, abort image path
+                logger.warning("generate_image header timeout — falling back to chat")
+                self.action = "chat"
+                self.remainder = self.buffer
+                self._resolved = True
+                return self.action
+
+            # Process complete lines in the buffer
+            while "\n" in self.buffer:
+                newline_idx = self.buffer.find("\n")
+                line = self.buffer[:newline_idx]
+                self.buffer = self.buffer[newline_idx + 1:]
+
+                stripped = line.strip()
+                if not stripped:
+                    # Blank line terminates header
+                    self.remainder = self.buffer
+                    self._resolved = True
+                    return self.action
+
+                kv = _HEADER_KV_RE.match(stripped)
+                if kv:
+                    self.header_fields[kv.group(1).lower()] = kv.group(2)
+                else:
+                    # Non-kv line terminates header; this line is chat text
+                    self.remainder = line + "\n" + self.buffer
+                    self._resolved = True
+                    return self.action
+
+            return None  # Need more data
+
+        # Standard single-line ACTION parsing
         newline_idx = self.buffer.find("\n")
         if newline_idx == -1:
             return None
@@ -236,9 +315,18 @@ class StreamingActionBuffer:
             if keyword in _VALID_ACTIONS:
                 self.action = keyword
                 self.action_params = match.group(2).strip() if match.group(2) else None
-                self.remainder = rest
-                self._resolved = True
-                return self.action
+
+                # Enter multi-line header mode for generate_image
+                if keyword in _MULTILINE_HEADER_ACTIONS:
+                    self._in_header_mode = True
+                    self._header_start_time = time.time()
+                    self.buffer = rest  # Continue parsing remaining buffer
+                    # Process any complete lines already in the buffer
+                    return self.feed("")
+                else:
+                    self.remainder = rest
+                    self._resolved = True
+                    return self.action
 
         self.action = "chat"
         self.remainder = self.buffer

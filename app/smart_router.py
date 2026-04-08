@@ -128,8 +128,9 @@ REASONING_PATTERNS = [
 
 IMAGE_GEN_PATTERNS = [
     r'\b(generate|create|make|draw)\s+(?:an?\s+)?(?:image|picture|photo|illustration|art)\b',
-    r'\b(image\s+of|picture\s+of|show\s+me)\b',
-    r'\b(visualize|render|design)\b',
+    r'\b(image\s+of|picture\s+of|photo\s+of)\b',
+    r'\bdraw\s+(?:me\s+)?\w',
+    r'\b(paint|sketch|illustrate)\s+(?:me\s+)?\w',
 ]
 
 UNCENSORED_PATTERNS = [

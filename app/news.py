@@ -138,12 +138,21 @@ def get_news_headlines(count: int = 2, lang: str = 'en', country: str = 'us',
         topics = extract_topics_from_sessions(db, user_id)
 
         if topics:
-            query = ' OR '.join(topics[:2])  # GNews search query
-            headlines = _fetch_gnews('search', {
-                'q': query,
-                'lang': lang,
-                'max': 8,
-            })
+            # Search multiple topic combinations for more results
+            all_personalized = []
+            seen = set()
+            for topic in topics[:3]:
+                batch = _fetch_gnews('search', {
+                    'q': topic,
+                    'lang': lang,
+                    'max': 10,
+                })
+                for h in batch:
+                    key = h['title'].lower()[:50]
+                    if key not in seen:
+                        seen.add(key)
+                        all_personalized.append(h)
+            headlines = all_personalized
 
             if headlines:
                 _user_cache[user_id] = {
@@ -154,22 +163,34 @@ def get_news_headlines(count: int = 2, lang: str = 'en', country: str = 'us',
                 logger.info(f'[News] Personalized news for user ({query}): {len(headlines)} results')
                 return headlines[:count]
 
-    # Fallback to generic top headlines
+    # Fallback to generic top headlines (fetch across categories for volume)
     if _generic_cache['headlines'] and (now - _generic_cache['fetched_at']) < CACHE_TTL:
         return _generic_cache['headlines'][:count]
 
-    headlines = _fetch_gnews('top-headlines', {
-        'lang': lang,
-        'country': country,
-        'max': 10,
-    })
+    categories = ['general', 'technology', 'business', 'science', 'entertainment']
+    all_headlines = []
+    seen_titles = set()
 
-    if headlines:
-        _generic_cache['headlines'] = headlines
+    for cat in categories:
+        batch = _fetch_gnews('top-headlines', {
+            'lang': lang,
+            'country': country,
+            'category': cat,
+            'max': 10,
+        })
+        for h in batch:
+            # Deduplicate by title
+            key = h['title'].lower()[:50]
+            if key not in seen_titles:
+                seen_titles.add(key)
+                all_headlines.append(h)
+
+    if all_headlines:
+        _generic_cache['headlines'] = all_headlines
         _generic_cache['fetched_at'] = now
-        logger.info(f'[News] Generic top headlines: {len(headlines)} results')
+        logger.info(f'[News] Fetched {len(all_headlines)} headlines across {len(categories)} categories')
 
-    return headlines[:count]
+    return all_headlines[:count]
 
 
 def headlines_to_options(headlines: List[Dict]) -> List[Dict]:

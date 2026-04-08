@@ -242,123 +242,15 @@
         document.body.classList.remove('is-daytime', 'is-nighttime');
         document.body.classList.add(isDay ? 'is-daytime' : 'is-nighttime');
 
-        // Mobile: typewriter + badge (first sentence only for one line)
+        // Mobile: typewriter (first sentence only)
         if (isMobile()) {
-            // Take first sentence only (Safari compatible)
             const sentenceEnd = greeting.search(/[.!?]/);
             const mobileGreeting = sentenceEnd > -1 ? greeting.substring(0, sentenceEnd + 1) : greeting;
             typewriterEffect(textEl, mobileGreeting);
-
-            // Add weather badge after typing completes
-            const typingDuration = mobileGreeting.length * 25 + 500;
-            if (window.WeatherIcon) {
-                setTimeout(() => {
-                    window.WeatherIcon.getWeatherIcon().then(weatherIcon => {
-                        if (weatherIcon) {
-                            const cached = localStorage.getItem('weatherData');
-                            let tempText = '';
-                            let cityText = '';
-                            if (cached) {
-                                try {
-                                    const data = JSON.parse(cached);
-                                    if (data.temp !== undefined) {
-                                        tempText = `${Math.round(data.temp)}°`;
-                                    }
-                                    if (data.city) {
-                                        cityText = data.city;
-                                    }
-                                } catch (e) {}
-                            }
-
-                            // Create wrapper for username with weather above/below
-                            const usernameWrapper = document.createElement('span');
-                            usernameWrapper.className = 'weather-username-wrapper';
-
-                            // Icon+degrees above username
-                            const iconWrapper = document.createElement('span');
-                            iconWrapper.className = 'weather-icon-wrapper';
-                            iconWrapper.appendChild(weatherIcon);
-
-                            if (tempText) {
-                                const tempBadge = document.createElement('span');
-                                tempBadge.className = 'weather-temp-badge';
-                                tempBadge.textContent = tempText;
-                                iconWrapper.appendChild(tempBadge);
-                            }
-
-                            usernameWrapper.appendChild(iconWrapper);
-
-                            // City below (will be positioned via CSS)
-                            if (cityText) {
-                                const citySpan = document.createElement('span');
-                                citySpan.className = 'weather-city';
-                                citySpan.textContent = cityText;
-                                usernameWrapper.appendChild(citySpan);
-                            }
-
-                            textEl.appendChild(usernameWrapper);
-                        }
-                    }).catch(() => {});
-                }, typingDuration);
-            }
         } else {
-            // Desktop: smooth fade in then show weather badge
+            // Desktop: smooth fade in
             textEl.textContent = greeting;
             textEl.classList.add('greeting-fade-in');
-
-            // Add weather badge after fade completes
-            if (window.WeatherIcon) {
-                setTimeout(() => {
-                    window.WeatherIcon.getWeatherIcon().then(weatherIcon => {
-                        if (weatherIcon) {
-                            // Get cached weather data
-                            const cached = localStorage.getItem('weatherData');
-                            let tempText = '';
-                            let cityText = '';
-                            if (cached) {
-                                try {
-                                    const data = JSON.parse(cached);
-                                    if (data.temp !== undefined) {
-                                        tempText = `${Math.round(data.temp)}°`;
-                                    }
-                                    if (data.city) {
-                                        cityText = data.city;
-                                    }
-                                } catch (e) {}
-                            }
-
-                            // Create wrapper for username with weather above/below
-                            const usernameWrapper = document.createElement('span');
-                            usernameWrapper.className = 'weather-username-wrapper';
-
-                            // Icon with temp next to it
-                            const iconWrapper = document.createElement('span');
-                            iconWrapper.className = 'weather-icon-wrapper';
-                            iconWrapper.appendChild(weatherIcon);
-
-                            if (tempText) {
-                                const tempBadge = document.createElement('span');
-                                tempBadge.className = 'weather-temp-badge';
-                                tempBadge.textContent = tempText;
-                                iconWrapper.appendChild(tempBadge);
-                            }
-
-                            usernameWrapper.appendChild(iconWrapper);
-
-                            if (cityText) {
-                                const citySpan = document.createElement('span');
-                                citySpan.className = 'weather-city';
-                                citySpan.textContent = cityText;
-                                usernameWrapper.appendChild(citySpan);
-                            }
-
-                            // Remove clip-path and add weather
-                            textEl.classList.add('animation-done');
-                            textEl.appendChild(usernameWrapper);
-                        }
-                    }).catch(() => {});
-                }, 900); // after reveal completes
-            }
         }
 
         // Set incognito label (always use guest/incognito greetings)

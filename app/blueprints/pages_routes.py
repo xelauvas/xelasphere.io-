@@ -108,14 +108,13 @@ def index():
         from app.news import get_news_headlines
         news_user_id = session['user']['uid'] if not guest_mode else None
         news_headlines = get_news_headlines(
-            count=4, db=db if news_user_id else None, user_id=news_user_id
+            count=50, db=db if news_user_id else None, user_id=news_user_id
         )
 
         # Mobile gets 7 suggestions (no More), desktop gets 3 + More = 4 (2x2 grid)
+        # News is now in greeting area, not in the options grid
         mobile = _is_mobile()
-        # 1 slot reserved for news ticker card if headlines available
-        num_news_slots = 1 if news_headlines else 0
-        num_suggestions = max(1, (6 if mobile else 3) - num_news_slots)
+        num_suggestions = 6 if mobile else 3
 
         # Use fallback options for guests (no API call), full options for logged-in users
         if guest_mode:
