@@ -220,17 +220,9 @@
      * Show the search indicator
      */
     function showIndicator(reason = 'Web search') {
-        const indicator = createSearchIndicator();
-        const textEl = indicator.querySelector('.search-auto-indicator-text');
-        const toggleIcon = indicator.querySelector('.search-auto-indicator-toggle i');
+        // No popup — just silently enable the search checkbox
+        isIndicatorVisible = false;
 
-        textEl.textContent = reason;
-        toggleIcon.className = 'fas fa-times';
-        indicator.classList.add('visible');
-        indicator.classList.remove('disabled');
-        isIndicatorVisible = true;
-
-        // Update the hidden checkbox to enable search
         const searchCheckbox = document.getElementById('enable-search');
         if (searchCheckbox && userOverride !== false) {
             searchCheckbox.checked = true;
@@ -259,14 +251,7 @@
      * Show indicator in disabled/override state
      */
     function showDisabledIndicator() {
-        const indicator = createSearchIndicator();
-        const textEl = indicator.querySelector('.search-auto-indicator-text');
-        const toggleIcon = indicator.querySelector('.search-auto-indicator-toggle i');
-
-        textEl.textContent = 'Search off';
-        toggleIcon.className = 'fas fa-undo';
-        indicator.classList.add('visible', 'disabled');
-        isIndicatorVisible = true;
+        isIndicatorVisible = false;
 
         const searchCheckbox = document.getElementById('enable-search');
         if (searchCheckbox) {
