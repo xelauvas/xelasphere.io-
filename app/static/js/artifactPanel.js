@@ -1040,9 +1040,9 @@ async function runScript() {
     document.getElementById('repl-input').focus();
 }
 
-// REPL input handler — sends commands to Docker container via /api/sandbox/exec
+// REPL input handler — sends commands to parent which calls Docker exec
 var replInput = document.getElementById('repl-input');
-replInput.addEventListener('keydown', async function(e) {
+replInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
         var cmd = replInput.value;
         replInput.value = '';
@@ -1052,46 +1052,16 @@ replInput.addEventListener('keydown', async function(e) {
 
         appendOutput('$ ' + cmd + '\\n', 'repl-in');
         replInput.disabled = true;
+        setStatus('Running...');
 
+        // Send to parent — parent handles the API call and responds
         try {
-            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-            // If no csrf in iframe, try parent
-            if (!csrfMeta) {
-                try { csrfMeta = window.parent.document.querySelector('meta[name="csrf-token"]'); } catch(e) {}
-            }
-            var headers = {'Content-Type': 'application/json'};
-            if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
-
-            // Wrap bare Python expressions as: python3 -c "cmd"
-            // If user types a shell command (pip, python, ls, etc.) send as-is
-            var shellCmd = cmd.trim();
-            if (!shellCmd.match(/^(pip|python|ls|cd|cat|mkdir|rm|cp|mv|echo|curl|wget|which|find|grep|head|tail|wc|chmod|export|env|pwd|whoami|bash|sh)\\b/) && !shellCmd.includes(' ')) {
-                // Likely a Python expression — wrap it
-                shellCmd = 'python3 -c "' + cmd.replace(/"/g, '\\\\"') + '"';
-            }
-
-            var resp = await fetch('/api/sandbox/exec', {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({command: shellCmd}),
-                credentials: 'same-origin'
-            });
-            var result = await resp.json();
-            if (result.error) {
-                appendOutput(result.error + '\\n', 'stderr');
-            } else {
-                if (result.stdout) appendOutput(result.stdout, 'stdout');
-                if (result.stderr) appendOutput(result.stderr, 'stderr');
-                if (!result.stdout && !result.stderr && result.exit_code === 0) {
-                    // Silent success
-                }
-            }
-        } catch (err) {
-            appendOutput('Request failed: ' + (err.message || err) + '\\n', 'stderr');
+            window.parent.postMessage({type: 'sandbox-exec', command: cmd.trim()}, '*');
+        } catch(err) {
+            appendOutput('Cannot reach parent: ' + err.message + '\\n', 'stderr');
+            replInput.disabled = false;
+            setStatus('');
         }
-        replInput.disabled = false;
-        replInput.focus();
-        scrollBottom();
     } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         if (histIdx > 0) { histIdx--; replInput.value = history[histIdx]; }
@@ -1099,6 +1069,22 @@ replInput.addEventListener('keydown', async function(e) {
         e.preventDefault();
         if (histIdx < history.length - 1) { histIdx++; replInput.value = history[histIdx]; }
         else { histIdx = history.length; replInput.value = ''; }
+    }
+});
+
+// Listen for exec results from parent
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'sandbox-exec-result') {
+        if (e.data.error) {
+            appendOutput(e.data.error + '\\n', 'stderr');
+        } else {
+            if (e.data.stdout) appendOutput(e.data.stdout, 'stdout');
+            if (e.data.stderr) appendOutput(e.data.stderr, 'stderr');
+        }
+        replInput.disabled = false;
+        setStatus('');
+        scrollBottom();
+        replInput.focus();
     }
 });
 
@@ -1251,6 +1237,8 @@ window.addEventListener('load', function() {
                 } else if (e.data?.type === 'sandbox-needs-server') {
                     console.log('[Sandbox] Received sandbox-needs-server message', e.data);
                     this._showRunOnServer(e.data);
+                } else if (e.data?.type === 'sandbox-exec') {
+                    this._handleExec(e.data.command);
                 }
             });
 
@@ -2426,6 +2414,41 @@ window.addEventListener('load', function() {
             } else {
                 // Fallback: put it in the toolbar area of the iframe output
                 console.warn('No header-right found for Run on Server button');
+            }
+        }
+
+        async _handleExec(command) {
+            try {
+                const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                const headers = {'Content-Type': 'application/json'};
+                if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
+
+                const resp = await fetch('/api/sandbox/exec', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({command}),
+                    credentials: 'same-origin'
+                });
+                const result = await resp.json();
+                // Send result back to iframe
+                const iframe = this.previewFrame;
+                if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({
+                        type: 'sandbox-exec-result',
+                        stdout: result.stdout || '',
+                        stderr: result.stderr || '',
+                        error: result.error || null,
+                        exit_code: result.exit_code
+                    }, '*');
+                }
+            } catch (err) {
+                const iframe = this.previewFrame;
+                if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({
+                        type: 'sandbox-exec-result',
+                        error: 'Request failed: ' + (err.message || err)
+                    }, '*');
+                }
             }
         }
 
