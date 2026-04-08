@@ -52,6 +52,27 @@ class Config:
     GOOGLE_SEARCH_ENGINE_ID = os.getenv('GOOGLE_SEARCH_ENGINE_ID', '')
     BRAVE_SEARCH_API_KEY = os.getenv('BRAVE_SEARCH_API_KEY', '')
     BRAVE_SEARCH_ENDPOINT = os.getenv('BRAVE_SEARCH_ENDPOINT', 'https://api.search.brave.com/res/v1/web/search')
+    YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY', '')
+
+    SEARCH_CONTEXT_BUDGET = {
+        'deepseek': 30_000,
+        'llama': 20_000,
+        'gpt-4': 60_000,
+        'kimi': 80_000,
+        'qwen': 40_000,
+        'default': 40_000,
+    }
+
+    SEARCH_PREAPPROVED_DOMAINS = [
+        'wikipedia.org', 'en.wikipedia.org', 'bbc.com', 'bbc.co.uk',
+        'reuters.com', 'nytimes.com', 'theguardian.com', 'techcrunch.com',
+        'github.com', 'stackoverflow.com', 'developer.mozilla.org',
+        'docs.python.org', 'arxiv.org', 'weather.com', 'apnews.com',
+    ]
+
+    BLOCKED_IMAGE_DOMAINS = []
+
+    FETCH_DEADLINE_MS = 2000
 
     # Finnhub API for stock news
     FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY', '')
