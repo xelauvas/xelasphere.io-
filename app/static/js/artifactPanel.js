@@ -978,9 +978,30 @@ async function loadPackagesFor(code) {
 }
 
 async function runScript() {
-    var py = await initPyodide();
     var code = JSON.parse(document.getElementById('code-data').textContent);
     var files = JSON.parse(document.getElementById('files-data').textContent);
+
+    appendOutput('--- Running ${entryName.replace(/'/g, "\\'")} ---\\n', 'repl-prompt');
+
+    // Try server sandbox first — more reliable, supports all libraries
+    try {
+        if (window.parent && window.parent.artifactPanel && window.parent.artifactPanel._runOnServer) {
+            appendOutput('Running on server...\\n', 'repl-prompt');
+            window.parent.artifactPanel._runOnServer(code, files, ENTRY_NAME);
+            return;
+        }
+    } catch(e) { /* parent access blocked — fall through to Pyodide */ }
+
+    // Fallback: Pyodide (browser-based Python)
+    appendOutput('Server unavailable, using browser Python...\\n', 'repl-prompt');
+    var py;
+    try {
+        py = await initPyodide();
+    } catch(err) {
+        appendOutput('Failed to load Python runtime: ' + (err.message || err) + '\\n', 'stderr');
+        appendOutput('Try clicking Run on Server if available.\\n', 'repl-prompt');
+        return;
+    }
 
     // Write aux files
     for (var path in files) {
@@ -988,8 +1009,6 @@ async function runScript() {
             py.FS.writeFile('/home/pyodide/' + path, files[path]);
         }
     }
-
-    appendOutput('--- Running ${entryName.replace(/'/g, "\\'")} ---\\n', 'repl-prompt');
 
     var canRun = await loadPackagesFor(code);
     if (canRun === false) {
