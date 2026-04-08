@@ -329,11 +329,10 @@ def smart_route(
         task_type = "long_context"
         model = get_model_for_task(task_type)
 
-    # Cost: for simple chat, prefer the fast small model
-    if task_type == "chat":
-        # Lightweight heuristic: short messages in short conversations are usually fine on 8B
-        if len(message) <= 220 and (conversation_length or 0) <= 10 and total_tokens <= 8000:
-            model = "llama-3.1-8b-instant"
+    # Note: 8B model downgrade removed — llama-3.1-8b-instant does not follow
+    # the ACTION protocol (web_search, generate_image, create_artifact).
+    # All requests use the default model (llama-3.3-70b-versatile) which is
+    # fast enough on Groq and reliably follows the protocol.
 
     # Stability: provider-aware fallback if the chosen provider isn't configured
     provider = MODEL_PROVIDERS.get(model, "groq")
