@@ -166,20 +166,47 @@ pending = session.pop('pending_confirmation', None)
 if pending and pending.get('type') == 'generate_image':
     # Check if not stale (expire after 5 minutes)
     if time.time() - pending.get('timestamp', 0) < 300:
-        user_response = prompt.strip().lower()
-        affirmative = user_response in ('yes', 'y', 'yeah', 'yep', 'sure',
-                                         'ok', 'okay', 'go', 'do it',
-                                         'looks good', 'that works', 'correct')
-        if affirmative:
-            # Generate the image with the stored description
+        # Classify response: yes / no / correction
+        # Use fast LLM call (Groq Llama 8B) — same pattern as classify_user_intent
+        # Three buckets: "confirm", "reject", "correction"
+        bucket = classify_confirmation_response(prompt, pending['description'])
+        if bucket == 'confirm':
             return generate_and_return_image(user_id, pending['description'])
-        # else: treat as a new prompt (user said no or typed a correction)
+        elif bucket == 'correction':
+            # User provided a better description — use it directly
+            return generate_and_return_image(user_id, prompt)
+        # bucket == 'reject' or classification failed: fall through to normal routing
+```
+
+**Confirmation classifier** (fast Groq Llama 8B call, ~200ms):
+
+```python
+def classify_confirmation_response(user_response: str, pending_description: str) -> str:
+    """Classify user's response to an image confirmation.
+    Returns: 'confirm' | 'reject' | 'correction'"""
+    prompt = f'''The user was asked to confirm generating this image:
+"{pending_description}"
+
+They responded: "{user_response}"
+
+Classify their response as exactly one of:
+- CONFIRM: they agree (yes, sure, go ahead, perfect, do it, exactly, looks good, etc.)
+- REJECT: they decline (no, nevermind, cancel, stop, etc.)
+- CORRECTION: they want a different image (they described something else or modified the description)
+
+Reply with ONLY one word: CONFIRM, REJECT, or CORRECTION'''
+
+    resp, _ = send_prompt(prompt, model='llama-3.1-8b-instant')
+    answer = resp.strip().upper().split()[0] if isinstance(resp, str) and resp.strip() else 'REJECT'
+    return answer.lower() if answer in ('CONFIRM', 'REJECT', 'CORRECTION') else 'reject'
 ```
 
 **Key properties:**
 - `session.pop()` ensures the state is consumed exactly once
 - 5-minute TTL prevents stale confirmations
-- Non-affirmative responses fall through to normal routing
+- LLM classification handles natural language ("go ahead", "perfect", "that's the one")
+- "correction" bucket lets user refine ("no, make it a watercolor painting instead")
+- Classification failure defaults to `reject` (safe — falls through to normal routing)
 - The pending state is server-side (Flask session), not client-side
 
 ### Frontend Confirmation UI
@@ -187,15 +214,17 @@ if pending and pending.get('type') == 'generate_image':
 When the frontend receives `{type: "image_confirm", description: "..."}`:
 
 ```javascript
-// Show inline confirmation message
+// Show inline confirmation with Yes/No buttons (canonical path)
+// Text input also works — classified by LLM on backend
 displayConfirmation({
     text: `Generating: "${description}" — is that right?`,
-    onConfirm: () => sendMessage('yes'),
-    onCancel: () => sendMessage('no, I meant something else')
+    onConfirm: () => sendMessage('yes'),   // fast path: hits 'confirm' bucket
+    onCancel: () => sendMessage('no')       // fast path: hits 'reject' bucket
+    // User can also type freely: "go ahead", "make it darker", etc.
 });
 ```
 
-The Yes/No buttons just send text messages, which hit the pending_confirmation check on the backend.
+The Yes/No buttons are the canonical path (guaranteed to classify correctly). Free-text input also works via the LLM classifier.
 
 ---
 
@@ -306,13 +335,25 @@ Buffer timeout (3s) fires. Everything buffered is flushed as plain chat text. Us
 
 ## Migration Plan
 
-1. Add `generate_image` to ACTION protocol in system prompt
-2. Update `StreamingActionBuffer` for multi-line header mode + timeout
-3. Update `ActionParser.parse()` to handle `generate_image`
-4. Add SSE event types: `image_generating`, `image_confirm`
-5. Add `pending_confirmation` session state handling
-6. Update frontend to handle new SSE events
-7. Reduce `isImagePrompt()` to `/image`-only
-8. Remove `is_image_request()`, `_strong_image_rules()`, `classify_image_intent_llm()`
-9. Remove streaming endpoint image pre-check (the one we just added)
-10. Test: explicit commands, natural language, pasted text, inferred context, error recovery
+Order is critical. The system prompt change is the **feature flag** — it activates
+the new behavior. Everything else must be in place before it's flipped on.
+
+**Phase 1: Remove old detection (safe — /image command still works)**
+1. Remove `is_image_request()`, `_strong_image_rules()`, `classify_image_intent_llm()` from `utilities.py`
+2. Remove `is_image_request()` calls from `chat_routes.py` (both streaming and non-streaming endpoints)
+3. Remove streaming endpoint image pre-check (the temporary one we added earlier)
+4. Reduce frontend `isImagePrompt()` to only match `/image`, `/img` commands
+5. Add `classify_confirmation_response()` to utilities
+
+**Phase 2: Build new interception (inactive — no model emits generate_image yet)**
+6. Update `StreamingActionBuffer` for multi-line header mode + 3s timeout
+7. Update `ActionParser` and `ParsedAction` to handle `generate_image`
+8. Add SSE event types: `image_generating`, `image_confirm`
+9. Add `pending_confirmation` session state handling in `chat_stream()`
+10. Update frontend to handle new SSE events (placeholder on `image_generating`, confirmation UI on `image_confirm`)
+
+**Phase 3: Activate (feature flag)**
+11. Add `generate_image` to ACTION protocol in system prompt — models start emitting it
+
+**Phase 4: Verify**
+12. Test: explicit `/image` commands, natural language, pasted text, inferred context, confirmation flow, error recovery, buffer timeout
