@@ -209,7 +209,10 @@
             name: 'markdown',
             matches: version => {
                 const entry = (version.entrypointPath || '').toLowerCase();
-                return entry.endsWith('.md') || entry.endsWith('.markdown');
+                if (!entry.endsWith('.md') && !entry.endsWith('.markdown')) return false;
+                // Don't claim markdown if the artifact has Python files — let Python renderer handle it
+                if (version.files?.some(f => (f.path || '').toLowerCase().endsWith('.py'))) return false;
+                return true;
             },
             render: (frame, version) => {
                 if (!frame) return;
@@ -796,8 +799,8 @@ ${pyFileNames.map(f => '<option value="' + escapeHtml(f) + '"' + (f === entryNam
     <div id="output"></div>
 </div>
 <div id="repl">
-    <span id="repl-prompt">&gt;&gt;&gt;</span>
-    <input id="repl-input" type="text" placeholder="Type Python here..." autocomplete="off" spellcheck="false"/>
+    <span id="repl-prompt">$</span>
+    <input id="repl-input" type="text" placeholder="python run_scraper.py books_toscrape, pip install X, ls..." autocomplete="off" spellcheck="false"/>
 </div>
 
 <script id="code-data" type="application/json">${codePayload}</script>
@@ -1037,7 +1040,7 @@ async function runScript() {
     document.getElementById('repl-input').focus();
 }
 
-// REPL input handler
+// REPL input handler — sends commands to Docker container via /api/sandbox/exec
 var replInput = document.getElementById('repl-input');
 replInput.addEventListener('keydown', async function(e) {
     if (e.key === 'Enter') {
@@ -1047,51 +1050,47 @@ replInput.addEventListener('keydown', async function(e) {
         history.push(cmd);
         histIdx = history.length;
 
-        appendOutput('>>> ' + cmd + '\\n', 'repl-in');
-
-        // Handle !pip install commands
-        if (cmd.trim().startsWith('!pip install') || cmd.trim().startsWith('pip install')) {
-            var pkgName = cmd.replace(/!?pip\\s+install\\s+/,'').trim();
-            if (pkgName) {
-                try {
-                    var py = await initPyodide();
-                    await py.loadPackage('micropip');
-                    var micropip = py.pyimport('micropip');
-                    setStatus('Installing ' + pkgName + '...');
-                    await micropip.install(pkgName);
-                    appendOutput('Successfully installed ' + pkgName + '\\n', 'stdout');
-                    setStatus('');
-                } catch(e) {
-                    appendOutput('Failed to install ' + pkgName + ': ' + (e.message || e) + '\\n', 'stderr');
-                    setStatus('');
-                }
-            }
-            scrollBottom();
-            return;
-        }
+        appendOutput('$ ' + cmd + '\\n', 'repl-in');
+        replInput.disabled = true;
 
         try {
-            var py = await initPyodide();
-            await loadPackagesFor(cmd);
+            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            // If no csrf in iframe, try parent
+            if (!csrfMeta) {
+                try { csrfMeta = window.parent.document.querySelector('meta[name="csrf-token"]'); } catch(e) {}
+            }
+            var headers = {'Content-Type': 'application/json'};
+            if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
 
-            // Pass command via globals to avoid quoting issues
-            py.globals.set('_repl_cmd', cmd);
-            var result = await py.runPythonAsync(
-                '_repl_result = None\\n' +
-                'try:\\n' +
-                '    _repl_code = compile(_repl_cmd, "<repl>", "eval")\\n' +
-                '    _repl_result = eval(_repl_code)\\n' +
-                'except SyntaxError:\\n' +
-                '    exec(compile(_repl_cmd, "<repl>", "exec"))\\n' +
-                '_repl_result'
-            );
-            if (result !== undefined && result !== null && String(result) !== 'None') {
-                appendOutput(String(result) + '\\n', 'stdout');
+            // Wrap bare Python expressions as: python3 -c "cmd"
+            // If user types a shell command (pip, python, ls, etc.) send as-is
+            var shellCmd = cmd.trim();
+            if (!shellCmd.match(/^(pip|python|ls|cd|cat|mkdir|rm|cp|mv|echo|curl|wget|which|find|grep|head|tail|wc|chmod|export|env|pwd|whoami|bash|sh)\\b/) && !shellCmd.includes(' ')) {
+                // Likely a Python expression — wrap it
+                shellCmd = 'python3 -c "' + cmd.replace(/"/g, '\\\\"') + '"';
+            }
+
+            var resp = await fetch('/api/sandbox/exec', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({command: shellCmd}),
+                credentials: 'same-origin'
+            });
+            var result = await resp.json();
+            if (result.error) {
+                appendOutput(result.error + '\\n', 'stderr');
+            } else {
+                if (result.stdout) appendOutput(result.stdout, 'stdout');
+                if (result.stderr) appendOutput(result.stderr, 'stderr');
+                if (!result.stdout && !result.stderr && result.exit_code === 0) {
+                    // Silent success
+                }
             }
         } catch (err) {
-            appendOutput(err.message || String(err), 'stderr');
-            appendOutput('\\n', 'stderr');
+            appendOutput('Request failed: ' + (err.message || err) + '\\n', 'stderr');
         }
+        replInput.disabled = false;
+        replInput.focus();
         scrollBottom();
     } else if (e.key === 'ArrowUp') {
         e.preventDefault();

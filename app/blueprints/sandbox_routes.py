@@ -91,6 +91,41 @@ def sandbox_run():
     )
 
 
+@sandbox_bp.route('/api/sandbox/exec', methods=['POST'])
+def sandbox_exec():
+    """Execute a command in the user's running sandbox container."""
+    user_id = session.get('user', {}).get('uid') if session.get('user') else None
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.get_json()
+    cmd = (data or {}).get('command', '').strip()
+    if not cmd:
+        return jsonify({"error": "No command provided"}), 400
+
+    container = sandbox_manager._find_running_container(user_id)
+    if not container:
+        return jsonify({"error": "No running container. Click Run first."}), 404
+
+    try:
+        exit_code, output = container.exec_run(
+            ['bash', '-c', cmd],
+            workdir='/home/sandbox',
+            environment={'PYTHONUNBUFFERED': '1', 'DISPLAY': ':99', 'SDL_AUDIODRIVER': 'dummy',
+                         'PATH': '/home/sandbox/.local/bin:/usr/local/bin:/usr/bin:/bin'},
+            demux=True,
+        )
+        stdout_text = output[0].decode('utf-8', errors='replace') if output and output[0] else ''
+        stderr_text = output[1].decode('utf-8', errors='replace') if output and output[1] else ''
+        return jsonify({
+            "exit_code": exit_code,
+            "stdout": stdout_text,
+            "stderr": stderr_text,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @sandbox_bp.route('/api/sandbox/stop', methods=['POST'])
 def sandbox_stop():
     """Kill a user's running sandbox container."""
