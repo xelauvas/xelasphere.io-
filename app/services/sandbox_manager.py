@@ -205,9 +205,8 @@ class SandboxManager:
 
         except Exception as e:
             yield {"type": "error", "text": str(e)}
-        finally:
-            if mode == 'script':
-                self._remove(user_id)
+        # Container stays alive for subsequent runs — cleaned up by
+        # kill() on next run, or cleanup_expired() on timeout
 
     def kill(self, user_id: str):
         """Kill and remove a user's active container."""

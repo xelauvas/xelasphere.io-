@@ -751,6 +751,7 @@ ${escapeHtml(entry.content || '')}
                 const codePayload = JSON.stringify(code).replace(/<\/script/g, '<\\/script');
                 const filesPayload = JSON.stringify(allFiles).replace(/<\/script/g, '<\\/script');
                 const entryName = pyFile?.path || 'main.py';
+                const pyFileNames = Object.keys(allFiles);
 
                 frame.srcdoc = `<!doctype html>
 <html>
@@ -786,7 +787,9 @@ body{background:#1e1e1e;color:#d4d4d4;font-family:'Söhne Mono',ui-monospace,SFM
 <div id="toolbar">
     <button class="tool-btn" onclick="runScript()">&#9654; Run</button>
     <button class="tool-btn ghost" onclick="clearOutput()">Clear</button>
-    <span class="file-name">${escapeHtml(entryName)}</span>
+    <select id="file-picker" style="background:#2a2a2a;color:#d4d4d4;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:2px 6px;font-size:11px;font-family:inherit;outline:none;cursor:pointer;">
+${pyFileNames.map(f => '<option value="' + escapeHtml(f) + '"' + (f === entryName ? ' selected' : '') + '>' + escapeHtml(f) + '</option>').join('\\n')}
+    </select>
     <span id="status"></span>
 </div>
 <div id="output-wrap">
@@ -805,7 +808,12 @@ var pyodideReady = null;
 var pyodide = null;
 var history = [];
 var histIdx = -1;
-var ENTRY_NAME = '${entryName.replace(/'/g, "\\'")}';
+var DEFAULT_ENTRY = '${entryName.replace(/'/g, "\\'")}';
+
+function getSelectedFile() {
+    var picker = document.getElementById('file-picker');
+    return picker ? picker.value : DEFAULT_ENTRY;
+}
 
 async function initPyodide() {
     if (pyodideReady) return pyodideReady;
@@ -898,12 +906,13 @@ async function loadPackagesFor(code) {
         srvBtn.onclick = function() {
             srvBtn.remove();
             appendOutput('Starting server execution...\\n', 'repl-prompt');
-            var code = JSON.parse(document.getElementById('code-data').textContent);
-            var files = JSON.parse(document.getElementById('files-data').textContent);
+            var srvCode = JSON.parse(document.getElementById('code-data').textContent);
+            var srvFiles = JSON.parse(document.getElementById('files-data').textContent);
+            var srvEntry = getSelectedFile();
             // Try direct parent access first, fall back to postMessage
             try {
                 if (window.parent && window.parent.artifactPanel && window.parent.artifactPanel._runOnServer) {
-                    window.parent.artifactPanel._runOnServer(code, files, ENTRY_NAME);
+                    window.parent.artifactPanel._runOnServer(srvFiles[srvEntry] || srvCode, srvFiles, srvEntry);
                     return;
                 }
             } catch(e) {
@@ -911,7 +920,7 @@ async function loadPackagesFor(code) {
             }
             // Fallback: postMessage
             try {
-                window.parent.postMessage({type: 'sandbox-needs-server', code: code, files: files, entry: ENTRY_NAME}, '*');
+                window.parent.postMessage({type: 'sandbox-needs-server', code: srvCode, files: srvFiles, entry: srvEntry}, '*');
                 appendOutput('Waiting for server...\\n', 'repl-prompt');
             } catch(e2) {
                 appendOutput('Cannot reach server: ' + e2.message + '\\n', 'stderr');
@@ -980,14 +989,16 @@ async function loadPackagesFor(code) {
 async function runScript() {
     var code = JSON.parse(document.getElementById('code-data').textContent);
     var files = JSON.parse(document.getElementById('files-data').textContent);
+    var selectedFile = getSelectedFile();
+    var selectedCode = files[selectedFile] || code;
 
-    appendOutput('--- Running ${entryName.replace(/'/g, "\\'")} ---\\n', 'repl-prompt');
+    appendOutput('--- Running ' + selectedFile + ' ---\\n', 'repl-prompt');
 
     // Try server sandbox first — more reliable, supports all libraries
     try {
         if (window.parent && window.parent.artifactPanel && window.parent.artifactPanel._runOnServer) {
             appendOutput('Running on server...\\n', 'repl-prompt');
-            window.parent.artifactPanel._runOnServer(code, files, ENTRY_NAME);
+            window.parent.artifactPanel._runOnServer(selectedCode, files, selectedFile);
             return;
         }
     } catch(e) { /* parent access blocked — fall through to Pyodide */ }
@@ -1005,19 +1016,19 @@ async function runScript() {
 
     // Write aux files
     for (var path in files) {
-        if (path !== '${entryName.replace(/'/g, "\\'")}') {
+        if (path !== selectedFile) {
             py.FS.writeFile('/home/pyodide/' + path, files[path]);
         }
     }
 
-    var canRun = await loadPackagesFor(code);
+    var canRun = await loadPackagesFor(selectedCode);
     if (canRun === false) {
         document.getElementById('repl-input').focus();
         return;
     }
 
     try {
-        await py.runPythonAsync(code);
+        await py.runPythonAsync(selectedCode);
     } catch (err) {
         appendOutput(err.message || String(err), 'stderr');
     }
