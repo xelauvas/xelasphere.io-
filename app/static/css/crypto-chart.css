@@ -551,15 +551,17 @@
 /* ==================== News Ticker ==================== */
 .crypto-chart-news {
     background: rgba(255, 255, 255, 0.01);
-    max-height: 130px;
+    max-height: 300px;
+    opacity: 1;
     overflow-y: auto;
     transition: max-height 0.3s ease, opacity 0.3s ease;
 }
 
 .crypto-chart-news.collapsed {
     max-height: 0;
-    overflow: hidden;
     opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
 }
 
 /* Custom scrollbar for news section */
@@ -786,7 +788,7 @@
 }
 
 /* News item base styles */
-.news-ticker-item {
+.crypto-chart-news .news-ticker-item {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -797,18 +799,21 @@
     background: transparent;
     border-left: 2px solid transparent;
     position: relative;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
 }
 
-.news-ticker-item:hover {
+.crypto-chart-news .news-ticker-item:hover {
     background: rgba(255, 255, 255, 0.04);
     border-left-color: #60a5fa;
 }
 
-.news-ticker-item:hover .ticker-headline {
+.crypto-chart-news .news-ticker-item:hover .ticker-headline {
     color: #fff;
 }
 
-.news-ticker-item::after {
+.crypto-chart-news .news-ticker-item::after {
     content: '↗';
     position: absolute;
     right: 12px;
@@ -820,7 +825,7 @@
     transition: opacity 0.2s;
 }
 
-.news-ticker-item:hover::after {
+.crypto-chart-news .news-ticker-item:hover::after {
     opacity: 1;
     color: #60a5fa;
 }
@@ -1114,18 +1119,18 @@
     }
 
     .crypto-chart-news {
-        max-height: 100px;
+        max-height: 200px;
     }
 
-    .news-ticker-item {
+    .crypto-chart-news .news-ticker-item {
         padding: 8px 10px;
     }
 
-    .news-ticker-item .news-title {
+    .crypto-chart-news .news-ticker-item .news-title {
         font-size: 11px;
     }
 
-    .news-ticker-item .news-time {
+    .crypto-chart-news .news-ticker-item .news-time {
         font-size: 9px;
     }
 
@@ -1256,8 +1261,8 @@
     color: rgba(0, 0, 0, 0.75);
 }
 
-[data-theme="light"] .news-ticker-item:hover .ticker-headline,
-.light-theme .news-ticker-item:hover .ticker-headline {
+[data-theme="light"] .crypto-chart-news .news-ticker-item:hover .ticker-headline,
+.light-theme .crypto-chart-news .news-ticker-item:hover .ticker-headline {
     color: #2563eb;
 }
 

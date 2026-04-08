@@ -466,14 +466,27 @@ const CryptoChartModule = (function() {
      * Format relative time (e.g., "2 hours ago")
      */
     function formatRelativeTime(timestamp) {
-        const now = Math.floor(Date.now() / 1000);
-        const diff = now - timestamp;
+        // Handle both Unix timestamps (numbers) and date strings (from RSS feeds)
+        let epochSeconds;
+        if (typeof timestamp === 'number') {
+            epochSeconds = timestamp;
+        } else if (typeof timestamp === 'string') {
+            const parsed = Date.parse(timestamp);
+            if (isNaN(parsed)) return '';
+            epochSeconds = Math.floor(parsed / 1000);
+        } else {
+            return '';
+        }
 
+        const now = Math.floor(Date.now() / 1000);
+        const diff = now - epochSeconds;
+
+        if (diff < 0) return 'Just now';
         if (diff < 60) return 'Just now';
         if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
         if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
         if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-        return new Date(timestamp * 1000).toLocaleDateString();
+        return new Date(epochSeconds * 1000).toLocaleDateString();
     }
 
     // ==================== Logo Cache (localStorage) ==================== //

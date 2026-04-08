@@ -625,7 +625,6 @@ def chat_stream():
         stream_model = routed_model
         logger.info(f"🔀 [Stream] Smart routing: {task_type} -> {stream_model}")
         # Stream endpoint only supports DeepSeek/Moonshot/OpenAI — force deepseek-chat if needed
-        from app.model_catalog import resolve_model_id, MODEL_PROVIDERS
         resolved = resolve_model_id(stream_model)
         provider = MODEL_PROVIDERS.get(resolved, "")
         if provider not in ("deepseek", "moonshot", "openai", "groq"):
@@ -650,6 +649,16 @@ def chat_stream():
 
     # Inject crypto/stock context ONLY when user explicitly asks for price/chart
     chart_query = detect_crypto_price_query(user_prompt_raw)
+
+    # Follow-up resolution: if no chart detected but the user is asking about price
+    # with a pronoun ("what is the price for it"), reuse the most recent chart asset
+    if not chart_query and re.search(r'\b(?:price|chart|value|worth|cost)\b', user_prompt_raw.lower()):
+        for msg in reversed((previous_messages or [])[-6:]):
+            prev_chart = msg.get('crypto_chart')
+            if prev_chart:
+                chart_query = prev_chart
+                logger.info(f"💰 [Stream] Follow-up price query resolved from conversation history: {prev_chart}")
+                break
     if chart_query:
         asset_type = chart_query.get('asset_type')
         if asset_type == 'crypto':
@@ -1024,8 +1033,24 @@ def chat_stream():
                         email_data = parse_email_from_response(full_content)
                         logger.info(f"Stream: Email detected, parsed: subject='{email_data.get('subject', '')[:30]}...'")
 
-                    # Check if user asked for crypto/stock price/chart
-                    crypto_chart = detect_crypto_price_query(user_prompt_raw)
+                    # Check if AI model decided to show a chart (best: AI understands context)
+                    crypto_chart = None
+                    if parsed_action is not None and parsed_action.chart_payload:
+                        crypto_chart = parsed_action.chart_payload
+                        logger.info(f"💰 [Stream] AI-driven chart: {crypto_chart}")
+
+                    # Fallback: regex-based detection (for models that don't emit ACTION: show_chart)
+                    if not crypto_chart:
+                        crypto_chart = detect_crypto_price_query(user_prompt_raw)
+
+                    # Follow-up: reuse previous chart if user says "price of it" etc.
+                    if not crypto_chart and re.search(r'\b(?:price|chart|value|worth|cost)\b', user_prompt_raw.lower()):
+                        for msg in reversed((previous_messages or [])[-6:]):
+                            prev_chart = msg.get('crypto_chart')
+                            if prev_chart:
+                                crypto_chart = prev_chart
+                                logger.info(f"💰 [Stream done] Follow-up chart from history: {prev_chart}")
+                                break
                     if crypto_chart:
                         asset_type = crypto_chart.get('asset_type', 'crypto')
                         asset = crypto_chart.get('symbol') if asset_type == 'stock' else crypto_chart.get('coin')
@@ -2402,8 +2427,13 @@ def chat():
 
         sentiment = 'neutral'
 
-        # Check if user asked for crypto/stock price/chart (needed for save_interaction)
-        crypto_chart = detect_crypto_price_query(user_prompt)
+        # Check if AI model decided to show a chart (preferred), fallback to regex
+        crypto_chart = None
+        if parsed_action is not None and parsed_action.chart_payload:
+            crypto_chart = parsed_action.chart_payload
+            logger.info(f"💰 [NonStream] AI-driven chart: {crypto_chart}")
+        if not crypto_chart:
+            crypto_chart = detect_crypto_price_query(user_prompt)
         if crypto_chart:
             asset_type = crypto_chart.get('asset_type', 'crypto')
             asset = crypto_chart.get('symbol') if asset_type == 'stock' else crypto_chart.get('coin')

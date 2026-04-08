@@ -19,23 +19,25 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 # Match "ACTION: xyz", "-- ACTION: xyz --", "**ACTION: xyz**" etc.
-_ACTION_LINE_RE = re.compile(r"^\s*[-*]*\s*ACTION:\s*(\w+)", re.IGNORECASE)
+# Group 2 captures params (e.g. "bitcoin" in "ACTION: show_chart bitcoin")
+_ACTION_LINE_RE = re.compile(r"^\s*[-*]*\s*ACTION:\s*(\w+)(?:\s+([^-*]+?))?\s*[-*]*\s*$", re.IGNORECASE)
 _ARTIFACT_FENCE_RE = re.compile(r"```artifact\s*([\s\S]*?)\s*```", re.IGNORECASE)
 _ARTIFACT_UNCLOSED_RE = re.compile(r"```artifact\s*([\s\S]+)", re.IGNORECASE)
 _PATCH_FENCE_RE = re.compile(r"```artifact_patch\s*([\s\S]*?)\s*```", re.IGNORECASE)
 
-_VALID_ACTIONS = {"chat", "create_artifact", "patch_artifact"}
+_VALID_ACTIONS = {"chat", "create_artifact", "patch_artifact", "show_chart"}
 
 
 @dataclass
 class ParsedAction:
     """Result of parsing a model response."""
 
-    action: str  # 'chat' | 'create_artifact' | 'patch_artifact'
+    action: str  # 'chat' | 'create_artifact' | 'patch_artifact' | 'show_chart'
     chat_text: str  # Everything except artifact/patch fence
     artifact_payload: Optional[Dict[str, Any]]  # Parsed artifact JSON (if create)
     patch_payload: Optional[Dict[str, Any]]  # Parsed patch JSON (if patch)
-    raw_response: str  # Full unmodified response
+    chart_payload: Optional[Dict[str, Any]] = None  # Parsed chart info (if show_chart)
+    raw_response: str = ""  # Full unmodified response
     used_fallback: bool = False  # True if ACTION line was missing
 
 
@@ -63,10 +65,12 @@ class ActionParser:
         first_line = lines[0].strip()
         match = _ACTION_LINE_RE.match(first_line)
 
+        action_params = None
         if match:
             keyword = match.group(1).lower()
             if keyword in _VALID_ACTIONS:
                 action = keyword
+                action_params = match.group(2).strip() if match.group(2) else None
                 response_text = lines[1] if len(lines) > 1 else ""
                 response_text = response_text.lstrip("\n")
 
@@ -89,18 +93,25 @@ class ActionParser:
         # Step 3: Extract payloads based on action
         artifact_payload = None
         patch_payload = None
+        chart_payload = None
         chat_text = response_text
 
         if action == "create_artifact":
             artifact_payload, chat_text = _extract_artifact(response_text)
         elif action == "patch_artifact":
             patch_payload, chat_text = _extract_patch(response_text)
+        elif action == "show_chart":
+            chart_payload = _extract_chart(action_params)
+            # show_chart acts like chat with a chart widget attached
+            if not chart_payload:
+                action = "chat"  # fallback if we can't parse chart params
 
         return ParsedAction(
             action=action,
             chat_text=chat_text.strip(),
             artifact_payload=artifact_payload,
             patch_payload=patch_payload,
+            chart_payload=chart_payload,
             raw_response=raw,
             used_fallback=used_fallback,
         )
@@ -134,6 +145,53 @@ def _extract_artifact(text: str):
     return payload, chat_text
 
 
+def _extract_chart(params: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Extract chart asset info from ACTION: show_chart params.
+
+    Expected formats:
+        ACTION: show_chart bitcoin
+        ACTION: show_chart AAPL stock
+        ACTION: show_chart solana crypto
+    """
+    if not params:
+        return None
+
+    from app.asset_config import CRYPTO_SYMBOLS, STOCK_SYMBOLS, COMPANY_TO_SYMBOL
+
+    parts = params.lower().strip().split()
+    asset_name = parts[0]
+    asset_hint = parts[1] if len(parts) > 1 else None
+
+    # Explicit stock hint
+    if asset_hint == 'stock' or asset_name.upper() in STOCK_SYMBOLS:
+        return {'symbol': asset_name.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
+
+    # Company name
+    if asset_name in COMPANY_TO_SYMBOL:
+        return {'symbol': COMPANY_TO_SYMBOL[asset_name].upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
+
+    # Crypto — check known symbols first
+    if asset_name in CRYPTO_SYMBOLS:
+        return {'coin': CRYPTO_SYMBOLS[asset_name], 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
+
+    # Strip trailing 's' for plurals
+    singular = asset_name.rstrip('s') if asset_name.endswith('s') and len(asset_name) > 3 else asset_name
+    if singular in CRYPTO_SYMBOLS:
+        return {'coin': CRYPTO_SYMBOLS[singular], 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
+
+    # Dynamic CoinGecko lookup
+    try:
+        from app.crypto_api import get_coin_id
+        coin_id = get_coin_id(asset_name) or (get_coin_id(singular) if singular != asset_name else None)
+        if coin_id:
+            return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
+    except Exception as e:
+        logger.warning(f"Chart asset lookup failed: {e}")
+
+    logger.warning(f"Could not resolve chart asset: {params}")
+    return None
+
+
 def _extract_patch(text: str):
     """Extract patch JSON from fenced block. Returns (payload, chat_text)."""
     from app.artifacts import extract_artifact_patch_block
@@ -154,6 +212,7 @@ class StreamingActionBuffer:
     def __init__(self) -> None:
         self.buffer = ""
         self.action: Optional[str] = None
+        self.action_params: Optional[str] = None  # e.g. "bitcoin" for show_chart
         self.remainder: str = ""
         self._resolved = False
 
@@ -176,6 +235,7 @@ class StreamingActionBuffer:
             keyword = match.group(1).lower()
             if keyword in _VALID_ACTIONS:
                 self.action = keyword
+                self.action_params = match.group(2).strip() if match.group(2) else None
                 self.remainder = rest
                 self._resolved = True
                 return self.action

@@ -635,6 +635,20 @@ DEVELOPER_INSTRUCTIONS = (
     "  an existing artifact. You will receive the current file contents below.\n"
     "  Respond with only the patches needed - do not regenerate unchanged files.\n\n"
 
+    "ACTION: show_chart <asset_name>\n"
+    "  Use when: the user asks about the PRICE, VALUE, CHART, or MARKET DATA of\n"
+    "  a specific cryptocurrency or stock. Put the asset identifier after show_chart.\n"
+    "  Examples:\n"
+    "    ACTION: show_chart bitcoin\n"
+    "    ACTION: show_chart AAPL stock\n"
+    "    ACTION: show_chart solana\n"
+    "    ACTION: show_chart ethereum\n"
+    "  IMPORTANT: Only use show_chart when the user explicitly wants to see\n"
+    "  price/market data. Do NOT use it for general mentions of crypto or stocks\n"
+    "  in conversation (e.g. 'explain how bitcoin works' = chat, NOT show_chart).\n"
+    "  For follow-up questions like 'what is the price for it', resolve the pronoun\n"
+    "  from conversation context and use the actual asset name.\n\n"
+
     "After the ACTION line, write your response.\n\n"
 
     "EXAMPLE for chat responses:\n"
@@ -807,158 +821,148 @@ def detect_crypto_price_query(prompt: str) -> Optional[dict]:
     """
     Detect if the user is asking for crypto or stock price/chart.
     Returns dict with asset info if detected, None otherwise.
+
+    Strategy: REQUIRE explicit financial intent signals. Never scan every word
+    against CoinGecko — there are millions of tokens with common English names.
+
+    Detection layers (all deterministic, no AI call):
+      1. Unambiguous ticker symbols (btc, eth, doge, xrp, ltc) — match anywhere
+      2. Explicit price-query structure ("X price", "price of X", "how much is X")
+         → resolve the captured asset name via known lists + CoinGecko
+      3. Ambiguous symbols (sol, ada, dot, link) — only match when adjacent to
+         a financial keyword (price, chart, coin, crypto, token, stock, trading)
     """
     if not prompt:
         return None
 
-    # Use AI intent classification first (general-purpose understanding)
-    intent = classify_user_intent(prompt)
-    if intent.get('confidence', 0) > 0.5:
-        # If AI classified this and it's NOT a financial query, skip detection
-        if intent.get('intent_type') in ['creative_task', 'code_request', 'image_request', 'recipe_request']:
-            logger.debug(f"🧠 Skipping crypto detection - AI classified as: {intent.get('intent_type')}")
-            return None
+    prompt_lower = prompt.lower().strip()
 
-        # If AI found an asset symbol, use it directly
-        if intent.get('asset_symbol') and (intent.get('has_crypto_mention') or intent.get('has_stock_mention')):
-            symbol = intent['asset_symbol'].lower()
-            if intent.get('has_crypto_mention'):
-                coin_id = get_coin_id_dynamic(symbol) or CRYPTO_SYMBOLS.get(symbol)
-                if coin_id:
-                    logger.info(f"🧠 AI detected crypto: {symbol} -> {coin_id}")
-                    return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
-            if intent.get('has_stock_mention'):
-                if symbol.upper() in STOCK_SYMBOLS:
-                    logger.info(f"🧠 AI detected stock: {symbol}")
-                    return {'symbol': symbol.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
+    # Short prompts (< 5 words) with a known asset are likely price queries
+    word_count = len(prompt_lower.split())
 
-    prompt_lower = prompt.lower()
+    # ── 1. Unambiguous top-coin symbols — safe to match anywhere ────────
+    # These are never normal English words.
+    _unambiguous = {
+        'btc': 'bitcoin', 'eth': 'ethereum', 'doge': 'dogecoin',
+        'xrp': 'ripple', 'ltc': 'litecoin',
+    }
+    for symbol, coin_id in _unambiguous.items():
+        if re.search(rf'\b{symbol}\b', prompt_lower):
+            logger.info(f"💰 Unambiguous crypto symbol: {symbol} -> {coin_id}")
+            return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
 
-    # Price query patterns - capture the asset name/symbol
+    # Full coin names — also unambiguous (allow plural "bitcoins", "ethereums" etc.)
+    _coin_names = {
+        'bitcoin': 'bitcoin', 'ethereum': 'ethereum', 'dogecoin': 'dogecoin',
+        'litecoin': 'litecoin', 'solana': 'solana', 'cardano': 'cardano',
+        'polkadot': 'polkadot', 'chainlink': 'chainlink',
+    }
+    for name, coin_id in _coin_names.items():
+        if re.search(rf'\b{name}s?\b', prompt_lower):
+            logger.info(f"💰 Crypto name detected: {name} -> {coin_id}")
+            return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
+
+    # ── 2. Explicit price-query patterns ────────────────────────────────
+    # Only fire when the sentence structurally asks for a price/chart.
+    # The captured group is the asset name — resolve it against known lists.
     price_patterns = [
-        r'(?:what(?:\'s| is| are)?|how much is|show me|get|check|give me)\s+(?:the\s+)?(?:current\s+)?(?:price|value|worth|chart|graph|stock)\s+(?:of|for)?\s*(\w+(?:\s+\w+)?)',
-        r'(\w+(?:\s+\w+)?)\s+(?:price|chart|graph|value|stock)',
-        r'(?:price|chart|graph|stock)\s+(?:of|for)\s+(\w+(?:\s+\w+)?)',
-        r'how\s+much\s+(?:is|does)\s+(?:one\s+)?(\w+)\s+(?:cost|worth|stock)',
-        r'(?:show|display|get)\s+(?:me\s+)?(?:the\s+)?(\w+(?:\s+\w+)?)\s+(?:price|chart|stock)',
+        # "what's the price of X", "show me X chart", "check X value"
+        r'(?:what(?:\'s| is)?|how much is|show me|get|check|give me)\s+(?:the\s+)?(?:current\s+)?(?:price|value|worth|chart|graph)\s+(?:of|for)\s+(\w+(?:\s+\w+)?)',
+        # "X price", "X chart" (only at end of prompt to avoid mid-sentence matches)
+        r'\b(\w+(?:\s+\w+)?)\s+(?:price|chart|stock)\s*[\?\.\!]?\s*$',
+        # "price of X", "chart of X"
+        r'\b(?:price|chart|graph|stock)\s+(?:of|for)\s+(\w+(?:\s+\w+)?)',
+        # "how much is X", "how much does X cost"
+        r'how\s+much\s+(?:is|does)\s+(?:one\s+)?(\w+)\s+(?:cost|worth)',
     ]
 
-    # Price-related words
-    price_words = ['price', 'chart', 'graph', 'value', 'worth', 'cost', 'trading', 'market', 'stock', 'ticker']
-    has_price_word = any(word in prompt_lower for word in price_words)
-
-    # First, check for crypto symbols
     for pattern in price_patterns:
         match = re.search(pattern, prompt_lower)
         if match:
             query = match.group(1).strip()
-            # Check if it's a crypto - fast path (top 10)
-            if query in CRYPTO_SYMBOLS:
-                coin_id = CRYPTO_SYMBOLS[query]
-                logger.info(f"💰 Crypto price query detected: {query} -> {coin_id}")
-                return {
-                    'coin': coin_id,
-                    'asset_type': 'crypto',
-                    'currency': 'usd',
-                    'range': '1D'
-                }
-            # Dynamic crypto lookup (all 24M+ coins)
-            coin_id = get_coin_id_dynamic(query)
-            if coin_id:
-                logger.info(f"💰 Crypto price query detected (dynamic): {query} -> {coin_id}")
-                return {
-                    'coin': coin_id,
-                    'asset_type': 'crypto',
-                    'currency': 'usd',
-                    'range': '1D'
-                }
-            # Check if it's a stock symbol (word boundary to avoid v matching vet)
-            if query in STOCK_SYMBOLS:
-                logger.info(f"📈 Stock price query detected: {query}")
-                return {
-                    'symbol': query.upper(),
-                    'asset_type': 'stock',
-                    'currency': 'usd',
-                    'range': '1D'
-                }
-            # Check company names
-            if query in COMPANY_TO_SYMBOL:
-                symbol = COMPANY_TO_SYMBOL[query]
-                logger.info(f"📈 Stock price query detected (company): {query} -> {symbol}")
-                return {
-                    'symbol': symbol.upper(),
-                    'asset_type': 'stock',
-                    'currency': 'usd',
-                    'range': '1D'
-                }
+            result = _resolve_asset(query)
+            if result:
+                return result
 
-    # Direct detection with price context
+    # ── 3. Ambiguous symbols — only with adjacent financial keyword ─────
+    _financial_context = r'(?:price|chart|value|coin|crypto|token|stock|trading|market|ticker|worth)'
+    _ambiguous = {
+        'sol': 'solana', 'ada': 'cardano', 'dot': 'polkadot',
+        'link': 'chainlink', 'bnb': 'binancecoin',
+        'solana': 'solana', 'cardano': 'cardano', 'polkadot': 'polkadot',
+        'chainlink': 'chainlink', 'ripple': 'ripple',
+    }
+    for symbol, coin_id in _ambiguous.items():
+        # Must appear adjacent to a financial keyword (within ~3 words)
+        if re.search(rf'\b{symbol}\b\s+{_financial_context}', prompt_lower) or \
+           re.search(rf'{_financial_context}\s+(?:of\s+)?\b{symbol}\b', prompt_lower):
+            logger.info(f"💰 Ambiguous crypto with financial context: {symbol} -> {coin_id}")
+            return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
+
+    # ── 4. Stock symbols & company names (only in price-query context) ──
+    has_price_word = bool(re.search(
+        r'\b(?:price|chart|graph|stock|ticker|trading|market\s+cap|shares?)\b',
+        prompt_lower
+    ))
     if has_price_word:
-        # Words that are common English but also crypto symbols — require explicit price intent
-        _ambiguous_crypto = {'link', 'dot', 'sol', 'ada', 'bnb'}
-        # Common stop words to skip in dynamic lookup
-        _stop_words = {
-            'price', 'chart', 'graph', 'value', 'worth', 'cost', 'trading', 'market',
-            'stock', 'ticker', 'the', 'for', 'of', 'is', 'what', 'show', 'me', 'get',
-            'check', 'give', 'how', 'much', 'does', 'are', 'can', 'will', 'its', 'this',
-            'that', 'with', 'from', 'have', 'has', 'about', 'would', 'could', 'should',
-            'current', 'today', 'now', 'please', 'tell', 'display', 'my', 'your',
-            'not', 'but', 'and', 'or', 'if', 'all', 'any', 'new', 'old', 'some',
-            'file', 'text', 'code', 'html', 'page', 'resume', 'make', 'create',
-            'write', 'read', 'help', 'need', 'want', 'like', 'just', 'here',
-        }
-
-        # Check crypto symbols - fast path (top 10)
-        for symbol, coin_id in CRYPTO_SYMBOLS.items():
-            if symbol in _ambiguous_crypto:
-                # Ambiguous words need stronger signal: must appear next to a price word
-                if not re.search(rf'\b{symbol}\b\s+(?:price|chart|value|stock|coin|crypto|token)', prompt_lower) and \
-                   not re.search(rf'(?:price|chart|value|stock|coin|crypto|token)\s+(?:of\s+)?\b{symbol}\b', prompt_lower):
-                    continue
-            if re.search(rf'\b{symbol}\b', prompt_lower):
-                logger.info(f"💰 Crypto detected with price context: {symbol} -> {coin_id}")
-                return {
-                    'coin': coin_id,
-                    'asset_type': 'crypto',
-                    'currency': 'usd',
-                    'range': '1D'
-                }
-
-        # Dynamic crypto lookup - extract words and check against CoinGecko
-        words = re.findall(r'\b([a-zA-Z]{2,10})\b', prompt_lower)
-        for word in words:
-            if word not in _stop_words and word not in _ambiguous_crypto:
-                coin_id = get_coin_id_dynamic(word)
-                if coin_id:
-                    logger.info(f"💰 Crypto detected with price context (dynamic): {word} -> {coin_id}")
-                    return {
-                        'coin': coin_id,
-                        'asset_type': 'crypto',
-                        'currency': 'usd',
-                        'range': '1D'
-                    }
-
-        # Check stock symbols
         for symbol in STOCK_SYMBOLS:
-            if re.search(rf'\b{symbol}\b', prompt_lower):
+            if re.search(rf'\b{re.escape(symbol)}\b', prompt_lower):
                 logger.info(f"📈 Stock detected with price context: {symbol}")
-                return {
-                    'symbol': symbol.upper(),
-                    'asset_type': 'stock',
-                    'currency': 'usd',
-                    'range': '1D'
-                }
-
-        # Check company names
+                return {'symbol': symbol.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
         for company, symbol in COMPANY_TO_SYMBOL.items():
             if company in prompt_lower:
                 logger.info(f"📈 Stock company detected: {company} -> {symbol}")
-                return {
-                    'symbol': symbol.upper(),
-                    'asset_type': 'stock',
-                    'currency': 'usd',
-                    'range': '1D'
-                }
+                return {'symbol': symbol.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
+
+    # ── 5. Short direct queries (≤4 words) — likely just an asset name ──
+    # e.g. "solana", "bitcoin price", "AAPL" — try to resolve the whole prompt
+    if word_count <= 4:
+        result = _resolve_asset(prompt_lower)
+        if result:
+            return result
+
+    return None
+
+
+def _resolve_asset(query: str) -> Optional[dict]:
+    """Try to resolve a query string to a known crypto or stock asset."""
+    query = query.lower().strip()
+    # Reject pronouns, articles, and common non-asset words
+    _non_assets = {
+        'it', 'this', 'that', 'them', 'they', 'he', 'she', 'we', 'us', 'me',
+        'my', 'your', 'our', 'their', 'its', 'his', 'her', 'mine', 'yours',
+        'the', 'a', 'an', 'one', 'some', 'any', 'each', 'every', 'all',
+        'what', 'which', 'who', 'whom', 'how', 'when', 'where', 'why',
+        'something', 'anything', 'everything', 'nothing', 'thing', 'things',
+        'current', 'today', 'now', 'please', 'here', 'there',
+    }
+    if query in _non_assets or len(query) < 2:
+        return None
+    # Normalize: try singular form too (e.g. "bitcoins" -> "bitcoin")
+    candidates = [query]
+    if query.endswith('s') and len(query) > 3:
+        candidates.append(query[:-1])
+
+    for q in candidates:
+        # Crypto fast path (top coins)
+        if q in CRYPTO_SYMBOLS:
+            coin_id = CRYPTO_SYMBOLS[q]
+            logger.info(f"💰 Crypto price query: {q} -> {coin_id}")
+            return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
+        # Dynamic crypto lookup
+        coin_id = get_coin_id_dynamic(q)
+        if coin_id:
+            logger.info(f"💰 Crypto price query (dynamic): {q} -> {coin_id}")
+            return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
+        # Stock symbol
+        if q.upper() in STOCK_SYMBOLS:
+            logger.info(f"📈 Stock price query: {q}")
+            return {'symbol': q.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
+        # Company name
+        if q in COMPANY_TO_SYMBOL:
+            symbol = COMPANY_TO_SYMBOL[q]
+            logger.info(f"📈 Stock price query (company): {q} -> {symbol}")
+            return {'symbol': symbol.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
 
     return None
 
