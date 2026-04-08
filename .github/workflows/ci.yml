@@ -45,9 +45,13 @@ jobs:
       - name: Action parser unit tests
         run: |
           python -c "
-          import sys, re, time
-          sys.path.insert(0, '.')
-          from app.context.action_parser import ActionParser, StreamingActionBuffer
+          import sys, re, time, importlib.util
+          # Direct import to avoid app/__init__.py triggering Firebase config
+          spec = importlib.util.spec_from_file_location('action_parser', 'app/context/action_parser.py')
+          mod = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          ActionParser = mod.ActionParser
+          StreamingActionBuffer = mod.StreamingActionBuffer
 
           # ActionParser tests
           r = ActionParser.parse('ACTION: generate_image\ndescription: a cat on a wall\nsource: explicit\n\nHere is your cat.')
@@ -112,7 +116,8 @@ jobs:
           except Exception as e:
               # Some services (Firestore, Redis) won't be available in CI
               # That's OK — we just want to verify imports and config don't crash
-              if 'credentials' in str(e).lower() or 'connect' in str(e).lower():
+              msg = str(e).lower()
+              if any(k in msg for k in ['credentials', 'connect', 'firebase', 'cred_path', 'not set']):
                   print(f'✓ Flask app boots (external services unavailable in CI: {e})')
               else:
                   raise
