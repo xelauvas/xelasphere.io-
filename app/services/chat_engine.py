@@ -734,7 +734,31 @@ DEVELOPER_INSTRUCTIONS = (
     "  - Describe what's IN the image, not the process of making it\n"
     "  - NEVER say 'I created a description', 'I sent to an image generator', or mention the pipeline\n"
     "  - Good: 'Here's a golden sunset over the mountains.'\n"
-    "  - Bad: 'I've created a description for an image generator to produce a sunset.'\n"
+    "  - Bad: 'I've created a description for an image generator to produce a sunset.'\n\n"
+
+    "ACTION: web_search\n"
+    "  query: <search query, resolve all pronouns from context>\n"
+    "  search_type: general | images | video | news\n"
+    "  reason: <why search is needed, logged server-side only>\n"
+    "  embed_video: <YouTube video ID> (optional, model picks most relevant)\n\n"
+    "  Use when: user asks about current events, real-time data, facts you're\n"
+    "  not confident about, prices, weather, news, 'search for', 'look up',\n"
+    "  or any question where up-to-date information improves your answer.\n\n"
+    "  NEVER use web_search for:\n"
+    "  - Questions you can answer confidently from training data\n"
+    "  - Creative tasks (writing, coding, brainstorming)\n"
+    "  - Explaining concepts you know well\n"
+    "  - Conversational responses ('how are you', 'thank you')\n\n"
+    "  After search results are injected, you MUST cite sources inline using\n"
+    "  [1], [2], [3] notation. Every factual claim from search results must\n"
+    "  have a citation.\n\n"
+
+    "EXAMPLE for web search:\n"
+    "ACTION: web_search\n"
+    "query: weather in London today\n"
+    "search_type: general\n"
+    "reason: user needs current weather data\n\n"
+    "Based on the search results, the weather in London today is partly cloudy [1]...\n\n"
 )
 
 
