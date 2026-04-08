@@ -172,9 +172,6 @@
     <!-- Email Edit Toolbar JS -->
     <script defer src="{{ url_for('static', filename='js/emailEditToolbar.js') }}"></script>
 
-    <!-- Search Auto-Detection JS -->
-    <script defer src="{{ url_for('static', filename='js/searchAutoDetect.js') }}"></script>
-
     <!-- Mobile Long-Press Context Menu JS -->
     <script defer src="{{ url_for('static', filename='js/mobileLongPress.js') }}?v=6"></script>
 
@@ -629,18 +626,6 @@
                                             <input type="file" id="file-upload" name="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.text,.md,.csv,.json,.rtf,.yaml,.yml,.toml,.xml,.html,.htm,.svg,.ini,.cfg,.conf,.env,.py,.pyw,.js,.mjs,.cjs,.ts,.tsx,.jsx,.java,.kt,.kts,.scala,.c,.h,.cpp,.hpp,.cc,.cs,.go,.rs,.rb,.erb,.php,.swift,.dart,.lua,.pl,.pm,.r,.sql,.sh,.bash,.zsh,.fish,.ps1,.psm1,.css,.scss,.sass,.less,.vue,.svelte,.hs,.lhs,.ex,.exs,.clj,.cljs,.cljc,.ml,.mli,.fs,.fsx,.erl,.hrl,.elm,.v,.sv,.vhd,.vhdl,.asm,.s,.dockerfile,.makefile,.mk,.gradle,.cmake,.tf,.tfvars,.proto,.graphql,.gql,.sol,.zig,.nim,.cr,.jl,.log" style="display: none;" multiple{% if is_guest %} disabled{% endif %}>
                                         </form>
 
-                                        <div class="popover-divider"></div>
-
-                                        <!-- Web Search Toggle -->
-                                        <label class="action-btn search-btn{% if is_guest %} guest-disabled{% endif %}" for="enable-search" role="menuitemcheckbox" aria-checked="false" data-tooltip="{% if is_guest %}Sign up to use search{% else %}Search{% endif %}"{% if is_guest %} aria-disabled="true"{% endif %}>
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <circle cx="12" cy="12" r="10"/>
-                                                <line x1="2" y1="12" x2="22" y2="12"/>
-                                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                                            </svg>
-                                            {% if is_guest %}<span class="guest-lock-icon"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg></span>{% endif %}
-                                            <input type="checkbox" id="enable-search" name="enable_search"{% if is_guest %} disabled{% endif %}>
-                                        </label>
                                     </div>
                                 </div>
 

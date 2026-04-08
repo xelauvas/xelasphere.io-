@@ -86,7 +86,7 @@ from app.utilities import (
 from app.search_client import (
     SearchResult, SearchBackend, SearchClient, SearchException,
     resolve_search_backend,
-    perform_web_search, should_auto_enable_search, should_auto_enable_search_simple,
+    perform_web_search,
 )
 from app.blueprints.email_routes import is_email_request, looks_like_email, parse_email_from_response
 from app.model_catalog import MODEL_LABELS, MODEL_PROVIDERS, DEFAULT_MODEL, AUTO_MODEL, resolve_model_id, get_selectable_models
@@ -1644,20 +1644,6 @@ def chat():
             extracted_text = session.pop('extracted_text', '')
         requested_page_id_raw = request.form.get('page_id')
         requested_page_id = requested_page_id_raw.strip() if requested_page_id_raw else None
-        # Guests don't get web search
-        if guest_mode:
-            enable_search = False
-            search_confidence = 'low'
-        else:
-            enable_search_param = request.form.get('enable_search')
-            if enable_search_param is not None:
-                # User explicitly set the toggle
-                enable_search = enable_search_param.lower() == 'true'
-                search_confidence = 'user'
-            else:
-                # Auto-detect if search is needed
-                enable_search, search_confidence = should_auto_enable_search(user_prompt)
-
         backend_param = request.form.get('backend') or getattr(Config, 'SEARCH_DEFAULT_BACKEND', SearchBackend.BRAVE.value)
         backend = resolve_search_backend(backend_param)
 
@@ -1721,10 +1707,10 @@ def chat():
         # NOTE: Image request check moved to after session/messages are loaded
         # so we can pass chat history for better detection accuracy
 
-        # Perform optional web search
+        # TODO: replaced by SearchOrchestrator
         search_results: List[SearchResult] = []
-        if enable_search and user_prompt:
-            search_results = perform_web_search(user_id, user_prompt, backend=backend)
+        # if enable_search and user_prompt:
+        #     search_results = perform_web_search(user_id, user_prompt, backend=backend)
 
         # Fetch content from URLs in the message (for summarization/analysis)
         url_content = ""
@@ -2123,12 +2109,13 @@ def chat():
             if extracted_text:
                 max_extract = min(len(extracted_text), 30000)
                 enriched_prompt = f"Uploaded file content:\n{extracted_text[:max_extract]}\n\nUser request: {enriched_prompt}"
-            if search_results:
-                search_parts = []
-                for r in search_results[:5]:
-                    search_parts.append(f"[{r.title}]({r.link})\n{r.snippet}")
-                search_text = "Web search results:\n" + "\n\n".join(search_parts)
-                enriched_prompt = f"{search_text}\n\n{enriched_prompt}"
+            # TODO: replaced by SearchOrchestrator
+            # if search_results:
+            #     search_parts = []
+            #     for r in search_results[:5]:
+            #         search_parts.append(f"[{r.title}]({r.link})\n{r.snippet}")
+            #     search_text = "Web search results:\n" + "\n\n".join(search_parts)
+            #     enriched_prompt = f"{search_text}\n\n{enriched_prompt}"
 
             built_context = context_builder.build(
                 system_prompt=SYSTEM_INSTRUCTIONS + "\n" + get_developer_instructions(model),

@@ -155,18 +155,6 @@ function buildSourcesButton(messageElement, messageId, messageSources = null) {
     return sourcesInline;
 }
 
-function renderSourcesButton(targetRow, messageElement, messageId, messageSources = null) {
-    if (!targetRow || !messageElement) return;
-    const existing = targetRow.querySelector('.action-sources-button');
-    if (existing) {
-        existing.remove();
-    }
-
-    const button = buildSourcesButton(messageElement, messageId, messageSources);
-    if (!button) return;
-    targetRow.appendChild(button);
-}
-
 async function requestGroqTts(text, format = DEFAULT_TTS_FORMAT, voice = DEFAULT_TTS_VOICE) {
     const csrfToken = getCsrfToken();
     const controller = new AbortController();
@@ -707,47 +695,7 @@ function appendActionButtons(container, messageId, { skipSourcesRefresh = false 
     moreWrapper.append(moreButton, moreMenu);
     primaryRow.appendChild(moreWrapper);
 
-    renderSourcesButton(primaryRow, messageElement, messageId);
-
     targetWrapper.appendChild(buttonsContainer);
-}
-
-function attachSourcesToMessage(messageId, searchResults) {
-    if (!messageId || !Array.isArray(searchResults) || !searchResults.length) {
-        return;
-    }
-    const messageElement = document.getElementById(messageId);
-    if (!messageElement) return;
-
-     const senderAttr = (messageElement.dataset?.sender || '').trim().toLowerCase();
-     const classTokens = (messageElement.className || '')
-         .split(/\s+/)
-         .map(token => token.trim().toLowerCase())
-         .filter(Boolean);
-     const isAiMessage = senderAttr === 'ai' ||
-         senderAttr === 'assistant' ||
-         classTokens.includes('ai-message') ||
-         classTokens.includes('assistant-message');
-
-     if (!isAiMessage) {
-         return;
-     }
-
-    try {
-        messageElement.dataset.sourceResults = JSON.stringify(searchResults);
-        messageElement.dataset.hasSources = 'true';
-    } catch (error) {
-        console.warn('Failed to persist sources on message', messageId, error);
-    }
-
-    const primaryRow = messageElement.querySelector('.action-buttons-row');
-    if (primaryRow) {
-        renderSourcesButton(primaryRow, messageElement, messageId, searchResults);
-    }
-}
-
-if (typeof window !== 'undefined') {
-    window.attachSourcesToMessage = attachSourcesToMessage;
 }
 
 // Function to create tooltip

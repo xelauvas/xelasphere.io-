@@ -2728,7 +2728,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
         // Get DOM elements and values
         const promptInput = document.getElementById('prompt');
-        const searchEnabled = document.getElementById('enable-search')?.checked || false;
         let prompt = promptText ? promptText.trim() : promptInput?.value.trim();
 
         // Check for quoted text from Text Selection Quote feature
@@ -2851,7 +2850,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         // Prepare request data
         const formData = new FormData();
         formData.append('prompt', prompt);
-        formData.append('enable_search', searchEnabled);
         if (attachments.length) {
             // Strip dataUrl from JSON metadata (too large for payload)
             const serverAttachments = attachments.map(att => {
@@ -4077,14 +4075,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 hasContainer: !!messageContainer,
                 hasModule: !!window.CryptoChartModule
             });
-        }
-
-        // Handle search results
-        if (data.search_results?.length > 0) {
-            populateRightSidebar(data.search_results);
-            if (typeof window.attachSourcesToMessage === 'function') {
-                window.attachSourcesToMessage(aiMsgId, data.search_results);
-            }
         }
 
         // Show subtle memory updated notice (above AI response, auto-vanish)
