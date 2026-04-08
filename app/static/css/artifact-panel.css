@@ -2992,3 +2992,123 @@ button.artifact-chat-pill,
   0%   { background: rgba(56, 229, 77, 0.5); }
   100% { background: rgba(56, 229, 77, 0.25); }
 }
+
+/* CodeMirror patch highlights */
+.cm-patch-removing {
+  background: rgba(255, 70, 70, 0.3) !important;
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 70, 70, 0.7);
+  animation: patch-remove-pulse 0.8s ease-in-out;
+}
+
+.cm-patch-added {
+  background: rgba(56, 229, 77, 0.3) !important;
+  animation: patch-add-pulse 0.6s ease-out;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE ARTIFACT PANEL — Touch-friendly sizing
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* --- Header: taller, bigger text --- */
+  .artifact-panel__header {
+    height: 52px !important;
+    min-height: 52px !important;
+    max-height: 52px !important;
+    padding: 0 12px 0 14px !important;
+  }
+
+  .artifact-panel__title {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+  }
+
+  .artifact-panel__version-badge {
+    font-size: 12px !important;
+    padding: 3px 10px !important;
+  }
+
+  /* --- Close button: bigger tap target --- */
+  .artifact-panel__close-btn {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .artifact-panel__close-btn i {
+    font-size: 16px !important;
+  }
+
+  /* --- Tab toggle: bigger pills --- */
+  .artifact-panel__tab-toggle {
+    padding: 3px !important;
+    border-radius: 10px !important;
+  }
+
+  .artifact-panel__tab-toggle > .artifact-panel__tab-btn {
+    padding: 7px 14px !important;
+    font-size: 13px !important;
+    border-radius: 8px !important;
+  }
+
+  /* --- File selector: readable --- */
+  .artifact-file-select {
+    font-size: 13px !important;
+    padding: 6px 20px 6px 2px !important;
+  }
+
+  /* --- Code: comfortable reading --- */
+  .artifact-code-block {
+    font-size: 13px !important;
+  }
+
+  .artifact-code-block pre code {
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    padding: 12px !important;
+  }
+
+  .CodeMirror {
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+  }
+
+  .CodeMirror-linenumber {
+    font-size: 12px !important;
+  }
+
+  /* --- Footer: comfortable --- */
+  .artifact-panel__footer {
+    height: 48px !important;
+    padding: 0 14px !important;
+  }
+
+  .artifact-panel__footer-btn {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 14px !important;
+  }
+
+  .artifact-panel__version-select {
+    font-size: 13px !important;
+    padding: 5px 26px 5px 10px !important;
+  }
+
+  /* --- Header actions (publish etc) --- */
+  .artifact-panel__header-action {
+    font-size: 12px !important;
+    padding: 6px 12px !important;
+  }
+
+  /* --- Hide resize handle on mobile --- */
+  .artifact-panel__resize-handle {
+    display: none !important;
+  }
+
+  /* --- Prevent tiny text in code toolbar --- */
+  .artifact-code-toolbar,
+  .artifact-code-header {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+  }
+}

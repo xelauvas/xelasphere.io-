@@ -116,7 +116,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/code-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tree-view.css') }}?v=1.1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/message-styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/message-styles.css') }}?v=3">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/recipe-card.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/prism.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
@@ -130,7 +130,7 @@
 
     <!-- Artifact Panel -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/design-tokens.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/artifact-panel.css') }}?v=9">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/artifact-panel.css') }}?v=10">
 
     <!-- Voice Mode -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/voice-mode.css') }}">
@@ -148,7 +148,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/email-edit-toolbar.css') }}">
 
     <!-- Mobile Responsive -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=14">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=15">
 
     <!-- Context Menu (long-press actions) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/context-menu.css') }}">
@@ -921,7 +921,7 @@
     <script src="{{ url_for('static', filename='js/filePreview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/scrollState.js') }}"></script>
     <script src="{{ url_for('static', filename='js/recipeDetector.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=25"></script>
+    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=26"></script>
     <script src="{{ url_for('static', filename='script.js') }}?v=4"></script>
     <script>
     // Patch: intercept FormData append to inject image files for vision API
@@ -970,7 +970,7 @@
         window.sharedSessionId = "{{ shared_session_id|default('', true) }}";
     </script>
     <script src="{{ url_for('static', filename='js/toast.js') }}?v=6"></script>
-    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=5"></script>
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}"></script>
     <script src="{{ url_for('static', filename='js/typeTextWorker.js') }}"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>

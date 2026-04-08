@@ -3118,7 +3118,7 @@ body.is-ios .arrow-down {
 
     .message.ai-message .text-message {
         background: transparent !important;
-        color: #d1d5db !important;
+        color: rgba(244, 244, 245, 0.9) !important;
         padding: 0 !important;
         margin: 0 !important;
         font-size: 15px !important;
@@ -4815,4 +4815,42 @@ body.device-tablet.mobile-sidebar-open .left-sidebar {
 body.device-phone .mobile-overlay,
 body.device-tablet .mobile-overlay {
     transition: opacity 0.5s ease !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DOCUMENT CARD — Mobile overrides
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .user-doc-card {
+        max-width: 85% !important;
+        border-radius: 16px !important;
+    }
+
+    .user-doc-card__preview {
+        padding: 10px 12px 4px !important;
+        max-height: 70px !important;
+    }
+
+    .user-doc-card__info {
+        padding: 8px 12px 10px !important;
+        min-height: 44px;
+    }
+
+    .user-doc-card__label {
+        font-size: 14px !important;
+    }
+
+    .user-doc-card__meta {
+        font-size: 12px !important;
+    }
+
+    .user-doc-card__expanded {
+        padding: 0 12px 12px !important;
+        font-size: 14px !important;
+        max-height: 50vh !important;
+    }
+
+    .user-doc-card.is-expanded {
+        max-width: 95% !important;
+    }
 }

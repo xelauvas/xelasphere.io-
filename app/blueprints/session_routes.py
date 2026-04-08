@@ -196,7 +196,7 @@ def get_unread_counts():
         sessions_ref = db.collection('users').document(user_id).collection('chat_sessions')
         # Only fetch the fields we need, and exclude archived sessions
         query = sessions_ref.where('status', '!=', 'archived').select(
-            ['last_message_at', 'last_updated', 'status']
+            ['last_message_at', 'last_updated', 'last_read_at', 'status']
         )
         # Avoid hanging the UI if Firestore is slow/quota-limited.
         try:
@@ -210,9 +210,14 @@ def get_unread_counts():
             # Use last_message_at if available, otherwise fall back to last_updated
             timestamp = data.get('last_message_at') or data.get('last_updated')
             if timestamp:
-                session_timestamps[doc.id] = {
+                entry = {
                     'last_message_at': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
                 }
+                # Include server-side last_read_at for cross-device sync
+                read_at = data.get('last_read_at')
+                if read_at:
+                    entry['last_read_at'] = read_at.isoformat() if hasattr(read_at, 'isoformat') else str(read_at)
+                session_timestamps[doc.id] = entry
 
         return make_etag_response({'session_timestamps': session_timestamps})
     except Exception as e:

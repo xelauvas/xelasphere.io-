@@ -3521,6 +3521,9 @@ async loadChatHistory(pageToken = null, limit = 10) {
             await this.fetchApi('/chat/archive', 'POST', { session_id: sessionId });
             delete this.chatHistory[sessionId];
             this.dirtySessions.delete(sessionId);
+            // Clean up notification state for archived session
+            if (window.BackgroundRequestManager?.clearRequest) window.BackgroundRequestManager.clearRequest(sessionId);
+            if (window.BackgroundRequestManager?.clearNotification) window.BackgroundRequestManager.clearNotification(sessionId);
 
             const wasActive = this.activeSessionId === sessionId;
             if (wasActive) {
@@ -3685,9 +3688,12 @@ async loadChatHistory(pageToken = null, limit = 10) {
             document.body.removeChild(modalOverlay);
             try {
                 await this.fetchApi('/chat/delete', 'POST', { session_id: sessionId });
-                
+
                 delete this.chatHistory[sessionId];
                 this.dirtySessions.delete(sessionId);
+                // Clean up notification state for deleted session
+                if (window.BackgroundRequestManager?.clearRequest) window.BackgroundRequestManager.clearRequest(sessionId);
+                if (window.BackgroundRequestManager?.clearNotification) window.BackgroundRequestManager.clearNotification(sessionId);
                 
                 const deletedActiveSession = this.activeSessionId === sessionId;
                 this.generatedImages = (this.generatedImages || []).filter(image => image.sessionId !== sessionId);
@@ -4114,7 +4120,16 @@ async loadChatHistory(pageToken = null, limit = 10) {
             // Render email composer instead of normal text
             window.EmailComposer.createCard(email, messageContent, false);
         } else if (!suppressText && safeContent) {
-            handleComplexMessage(messageContent, safeContent, messageType, id, showButtons, isHistory);
+            // Long user messages → document card (Claude-style)
+            if (sender === 'user' && typeof isLongMessage === 'function' && isLongMessage(safeContent)) {
+                const card = createDocumentCard(safeContent);
+                const wrapper = document.createElement('div');
+                wrapper.classList.add('text-message-container');
+                wrapper.appendChild(card);
+                messageContent.appendChild(wrapper);
+            } else {
+                handleComplexMessage(messageContent, safeContent, messageType, id, showButtons, isHistory);
+            }
         }
         // Render attachments - CSS order property ensures they appear after text
         // AI-generated images render full-size (matching initial display), not as file cards

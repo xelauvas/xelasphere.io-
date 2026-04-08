@@ -349,6 +349,7 @@ const BackgroundRequestManager = (() => {
 
     function clearRequest(sessionId) {
         activeRequests.delete(sessionId);
+        pendingNotifications.delete(sessionId);
     }
 
     function hasPendingNotification(sessionId) {
@@ -2263,13 +2264,97 @@ function renderLiveAttachments(container, attachmentsMeta) {
     }
 }
 
+// Threshold for collapsing long user messages into a document card
+const LONG_MESSAGE_CHAR_THRESHOLD = 500;
+const LONG_MESSAGE_LINE_THRESHOLD = 8;
+
+function isLongMessage(text) {
+    if (!text) return false;
+    if (text.length > LONG_MESSAGE_CHAR_THRESHOLD) return true;
+    const lines = text.split('\n');
+    return lines.length > LONG_MESSAGE_LINE_THRESHOLD;
+}
+
+function createDocumentCard(text) {
+    const lines = text.split('\n').filter(l => l.trim());
+    const lineCount = lines.length;
+    const charCount = text.length;
+
+    // Get a preview label — first non-empty line, truncated
+    const firstLine = lines[0] || 'Pasted text';
+    const label = firstLine.length > 50 ? firstLine.slice(0, 50) + '…' : firstLine;
+
+    // Build the card
+    const card = document.createElement('div');
+    card.className = 'user-doc-card';
+
+    // Miniature text preview (visual texture, not readable)
+    const preview = document.createElement('div');
+    preview.className = 'user-doc-card__preview';
+    // Show up to 20 lines as miniature text
+    const previewLines = lines.slice(0, 20);
+    previewLines.forEach(line => {
+        const lineEl = document.createElement('div');
+        lineEl.className = 'user-doc-card__line';
+        lineEl.textContent = line;
+        preview.appendChild(lineEl);
+    });
+    if (lines.length > 20) {
+        const fade = document.createElement('div');
+        fade.className = 'user-doc-card__fade';
+        preview.appendChild(fade);
+    }
+    card.appendChild(preview);
+
+    // Info bar
+    const info = document.createElement('div');
+    info.className = 'user-doc-card__info';
+    info.innerHTML = `
+        <span class="user-doc-card__label">${escapeHtml(label)}</span>
+        <span class="user-doc-card__meta">${lineCount} lines · ${charCount.toLocaleString()} chars</span>
+    `;
+    card.appendChild(info);
+
+    // Expanded state (full text, hidden by default)
+    const expanded = document.createElement('div');
+    expanded.className = 'user-doc-card__expanded';
+    const htmlContent = marked.parse(text);
+    expanded.innerHTML = DOMPurify.sanitize(htmlContent);
+    card.appendChild(expanded);
+
+    // Click to toggle
+    card.addEventListener('click', (e) => {
+        // Don't toggle if clicking a link inside expanded
+        if (e.target.closest('a')) return;
+        card.classList.toggle('is-expanded');
+    });
+
+    return card;
+}
+
+function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
 function appendUserMessage(messageDiv, message, messageId) {
     if (!messageDiv || !message) {
         throw new Error('Message div and content are required');
     }
 
     const container = messageDiv.querySelector('.message-content') || messageDiv;
-    appendTextMessage(container, message, true);
+
+    // Long messages → document card (Claude-style)
+    if (isLongMessage(message)) {
+        const card = createDocumentCard(message);
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('text-message-container');
+        wrapper.appendChild(card);
+        container.appendChild(wrapper);
+    } else {
+        appendTextMessage(container, message, true);
+    }
 
     let footer = messageDiv.querySelector('.message-bubble-footer');
     if (!footer) {

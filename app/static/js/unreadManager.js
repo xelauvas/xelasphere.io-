@@ -148,10 +148,24 @@ const UnreadNotificationManager = (() => {
      * Set the unread count and update favicon badge
      */
     function setUnreadCount(count) {
-        // Only update favicon if count changed
         if (count !== currentUnreadCount) {
             currentUnreadCount = count;
             updateFaviconBadge(count);
+            updateDocumentTitle(count);
+            // Cache for optimistic render on next page load
+            try { localStorage.setItem('xela_unread_count', String(count)); } catch (e) { /* ignore */ }
+        }
+    }
+
+    /**
+     * Update document.title with (N) unread badge
+     */
+    const _originalTitle = document.title;
+    function updateDocumentTitle(count) {
+        if (count > 0) {
+            document.title = `(${count}) ${_originalTitle}`;
+        } else {
+            document.title = _originalTitle;
         }
     }
 
@@ -284,10 +298,25 @@ const UnreadNotificationManager = (() => {
         if (isInitialized) return;
         isInitialized = true;
 
-        console.log('[UnreadManager] Initializing with localStorage-based tracking...');
+        // Restore cached unread count immediately (prevents flash)
+        try {
+            const cached = localStorage.getItem('xela_unread_count');
+            if (cached) {
+                const count = parseInt(cached, 10);
+                if (count > 0) {
+                    currentUnreadCount = count;
+                    updateDocumentTitle(count);
+                }
+            }
+        } catch (e) { /* ignore */ }
 
         // Setup favicon badge system
         initFaviconBadge();
+
+        // Apply cached count to favicon now that canvas is ready
+        if (currentUnreadCount > 0) {
+            updateFaviconBadge(currentUnreadCount);
+        }
 
         // Setup cross-tab sync via BroadcastChannel
         setupBroadcastChannel();
@@ -298,7 +327,7 @@ const UnreadNotificationManager = (() => {
         // Setup visibility listener for smart polling
         setupVisibilityListener();
 
-        // Initial fetch
+        // Initial fetch (will reconcile with server)
         fetchUnreadCounts();
 
         console.log('[UnreadManager] Initialized');
@@ -469,18 +498,30 @@ const UnreadNotificationManager = (() => {
         // Notification dots are managed purely by BackgroundRequestManager (in-memory, event-driven).
         for (const [sessionId, info] of Object.entries(serverTimestamps)) {
             const lastMessageAt = new Date(info.last_message_at).getTime();
-            const lastReadAt = readTimes[sessionId] ? new Date(readTimes[sessionId]).getTime() : 0;
+
+            // Use localStorage first, fall back to server last_read_at (cross-device)
+            let lastReadTime = 0;
+            if (readTimes[sessionId]) {
+                lastReadTime = new Date(readTimes[sessionId]).getTime();
+            } else if (info.last_read_at) {
+                // New device — seed from server
+                lastReadTime = new Date(info.last_read_at).getTime();
+                readTimes[sessionId] = info.last_read_at;
+            }
 
             sessionTimestamps.set(sessionId, info);
             previousSessions.delete(sessionId);
 
-            const hasUnreadMessages = lastMessageAt > lastReadAt;
+            const hasUnreadMessages = lastMessageAt > lastReadTime;
             const isActive = sessionId === activeSessionId;
 
             if (!isActive && hasUnreadMessages) {
                 unreadCount++;
             }
         }
+
+        // Persist any server-seeded read times to localStorage
+        saveReadTimes(readTimes);
 
         // Favicon badge only — no DOM dot manipulation from polling
         setUnreadCount(unreadCount);
@@ -521,7 +562,7 @@ const UnreadNotificationManager = (() => {
         // Check if this session was unread (for favicon update)
         const wasUnread = hasUnread(sessionId);
 
-        // Store current time as lastReadAt in localStorage (device-specific)
+        // Store current time as lastReadAt in localStorage (device-local cache)
         const now = new Date().toISOString();
         setLastReadAt(sessionId, now);
 
@@ -538,10 +579,29 @@ const UnreadNotificationManager = (() => {
             window.BackgroundRequestManager.clearNotification(sessionId);
         }
 
+        // Persist to server — enables cross-device sync
+        markReadOnServer(sessionId);
+
         // Broadcast to other tabs for instant sync
         broadcast({ type: 'session_read', sessionId, timestamp: now });
+    }
 
-        console.log(`[UnreadManager] Marked session ${sessionId} as read at ${now}`);
+    /**
+     * Persist last_read_at to server for cross-device sync.
+     * Fire-and-forget — don't block UI on network.
+     */
+    function markReadOnServer(sessionId) {
+        const csrfToken = getCsrfToken();
+        fetch(`/chat/session/${sessionId}/mark-read`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+            },
+            credentials: 'same-origin'
+        }).catch(err => {
+            console.warn('[UnreadManager] Failed to mark read on server:', err);
+        });
     }
 
     /**
