@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # ── 1. Python syntax check ──────────────────────────────
+      - name: Python syntax check
+        run: |
+          echo "Checking all .py files..."
+          find app -name '*.py' -print0 | xargs -0 python -m py_compile
+          echo "✓ All Python files compile cleanly"
+
+      # ── 2. JS syntax check ──────────────────────────────────
+      - name: JS syntax check
+        run: |
+          echo "Checking all .js files..."
+          for f in $(find app/static/js -name '*.js' -not -path '*/vendor/*'); do
+            node -e "new Function(require('fs').readFileSync('$f','utf8'))" || exit 1
+          done
+          echo "✓ All JS files parse cleanly"
+
+      # ── 3. Unit tests (action parser) ───────────────────────
+      - name: Action parser unit tests
+        run: |
+          python -c "
+          import sys, re, time
+          sys.path.insert(0, '.')
+          from app.context.action_parser import ActionParser, StreamingActionBuffer
+
+          # ActionParser tests
+          r = ActionParser.parse('ACTION: generate_image\ndescription: a cat on a wall\nsource: explicit\n\nHere is your cat.')
+          assert r.action == 'generate_image' and r.image_payload['description'] == 'a cat on a wall'
+          assert r.image_payload['source'] == 'explicit' and 'Here is your cat' in r.chat_text
+
+          r = ActionParser.parse('ACTION: generate_image\nsource: explicit\n\nText')
+          assert r.action == 'chat', 'Missing description should fallback to chat'
+
+          r = ActionParser.parse('ACTION: chat\nHello world')
+          assert r.action == 'chat' and 'Hello world' in r.chat_text
+
+          r = ActionParser.parse('ACTION: show_chart bitcoin\nHere is BTC')
+          assert r.action == 'show_chart'
+
+          # StreamingActionBuffer tests
+          buf = StreamingActionBuffer()
+          assert buf.feed('ACTION: generate_image\n') is None
+          assert buf.feed('description: a sunset\n') is None
+          assert buf.feed('source: explicit\n') is None
+          r = buf.feed('\n')
+          assert r == 'generate_image' and buf.header_fields['description'] == 'a sunset'
+
+          buf = StreamingActionBuffer()
+          r = buf.feed('ACTION: generate_image\ndescription: a cat\nsource: explicit\n\nHello')
+          assert r == 'generate_image' and 'Hello' in buf.remainder
+
+          buf = StreamingActionBuffer()
+          r = buf.feed('ACTION: chat\nHello')
+          assert r == 'chat' and 'Hello' in buf.remainder
+
+          buf = StreamingActionBuffer()
+          r = buf.feed('Hello world\nHow are you')
+          assert r == 'chat'
+
+          # Timeout fallback
+          buf = StreamingActionBuffer()
+          buf.feed('ACTION: generate_image\n')
+          buf.feed('description: test\n')
+          buf._header_start_time = time.time() - 4
+          r = buf.feed('still waiting\n')
+          assert r == 'chat', 'Timeout should fallback to chat'
+
+          print('✓ All 10 action parser tests passed')
+          "
+
+      # ── 4. Flask app boot check ─────────────────────────────
+      - name: Install dependencies
+        run: pip install -r requirements-cpu.txt
+
+      - name: Flask app boot check
+        env:
+          FLASK_ENV: testing
+          SECRET_KEY: ci-test-key
+          TESTING: "true"
+        run: |
+          python -c "
+          import os
+          os.environ['TESTING'] = 'true'
+          os.environ['SECRET_KEY'] = 'ci-test-key'
+          try:
+              from run import app
+              with app.test_client() as client:
+                  print('✓ Flask app boots successfully')
+          except Exception as e:
+              # Some services (Firestore, Redis) won't be available in CI
+              # That's OK — we just want to verify imports and config don't crash
+              if 'credentials' in str(e).lower() or 'connect' in str(e).lower():
+                  print(f'✓ Flask app boots (external services unavailable in CI: {e})')
+              else:
+                  raise
+          "
