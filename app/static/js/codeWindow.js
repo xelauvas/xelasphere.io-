@@ -3297,12 +3297,14 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     // Defer slightly so tab DOM exists after session creation
                                     setTimeout(() => {
                                         const mgr = window.chatManager;
-                                        if (mgr && requestSessionId && mgr.chatHistory?.[requestSessionId]) {
-                                            const sess = mgr.chatHistory[requestSessionId];
+                                        // Use current activeSessionId if requestSessionId was null (new chat)
+                                        const titleSessionId = requestSessionId || mgr?.activeSessionId;
+                                        if (mgr && titleSessionId && mgr.chatHistory?.[titleSessionId]) {
+                                            const sess = mgr.chatHistory[titleSessionId];
                                             if (sess.session_name !== titleName) {
                                                 sess.session_name = titleName;
                                                 sess.autoTitleEligible = false;
-                                                const tab = document.querySelector(`.chat-tab[data-session-id="${requestSessionId}"] .tab-name`);
+                                                const tab = document.querySelector(`.chat-tab[data-session-id="${titleSessionId}"] .tab-name`);
                                                 if (tab) {
                                                     typewriteTitle(tab, titleName);
                                                 } else if (typeof mgr.renderChatTabs === 'function') {
