@@ -58,12 +58,12 @@
 .search-news-carousel {
     position: relative;
     margin: 0 0 16px 0;
+    overflow: hidden;
 }
 
 .search-news-cards {
     display: flex;
     gap: 12px;
-    overflow: hidden;
 }
 
 .search-news-card {
@@ -144,28 +144,39 @@
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    background: rgba(30, 30, 30, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #fff;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.9);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     z-index: 2;
-    transition: background 0.15s;
-    font-size: 14px;
+    transition: background 0.15s, transform 0.15s, opacity 0.15s;
+    font-size: 16px;
+    line-height: 1;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.search-news-carousel:hover .search-carousel-arrow:not(.search-carousel-arrow--hidden) {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .search-carousel-arrow:hover {
-    background: rgba(60, 60, 60, 0.95);
+    background: rgba(0, 0, 0, 0.8);
+    transform: translateY(-50%) scale(1.1);
 }
 
-.search-carousel-arrow--left  { left: -16px; }
-.search-carousel-arrow--right { right: -16px; }
-.search-carousel-arrow--hidden { display: none; }
+.search-carousel-arrow--left  { left: 8px; }
+.search-carousel-arrow--right { right: 8px; }
+.search-carousel-arrow--hidden { display: none !important; }
 
 /* -----------------------------------------------------------
    Image Carousel (image_grid render_hint)

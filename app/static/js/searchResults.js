@@ -157,6 +157,12 @@
         var currentIndex = 0;
         var VISIBLE = 3;
 
+        function getCardWidth() {
+            var firstCard = track.children[0];
+            if (!firstCard) return 200;
+            return firstCard.offsetWidth + 12; // 12px gap
+        }
+
         function updateArrows() {
             leftArrow.classList.toggle('search-carousel-arrow--hidden', currentIndex === 0);
             rightArrow.classList.toggle('search-carousel-arrow--hidden',
@@ -165,11 +171,9 @@
 
         function scrollTo(index) {
             currentIndex = Math.max(0, Math.min(index, webResults.length - VISIBLE));
-            var firstCard = track.children[0];
-            if (!firstCard) return;
-            var cardWidth = firstCard.offsetWidth + 12; // 12px gap
+            var cardWidth = getCardWidth();
             track.style.transform = 'translateX(-' + (currentIndex * cardWidth) + 'px)';
-            track.style.transition = 'transform 0.3s ease';
+            track.style.transition = 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)';
             updateArrows();
         }
 
