@@ -126,6 +126,9 @@ const NAME_FALLBACKS = {
 let ASSET_NAMES = {};  // Will be populated from API
 let CRYPTO_TICKERS = {};  // Will be populated from API
 
+// Per-message search stream data (replaces window._stream* globals)
+const _searchStreamData = new Map();
+
 // Load asset config from API (called by cryptoChartModule or on demand)
 let _assetConfigLoaded = false;
 function loadAssetConfig(config) {
@@ -3276,12 +3279,15 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             console.log('Parsed artifact from done:', streamArtifact);
                             console.log('Parsed email from done:', streamIsEmail, streamEmailData);
                             if (streamCryptoChart) console.log('Parsed crypto chart:', streamCryptoChart);
-                            // Store search results for post-stream rendering
+                            // Store search results for post-stream rendering (message-scoped)
                             if (chunk.search_results || chunk.embed_video) {
-                                window._streamSearchResults = chunk.search_results;
-                                window._streamEmbedVideo = chunk.embed_video;
-                                window._streamFetchedUrls = chunk.fetched_urls || [];
-                                window._streamRenderHint = chunk.render_hint || 'text_only';
+                                const _sMsgId = searchMsgId || placeholderId || 'pending';
+                                _searchStreamData.set(_sMsgId, {
+                                    searchResults: chunk.search_results,
+                                    embedVideo: chunk.embed_video,
+                                    fetchedUrls: chunk.fetched_urls || [],
+                                    renderHint: chunk.render_hint || 'text_only',
+                                });
                             }
                             // Handle image from generate_image ACTION path
                             if (chunk.image_url && window._pendingImagePlaceholderId) {
@@ -3482,23 +3488,17 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 }
 
                 // Render inline search results (sources, video cards, citations)
-                // Save for persistence before deleting globals
-                const _savedSearchResults = window._streamSearchResults || null;
-                const _savedRenderHint = window._streamRenderHint || null;
-                const _savedEmbedVideo = window._streamEmbedVideo || null;
-                const _savedFetchedUrls = window._streamFetchedUrls || null;
-                if (_savedSearchResults && window.SearchResults) {
+                const _sdKey = [aiMsgId, searchMsgId, placeholderId, 'pending'].find(k => k && _searchStreamData.has(k));
+                const _sd = _sdKey ? _searchStreamData.get(_sdKey) : null;
+                if (_sd && window.SearchResults) {
                     window.SearchResults.renderFinalResults(
                         messageContainer || document.getElementById(aiMsgId),
-                        _savedSearchResults,
-                        _savedEmbedVideo,
-                        _savedFetchedUrls,
-                        _savedRenderHint
+                        _sd.searchResults,
+                        _sd.embedVideo,
+                        _sd.fetchedUrls,
+                        _sd.renderHint
                     );
-                    delete window._streamSearchResults;
-                    delete window._streamEmbedVideo;
-                    delete window._streamFetchedUrls;
-                    delete window._streamRenderHint;
+                    _searchStreamData.delete(_sdKey);
                 }
 
                 // Handle email composer for streamed responses (backend flag)
