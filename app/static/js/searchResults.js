@@ -774,16 +774,17 @@
             fired = true;
             callback();
         }
-        // If text is already rendered (history replay), run immediately
         var content = messageEl.querySelector('.message-content');
-        if (content && content.textContent && content.textContent.length > 0) {
-            // Use microtask so DOM is fully settled
+        var isTyping = content && content.querySelector('.streaming-cursor');
+        if (!isTyping && content && content.textContent && content.textContent.length > 0) {
+            // History: text fully rendered, no typing animation — run immediately
             Promise.resolve().then(run);
             return;
         }
+        // Real-time: wait for ProgressiveTextDisplay to finish
         messageEl.addEventListener('typing-complete', run, { once: true });
-        // Fallback: if event never fires, run after 4s
-        setTimeout(run, 4000);
+        // Fallback timeout
+        setTimeout(run, 6000);
     }
 
     /* -------------------------------------------------------
