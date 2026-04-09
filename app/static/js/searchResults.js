@@ -774,9 +774,16 @@
             fired = true;
             callback();
         }
+        // If text is already rendered (history replay), run immediately
+        var content = messageEl.querySelector('.message-content');
+        if (content && content.textContent && content.textContent.length > 0) {
+            // Use microtask so DOM is fully settled
+            Promise.resolve().then(run);
+            return;
+        }
         messageEl.addEventListener('typing-complete', run, { once: true });
-        // Fallback: if event never fires (e.g. history replay), run after 8s
-        setTimeout(run, 8000);
+        // Fallback: if event never fires, run after 4s
+        setTimeout(run, 4000);
     }
 
     /* -------------------------------------------------------
