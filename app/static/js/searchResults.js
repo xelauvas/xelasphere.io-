@@ -741,16 +741,8 @@
             if (data.url) st.fetchedUrls.add(data.url);
 
         } else if (eventType === 'search_complete') {
-            // Stop shimmer — search done, waiting for AI synthesis
-            if (st.bannerEl) {
-                var label = st.bannerEl.querySelector('.search-banner__label');
-                if (label) {
-                    label.style.animation = 'none';
-                    label.style.background = 'none';
-                    label.style.webkitTextFillColor = 'rgba(255, 255, 255, 0.5)';
-                    label.style.color = 'rgba(255, 255, 255, 0.5)';
-                }
-            }
+            // Mark complete — dismissBanner() handles the smooth fade
+            st.searchComplete = true;
         }
     }
 
