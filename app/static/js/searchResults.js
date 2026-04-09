@@ -849,8 +849,11 @@
 
         var st = _getState(content);
 
-        // Remove shimmer banner if still visible
-        if (st.bannerEl) { st.bannerEl.remove(); st.bannerEl = null; }
+        // Remove shimmer banner if still in container (safety net for history/edge cases)
+        if (st.bannerEl && st.bannerEl.parentNode === content) {
+            st.bannerEl.remove();
+        }
+        st.bannerEl = null;
 
         // Merge data
         if (Array.isArray(fetchedUrls)) {

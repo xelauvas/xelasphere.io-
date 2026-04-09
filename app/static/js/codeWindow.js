@@ -3004,6 +3004,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let patchParsedPatches = [];
                 let artifactStreamActive = false;
                 let searchMsgId = null; // Track message element for search banner
+                let searchBannerDismissed = false; // Track if search banner was dismissed
                 let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
                 // Use array to avoid O(n²) string concatenation per chunk.
@@ -3108,13 +3109,14 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     isFirstContentChunk = false;
                                     window.scrollState?.contentArrived?.();
                                     ThinkingIndicator.setContentMode();
-                                    // Dismiss search banner when answer starts
-                                    if (searchMsgId && window.SearchResults) {
-                                        var searchEl = document.getElementById(searchMsgId);
-                                        var searchContent = searchEl?.querySelector('.message-content');
-                                        if (searchContent) {
-                                            window.SearchResults.dismissBanner(searchContent);
-                                        }
+                                }
+                                // Dismiss search banner on first synthesis content chunk
+                                if (searchMsgId && !searchBannerDismissed && window.SearchResults) {
+                                    searchBannerDismissed = true;
+                                    var searchEl = document.getElementById(searchMsgId);
+                                    var searchContent = searchEl?.querySelector('.message-content');
+                                    if (searchContent) {
+                                        window.SearchResults.dismissBanner(searchContent);
                                     }
                                 }
                                 if (bgRequest) {
