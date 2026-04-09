@@ -330,8 +330,11 @@ class SearchOrchestrator:
                 section = (
                     f'### [{i}] {result.title or "Image"}\n'
                     f'URL: {result.url}\n'
-                    f'Source: {result.source_domain}\n\n'
+                    f'Source: {result.source_domain}\n'
                 )
+                if result.snippet and result.snippet != result.title:
+                    section += f'Description: {result.snippet}\n'
+                section += '\n'
             elif result.type == 'video':
                 section = (
                     f'### [{i}] {result.title or "Video"}\n'
@@ -504,8 +507,9 @@ class SearchOrchestrator:
 
         results: List[SearchResult] = []
         items = data.get('results', [])
-        for item in items:
-            img_url = item.get('properties', {}).get('url') or item.get('url', '')
+        for i, item in enumerate(items):
+            props = item.get('properties', {})
+            img_url = props.get('url') or item.get('url', '')
             source_url = item.get('source', item.get('url', ''))
 
             # Content safety guard: https-only
@@ -526,14 +530,36 @@ class SearchOrchestrator:
             except Exception:
                 source_domain = img_domain
 
+            # Extract description — prefer page_fetched, fall back to title
+            description = (
+                item.get('description')
+                or item.get('page_fetched', '')
+                or ''
+            ).strip()
+            # Use description as snippet if available, otherwise source domain context
+            snippet = description if description and description != item.get('title', '') else (
+                f"Image from {source_domain}" if source_domain else ''
+            )
+
+            # Favicon from meta_url if available
+            meta_url = item.get('meta_url', {})
+            favicon_url = (
+                meta_url.get('favicon')
+                or (f'https://www.google.com/s2/favicons?domain={source_domain}' if source_domain else None)
+            )
+
+            # Position-based relevance (same formula as web, no freshness)
+            score = max(0.0, 1.0 - i * 0.05)
+
             results.append(SearchResult(
                 type='image',
                 title=item.get('title', ''),
                 url=source_url,
-                snippet=item.get('title', ''),
+                snippet=snippet,
+                favicon=favicon_url,
                 thumbnail=img_url,
                 source_domain=source_domain,
-                relevance_score=1.0,
+                relevance_score=score,
             ))
 
         return results

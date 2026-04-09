@@ -362,8 +362,10 @@
             var s = sources[current];
             var favicon = _getFavicon(s);
             var domain = _getDomain(s);
-            var snippet = (s.snippet || '').slice(0, 120);
-            if (s.snippet && s.snippet.length > 120) snippet += '\u2026';
+            var rawSnippet = s.snippet || '';
+            // Skip snippet if it duplicates the title
+            var snippet = (rawSnippet && rawSnippet !== s.title) ? rawSnippet.slice(0, 120) : '';
+            if (rawSnippet.length > 120 && snippet) snippet += '\u2026';
 
             // Nav row (only show if multiple sources)
             var navHtml = '';
@@ -681,7 +683,7 @@
         title.textContent = s.title || '';
         item.appendChild(title);
 
-        if (s.snippet) {
+        if (s.snippet && s.snippet !== s.title) {
             var snippet = document.createElement('div');
             snippet.className = 'source-item__snippet';
             snippet.textContent = s.snippet;
