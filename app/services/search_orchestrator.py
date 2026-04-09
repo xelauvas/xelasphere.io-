@@ -514,11 +514,17 @@ class SearchOrchestrator:
 
             # Content safety guard: blocked domains
             try:
-                domain = urlparse(img_url).netloc.lstrip('www.')
+                img_domain = urlparse(img_url).netloc.lstrip('www.')
             except Exception:
                 continue
-            if any(blocked in domain for blocked in blocked_domains if blocked):
+            if any(blocked in img_domain for blocked in blocked_domains if blocked):
                 continue
+
+            # Use source page domain for attribution (not CDN image domain)
+            try:
+                source_domain = urlparse(source_url).netloc.lstrip('www.') if source_url else img_domain
+            except Exception:
+                source_domain = img_domain
 
             results.append(SearchResult(
                 type='image',
@@ -526,7 +532,7 @@ class SearchOrchestrator:
                 url=source_url,
                 snippet=item.get('title', ''),
                 thumbnail=img_url,
-                source_domain=domain,
+                source_domain=source_domain,
                 relevance_score=1.0,
             ))
 
