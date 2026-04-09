@@ -851,11 +851,13 @@
             }
         }
 
-        // 2. Citation pills + sources button — wait for typing animation to finish
-        if (webRes.length > 0) {
+        // 2. Citation pills + sources button — use all available results as sources
+        //    Web results are preferred, but image/video results also carry URLs
+        var allSources = webRes.length > 0 ? webRes : [].concat(images, videos).filter(function (r) { return r && r.url; });
+        if (allSources.length > 0) {
             _onTypingComplete(messageEl, function () {
-                processCitations(messageEl, webRes);
-                _appendSourcesButton(messageEl, webRes);
+                processCitations(messageEl, allSources);
+                _appendSourcesButton(messageEl, allSources);
             });
         }
     }

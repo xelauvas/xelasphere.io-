@@ -313,7 +313,7 @@ class SearchOrchestrator:
             if Config is not None else 40_000
         )
 
-        parts = [f'## Web Search Results for: {query}\n']
+        parts = [f'## Search Results for: {query}\n']
         total_chars = len(parts[0])
 
         for i, result in enumerate(results, 1):
@@ -326,11 +326,26 @@ class SearchOrchestrator:
                 if result.full_content:
                     section += f'\nContent:\n{result.full_content}\n'
                 section += '\n'
+            elif result.type == 'image':
+                section = (
+                    f'### [{i}] {result.title or "Image"}\n'
+                    f'URL: {result.url}\n'
+                    f'Source: {result.source_domain}\n\n'
+                )
+            elif result.type == 'video':
+                section = (
+                    f'### [{i}] {result.title or "Video"}\n'
+                    f'URL: {result.url}\n'
+                    f'Channel: {result.channel or "Unknown"}\n'
+                    f'Duration: {result.duration or "N/A"}\n\n'
+                )
+            else:
+                continue
 
-                if total_chars + len(section) > budget:
-                    break
-                parts.append(section)
-                total_chars += len(section)
+            if total_chars + len(section) > budget:
+                break
+            parts.append(section)
+            total_chars += len(section)
 
         return ''.join(parts)
 
