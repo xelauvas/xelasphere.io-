@@ -342,12 +342,15 @@
     function _domainToName(domain) {
         if (!domain) return '';
         var name = domain.replace(/^www\./, '');
-        // Use second-level domain for CDN subdomains (media.istockphoto.com → istockphoto)
         var parts = name.split('.');
-        if (parts.length > 2) {
+        // Two-part TLDs: theguardian.co.uk → theguardian
+        var twoPartTlds = ['co', 'com', 'org', 'net', 'gov', 'edu', 'ac'];
+        if (parts.length > 2 && twoPartTlds.indexOf(parts[parts.length - 2]) >= 0) {
+            name = parts[parts.length - 3]; // 'theguardian' from 'theguardian.co.uk'
+        } else if (parts.length > 2) {
             name = parts[parts.length - 2]; // 'istockphoto' from 'media.istockphoto.com'
         } else {
-            name = parts[0]; // 'theguardian' from 'theguardian.com'
+            name = parts[0]; // 'apnews' from 'apnews.com'
         }
         if (!name) return '';
         name = name.charAt(0).toUpperCase() + name.slice(1);
@@ -777,24 +780,35 @@
        dispatched by ProgressiveTextDisplay, with a timeout
        fallback in case the event never fires.
     ------------------------------------------------------- */
-    function _onTypingComplete(messageEl, callback) {
-        var fired = false;
-        function run() {
-            if (fired) return;
-            fired = true;
-            callback();
-        }
+    function _processCitationsWhenReady(messageEl, sources, attempt, lastLen) {
+        attempt = attempt || 0;
+        lastLen = lastLen || 0;
+        var MAX_ATTEMPTS = 40;  // 40 × 200ms = 8s max
         var content = messageEl.querySelector('.message-content');
-        var isTyping = content && content.querySelector('.streaming-cursor');
-        if (!isTyping && content && content.textContent && content.textContent.length > 0) {
-            // History: text fully rendered, no typing animation — run immediately
-            Promise.resolve().then(run);
+        if (!content) return;
+
+        var textContent = content.textContent || '';
+        var curLen = textContent.length;
+        var hasCitations = /\[\d+\]/.test(textContent);
+        var isStable = curLen > 0 && curLen === lastLen;
+
+        if (hasCitations && isStable) {
+            processCitations(messageEl, sources);
+            _appendSourcesButton(messageEl, sources);
             return;
         }
-        // Real-time: wait for ProgressiveTextDisplay to finish
-        messageEl.addEventListener('typing-complete', run, { once: true });
-        // Fallback timeout
-        setTimeout(run, 6000);
+
+        // If text is stable but no citations, still add sources button
+        if (isStable && curLen > 0 && attempt > 4) {
+            _appendSourcesButton(messageEl, sources);
+            return;
+        }
+
+        if (attempt < MAX_ATTEMPTS) {
+            setTimeout(function () {
+                _processCitationsWhenReady(messageEl, sources, attempt + 1, curLen);
+            }, 200);
+        }
     }
 
     /* -------------------------------------------------------
@@ -884,10 +898,7 @@
         //    Web results are preferred, but image/video results also carry URLs
         var allSources = webRes.length > 0 ? webRes : [].concat(images, videos).filter(function (r) { return r && r.url; });
         if (allSources.length > 0) {
-            _onTypingComplete(messageEl, function () {
-                processCitations(messageEl, allSources);
-                _appendSourcesButton(messageEl, allSources);
-            });
+            _processCitationsWhenReady(messageEl, allSources);
         }
     }
 
