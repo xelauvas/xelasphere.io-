@@ -252,13 +252,13 @@ class SearchOrchestrator:
                     image_results = results
                     yield SearchEvent(
                         type='search_images',
-                        data={'results': [self._result_to_dict(r) for r in image_results]},
+                        data={'images': [self._result_to_dict(r) for r in image_results]},
                     )
                 elif backend == 'video':
                     video_results = results
                     yield SearchEvent(
                         type='search_videos',
-                        data={'results': [self._result_to_dict(r) for r in video_results]},
+                        data={'videos': [self._result_to_dict(r) for r in video_results]},
                     )
 
         # --- Full content fetch for top 3 web results ---
@@ -652,9 +652,9 @@ class SearchOrchestrator:
         if cached.get('web'):
             yield SearchEvent(type='search_web_results', data={'results': cached['web']})
         if cached.get('images'):
-            yield SearchEvent(type='search_images', data={'results': cached['images']})
+            yield SearchEvent(type='search_images', data={'images': cached['images']})
         if cached.get('video'):
-            yield SearchEvent(type='search_videos', data={'results': cached['video']})
+            yield SearchEvent(type='search_videos', data={'videos': cached['video']})
         yield SearchEvent(type='search_complete', data={'query': '', 'search_type': search_type, 'cached': True})
 
 
