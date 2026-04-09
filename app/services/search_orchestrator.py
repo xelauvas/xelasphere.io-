@@ -35,11 +35,22 @@ logger = logging.getLogger(__name__)
 search_cache: TTLCache = TTLCache(maxsize=100, ttl=900)  # 15 min
 
 BRAVE_WEB_ENDPOINT = 'https://api.search.brave.com/res/v1/web/search'
+BRAVE_NEWS_ENDPOINT = 'https://api.search.brave.com/res/v1/news/search'
 BRAVE_IMAGES_ENDPOINT = 'https://api.search.brave.com/res/v1/images/search'
 YOUTUBE_SEARCH_ENDPOINT = 'https://www.googleapis.com/youtube/v3/search'
 YOUTUBE_VIDEOS_ENDPOINT = 'https://www.googleapis.com/youtube/v3/videos'
 
 REQUEST_TIMEOUT = 8  # seconds per backend call
+
+# Domains that pollute news queries (ticket sites, social media, event pages)
+_NEWS_DOMAIN_BLOCKLIST = frozenset({
+    'ticketle.co.uk', 'allgigs.co.uk', 'ticketmaster.com', 'eventbrite.com',
+    'facebook.com', 'instagram.com', 'tiktok.com', 'pinterest.com',
+    'world-border-congress.com', 'newlandchase.com',
+})
+
+# Max age in hours for news results (7 days)
+_NEWS_MAX_AGE_HOURS = 168
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +72,7 @@ class SearchResult:
     duration: Optional[str] = None
     source_domain: str = ''
     relevance_score: float = 0.0
+    _age_hours: float = 0.0  # internal: used for news freshness filtering
 
 
 @dataclass
@@ -188,6 +200,10 @@ class SearchOrchestrator:
 
         search_type options: 'general', 'images', 'video', 'news'
         """
+        # Normalize unknown search types to 'general'
+        if search_type not in ('general', 'images', 'video', 'news'):
+            search_type = 'general'
+
         cache_key = f'{search_type}:{query.lower().strip()}'
 
         # --- Cache hit ---
@@ -333,18 +349,69 @@ class SearchOrchestrator:
             logger.debug('BRAVE_SEARCH_API_KEY not set — skipping web search')
             return []
 
-        params: Dict[str, Any] = {
-            'q': query,
-            'count': 10,
-            'safesearch': 'moderate',
-        }
-        if search_type == 'news':
-            params['freshness'] = 'pd'  # past day
-
         headers = {
             'Accept': 'application/json',
             'Accept-Encoding': 'gzip',
             'X-Subscription-Token': api_key,
+        }
+
+        # Use dedicated News endpoint for news queries
+        if search_type == 'news':
+            params: Dict[str, Any] = {
+                'q': query,
+                'count': 10,
+                'safesearch': 'moderate',
+                'freshness': 'pd',  # past day
+            }
+            try:
+                resp = requests.get(
+                    BRAVE_NEWS_ENDPOINT,
+                    params=params,
+                    headers=headers,
+                    timeout=REQUEST_TIMEOUT,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as exc:
+                logger.warning('Brave news search failed: %s', exc)
+                return []
+
+            results: List[SearchResult] = []
+            news_items = data.get('results', [])
+            for i, item in enumerate(news_items):
+                url = item.get('url', '')
+                age_str = item.get('age', '')
+                age_hours = _parse_age_to_hours(age_str)
+                score = _score_web_result(i, age_hours)
+
+                parsed = urlparse(url)
+                domain = parsed.netloc.lstrip('www.')
+
+                # Skip blocklisted domains and stale results
+                if domain in _NEWS_DOMAIN_BLOCKLIST:
+                    continue
+                if age_hours and age_hours > _NEWS_MAX_AGE_HOURS:
+                    continue
+
+                results.append(SearchResult(
+                    type='web',
+                    title=item.get('title', ''),
+                    url=url,
+                    snippet=item.get('description', ''),
+                    favicon=item.get('meta_url', {}).get('favicon') or f'https://www.google.com/s2/favicons?domain={domain}',
+                    thumbnail=item.get('thumbnail', {}).get('src') if item.get('thumbnail') else None,
+                    source_domain=domain,
+                    relevance_score=score,
+                    _age_hours=age_hours,
+                ))
+            logger.info(f"[Search] Brave News API: {len(news_items)} raw -> {len(results)} filtered")
+            return results
+
+        # General web search
+        params: Dict[str, Any] = {
+            'q': query,
+            'count': 10,
+            'safesearch': 'moderate',
         }
 
         try:
@@ -380,6 +447,7 @@ class SearchOrchestrator:
                 thumbnail=item.get('thumbnail', {}).get('src') if item.get('thumbnail') else None,
                 source_domain=domain,
                 relevance_score=score,
+                _age_hours=age_hours,
             ))
 
         return results

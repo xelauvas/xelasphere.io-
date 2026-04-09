@@ -148,6 +148,7 @@ class ActionParser:
                     "search_type": header_fields.get("search_type", "general").strip(),
                     "reason": header_fields.get("reason", "").strip(),
                     "embed_video": header_fields.get("embed_video", "").strip() or None,
+                    "render_hint": header_fields.get("render_hint", "text_only").strip(),
                 }
             else:
                 logger.warning("web_search ACTION missing query, falling back to chat")

@@ -1,5 +1,11 @@
-/* searchResults.js — Inline search result rendering for XelaSphere
+/* searchResults.js — ChatGPT-style search result rendering for XelaSphere
    Exposes window.SearchResults (IIFE)
+
+   render_hint modes:
+     news_cards    — news article cards carousel above AI text
+     image_grid    — image carousel above AI text
+     video_primary — video embed above AI text, remaining as cards
+     text_only     — just AI text with citation pills + sources button
 */
 (function () {
     'use strict';
@@ -11,11 +17,10 @@
         if (!_state.has(container)) {
             _state.set(container, {
                 bannerEl: null,
-                carouselRendered: false,
                 webResults: [],
                 videoResults: [],
-                fetchedUrls: new Set(),
-                pendingHighlights: new Set()
+                imageResults: [],
+                fetchedUrls: new Set()
             });
         }
         return _state.get(container);
@@ -31,32 +36,159 @@
         return d.innerHTML;
     }
 
+    function _getDomain(r) {
+        if (r.source_domain) return r.source_domain.replace(/^www\./, '');
+        try { return new URL(r.url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
+    }
+
+    function _getFavicon(r) {
+        if (r.favicon) return r.favicon;
+        var domain = _getDomain(r);
+        return domain ? 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=16' : '';
+    }
+
     /* -------------------------------------------------------
-       createSearchBanner
+       createSearchBanner — shimmer "Searching the web"
     ------------------------------------------------------- */
     function createSearchBanner(query, searchType) {
         const banner = document.createElement('div');
         banner.className = 'search-banner';
 
-        const spinner = document.createElement('div');
-        spinner.className = 'search-banner__spinner';
-
-        const text = document.createElement('div');
-        text.className = 'search-banner__text';
-
-        const label = searchType === 'images' ? 'Searching images'
+        const label = document.createElement('div');
+        label.className = 'search-banner__label';
+        label.textContent = searchType === 'images' ? 'Searching images'
             : searchType === 'videos' ? 'Searching videos'
             : 'Searching the web';
+        banner.appendChild(label);
 
-        text.textContent = query ? `${label} for "${query}"` : label + '…';
+        if (query) {
+            const queryEl = document.createElement('div');
+            queryEl.className = 'search-banner__query';
+            queryEl.textContent = '"' + query + '"';
+            banner.appendChild(queryEl);
+        }
 
-        banner.appendChild(spinner);
-        banner.appendChild(text);
         return banner;
     }
 
     /* -------------------------------------------------------
-       createImageCarousel
+       createNewsCarousel — news_cards render_hint
+    ------------------------------------------------------- */
+    function createNewsCarousel(webResults) {
+        if (!webResults || !webResults.length) return null;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'search-news-carousel';
+
+        const track = document.createElement('div');
+        track.className = 'search-news-cards';
+
+        webResults.forEach(function (r) {
+            const card = document.createElement('a');
+            card.className = 'search-news-card';
+            card.href = r.url || '#';
+            card.target = '_blank';
+            card.rel = 'noopener noreferrer';
+
+            // Image or placeholder
+            if (r.thumbnail) {
+                var img = document.createElement('img');
+                img.className = 'search-news-card__image';
+                img.src = r.thumbnail;
+                img.alt = r.title || '';
+                img.loading = 'lazy';
+                img.onerror = function () {
+                    var ph = this.nextElementSibling;
+                    if (ph) ph.style.display = 'flex';
+                    this.remove();
+                };
+                card.appendChild(img);
+            }
+
+            var placeholder = document.createElement('div');
+            placeholder.className = 'search-news-card__image search-news-card__image--placeholder';
+            placeholder.style.display = r.thumbnail ? 'none' : 'flex';
+            placeholder.textContent = '\uD83D\uDCF0'; // newspaper emoji
+            card.appendChild(placeholder);
+
+            // Body
+            var body = document.createElement('div');
+            body.className = 'search-news-card__body';
+
+            var publisher = document.createElement('div');
+            publisher.className = 'search-news-card__publisher';
+
+            var favicon = _getFavicon(r);
+            if (favicon) {
+                var favImg = document.createElement('img');
+                favImg.className = 'search-news-card__favicon';
+                favImg.src = favicon;
+                favImg.alt = '';
+                favImg.onerror = function () { this.style.display = 'none'; };
+                publisher.appendChild(favImg);
+            }
+
+            var pubName = document.createElement('span');
+            pubName.className = 'search-news-card__publisher-name';
+            pubName.textContent = _getDomain(r);
+            publisher.appendChild(pubName);
+            body.appendChild(publisher);
+
+            var title = document.createElement('div');
+            title.className = 'search-news-card__title';
+            title.textContent = r.title || '';
+            body.appendChild(title);
+
+            card.appendChild(body);
+            track.appendChild(card);
+        });
+
+        // Arrow buttons
+        var leftArrow = document.createElement('button');
+        leftArrow.className = 'search-carousel-arrow search-carousel-arrow--left search-carousel-arrow--hidden';
+        leftArrow.innerHTML = '&#8249;';
+        leftArrow.setAttribute('aria-label', 'Previous');
+
+        var rightArrow = document.createElement('button');
+        rightArrow.className = 'search-carousel-arrow search-carousel-arrow--right';
+        rightArrow.innerHTML = '&#8250;';
+        rightArrow.setAttribute('aria-label', 'Next');
+
+        var currentIndex = 0;
+        var VISIBLE = 3;
+
+        function updateArrows() {
+            leftArrow.classList.toggle('search-carousel-arrow--hidden', currentIndex === 0);
+            rightArrow.classList.toggle('search-carousel-arrow--hidden',
+                currentIndex >= webResults.length - VISIBLE);
+        }
+
+        function scrollTo(index) {
+            currentIndex = Math.max(0, Math.min(index, webResults.length - VISIBLE));
+            var firstCard = track.children[0];
+            if (!firstCard) return;
+            var cardWidth = firstCard.offsetWidth + 12; // 12px gap
+            track.style.transform = 'translateX(-' + (currentIndex * cardWidth) + 'px)';
+            track.style.transition = 'transform 0.3s ease';
+            updateArrows();
+        }
+
+        leftArrow.onclick = function () { scrollTo(currentIndex - VISIBLE); };
+        rightArrow.onclick = function () { scrollTo(currentIndex + VISIBLE); };
+
+        if (webResults.length <= VISIBLE) {
+            rightArrow.classList.add('search-carousel-arrow--hidden');
+        }
+
+        wrapper.appendChild(leftArrow);
+        wrapper.appendChild(track);
+        wrapper.appendChild(rightArrow);
+
+        return wrapper;
+    }
+
+    /* -------------------------------------------------------
+       createImageCarousel — image_grid render_hint
     ------------------------------------------------------- */
     function createImageCarousel(images) {
         if (!images || !images.length) return null;
@@ -90,7 +222,7 @@
     }
 
     /* -------------------------------------------------------
-       createVideoEmbed
+       createVideoEmbed — single YouTube embed
     ------------------------------------------------------- */
     function createVideoEmbed(videoId, title, channel) {
         if (!videoId) return null;
@@ -113,7 +245,7 @@
         if (title || channel) {
             const caption = document.createElement('div');
             caption.className = 'search-video-embed__caption';
-            caption.textContent = [title, channel].filter(Boolean).join(' · ');
+            caption.textContent = [title, channel].filter(Boolean).join(' \u00B7 ');
             wrap.appendChild(caption);
         }
 
@@ -121,89 +253,7 @@
     }
 
     /* -------------------------------------------------------
-       createSourceCards
-    ------------------------------------------------------- */
-    function createSourceCards(webResults, fetchedUrls) {
-        if (!webResults || !webResults.length) return null;
-
-        const fetchedSet = fetchedUrls instanceof Set
-            ? fetchedUrls
-            : new Set(Array.isArray(fetchedUrls) ? fetchedUrls : []);
-
-        const wrap = document.createElement('div');
-        wrap.className = 'search-sources';
-
-        const label = document.createElement('div');
-        label.className = 'search-sources__label';
-        label.textContent = 'Sources';
-        wrap.appendChild(label);
-
-        webResults.forEach(function (r, i) {
-            const num = i + 1;
-            const card = document.createElement('a');
-            card.className = 'search-source-card';
-            card.href = r.url || '#';
-            card.target = '_blank';
-            card.rel = 'noopener noreferrer';
-            card.dataset.citationNum = num;
-
-            // Citation number bubble
-            const numEl = document.createElement('div');
-            numEl.className = 'search-source-card__num';
-            numEl.textContent = num;
-            card.appendChild(numEl);
-
-            // Favicon
-            if (r.source_domain || r.url) {
-                const domain = r.source_domain || (() => {
-                    try { return new URL(r.url).hostname; } catch (e) { return ''; }
-                })();
-                if (domain) {
-                    const fav = document.createElement('img');
-                    fav.className = 'search-source-card__favicon';
-                    fav.src = r.favicon || ('https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=16');
-                    fav.alt = '';
-                    fav.onerror = function () { this.style.display = 'none'; };
-                    card.appendChild(fav);
-                }
-            }
-
-            // Body
-            const body = document.createElement('div');
-            body.className = 'search-source-card__body';
-
-            const titleEl = document.createElement('div');
-            titleEl.className = 'search-source-card__title';
-            titleEl.textContent = r.title || r.source_domain || r.url || '';
-            body.appendChild(titleEl);
-
-            const domainEl = document.createElement('div');
-            domainEl.className = 'search-source-card__domain';
-            domainEl.textContent = r.source_domain || (() => {
-                try { return new URL(r.url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
-            })();
-            body.appendChild(domainEl);
-
-            card.appendChild(body);
-
-            // Checkmark badge for fetched URLs
-            const urlToCheck = r.url || '';
-            if (urlToCheck && fetchedSet.has(urlToCheck)) {
-                const check = document.createElement('div');
-                check.className = 'search-source-card__check';
-                check.textContent = '✓';
-                check.title = 'Full content read';
-                card.appendChild(check);
-            }
-
-            wrap.appendChild(card);
-        });
-
-        return wrap.children.length > 1 ? wrap : null; // >1 because label is a child
-    }
-
-    /* -------------------------------------------------------
-       createVideoCards
+       createVideoCards — remaining videos as cards
     ------------------------------------------------------- */
     function createVideoCards(videos) {
         if (!videos || !videos.length) return null;
@@ -219,11 +269,10 @@
         videos.forEach(function (v) {
             const card = document.createElement('a');
             card.className = 'search-video-card';
-            card.href = v.url || ('#' + (v.video_id || ''));
+            card.href = v.url || '#';
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
 
-            // Thumbnail
             const thumbWrap = document.createElement('div');
             thumbWrap.className = 'search-video-card__thumb';
 
@@ -248,7 +297,6 @@
 
             card.appendChild(thumbWrap);
 
-            // Body
             const body = document.createElement('div');
             body.className = 'search-video-card__body';
 
@@ -259,7 +307,7 @@
 
             const meta = document.createElement('div');
             meta.className = 'search-video-card__meta';
-            meta.textContent = [v.channel, v.source_domain].filter(Boolean).join(' · ');
+            meta.textContent = [v.channel, v.source_domain].filter(Boolean).join(' \u00B7 ');
             body.appendChild(meta);
 
             card.appendChild(body);
@@ -270,22 +318,376 @@
     }
 
     /* -------------------------------------------------------
+       _domainToName — strip www/TLD, capitalize, truncate
+    ------------------------------------------------------- */
+    function _domainToName(domain) {
+        var name = (domain || '').replace(/^www\./, '');
+        name = name.split('.')[0]; // 'theguardian'
+        name = name.charAt(0).toUpperCase() + name.slice(1);
+        if (name.length > 15) name = name.slice(0, 13) + '\u2026';
+        return name;
+    }
+
+    /* -------------------------------------------------------
+       createCitationTooltip — hover preview card with nav
+    ------------------------------------------------------- */
+    function createCitationTooltip(nums, sourceMap) {
+        var sources = nums.map(function (n) { return sourceMap[n]; }).filter(Boolean);
+        if (!sources.length) return null;
+
+        var current = 0;
+        var tooltip = document.createElement('div');
+        tooltip.className = 'citation-tooltip';
+
+        function render() {
+            var s = sources[current];
+            var favicon = _getFavicon(s);
+            var domain = _getDomain(s);
+            var snippet = (s.snippet || '').slice(0, 120);
+            if (s.snippet && s.snippet.length > 120) snippet += '\u2026';
+
+            // Nav row (only show if multiple sources)
+            var navHtml = '';
+            if (sources.length > 1) {
+                navHtml = '<div class="citation-tooltip__nav">' +
+                    '<button class="ct-prev">\u2190</button>' +
+                    '<button class="ct-next">\u2192</button>' +
+                    '<span>' + (current + 1) + '/' + sources.length + '</span>' +
+                    '</div>';
+            }
+
+            tooltip.innerHTML = navHtml +
+                '<div class="citation-tooltip__publisher">' +
+                    (favicon ? '<img src="' + _esc(favicon) + '" width="14" height="14" onerror="this.style.display=\'none\'">' : '') +
+                    '<span>' + _esc(domain) + '</span>' +
+                '</div>' +
+                '<div class="citation-tooltip__title">' + _esc(s.title || '') + '</div>' +
+                (snippet ? '<div class="citation-tooltip__snippet">' + _esc(snippet) + '</div>' : '');
+
+            // Wire nav buttons
+            var prevBtn = tooltip.querySelector('.ct-prev');
+            var nextBtn = tooltip.querySelector('.ct-next');
+            if (prevBtn) prevBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                current = Math.max(0, current - 1);
+                render();
+            });
+            if (nextBtn) nextBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                current = Math.min(sources.length - 1, current + 1);
+                render();
+            });
+        }
+
+        render();
+
+        // Self-remove when mouse leaves tooltip
+        tooltip.addEventListener('mouseleave', function () {
+            tooltip.remove();
+        });
+
+        return tooltip;
+    }
+
+    function _positionTooltip(pill, tooltip) {
+        var rect = pill.getBoundingClientRect();
+        var spaceBelow = window.innerHeight - rect.bottom;
+
+        if (spaceBelow < 200) {
+            tooltip.style.top = (rect.top + window.scrollY - tooltip.offsetHeight - 8) + 'px';
+        } else {
+            tooltip.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+        }
+        tooltip.style.left = Math.min(
+            rect.left + window.scrollX,
+            window.innerWidth - 295
+        ) + 'px';
+    }
+
+    /* -------------------------------------------------------
+       processCitations — replace [N] groups with ChatGPT-style pills
+       Consecutive [1][2][3] → single pill "Reuters +2"
+    ------------------------------------------------------- */
+    function processCitations(messageEl, sources) {
+        if (!messageEl || !sources || !sources.length) return;
+        var content = messageEl.querySelector('.message-content');
+        if (!content) return;
+
+        // Build 1-indexed source map
+        var sourceMap = {};
+        sources.forEach(function (s, i) { sourceMap[i + 1] = s; });
+
+        // Store sources on the message element for sidebar access
+        messageEl._citationSources = sources;
+
+        // Walk text nodes, skip code/pre and existing pills
+        var walker = document.createTreeWalker(
+            content,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: function (node) {
+                    var el = node.parentElement;
+                    while (el && el !== content) {
+                        if (el.classList && el.classList.contains('citation-pill') ||
+                            el.tagName === 'CODE' || el.tagName === 'PRE') {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        el = el.parentElement;
+                    }
+                    return /\[\d+\]/.test(node.nodeValue)
+                        ? NodeFilter.FILTER_ACCEPT
+                        : NodeFilter.FILTER_SKIP;
+                }
+            }
+        );
+
+        var nodes = [];
+        var n;
+        while ((n = walker.nextNode())) nodes.push(n);
+
+        nodes.forEach(function (textNode) {
+            // Split on consecutive citation groups: ([1][2][3]) or single [1]
+            var parts = textNode.nodeValue.split(/((?:\[\d+\])+)/);
+            if (parts.length <= 1) return;
+
+            var frag = document.createDocumentFragment();
+            parts.forEach(function (part) {
+                // Check if this part is a citation group
+                var groupMatch = part.match(/^(?:\[\d+\])+$/);
+                if (groupMatch) {
+                    // Extract all numbers from the group
+                    var nums = [];
+                    var m;
+                    var re = /\[(\d+)\]/g;
+                    while ((m = re.exec(part)) !== null) {
+                        nums.push(parseInt(m[1], 10));
+                    }
+
+                    // Filter to valid sources only
+                    var validNums = nums.filter(function (num) { return !!sourceMap[num]; });
+                    if (!validNums.length) {
+                        frag.appendChild(document.createTextNode(part));
+                        return;
+                    }
+
+                    var firstSource = sourceMap[validNums[0]];
+                    var domain = _getDomain(firstSource);
+                    var name = _domainToName(domain);
+                    var extra = validNums.length - 1;
+                    var label = extra > 0 ? name + ' +' + extra : name;
+
+                    var pill = document.createElement('span');
+                    pill.className = 'citation-pill';
+                    pill.setAttribute('data-citations', validNums.join(','));
+                    pill.textContent = label;
+
+                    // Click → open sources sidebar
+                    pill.addEventListener('click', function () {
+                        var indices = this.getAttribute('data-citations');
+                        openSidebarForCitations(messageEl, indices);
+                    });
+
+                    // Hover → tooltip preview card
+                    (function (p, vn, sm) {
+                        p.addEventListener('mouseenter', function () {
+                            // Remove any existing tooltip
+                            var old = document.querySelector('.citation-tooltip');
+                            if (old) old.remove();
+
+                            var tt = createCitationTooltip(vn, sm);
+                            if (!tt) return;
+                            document.body.appendChild(tt);
+                            _positionTooltip(p, tt);
+                            p._tooltip = tt;
+                        });
+                        p.addEventListener('mouseleave', function () {
+                            setTimeout(function () {
+                                if (p._tooltip && !p._tooltip.matches(':hover')) {
+                                    p._tooltip.remove();
+                                    p._tooltip = null;
+                                }
+                            }, 150);
+                        });
+                    })(pill, validNums, sourceMap);
+
+                    frag.appendChild(pill);
+                } else {
+                    frag.appendChild(document.createTextNode(part));
+                }
+            });
+
+            textNode.parentNode.replaceChild(frag, textNode);
+        });
+    }
+
+    /* -------------------------------------------------------
+       createSourcesButton — favicon stack + "Sources" label
+    ------------------------------------------------------- */
+    function createSourcesButton(sources) {
+        var btn = document.createElement('button');
+        btn.className = 'sources-btn';
+
+        var top3 = sources.slice(0, 3);
+        var faviconsWrap = document.createElement('div');
+        faviconsWrap.className = 'sources-btn__favicons';
+
+        top3.forEach(function (s) {
+            var img = document.createElement('img');
+            img.className = 'sources-btn__favicon';
+            img.src = _getFavicon(s);
+            img.alt = _getDomain(s);
+            img.onerror = function () { this.style.display = 'none'; };
+            faviconsWrap.appendChild(img);
+        });
+
+        var label = document.createElement('span');
+        label.className = 'sources-btn__label';
+        label.textContent = 'Sources';
+
+        btn.appendChild(faviconsWrap);
+        btn.appendChild(label);
+
+        btn.addEventListener('click', function () {
+            openSidebar(sources);
+        });
+
+        return btn;
+    }
+
+    /* -------------------------------------------------------
+       Sources Sidebar
+    ------------------------------------------------------- */
+    var _outsideClickBound = null;
+
+    function openSidebarForCitations(messageEl, indicesStr) {
+        var indices = indicesStr.split(',').map(Number);
+        var sources = messageEl._citationSources || [];
+        if (!sources.length) return;
+        openSidebar(sources, indices);
+    }
+
+    function openSidebar(sources, highlightIndices) {
+        var sidebar = document.getElementById('sources-sidebar');
+        var body = document.getElementById('sources-sidebar-body');
+        if (!sidebar || !body) return;
+
+        body.innerHTML = '';
+
+        // Build all source items with data-source-num
+        sources.forEach(function (s, i) {
+            var item = createSourceItem(s);
+            item.dataset.sourceNum = String(i + 1); // 1-indexed
+            body.appendChild(item);
+
+            // Insert "More" separator after 4th item
+            if (i === 3 && sources.length > 4) {
+                var more = document.createElement('div');
+                more.className = 'sources-sidebar__more';
+                more.textContent = 'More';
+                body.appendChild(more);
+            }
+        });
+
+        // Highlight cited sources and scroll to first
+        if (highlightIndices && highlightIndices.length) {
+            highlightIndices.forEach(function (num, idx) {
+                var item = body.querySelector('[data-source-num="' + num + '"]');
+                if (item) {
+                    item.classList.add('source-item--highlight');
+                    if (idx === 0) {
+                        setTimeout(function () {
+                            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                        }, 50);
+                    }
+                }
+            });
+        }
+
+        sidebar.classList.add('sources-sidebar--open');
+        sidebar.setAttribute('aria-hidden', 'false');
+
+        // Close on outside click (delayed to avoid catching the opening click)
+        setTimeout(function () {
+            _outsideClickBound = function (e) {
+                if (sidebar && !sidebar.contains(e.target) &&
+                    !e.target.closest('.sources-btn') &&
+                    !e.target.closest('.citation-pill')) {
+                    closeSidebar();
+                }
+            };
+            document.addEventListener('click', _outsideClickBound);
+        }, 0);
+    }
+
+    function closeSidebar() {
+        var sidebar = document.getElementById('sources-sidebar');
+        if (sidebar) {
+            sidebar.classList.remove('sources-sidebar--open');
+            sidebar.setAttribute('aria-hidden', 'true');
+        }
+        if (_outsideClickBound) {
+            document.removeEventListener('click', _outsideClickBound);
+            _outsideClickBound = null;
+        }
+    }
+
+    function createSourceItem(s) {
+        var item = document.createElement('div');
+        item.className = 'source-item';
+        item.addEventListener('click', function () {
+            window.open(s.url, '_blank');
+        });
+
+        var publisher = document.createElement('div');
+        publisher.className = 'source-item__publisher';
+
+        var favicon = _getFavicon(s);
+        if (favicon) {
+            var favImg = document.createElement('img');
+            favImg.className = 'source-item__favicon';
+            favImg.src = favicon;
+            favImg.alt = '';
+            favImg.onerror = function () { this.style.display = 'none'; };
+            publisher.appendChild(favImg);
+        }
+
+        var name = document.createElement('span');
+        name.className = 'source-item__name';
+        name.textContent = _getDomain(s);
+        publisher.appendChild(name);
+        item.appendChild(publisher);
+
+        var title = document.createElement('div');
+        title.className = 'source-item__title';
+        title.textContent = s.title || '';
+        item.appendChild(title);
+
+        if (s.snippet) {
+            var snippet = document.createElement('div');
+            snippet.className = 'source-item__snippet';
+            snippet.textContent = s.snippet;
+            item.appendChild(snippet);
+        }
+
+        return item;
+    }
+
+    /* -------------------------------------------------------
        openLightbox
     ------------------------------------------------------- */
     function openLightbox(url, title) {
-        // Remove any existing lightbox
         var existing = document.querySelector('.search-lightbox');
         if (existing) existing.remove();
 
-        const overlay = document.createElement('div');
+        var overlay = document.createElement('div');
         overlay.className = 'search-lightbox';
 
-        const img = document.createElement('img');
+        var img = document.createElement('img');
         img.className = 'search-lightbox__img';
         img.src = url;
         img.alt = title || '';
 
-        const closeBtn = document.createElement('button');
+        var closeBtn = document.createElement('button');
         closeBtn.className = 'search-lightbox__close';
         closeBtn.innerHTML = '&times;';
         closeBtn.setAttribute('aria-label', 'Close');
@@ -294,7 +696,7 @@
         overlay.appendChild(closeBtn);
 
         if (title) {
-            const cap = document.createElement('div');
+            var cap = document.createElement('div');
             cap.className = 'search-lightbox__title';
             cap.textContent = title;
             overlay.appendChild(cap);
@@ -311,94 +713,10 @@
     }
 
     /* -------------------------------------------------------
-       processCitations — replace [N] text with citation links
-    ------------------------------------------------------- */
-    function processCitations(messageEl) {
-        const content = messageEl.querySelector('.message-content');
-        if (!content) return;
-
-        // Gather all text nodes (skip already-processed citation links)
-        const walker = document.createTreeWalker(
-            content,
-            NodeFilter.SHOW_TEXT,
-            {
-                acceptNode: function (node) {
-                    // Skip if inside a citation-link or code block
-                    let el = node.parentElement;
-                    while (el && el !== content) {
-                        if (el.classList && (el.classList.contains('citation-link') ||
-                            el.tagName === 'CODE' || el.tagName === 'PRE')) {
-                            return NodeFilter.FILTER_REJECT;
-                        }
-                        el = el.parentElement;
-                    }
-                    return /\[\d+\]/.test(node.nodeValue)
-                        ? NodeFilter.FILTER_ACCEPT
-                        : NodeFilter.FILTER_SKIP;
-                }
-            }
-        );
-
-        const nodes = [];
-        let n;
-        while ((n = walker.nextNode())) nodes.push(n);
-
-        nodes.forEach(function (textNode) {
-            const parts = textNode.nodeValue.split(/(\[\d+\])/);
-            if (parts.length <= 1) return;
-
-            const frag = document.createDocumentFragment();
-            parts.forEach(function (part) {
-                const match = part.match(/^\[(\d+)\]$/);
-                if (match) {
-                    const num = parseInt(match[1], 10);
-                    const a = document.createElement('a');
-                    a.className = 'citation-link';
-                    a.textContent = num;
-                    a.href = '#';
-                    a.dataset.citationNum = num;
-                    a.addEventListener('click', function (e) {
-                        e.preventDefault();
-                        highlightSource(num);
-                    });
-                    frag.appendChild(a);
-                } else {
-                    frag.appendChild(document.createTextNode(part));
-                }
-            });
-
-            textNode.parentNode.replaceChild(frag, textNode);
-        });
-    }
-
-    /* -------------------------------------------------------
-       highlightSource
-    ------------------------------------------------------- */
-    function highlightSource(num) {
-        const card = document.querySelector('.search-source-card[data-citation-num="' + num + '"]');
-        if (card) {
-            card.classList.remove('search-source-card--highlight');
-            // Force reflow so animation restarts
-            void card.offsetWidth;
-            card.classList.add('search-source-card--highlight');
-            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            card.addEventListener('animationend', function () {
-                card.classList.remove('search-source-card--highlight');
-            }, { once: true });
-        } else {
-            // Card not rendered yet — scroll to bottom of chat to show it when it appears
-            const chatbox = document.querySelector('.chatbox') || document.querySelector('.messages-container');
-            if (chatbox) {
-                chatbox.scrollTop = chatbox.scrollHeight;
-            }
-        }
-    }
-
-    /* -------------------------------------------------------
        handleSearchEvent — called during streaming
     ------------------------------------------------------- */
     function handleSearchEvent(container, eventType, data) {
-        const st = _getState(container);
+        var st = _getState(container);
 
         if (eventType === 'search_started') {
             if (!st.bannerEl) {
@@ -410,15 +728,7 @@
             st.webResults = data.results || [];
 
         } else if (eventType === 'search_images') {
-            // Remove banner and show carousel immediately during streaming
-            if (st.bannerEl) { st.bannerEl.remove(); st.bannerEl = null; }
-            if (!st.carouselRendered) {
-                const carousel = createImageCarousel(data.images || []);
-                if (carousel) {
-                    container.insertBefore(carousel, container.firstChild);
-                    st.carouselRendered = true;
-                }
-            }
+            st.imageResults = data.images || [];
 
         } else if (eventType === 'search_videos') {
             st.videoResults = data.videos || [];
@@ -427,92 +737,179 @@
             if (data.url) st.fetchedUrls.add(data.url);
 
         } else if (eventType === 'search_complete') {
-            if (st.bannerEl) { st.bannerEl.remove(); st.bannerEl = null; }
+            // Stop shimmer — search done, waiting for AI synthesis
+            if (st.bannerEl) {
+                var label = st.bannerEl.querySelector('.search-banner__label');
+                if (label) {
+                    label.style.animation = 'none';
+                    label.style.background = 'none';
+                    label.style.webkitTextFillColor = 'rgba(255, 255, 255, 0.5)';
+                    label.style.color = 'rgba(255, 255, 255, 0.5)';
+                }
+            }
+        }
+    }
+
+    /* -------------------------------------------------------
+       _appendSourcesButtonWhenReady — wait for action bar to exist
+    ------------------------------------------------------- */
+    function _appendSourcesButtonWhenReady(messageEl, sources, attempt) {
+        attempt = attempt || 0;
+        var MAX_ATTEMPTS = 30;
+        var actionBar = messageEl.querySelector('.action-buttons');
+        if (actionBar) {
+            // Don't add duplicate
+            if (!actionBar.querySelector('.sources-btn')) {
+                actionBar.appendChild(createSourcesButton(sources));
+            }
+            return;
+        }
+        if (attempt < MAX_ATTEMPTS) {
+            setTimeout(function () {
+                _appendSourcesButtonWhenReady(messageEl, sources, attempt + 1);
+            }, 250);
+        }
+    }
+
+    /* -------------------------------------------------------
+       _processCitationsWhenReady — wait for typing animation
+       to finish before replacing [N] with citation pills.
+       ProgressiveTextDisplay renders text incrementally so
+       text nodes may not exist yet when renderFinalResults fires.
+    ------------------------------------------------------- */
+    function _processCitationsWhenReady(messageEl, sources, attempt, lastLen) {
+        attempt = attempt || 0;
+        lastLen = lastLen || 0;
+        var MAX_ATTEMPTS = 30;  // 30 × 250ms = 7.5s max wait
+        var content = messageEl.querySelector('.message-content');
+        if (!content) return;
+
+        var textContent = content.textContent || '';
+        var curLen = textContent.length;
+
+        // Wait for two conditions:
+        // 1. Text contains [N] citations
+        // 2. Text length is stable (typing animation finished)
+        var hasCitations = /\[\d+\]/.test(textContent);
+        var isStable = curLen > 0 && curLen === lastLen;
+
+        if (hasCitations && isStable) {
+            processCitations(messageEl, sources);
+            return;
+        }
+
+        if (attempt < MAX_ATTEMPTS) {
+            setTimeout(function () {
+                _processCitationsWhenReady(messageEl, sources, attempt + 1, curLen);
+            }, 250);
         }
     }
 
     /* -------------------------------------------------------
        renderFinalResults — called after done event
+       render_hint determines what renders above the AI text
     ------------------------------------------------------- */
-    function renderFinalResults(messageEl, searchResults, embedVideoId, fetchedUrls) {
+    function renderFinalResults(messageEl, searchResults, embedVideoId, fetchedUrls, renderHint) {
         if (!messageEl || !searchResults) return;
 
-        const content = messageEl.querySelector('.message-content');
+        var content = messageEl.querySelector('.message-content');
         if (!content) return;
 
-        const st = _getState(content);
+        var st = _getState(content);
 
-        // Merge server-provided fetchedUrls into the set
+        // Remove shimmer banner if still visible
+        if (st.bannerEl) { st.bannerEl.remove(); st.bannerEl = null; }
+
+        // Merge data
         if (Array.isArray(fetchedUrls)) {
             fetchedUrls.forEach(function (u) { st.fetchedUrls.add(u); });
         }
 
-        const images   = searchResults.images  || [];
-        const webRes   = searchResults.web      || [];
-        const videos   = searchResults.videos   || [];
-        const fetched  = st.fetchedUrls;
+        var webRes = searchResults.web || [];
+        var images = searchResults.images || st.imageResults || [];
+        var videos = searchResults.videos || st.videoResults || [];
 
-        // 1. Image carousel — if not already shown during streaming
-        if (images.length && !st.carouselRendered) {
-            const carousel = createImageCarousel(images);
-            if (carousel) {
-                content.insertBefore(carousel, content.firstChild);
-                st.carouselRendered = true;
+        // Normalize render_hint
+        var hint = renderHint || 'text_only';
+
+        // 1. Primary content above AI text — based on render_hint
+        //    Insert before the first text container, not before action-buttons
+        var _insertTarget = content.querySelector('.text-message-container') || content.firstChild;
+
+        if (hint === 'news_cards' && webRes.length > 0) {
+            var carousel = createNewsCarousel(webRes);
+            if (carousel) content.insertBefore(carousel, _insertTarget);
+        } else if (hint === 'image_grid' && images.length > 0) {
+            var imgCarousel = createImageCarousel(images);
+            if (imgCarousel) content.insertBefore(imgCarousel, _insertTarget);
+        } else if (hint === 'video_primary' && videos.length > 0) {
+            var topVideoId = embedVideoId || (videos[0] && videos[0].video_id);
+            if (topVideoId) {
+                var matchedVideo = videos.find(function (v) { return v.video_id === topVideoId; });
+                var embedEl = createVideoEmbed(
+                    topVideoId,
+                    matchedVideo ? matchedVideo.title : null,
+                    matchedVideo ? matchedVideo.channel : null
+                );
+                if (embedEl) content.insertBefore(embedEl, _insertTarget);
+
+                // Remaining videos as cards below
+                var remaining = videos.filter(function (v) { return v.video_id !== topVideoId; });
+                if (remaining.length > 0) {
+                    var videoCards = createVideoCards(remaining);
+                    if (videoCards) content.appendChild(videoCards);
+                }
             }
         }
 
-        // 2. YouTube embed
-        var embeddedVideoId = null;
-        if (embedVideoId) {
-            // Find matching video metadata
-            var allVideos = videos.length ? videos : (st.videoResults || []);
-            var matchedVideo = allVideos.find(function (v) { return v.video_id === embedVideoId; });
-            var embedTitle   = matchedVideo ? matchedVideo.title   : null;
-            var embedChannel = matchedVideo ? matchedVideo.channel : null;
-
-            var embedEl = createVideoEmbed(embedVideoId, embedTitle, embedChannel);
-            if (embedEl) {
-                content.insertBefore(embedEl, content.firstChild);
-                embeddedVideoId = embedVideoId;
-            }
+        // 2. Citation pills — replace [1][2][3] with publisher name pills
+        //    ProgressiveTextDisplay may still be typing, so retry until text nodes exist
+        if (webRes.length > 0) {
+            _processCitationsWhenReady(messageEl, webRes);
         }
 
-        // 3. Source cards (appended after AI text)
-        if (webRes.length) {
-            const sourceCards = createSourceCards(webRes, fetched);
-            if (sourceCards) content.appendChild(sourceCards);
+        // 3. Sources button — appended to message action bar
+        //    Action bar may not exist yet (typing animation), so retry
+        if (webRes.length > 0) {
+            _appendSourcesButtonWhenReady(messageEl, webRes);
         }
+    }
 
-        // 4. Remaining video cards (exclude embedded one)
-        var allVideos2 = videos.length ? videos : (st.videoResults || []);
-        var remainingVideos = embeddedVideoId
-            ? allVideos2.filter(function (v) { return v.video_id !== embeddedVideoId; })
-            : allVideos2;
-
-        if (remainingVideos.length) {
-            var videoCards = createVideoCards(remainingVideos);
-            if (videoCards) content.appendChild(videoCards);
-        }
-
-        // 5. Process citations in AI text
-        processCitations(messageEl);
+    /* -------------------------------------------------------
+       dismissBanner — fade out banner when answer starts streaming
+    ------------------------------------------------------- */
+    function dismissBanner(container) {
+        if (!container) return;
+        var banner = container.querySelector('.search-banner');
+        if (!banner) return;
+        banner.style.transition = 'opacity 0.5s ease, transform 0.5s ease, margin 0.5s ease';
+        banner.style.opacity = '0';
+        banner.style.transform = 'translateY(-6px)';
+        banner.style.marginBottom = '0';
+        setTimeout(function () {
+            if (banner.parentNode) banner.remove();
+        }, 500);
     }
 
     /* -------------------------------------------------------
        Public API
     ------------------------------------------------------- */
     window.SearchResults = {
-        handleSearchEvent:  handleSearchEvent,
-        renderFinalResults: renderFinalResults,
-        processCitations:   processCitations,
-        highlightSource:    highlightSource,
+        handleSearchEvent:    handleSearchEvent,
+        renderFinalResults:   renderFinalResults,
+        processCitations:     processCitations,
+        dismissBanner:        dismissBanner,
+        openSidebar:          openSidebar,
+        openSidebarForCitations: openSidebarForCitations,
+        closeSidebar:         closeSidebar,
         // Helpers exposed for testing
-        createSearchBanner:  createSearchBanner,
-        createImageCarousel: createImageCarousel,
-        createVideoEmbed:    createVideoEmbed,
-        createSourceCards:   createSourceCards,
-        createVideoCards:    createVideoCards,
-        openLightbox:        openLightbox
+        createSearchBanner:   createSearchBanner,
+        createNewsCarousel:   createNewsCarousel,
+        createImageCarousel:  createImageCarousel,
+        createVideoEmbed:     createVideoEmbed,
+        createVideoCards:     createVideoCards,
+        createSourcesButton:  createSourcesButton,
+        openLightbox:         openLightbox
     };
 
 }());

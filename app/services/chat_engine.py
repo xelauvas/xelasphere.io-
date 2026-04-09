@@ -173,13 +173,98 @@ ARTIFACT_CAPABLE_MODELS = {
 }
 
 
+def _get_model_family(model: str) -> str:
+    """Detect model family from model ID for prompt tuning."""
+    m = model.lower()
+    if 'deepseek' in m:
+        return 'deepseek'
+    if 'llama' in m:
+        return 'llama'
+    if 'qwen' in m or 'qwq' in m:
+        return 'qwen'
+    if 'kimi' in m:
+        return 'kimi'
+    if 'gpt' in m:
+        return 'openai'
+    if 'gemma' in m or 'dolphin' in m:
+        return 'small'
+    return 'default'
+
+
+def _model_search_prompt_variant(family: str) -> str:
+    """Return model-family-specific web search instructions.
+
+    Different models need different prompt styles:
+    - DeepSeek: follows well but needs explicit \\n reminder
+    - Llama/Qwen: need shorter, simpler examples
+    - Kimi: tends to add preamble before ACTION
+    - Small/local: very concise, one example only
+    """
+    if family == 'deepseek':
+        return (
+            WEB_SEARCH_INSTRUCTIONS +
+            "\nIMPORTANT: Each header field (query, search_type, render_hint, reason) "
+            "must be on its own line. End the ACTION block with a blank line before "
+            "writing your response text.\n"
+        )
+    if family in ('llama', 'qwen'):
+        # Shorter prompt — these models get confused by long blocks
+        return (
+            "\n===============================================================\n"
+            "WEB SEARCH\n"
+            "===============================================================\n\n"
+            "To search the web, output EXACTLY this format (no extra text before it):\n"
+            "ACTION: web_search\n"
+            "query: <your search query>\n"
+            "search_type: general | images | video | news\n"
+            "render_hint: news_cards | image_grid | video_primary | text_only\n"
+            "reason: <why>\n\n"
+            "Then write your response using [1], [2], [3] to cite sources.\n\n"
+            "Use web_search for: news, current events, prices, weather, music, "
+            "anything you're not 100% sure about.\n"
+            "Do NOT search for: creative tasks, coding, greetings.\n\n"
+            "EXAMPLE:\n"
+            "ACTION: web_search\n"
+            "query: latest news today\n"
+            "search_type: news\n"
+            "render_hint: news_cards\n"
+            "reason: user wants current news\n\n"
+        )
+    if family == 'kimi':
+        return (
+            WEB_SEARCH_INSTRUCTIONS +
+            "\nCRITICAL: Start your response IMMEDIATELY with ACTION: web_search "
+            "on the very first line. Do NOT write any text before the ACTION line.\n"
+        )
+    if family == 'small':
+        # Minimal prompt for small local models
+        return (
+            "\nWEB SEARCH: To search, output:\n"
+            "ACTION: web_search\n"
+            "query: <search terms>\n"
+            "search_type: general\n"
+            "render_hint: text_only\n"
+            "reason: <why>\n\n"
+            "Then write your answer citing sources as [1], [2], [3].\n"
+            "Search for: news, prices, current events, songs, facts you're unsure about.\n\n"
+        )
+    return WEB_SEARCH_INSTRUCTIONS
+
+
 def get_developer_instructions(model: str = "") -> str:
-    """Return DEVELOPER_INSTRUCTIONS, stripping artifact/patch sections for incapable models."""
+    """Return DEVELOPER_INSTRUCTIONS, stripping artifact/patch sections for incapable models.
+
+    Web search instructions are ALWAYS included, tuned per model family.
+    """
     from app.model_catalog import resolve_model_id
     resolved = resolve_model_id(model) if model else ""
+    family = _get_model_family(resolved or model)
+    search_block = _model_search_prompt_variant(family)
+
     if resolved in ARTIFACT_CAPABLE_MODELS or model in ARTIFACT_CAPABLE_MODELS:
-        return DEVELOPER_INSTRUCTIONS
+        return DEVELOPER_INSTRUCTIONS + search_block
     # Strip everything from ACTION PROTOCOL onward — small models just get chat rules
+    # But always include web search so all models can search
     marker = "RESPONSE FORMAT - ACTION PROTOCOL"
     idx = DEVELOPER_INSTRUCTIONS.find(marker)
     if idx > 0:
@@ -188,8 +273,9 @@ def get_developer_instructions(model: str = "") -> str:
             "===============\n"
             "Respond in plain Markdown. Use code blocks (```) for any code.\n"
             "Do NOT use ACTION: lines or artifact blocks.\n"
-        )
-    return DEVELOPER_INSTRUCTIONS
+            "The ONLY ACTION you may use is ACTION: web_search (see below).\n"
+        ) + search_block
+    return DEVELOPER_INSTRUCTIONS + search_block
 
 
 DEVELOPER_INSTRUCTIONS = (
@@ -735,30 +821,58 @@ DEVELOPER_INSTRUCTIONS = (
     "  - NEVER say 'I created a description', 'I sent to an image generator', or mention the pipeline\n"
     "  - Good: 'Here's a golden sunset over the mountains.'\n"
     "  - Bad: 'I've created a description for an image generator to produce a sunset.'\n\n"
+)
 
+# Web search instructions — included for ALL models (not just artifact-capable)
+WEB_SEARCH_INSTRUCTIONS = (
+    "\n===============================================================\n"
+    "WEB SEARCH\n"
+    "===============================================================\n\n"
     "ACTION: web_search\n"
     "  query: <search query, resolve all pronouns from context>\n"
     "  search_type: general | images | video | news\n"
+    "  render_hint: news_cards | image_grid | video_primary | text_only\n"
     "  reason: <why search is needed, logged server-side only>\n"
     "  embed_video: <YouTube video ID> (optional, model picks most relevant)\n\n"
+    "  render_hint values:\n"
+    "  - news_cards: use when results are news articles with images (news, current events, 'what happened')\n"
+    "  - image_grid: use when user wants to SEE something ('show me', 'what does X look like', 'images of')\n"
+    "  - video_primary: use when a video is the best answer ('how to', 'tutorial', 'watch', 'play')\n"
+    "  - text_only: use for factual queries, prices, weather, definitions\n\n"
     "  Use when: user asks about current events, real-time data, facts you're\n"
     "  not confident about, prices, weather, news, 'search for', 'look up',\n"
-    "  or any question where up-to-date information improves your answer.\n\n"
+    "  or any question where up-to-date information improves your answer.\n"
+    "  ALWAYS search for: music/song requests ('play X', 'find song'),\n"
+    "  specific media lookups, product lookups, or any proper noun / title\n"
+    "  you are not 100% certain about — search first, don't guess.\n\n"
     "  NEVER use web_search for:\n"
-    "  - Questions you can answer confidently from training data\n"
     "  - Creative tasks (writing, coding, brainstorming)\n"
-    "  - Explaining concepts you know well\n"
+    "  - Explaining well-known concepts\n"
     "  - Conversational responses ('how are you', 'thank you')\n\n"
     "  After search results are injected, you MUST cite sources inline using\n"
     "  [1], [2], [3] notation. Every factual claim from search results must\n"
     "  have a citation.\n\n"
-
-    "EXAMPLE for web search:\n"
+    "EXAMPLES for web search:\n"
     "ACTION: web_search\n"
-    "query: weather in London today\n"
+    "query: what happened in the news today\n"
+    "search_type: news\n"
+    "render_hint: news_cards\n"
+    "reason: user wants current news\n\n"
+    "ACTION: web_search\n"
+    "query: modern kitchen designs\n"
+    "search_type: images\n"
+    "render_hint: image_grid\n"
+    "reason: user wants to see kitchen designs\n\n"
+    "ACTION: web_search\n"
+    "query: how to tie a bowline knot\n"
+    "search_type: video\n"
+    "render_hint: video_primary\n"
+    "reason: tutorial best shown as video\n\n"
+    "ACTION: web_search\n"
+    "query: bitcoin price today\n"
     "search_type: general\n"
-    "reason: user needs current weather data\n\n"
-    "Based on the search results, the weather in London today is partly cloudy [1]...\n\n"
+    "render_hint: text_only\n"
+    "reason: user needs current price data\n\n"
 )
 
 
@@ -1520,13 +1634,21 @@ def save_interaction(
         Tuple of the chat payload and a boolean indicating whether persistence succeeded.
     """
     response_identifier = response_id or f"msg_{uuid.uuid4().hex}"
+    # Serialize search results for Firestore
+    serialized_search = []
+    if search_results and isinstance(search_results, dict):
+        # _search_done_data format: {web: [...], images: [...], videos: [...], ...}
+        serialized_search = search_results
+    elif search_results and isinstance(search_results, list):
+        serialized_search = search_results
+
     chat_data = {
         'prompt': display_prompt if display_prompt is not None else user_prompt,
         'response': response_text,
         'timestamp': datetime.utcnow().isoformat(),
         'sentiment': sentiment,
         'is_code': is_code_response,
-        'search_results': [],
+        'search_results': serialized_search,
         'response_id': response_identifier,
         'render_mode': render_mode
     }

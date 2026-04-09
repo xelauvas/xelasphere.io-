@@ -524,7 +524,7 @@ def stream_deepseek_response(prompt: str, model: str = "deepseek-reasoner", syst
     provider = MODEL_PROVIDERS.get(resolved_model, "groq")
 
     # Streaming supported for OpenAI-compatible providers
-    if provider not in ("deepseek", "moonshot", "openai", "groq"):
+    if provider not in ("deepseek", "moonshot", "openai", "groq", "ollama"):
         yield {'type': 'error', 'text': 'Streaming not available for this provider'}
         return
 

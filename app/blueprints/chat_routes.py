@@ -63,6 +63,7 @@ from app.artifacts import (
     apply_patches, ArtifactStore,
 )
 from app.context.action_parser import ActionParser, StreamingActionBuffer
+from app.services.stream_normalizer import StreamNormalizer, get_model_family
 from app.context.context_builder import ContextBuilder, extract_turn_metadata
 from app.context.artifact_state_tracker import get_tracker, ArtifactStateTracker
 from app.file_processor import (
@@ -813,6 +814,20 @@ def chat_stream():
             stream_model = "deepseek-chat"
             logger.info(f"🔀 [Stream] Overriding non-streaming model to deepseek-chat")
 
+    # --- Swap Ollama models to Groq for search-likely queries ---
+    # Local CPU-only models are too slow and weak for ACTION protocol + search
+    _resolved_for_check = resolve_model_id(stream_model)
+    _provider_for_check = MODEL_PROVIDERS.get(_resolved_for_check, "")
+    if _provider_for_check == "ollama":
+        _search_keywords = ('news', 'latest', 'current', 'today', 'price', 'weather',
+                            'search', 'look up', 'find', 'play', 'watch', 'how to',
+                            'what happened', 'who won', 'score', 'update')
+        _prompt_lower = user_prompt_raw.lower() if user_prompt_raw else ""
+        if any(kw in _prompt_lower for kw in _search_keywords):
+            _ollama_original = stream_model
+            stream_model = "llama-3.3-70b-versatile"  # Groq — fast + free
+            logger.info(f"🔀 [Stream] Ollama search bypass: {_ollama_original} -> {stream_model} (query likely needs search)")
+
     # --- Build prompt via ContextBuilder (after stream_model is resolved) ---
     from app.model_catalog import get_model_context_limit
     model_context = get_model_context_limit(stream_model)
@@ -887,6 +902,47 @@ def chat_stream():
         parsed_action = None  # Set when response is complete
         action_buffer = StreamingActionBuffer()  # Buffer first line to strip ACTION:
         action_resolved = False
+        normalizer = StreamNormalizer(model_family=get_model_family(stream_model))
+        _search_second_pass_done = False  # True after 2nd LLM call completes
+        _search_synthesis_content = []  # Collects 2nd pass content for chat_summary
+
+        def _search_synthesis_generator(ws_query):
+            """Second LLM call: feed search results back to model for synthesis.
+
+            Generator that yields SSE data lines. Collects content into
+            _search_synthesis_content for chat_summary.
+            """
+            search_context = search_orchestrator.get_context_for_ai(ws_query)
+            if not search_context:
+                logger.warning("[Stream] No search context for synthesis")
+                return
+
+            synthesis_prompt = (
+                f"{search_context}\n\n"
+                f"---\n"
+                f"The user asked: {user_prompt_raw}\n\n"
+                f"Summarize the search results above into a clear, direct answer. "
+                f"Use inline citations [1], [2], [3] matching the source numbers. "
+                f"Every factual claim must have a citation. Be concise."
+            )
+
+            logger.info(f"[Stream] Starting search synthesis (2nd LLM call) with {stream_model}")
+            try:
+                for chunk in stream_deepseek_response(synthesis_prompt, stream_model, system_prompt_override=_sys_prompt):
+                    ct = chunk.get('type')
+                    if ct == 'content':
+                        text = chunk.get('text', '')
+                        _search_synthesis_content.append(text)
+                        yield f"data: {json.dumps({'type': 'content', 'text': text})}\n\n"
+                    elif ct == 'reasoning':
+                        text = chunk.get('text', '')
+                        reasoning_buffer.append(text)
+                        yield f"data: {json.dumps({'type': 'reasoning', 'text': text})}\n\n"
+                    elif ct == 'error':
+                        logger.warning(f"[Stream] Search synthesis error: {chunk.get('text')}")
+                        break
+            except Exception as e:
+                logger.error(f"[Stream] Search synthesis failed: {e}")
 
         try:
             # Extract system prompt from built context for proper streaming
@@ -905,50 +961,78 @@ def chat_stream():
                     text = chunk.get('text', '')
                     content_buffer.append(text)
 
-                    # Only strip the ACTION: first line — frontend handles
-                    # artifact fence detection and streaming display
+                    # Feed through normalizer → action buffer
                     if not action_resolved:
-                        result = action_buffer.feed(text)
-                        if result is not None:
-                            action_resolved = True
+                        for normalized_chunk in normalizer.feed(text):
+                            result = action_buffer.feed(normalized_chunk)
+                            if result is not None:
+                                action_resolved = True
 
-                            # generate_image: send SSE event immediately
-                            if result == "generate_image" and action_buffer.header_fields.get("description"):
-                                img_description = action_buffer.header_fields["description"]
-                                img_source = action_buffer.header_fields.get("source", "explicit").lower()
-                                if img_source not in ("explicit", "inferred"):
-                                    img_source = "explicit"
+                                # generate_image: send SSE event immediately
+                                if result == "generate_image" and action_buffer.header_fields.get("description"):
+                                    img_description = action_buffer.header_fields["description"]
+                                    img_source = action_buffer.header_fields.get("source", "explicit").lower()
+                                    if img_source not in ("explicit", "inferred"):
+                                        img_source = "explicit"
 
-                                if img_source == "inferred":
-                                    yield f"data: {json.dumps({'type': 'image_confirm', 'description': img_description})}\n\n"
-                                    session['pending_image_confirmation'] = {
-                                        'type': 'generate_image',
-                                        'description': img_description,
-                                        'timestamp': time.time()
-                                    }
-                                else:
-                                    yield f"data: {json.dumps({'type': 'image_generating', 'description': img_description})}\n\n"
+                                    if img_source == "inferred":
+                                        yield f"data: {json.dumps({'type': 'image_confirm', 'description': img_description})}\n\n"
+                                        session['pending_image_confirmation'] = {
+                                            'type': 'generate_image',
+                                            'description': img_description,
+                                            'timestamp': time.time()
+                                        }
+                                    else:
+                                        yield f"data: {json.dumps({'type': 'image_generating', 'description': img_description})}\n\n"
 
-                            # web_search: fire progressive search
-                            if result == "web_search" and action_buffer.header_fields.get("query"):
-                                ws_query = action_buffer.header_fields["query"]
-                                ws_type = action_buffer.header_fields.get("search_type", "general")
-                                ws_reason = action_buffer.header_fields.get("reason", "")
-                                logger.info(f"[Stream] web_search: query='{ws_query}', type={ws_type}, reason='{ws_reason}'")
+                                # web_search: fire progressive search
+                                if result == "web_search" and action_buffer.header_fields.get("query"):
+                                    ws_query = action_buffer.header_fields["query"]
+                                    ws_type = action_buffer.header_fields.get("search_type", "general")
+                                    ws_reason = action_buffer.header_fields.get("reason", "")
+                                    logger.info(f"[Stream] web_search: query='{ws_query}', type={ws_type}, reason='{ws_reason}'")
 
-                                yield f"data: {json.dumps({'type': 'search_started', 'query': ws_query, 'search_type': ws_type})}\n\n"
+                                    yield f"data: {json.dumps({'type': 'search_started', 'query': ws_query, 'search_type': ws_type})}\n\n"
 
-                                for event in search_orchestrator.search_progressive(ws_query, ws_type, stream_model):
-                                    yield f"data: {json.dumps({'type': event.type, **event.data})}\n\n"
+                                    for event in search_orchestrator.search_progressive(ws_query, ws_type, stream_model):
+                                        yield f"data: {json.dumps({'type': event.type, **event.data})}\n\n"
 
-                            # Forward remainder after the ACTION line
-                            if action_buffer.remainder:
-                                yield f"data: {json.dumps({'type': 'content', 'text': action_buffer.remainder})}\n\n"
-                        continue  # Buffer until first newline
+                                    # 2nd LLM call: synthesize search results
+                                    yield from _search_synthesis_generator(ws_query)
+                                    _search_second_pass_done = True
+
+                                # Forward remainder after the ACTION line (skip if search did 2nd pass)
+                                if not _search_second_pass_done and action_buffer.remainder:
+                                    yield f"data: {json.dumps({'type': 'content', 'text': action_buffer.remainder})}\n\n"
+                                break  # Action resolved, stop feeding normalizer output
+                        continue  # Buffer until action resolved
 
                     yield f"data: {json.dumps({'type': 'content', 'text': text})}\n\n"
 
                 elif chunk_type == 'done':
+                    # Flush normalizer for models that don't emit trailing \n
+                    if not action_resolved:
+                        for normalized_chunk in normalizer.flush():
+                            result = action_buffer.feed(normalized_chunk)
+                            if result is not None and result != "chat":
+                                action_resolved = True
+                                logger.info(f"[Stream] normalizer flush: action={result}, fields={dict(action_buffer.header_fields)}")
+
+                                if result == "web_search" and action_buffer.header_fields.get("query"):
+                                    ws_query = action_buffer.header_fields["query"]
+                                    ws_type = action_buffer.header_fields.get("search_type", "general")
+                                    logger.info(f"[Stream] web_search (flushed): query='{ws_query}', type={ws_type}")
+
+                                    yield f"data: {json.dumps({'type': 'search_started', 'query': ws_query, 'search_type': ws_type})}\n\n"
+
+                                    for event in search_orchestrator.search_progressive(ws_query, ws_type, stream_model):
+                                        yield f"data: {json.dumps({'type': event.type, **event.data})}\n\n"
+
+                                    # 2nd LLM call: synthesize search results
+                                    yield from _search_synthesis_generator(ws_query)
+                                    _search_second_pass_done = True
+                                break
+
                     full_reasoning = ''.join(reasoning_buffer)
                     full_content = ''.join(content_buffer)
                     # Strip HTML tags that some models may output
@@ -1159,7 +1243,11 @@ def chat_stream():
                             search_context = search_orchestrator.get_context_for_ai(
                                 parsed_action.search_payload['query']
                             )
-                            chat_summary = parsed_action.chat_text
+                            # Use synthesis content from 2nd LLM call, not the filler from 1st call
+                            if _search_synthesis_content:
+                                chat_summary = ''.join(_search_synthesis_content)
+                            else:
+                                chat_summary = parsed_action.chat_text
                             query_key = parsed_action.search_payload['query'].lower().strip()
                             all_last = search_orchestrator._last_results.get(query_key, [])
                             _search_done_data = {
@@ -1168,6 +1256,7 @@ def chat_stream():
                                 'videos': [search_orchestrator._result_to_dict(r) for r in all_last if r.type == 'video'],
                                 'fetched_urls': list(search_orchestrator.get_fetched_urls()),
                                 'embed_video': parsed_action.search_payload.get('embed_video'),
+                                'render_hint': parsed_action.search_payload.get('render_hint', 'text_only'),
                             }
                             routing = ArtifactDecision(
                                 render_mode="inline",
@@ -1368,9 +1457,14 @@ def chat_stream():
                     if parsed_action is not None and not parsed_action.used_fallback:
                         # ACTION line was parsed — use chat_text (stripped) as display content
                         display_content = parsed_action.chat_text
+                        # For web_search: use synthesized content from 2nd LLM call
+                        if _search_synthesis_content and parsed_action.action == "web_search":
+                            synthesis_text = ''.join(_search_synthesis_content)
+                            display_content = synthesis_text
+                            chat_summary = synthesis_text
                         # Also update chat_summary for inline mode (it still has
                         # the raw ACTION: line otherwise, which leaks into the UI)
-                        if render_mode == 'inline':
+                        elif render_mode == 'inline':
                             chat_summary = parsed_action.chat_text
 
                     # Model attribution for ghost label
@@ -1407,6 +1501,8 @@ def chat_stream():
                         done_payload['search_results'] = _search_done_data
                         done_payload['embed_video'] = _search_done_data.get('embed_video')
                         done_payload['fetched_urls'] = _search_done_data.get('fetched_urls', [])
+                        if parsed_action and parsed_action.search_payload:
+                            done_payload['render_hint'] = parsed_action.search_payload.get('render_hint', 'text_only')
                     _pvd = getattr(routing, '_patch_visual_data', None) if routing else None
                     logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, has_patches={_pvd is not None}, patch_count={len(_pvd.get('patches',[])) if _pvd else 0}, session_name={repr(stream_session_name)}")
 
@@ -1506,7 +1602,7 @@ def chat_stream():
                                 response_text=chat_summary,
                                 sentiment='neutral',
                                 is_code_response=(render_mode in ['artifact', 'code_window']),
-                                search_results=[],
+                                search_results=_search_done_data if _search_done_data else [],
                                 persist=True,
                                 response_id=response_msg_id,
                                 render_mode=render_mode,

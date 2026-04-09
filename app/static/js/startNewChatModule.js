@@ -2633,8 +2633,8 @@ async loadChatHistory(pageToken = null, limit = 10) {
         const pageMessages = normalizedSession.messages;
         const normalizedSender = sender === 'user' ? 'User' : 'AI';
         const targetId = messageId || this.generateMessageId();
-        const searchResultsCopy = Array.isArray(search_results) && search_results.length
-            ? search_results.map(result => ({ ...result }))
+        const searchResultsCopy = search_results && typeof search_results === 'object'
+            ? (Array.isArray(search_results) ? search_results.map(r => ({ ...r })) : { ...search_results })
             : null;
 
         const replacement = {
@@ -3426,6 +3426,11 @@ async loadChatHistory(pageToken = null, limit = 10) {
             task_type: taskType
         };
 
+        // Persist search results (web, images, videos, render_hint, embed_video)
+        if (messageData.search_results && typeof messageData.search_results === 'object') {
+            messageEntry.search_results = messageData.search_results;
+        }
+
         if (existingIndex >= 0) {
             // Update existing message
             Object.assign(messages[existingIndex], messageEntry);
@@ -3748,6 +3753,10 @@ async loadChatHistory(pageToken = null, limit = 10) {
      * @param {Object} message - The message object.
      */
     displayHistoricalMessage(message) {
+        // Skip zero-width space placeholders (search banner remnants)
+        const _resp = message?.response || message?.content || '';
+        if (_resp === '\u200B' || _resp === '\u200b') return;
+
         const hasAttachments = (message?.attachments && message.attachments.length > 0) ||
                                (message?.user_attachments && message.user_attachments.length > 0);
         if (!message || (!message.prompt && !message.response && !message.content && !hasAttachments)) {
@@ -3876,7 +3885,8 @@ async loadChatHistory(pageToken = null, limit = 10) {
             const messageId = message.response_id || message.id || generateMessageId();
             const hasAiImages = aiAttachments.some(att => this.isAttachmentImage(att));
 
-            const sources = Array.isArray(message.search_results) ? message.search_results : [];
+            const sources = message.search_results && typeof message.search_results === 'object'
+                ? message.search_results : [];
 
             // Debug: Log crypto_chart data
             console.log('[Chart History] Processing AI message:', messageId);
@@ -4101,7 +4111,8 @@ async loadChatHistory(pageToken = null, limit = 10) {
             messageDiv.dataset.messageKey = id;
         }
 
-        if (Array.isArray(sources) && sources.length) {
+        const hasSources = sources && typeof sources === 'object' && (Array.isArray(sources) ? sources.length > 0 : !!sources.web);
+        if (hasSources) {
             try {
                 messageDiv.dataset.sourceResults = JSON.stringify(sources);
                 messageDiv.dataset.hasSources = 'true';
@@ -4165,6 +4176,19 @@ async loadChatHistory(pageToken = null, limit = 10) {
             if (!isHistory && typeof window.dismissEphemeralOptions === 'function') {
                 window.dismissEphemeralOptions();
             }
+        }
+
+        // Render search results (news cards, citations, sources button) for history
+        if (isHistory && sender === 'ai' && sources && typeof sources === 'object' && (sources.web || sources.length) && window.SearchResults) {
+            // sources is the full _search_done_data dict: {web, images, videos, ...}
+            const searchData = sources.web ? sources : { web: sources };
+            window.SearchResults.renderFinalResults(
+                messageDiv,
+                searchData,
+                sources.embed_video || null,
+                sources.fetched_urls || [],
+                sources.render_hint || 'text_only'
+            );
         }
 
         if (sender === 'ai' && modelMeta) {

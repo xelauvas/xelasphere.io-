@@ -2513,7 +2513,9 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
     // Don't call scrollToBottom here - it uses smooth scroll that overrides instant scroll
     resetInputIfNecessary(sender);
 
-    if (typeof window !== 'undefined' && window.chatManager?.recordLiveMessage) {
+    // Skip recording zero-width space placeholders (search banner) to history
+    const _isPlaceholder = typeof message === 'string' && (message === '\u200B' || message.trim() === '');
+    if (!_isPlaceholder && typeof window !== 'undefined' && window.chatManager?.recordLiveMessage) {
         const payloadContent = normalizedSender === 'user' ? message : (typeof safeMessage !== 'undefined' ? safeMessage : message);
         const payload = {
             sender: normalizedSender,
@@ -2998,6 +3000,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let patchStreamBuffer = '';
                 let patchParsedPatches = [];
                 let artifactStreamActive = false;
+                let searchMsgId = null; // Track message element for search banner
                 let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
                 // Use array to avoid O(n²) string concatenation per chunk.
@@ -3102,6 +3105,14 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     isFirstContentChunk = false;
                                     window.scrollState?.contentArrived?.();
                                     ThinkingIndicator.setContentMode();
+                                    // Dismiss search banner when answer starts
+                                    if (searchMsgId && window.SearchResults) {
+                                        var searchEl = document.getElementById(searchMsgId);
+                                        var searchContent = searchEl?.querySelector('.message-content');
+                                        if (searchContent) {
+                                            window.SearchResults.dismissBanner(searchContent);
+                                        }
+                                    }
                                 }
                                 if (bgRequest) {
                                     BackgroundRequestManager.appendContent(requestSessionId, chunkText);
@@ -3226,11 +3237,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                    chunk.type === 'search_content' || chunk.type === 'search_complete') {
                             if (isSessionActive()) {
                                 ThinkingIndicator.hide(); hideSimplePulsingDot();
-                                let searchMsgEl = document.getElementById(placeholderId || aiMsgId);
+                                if (!searchMsgId) {
+                                    searchMsgId = placeholderId || generateMessageId();
+                                }
+                                let searchMsgEl = document.getElementById(searchMsgId);
                                 if (!searchMsgEl) {
-                                    const id = placeholderId || generateMessageId();
-                                    displayMessage('', 'ai', 'text', prompt, true, id);
-                                    searchMsgEl = document.getElementById(id);
+                                    displayMessage('\u200B', 'ai', 'text', prompt, false, searchMsgId);
+                                    searchMsgEl = document.getElementById(searchMsgId);
                                 }
                                 const searchContent = searchMsgEl?.querySelector('.message-content');
                                 if (searchContent && window.SearchResults) {
@@ -3268,6 +3281,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 window._streamSearchResults = chunk.search_results;
                                 window._streamEmbedVideo = chunk.embed_video;
                                 window._streamFetchedUrls = chunk.fetched_urls || [];
+                                window._streamRenderHint = chunk.render_hint || 'text_only';
                             }
                             // Handle image from generate_image ACTION path
                             if (chunk.image_url && window._pendingImagePlaceholderId) {
@@ -3396,7 +3410,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 console.log('Session still active, displaying streaming response');
 
                 // Create the AI message container - prefer backend's response_id for consistency
-                const aiMsgId = streamResponseId || placeholderId || generateMessageId();
+                // Reuse searchMsgId if search created a placeholder element
+                const aiMsgId = streamResponseId || searchMsgId || placeholderId || generateMessageId();
 
                 // generate_image done: placeholder already replaced, show chat text below image and save
                 if (window._streamDoneImageUrl) {
@@ -3465,16 +3480,23 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 }
 
                 // Render inline search results (sources, video cards, citations)
-                if (window._streamSearchResults && window.SearchResults) {
+                // Save for persistence before deleting globals
+                const _savedSearchResults = window._streamSearchResults || null;
+                const _savedRenderHint = window._streamRenderHint || null;
+                const _savedEmbedVideo = window._streamEmbedVideo || null;
+                const _savedFetchedUrls = window._streamFetchedUrls || null;
+                if (_savedSearchResults && window.SearchResults) {
                     window.SearchResults.renderFinalResults(
                         messageContainer || document.getElementById(aiMsgId),
-                        window._streamSearchResults,
-                        window._streamEmbedVideo,
-                        window._streamFetchedUrls
+                        _savedSearchResults,
+                        _savedEmbedVideo,
+                        _savedFetchedUrls,
+                        _savedRenderHint
                     );
                     delete window._streamSearchResults;
                     delete window._streamEmbedVideo;
                     delete window._streamFetchedUrls;
+                    delete window._streamRenderHint;
                 }
 
                 // Handle email composer for streamed responses (backend flag)
@@ -3562,7 +3584,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         email: streamEmailData || null,
                         artifact_reference: streamArtifactRef,
                         crypto_chart: streamCryptoChart || null,
-                        model_meta: streamModelMeta || null
+                        model_meta: streamModelMeta || null,
+                        search_results: _savedSearchResults || null
                     });
                     // Also update with artifact fields via updateLastAiMessage for full persistence
                     if (streamArtifactRef && manager.updateLastAiMessage) {

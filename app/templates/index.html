@@ -121,7 +121,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/prism.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/options-btn.css') }}?v=14">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/search-results.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/search-results.css') }}?v=3">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}">
@@ -920,7 +920,7 @@
     <script src="{{ url_for('static', filename='js/filePreview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/scrollState.js') }}"></script>
     <script src="{{ url_for('static', filename='js/recipeDetector.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=31"></script>
+    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=34"></script>
     <script src="{{ url_for('static', filename='script.js') }}?v=4"></script>
     <script>
     // Patch: intercept FormData append to inject image files for vision API
@@ -963,7 +963,7 @@
     <script src="{{ url_for('static', filename='js/sidebarHandler.js') }}"></script>
     <script src="{{ url_for('static', filename='js/weatherIcon.js') }}"></script>
     <script src="{{ url_for('static', filename='js/greeting.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/searchResults.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/searchResults.js') }}?v=5"></script>
     <script src="{{ url_for('static', filename='js/cryptoChartModule.js') }}"></script>
     <script src="{{ url_for('static', filename='js/unreadManager.js') }}?v=2"></script>
     <script>
@@ -1063,6 +1063,14 @@
     <div class="ghost-bottom-sheet" id="ghost-bottom-sheet" role="dialog" aria-label="Select AI model">
         <div class="ghost-bottom-sheet__handle"></div>
         <div class="ghost-bottom-sheet__grid" id="ghost-bottom-sheet-grid"></div>
+    </div>
+    <!-- Sources sidebar -->
+    <div class="sources-sidebar" id="sources-sidebar" aria-hidden="true">
+        <div class="sources-sidebar__header">
+            <span class="sources-sidebar__title">Sources</span>
+            <button class="sources-sidebar__close" onclick="SearchResults.closeSidebar()" aria-label="Close sources">&times;</button>
+        </div>
+        <div class="sources-sidebar__body" id="sources-sidebar-body"></div>
     </div>
 </body>
 </html>

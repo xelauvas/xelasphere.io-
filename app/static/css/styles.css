@@ -2140,41 +2140,46 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     justify-content: flex-start;
     align-items: center;
     width: 100%;
-    padding: 0.35rem 0 0;
-    margin-top: 0.1rem;
+    padding: 0.2rem 0 0;
+    margin-top: 0.05rem;
     border: none;
-    gap: 0.4rem;
+    gap: 0.15rem;
 }
 
 .action-buttons-row {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.15rem;
 }
 
 .action-btn {
     background: none;
-    border: 1px solid transparent;
+    border: none;
     box-shadow: none;
     appearance: none;
     -webkit-appearance: none;
-    color: var(--text-color-light);
-    font-size: 0.8rem;
-    padding: 0.35rem 0.45rem;
-    border-radius: 0.5rem;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.75rem;
+    padding: 0.25rem 0.35rem;
+    border-radius: 0.4rem;
     cursor: pointer;
     outline: none;
-    transition: none;
+    transition: color 0.12s, background 0.12s;
     position: relative;
     line-height: 1;
 }
 
 .action-btn:hover,
-.action-btn:focus-visible,
+.action-btn:focus-visible {
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
+}
+
 .action-btn:active {
-    color: var(--text-color-light);
+    color: rgba(255, 255, 255, 0.85);
     background: none;
-    border-color: transparent;
+    border: none;
 }
 
 .action-btn i {
@@ -2190,17 +2195,17 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
 
 .action-more-button {
     background: none;
-    border: 1px solid transparent;
+    border: none;
     box-shadow: none;
     appearance: none;
     -webkit-appearance: none;
-    color: var(--text-color-light);
-    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.75rem;
     line-height: 1;
-    padding: 0.35rem 0.45rem;
-    border-radius: 0.5rem;
+    padding: 0.25rem 0.35rem;
+    border-radius: 0.4rem;
     cursor: pointer;
-    transition: none;
+    transition: color 0.12s, background 0.12s;
 }
 
 .action-more-button:hover {
