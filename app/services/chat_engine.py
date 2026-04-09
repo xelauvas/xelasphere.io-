@@ -1703,34 +1703,39 @@ def save_interaction(
     if turn_metadata:
         chat_data['turn_metadata'] = turn_metadata
     if search_results:
-        normalized_results = []
-        for result in search_results:
-            if result is None:
-                continue
-            if isinstance(result, SearchResult):
-                normalized_results.append(result.to_dict())
-                continue
-            if isinstance(result, dict):
-                normalized_results.append(result)
-                continue
-            if hasattr(result, '_asdict'):
-                try:
-                    normalized_results.append(result._asdict())
+        if isinstance(search_results, dict):
+            # _search_done_data format: {web: [...], images: [...], videos: [...], ...}
+            # Already set in chat_data above via serialized_search — no normalization needed
+            chat_data['search_results'] = search_results
+        elif isinstance(search_results, list):
+            normalized_results = []
+            for result in search_results:
+                if result is None:
                     continue
-                except Exception:
-                    pass
-            if hasattr(result, 'to_dict'):
-                try:
+                if isinstance(result, SearchResult):
                     normalized_results.append(result.to_dict())
                     continue
-                except Exception:
-                    pass
-            if isinstance(result, (list, tuple)):
-                normalized_results.append({'value': list(result)})
-            else:
-                normalized_results.append({'value': str(result)})
-        if normalized_results:
-            chat_data['search_results'] = normalized_results
+                if isinstance(result, dict):
+                    normalized_results.append(result)
+                    continue
+                if hasattr(result, '_asdict'):
+                    try:
+                        normalized_results.append(result._asdict())
+                        continue
+                    except Exception:
+                        pass
+                if hasattr(result, 'to_dict'):
+                    try:
+                        normalized_results.append(result.to_dict())
+                        continue
+                    except Exception:
+                        pass
+                if isinstance(result, (list, tuple)):
+                    normalized_results.append({'value': list(result)})
+                else:
+                    normalized_results.append({'value': str(result)})
+            if normalized_results:
+                chat_data['search_results'] = normalized_results
 
     if user_attachments:
         chat_data['user_attachments'] = user_attachments
