@@ -340,8 +340,16 @@
        _domainToName — strip www/TLD, capitalize, truncate
     ------------------------------------------------------- */
     function _domainToName(domain) {
-        var name = (domain || '').replace(/^www\./, '');
-        name = name.split('.')[0]; // 'theguardian'
+        if (!domain) return '';
+        var name = domain.replace(/^www\./, '');
+        // Use second-level domain for CDN subdomains (media.istockphoto.com → istockphoto)
+        var parts = name.split('.');
+        if (parts.length > 2) {
+            name = parts[parts.length - 2]; // 'istockphoto' from 'media.istockphoto.com'
+        } else {
+            name = parts[0]; // 'theguardian' from 'theguardian.com'
+        }
+        if (!name) return '';
         name = name.charAt(0).toUpperCase() + name.slice(1);
         if (name.length > 15) name = name.slice(0, 13) + '\u2026';
         return name;
@@ -493,7 +501,7 @@
 
                     var firstSource = sourceMap[validNums[0]];
                     var domain = _getDomain(firstSource);
-                    var name = _domainToName(domain);
+                    var name = _domainToName(domain) || firstSource.title?.split(/\s+/).slice(0, 2).join(' ') || ('Source ' + validNums[0]);
                     var extra = validNums.length - 1;
                     var label = extra > 0 ? name + ' +' + extra : name;
 
