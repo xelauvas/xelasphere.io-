@@ -3587,7 +3587,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         artifact_reference: streamArtifactRef,
                         crypto_chart: streamCryptoChart || null,
                         model_meta: streamModelMeta || null,
-                        search_results: _savedSearchResults || null
+                        search_results: (_sd && _sd.searchResults) || null
                     });
                     // Also update with artifact fields via updateLastAiMessage for full persistence
                     if (streamArtifactRef && manager.updateLastAiMessage) {
