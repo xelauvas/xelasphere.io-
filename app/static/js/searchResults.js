@@ -909,13 +909,25 @@
         if (!container) return;
         var banner = container.querySelector('.search-banner');
         if (!banner) return;
-        banner.style.transition = 'opacity 0.5s ease, transform 0.5s ease, margin 0.5s ease';
+
+        // Capture position and detach from flow so displayMessage's
+        // innerHTML='' won't hard-cut the fade animation
+        var rect = banner.getBoundingClientRect();
+        var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        banner.style.position = 'absolute';
+        banner.style.top = (rect.top + scrollTop) + 'px';
+        banner.style.left = rect.left + 'px';
+        banner.style.width = rect.width + 'px';
+        banner.style.zIndex = '10';
+        document.body.appendChild(banner);
+
+        // Fade out
+        banner.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
         banner.style.opacity = '0';
-        banner.style.transform = 'translateY(-6px)';
-        banner.style.marginBottom = '0';
+        banner.style.transform = 'translateY(-8px)';
         setTimeout(function () {
             if (banner.parentNode) banner.remove();
-        }, 500);
+        }, 400);
     }
 
     /* -------------------------------------------------------
