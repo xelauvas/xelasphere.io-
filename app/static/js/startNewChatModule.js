@@ -4111,7 +4111,10 @@ async loadChatHistory(pageToken = null, limit = 10) {
             messageDiv.dataset.messageKey = id;
         }
 
-        const hasSources = sources && typeof sources === 'object' && (Array.isArray(sources) ? sources.length > 0 : !!sources.web);
+        const hasSources = sources && typeof sources === 'object' && (
+            Array.isArray(sources) ? sources.length > 0
+            : !!(sources.web?.length || sources.images?.length || sources.videos?.length)
+        );
         if (hasSources) {
             try {
                 messageDiv.dataset.sourceResults = JSON.stringify(sources);
@@ -4179,9 +4182,15 @@ async loadChatHistory(pageToken = null, limit = 10) {
         }
 
         // Render search results (news cards, citations, sources button) for history
-        if (isHistory && sender === 'ai' && sources && typeof sources === 'object' && (sources.web || sources.length) && window.SearchResults) {
+        const _hasSearchData = sources && typeof sources === 'object' && (
+            (Array.isArray(sources.web) && sources.web.length > 0) ||
+            (Array.isArray(sources.images) && sources.images.length > 0) ||
+            (Array.isArray(sources.videos) && sources.videos.length > 0) ||
+            (Array.isArray(sources) && sources.length > 0)
+        );
+        if (isHistory && sender === 'ai' && _hasSearchData && window.SearchResults) {
             // sources is the full _search_done_data dict: {web, images, videos, ...}
-            const searchData = sources.web ? sources : { web: sources };
+            const searchData = (sources.web || sources.images || sources.videos) ? sources : { web: sources };
             window.SearchResults.renderFinalResults(
                 messageDiv,
                 searchData,
