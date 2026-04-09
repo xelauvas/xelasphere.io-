@@ -261,45 +261,69 @@ class SearchOrchestrator:
                         data={'videos': [self._result_to_dict(r) for r in video_results]},
                     )
 
-        # --- Full content fetch for top 3 web results ---
-        if web_results and self._fetcher is not None:
-            top_urls = [r.url for r in web_results[:3]]
-            deadline_seconds = (
-                getattr(Config, 'FETCH_DEADLINE_MS', 2000) / 1000.0
-                if Config is not None else 2.0
-            )
-            fetched = self._fetcher.fetch_multiple(
-                top_urls,
-                deadline_seconds=deadline_seconds,
-            )
-            for url, fetch_data in zip(top_urls, fetched):
-                if fetch_data and not fetch_data.get('error'):
-                    self._fetched_urls.add(url)
-                    # Attach content to the matching SearchResult
-                    for r in web_results:
-                        if r.url == url:
-                            r.full_content = fetch_data.get('content', '')
-                            break
-                    yield SearchEvent(
-                        type='search_content',
-                        data={
-                            'url': url,
-                            'content': fetch_data.get('content', ''),
-                            'og_image': fetch_data.get('og_image'),
-                            'og_title': fetch_data.get('og_title'),
-                        },
-                    )
+        # --- Store results, cache, and emit complete ---
+        all_results_list = web_results + image_results + video_results
+        self._last_results[query.lower().strip()] = all_results_list
 
-        # --- Cache and complete ---
         all_results = {
             'web': [self._result_to_dict(r) for r in web_results],
             'images': [self._result_to_dict(r) for r in image_results],
             'video': [self._result_to_dict(r) for r in video_results],
         }
         search_cache[cache_key] = all_results
-        self._last_results[query.lower().strip()] = web_results + image_results + video_results
 
         yield SearchEvent(type='search_complete', data={'query': query, 'search_type': search_type})
+
+    def fetch_content_for_query(self, query: str) -> List['SearchEvent']:
+        """Fetch full page content for top 3 web results of a previous search.
+
+        Safe to call from a background thread. Returns a list of SearchEvent
+        objects (search_content events) that can be yielded to the frontend.
+        Also updates the cached results with full_content and refreshes the
+        search_cache entry.
+        """
+        key = query.lower().strip()
+        results = self._last_results.get(key, [])
+        web_results = [r for r in results if r.type == 'web']
+        if not web_results or self._fetcher is None:
+            return []
+
+        top_urls = [r.url for r in web_results[:3]]
+        deadline_seconds = (
+            getattr(Config, 'FETCH_DEADLINE_MS', 2000) / 1000.0
+            if Config is not None else 2.0
+        )
+        fetched = self._fetcher.fetch_multiple(
+            top_urls,
+            deadline_seconds=deadline_seconds,
+        )
+
+        events: List[SearchEvent] = []
+        for url, fetch_data in zip(top_urls, fetched):
+            if fetch_data and not fetch_data.get('error'):
+                self._fetched_urls.add(url)
+                for r in web_results:
+                    if r.url == url:
+                        r.full_content = fetch_data.get('content', '')
+                        break
+                events.append(SearchEvent(
+                    type='search_content',
+                    data={
+                        'url': url,
+                        'content': fetch_data.get('content', ''),
+                        'og_image': fetch_data.get('og_image'),
+                        'og_title': fetch_data.get('og_title'),
+                    },
+                ))
+
+        # Update cache with enriched content
+        cache_key_prefix = key
+        for ck, cv in search_cache.items():
+            if ck.endswith(f':{cache_key_prefix}'):
+                cv['web'] = [self._result_to_dict(r) for r in web_results]
+                break
+
+        return events
 
     def get_context_for_ai(self, query: str) -> str:
         """Build a context string from the last fetched results for AI prompt injection."""

@@ -906,6 +906,38 @@ def chat_stream():
         _search_second_pass_done = False  # True after 2nd LLM call completes
         _search_synthesis_content = []  # Collects 2nd pass content for chat_summary
 
+        def _run_search_and_synthesize(ws_query, ws_type):
+            """Run search, emit events, start synthesis immediately after
+            search_complete. Content fetch runs in a background thread
+            alongside synthesis, saving 0-2s of shimmer time."""
+            from concurrent.futures import ThreadPoolExecutor as _TPE
+
+            # Phase 1: run search backends, yield all events including search_complete
+            for event in search_orchestrator.search_progressive(ws_query, ws_type, stream_model):
+                yield f"data: {json.dumps({'type': event.type, **event.data})}\n\n"
+
+            # Phase 2: content fetch (background) + synthesis (foreground) in parallel
+            fetch_future = None
+            if search_orchestrator._fetcher is not None:
+                fetch_pool = _TPE(max_workers=1)
+                fetch_future = fetch_pool.submit(
+                    search_orchestrator.fetch_content_for_query, ws_query
+                )
+
+            # 2nd LLM call starts immediately
+            yield from _search_synthesis_generator(ws_query)
+
+            # Yield content-fetch events if fetch finished
+            if fetch_future is not None:
+                try:
+                    fetch_events = fetch_future.result(timeout=5)
+                    for event in fetch_events:
+                        yield f"data: {json.dumps({'type': event.type, **event.data})}\n\n"
+                except Exception as e:
+                    logger.warning(f"[Stream] Content fetch parallel failed: {e}")
+                finally:
+                    fetch_pool.shutdown(wait=False)
+
         def _search_synthesis_generator(ws_query):
             """Second LLM call: feed search results back to model for synthesis.
 
@@ -994,11 +1026,7 @@ def chat_stream():
 
                                     yield f"data: {json.dumps({'type': 'search_started', 'query': ws_query, 'search_type': ws_type})}\n\n"
 
-                                    for event in search_orchestrator.search_progressive(ws_query, ws_type, stream_model):
-                                        yield f"data: {json.dumps({'type': event.type, **event.data})}\n\n"
-
-                                    # 2nd LLM call: synthesize search results
-                                    yield from _search_synthesis_generator(ws_query)
+                                    yield from _run_search_and_synthesize(ws_query, ws_type)
                                     _search_second_pass_done = True
 
                                 # Forward remainder after the ACTION line (skip if search did 2nd pass)
@@ -1025,11 +1053,7 @@ def chat_stream():
 
                                     yield f"data: {json.dumps({'type': 'search_started', 'query': ws_query, 'search_type': ws_type})}\n\n"
 
-                                    for event in search_orchestrator.search_progressive(ws_query, ws_type, stream_model):
-                                        yield f"data: {json.dumps({'type': event.type, **event.data})}\n\n"
-
-                                    # 2nd LLM call: synthesize search results
-                                    yield from _search_synthesis_generator(ws_query)
+                                    yield from _run_search_and_synthesize(ws_query, ws_type)
                                     _search_second_pass_done = True
                                 break
 
