@@ -41,9 +41,20 @@
         try { return new URL(r.url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
     }
 
+    function _getRootDomain(domain) {
+        // Strip CDN subdomains: media.istockphoto.com → istockphoto.com
+        if (!domain) return domain;
+        var parts = domain.split('.');
+        // Handle two-part TLDs (co.uk, com.au)
+        if (parts.length > 2 && parts[parts.length - 2].length <= 3 && parts[parts.length - 1].length <= 2) {
+            return parts.slice(-3).join('.');
+        }
+        return parts.length > 2 ? parts.slice(-2).join('.') : domain;
+    }
+
     function _getFavicon(r) {
         if (r.favicon) return r.favicon;
-        var domain = _getDomain(r);
+        var domain = _getRootDomain(_getDomain(r));
         return domain ? 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=16' : '';
     }
 

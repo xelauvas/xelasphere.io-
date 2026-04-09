@@ -448,9 +448,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       sourcesBtn.dataset.hasSources = 'true';
 
+      // Strip CDN subdomains for favicon lookup
+      const rootDomain = (d) => {
+        const p = d.split('.');
+        if (p.length > 2 && p[p.length - 2].length <= 3 && p[p.length - 1].length <= 2) return p.slice(-3).join('.');
+        return p.length > 2 ? p.slice(-2).join('.') : d;
+      };
       domains.forEach((domain) => {
         const img = document.createElement('img');
-        img.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
+        img.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(rootDomain(domain))}&sz=32`;
         img.alt = domain;
         img.className = 'source-icon';
         img.onerror = () => img.remove();
