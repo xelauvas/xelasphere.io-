@@ -54,11 +54,15 @@
         const banner = document.createElement('div');
         banner.className = 'search-banner';
 
+        const searchTypeLabels = {
+            'news': 'Searching news',
+            'images': 'Searching images',
+            'video': 'Searching videos',
+            'general': 'Searching the web',
+        };
         const label = document.createElement('div');
         label.className = 'search-banner__label';
-        label.textContent = searchType === 'images' ? 'Searching images'
-            : searchType === 'videos' ? 'Searching videos'
-            : 'Searching the web';
+        label.textContent = searchTypeLabels[searchType] || 'Searching the web';
         banner.appendChild(label);
 
         if (query) {
