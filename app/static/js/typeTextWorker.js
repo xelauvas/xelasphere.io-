@@ -426,9 +426,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return '';
       };
 
+      // Normalize: searchResults may be a dict {web, images, videos} or an array
+      const resultsList = Array.isArray(searchResults)
+        ? searchResults
+        : [].concat(searchResults?.web || [], searchResults?.images || [], searchResults?.videos || []);
       const domains = [
         ...new Set(
-          (searchResults || [])
+          resultsList
             .map(extractDomain)
             .filter(Boolean)
         ),
