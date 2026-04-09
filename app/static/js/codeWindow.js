@@ -4946,6 +4946,9 @@ function appendTextMessage(container, text, isUserMessage, messageId, isHistory 
                 onComplete: () => {
                     renderMathInMessage(messageElement);
                     applyAttribution();
+                    // Signal that typing animation is done (used by citation processing)
+                    const msgEl = messageElement.closest('.message');
+                    if (msgEl) msgEl.dispatchEvent(new CustomEvent('typing-complete', { bubbles: false }));
                     resolve();
                 }
             });

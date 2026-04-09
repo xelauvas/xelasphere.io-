@@ -751,58 +751,47 @@
     }
 
     /* -------------------------------------------------------
-       _appendSourcesButtonWhenReady — wait for action bar to exist
+       _onTypingComplete — run callback when typing animation
+       finishes. Listens for 'typing-complete' custom event
+       dispatched by ProgressiveTextDisplay, with a timeout
+       fallback in case the event never fires.
     ------------------------------------------------------- */
-    function _appendSourcesButtonWhenReady(messageEl, sources, attempt) {
-        attempt = attempt || 0;
-        var MAX_ATTEMPTS = 30;
+    function _onTypingComplete(messageEl, callback) {
+        var fired = false;
+        function run() {
+            if (fired) return;
+            fired = true;
+            callback();
+        }
+        messageEl.addEventListener('typing-complete', run, { once: true });
+        // Fallback: if event never fires (e.g. history replay), run after 8s
+        setTimeout(run, 8000);
+    }
+
+    /* -------------------------------------------------------
+       _appendSourcesButton — add sources button to action bar
+    ------------------------------------------------------- */
+    function _appendSourcesButton(messageEl, sources) {
         var actionBar = messageEl.querySelector('.action-buttons');
         if (actionBar) {
-            // Don't add duplicate
             if (!actionBar.querySelector('.sources-btn')) {
                 actionBar.appendChild(createSourcesButton(sources));
             }
             return;
         }
-        if (attempt < MAX_ATTEMPTS) {
-            setTimeout(function () {
-                _appendSourcesButtonWhenReady(messageEl, sources, attempt + 1);
-            }, 250);
-        }
-    }
-
-    /* -------------------------------------------------------
-       _processCitationsWhenReady — wait for typing animation
-       to finish before replacing [N] with citation pills.
-       ProgressiveTextDisplay renders text incrementally so
-       text nodes may not exist yet when renderFinalResults fires.
-    ------------------------------------------------------- */
-    function _processCitationsWhenReady(messageEl, sources, attempt, lastLen) {
-        attempt = attempt || 0;
-        lastLen = lastLen || 0;
-        var MAX_ATTEMPTS = 30;  // 30 × 250ms = 7.5s max wait
-        var content = messageEl.querySelector('.message-content');
-        if (!content) return;
-
-        var textContent = content.textContent || '';
-        var curLen = textContent.length;
-
-        // Wait for two conditions:
-        // 1. Text contains [N] citations
-        // 2. Text length is stable (typing animation finished)
-        var hasCitations = /\[\d+\]/.test(textContent);
-        var isStable = curLen > 0 && curLen === lastLen;
-
-        if (hasCitations && isStable) {
-            processCitations(messageEl, sources);
-            return;
-        }
-
-        if (attempt < MAX_ATTEMPTS) {
-            setTimeout(function () {
-                _processCitationsWhenReady(messageEl, sources, attempt + 1, curLen);
-            }, 250);
-        }
+        // Action bar may not exist yet — brief retry
+        var attempts = 0;
+        var interval = setInterval(function () {
+            var bar = messageEl.querySelector('.action-buttons');
+            if (bar) {
+                clearInterval(interval);
+                if (!bar.querySelector('.sources-btn')) {
+                    bar.appendChild(createSourcesButton(sources));
+                }
+            } else if (++attempts >= 10) {
+                clearInterval(interval);
+            }
+        }, 200);
     }
 
     /* -------------------------------------------------------
@@ -862,16 +851,12 @@
             }
         }
 
-        // 2. Citation pills — replace [1][2][3] with publisher name pills
-        //    ProgressiveTextDisplay may still be typing, so retry until text nodes exist
+        // 2. Citation pills + sources button — wait for typing animation to finish
         if (webRes.length > 0) {
-            _processCitationsWhenReady(messageEl, webRes);
-        }
-
-        // 3. Sources button — appended to message action bar
-        //    Action bar may not exist yet (typing animation), so retry
-        if (webRes.length > 0) {
-            _appendSourcesButtonWhenReady(messageEl, webRes);
+            _onTypingComplete(messageEl, function () {
+                processCitations(messageEl, webRes);
+                _appendSourcesButton(messageEl, webRes);
+            });
         }
     }
 
