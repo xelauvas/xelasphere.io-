@@ -313,7 +313,7 @@
                 var lastChild = track.lastElementChild;
                 var debug = document.createElement('div');
                 debug.style.cssText = 'position:fixed;top:10px;left:10px;z-index:9999;background:red;color:white;padding:8px;font-size:11px;border-radius:4px;max-width:90vw;';
-                debug.textContent = 'wrap:' + wrap.clientWidth + ' lastOL:' + (lastChild ? lastChild.offsetLeft : '?') + ' lastOW:' + (lastChild ? lastChild.offsetWidth : '?') + ' max:' + maxOffset + ' kids:' + track.children.length + ' offsetX:' + offsetX;
+                debug.textContent = 'wrap:' + wrap.clientWidth + ' max:' + maxOffset + ' offsetX:' + Math.round(offsetX) + ' curX:' + Math.round(currentX) + ' trackW:' + track.scrollWidth + ' lastTag:' + (lastChild ? lastChild.tagName + '.' + lastChild.className : '?');
                 document.body.appendChild(debug);
                 setTimeout(function() { debug.remove(); }, 3000);
                 startX = e.touches[0].clientX;
