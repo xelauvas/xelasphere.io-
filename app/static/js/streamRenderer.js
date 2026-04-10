@@ -220,8 +220,14 @@
         text = text.replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
 
         // Normalize paragraph breaks: single \n between prose → \n\n
-        // Must be done on accumulated buffer, not per-token (per-token doubles \n\n → \n\n\n\n)
+        // Must be done on accumulated buffer, not per-token
+        var beforeDouble = (text.match(/\n\n/g) || []).length;
         text = text.replace(/(?<!\n)\n(?!\n)(?![-*+#>]|[0-9]+\.|[ \t]*```)/g, '\n\n');
+        var afterDouble = (text.match(/\n\n/g) || []).length;
+        if (!this._normLogDone && afterDouble > beforeDouble) {
+            this._normLogDone = true;
+            console.log('[StreamRenderer] normalize: before \\n\\n:', beforeDouble, 'after:', afterDouble, 'text len:', text.length);
+        }
 
         // Parse markdown → HTML using the exact same pipeline as appendTextMessage
         var rawHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
