@@ -274,12 +274,7 @@ h1 {
     direction: inherit;
     unicode-bidi: plaintext;
 }
-@media (max-width: 768px) {
-    .text-message-container {
-        width: 100%;
-        max-width: 100%;
-    }
-}
+/* Mobile text-message-container overrides are in mobile.css */
 .user-message .text-message-container {
     align-items: flex-end;
     width: min(100%, 520px);
@@ -1626,40 +1621,7 @@ h1 {
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-    .text-message-container {
-        width: 95%;
-        margin-right: 10px;
-        padding: 6px;
-    }
-    
-    .message-warning {
-        margin-right: 10px;
-        font-size: 12px;
-    }
-
-    .text-message {
-        font-size: var(--mobile-font-size);
-        line-height: var(--mobile-line-height);
-        padding: var(--mobile-message-padding-y) var(--mobile-message-padding-x);
-    }
-
-    .message-attachments {
-        gap: 0.5rem;
-    }
-
-    .attachment-card {
-        width: 100%;
-    }
-
-    .attachment-thumb {
-        height: 7.5rem;
-    }
-    .text-message table {
-        -webkit-overflow-scrolling: touch;
-    }
-}
+/* Mobile responsive overrides are in mobile.css */
 
 /* Print Styles */
 @media print {
@@ -2267,112 +2229,7 @@ h1 {
     100% { transform: scale(1); }
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   MOBILE PREMIUM STYLES - Touch-Friendly
-   ═══════════════════════════════════════════════════════════════ */
-
-@media (max-width: 768px) {
-    /* Larger touch targets */
-    .text-message li.task-list-item input[type="checkbox"] {
-        width: 24px;
-        height: 24px;
-        min-width: 24px;
-    }
-
-    .text-message li.task-list-item input[type="checkbox"]:checked::after {
-        top: 4px;
-        left: 8px;
-        width: 6px;
-        height: 12px;
-    }
-
-    /* Bigger code copy button */
-    .code-block-copy {
-        padding: 0.5rem 0.85rem;
-        font-size: 0.8rem;
-    }
-
-    /* Touch-friendly links */
-    .text-message a {
-        padding: 0.15rem 0;
-    }
-
-    /* Scrollable tables */
-    .text-message table {
-        display: block;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    /* Swipe indicator for tables */
-    .text-message table::after {
-        content: '';
-        position: absolute;
-        right: 0;
-        top: 0;
-        bottom: 0;
-        width: 30px;
-        background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.3));
-        pointer-events: none;
-        opacity: 0.5;
-    }
-
-    /* Blockquote full width */
-    .text-message blockquote {
-        margin-left: -0.5rem;
-        margin-right: -0.5rem;
-        padding-left: 1rem;
-        border-radius: 0;
-    }
-
-    /* Code blocks full bleed */
-    .code-block-wrapper {
-        margin-left: -1rem;
-        margin-right: -1rem;
-        border-radius: 0;
-    }
-
-    .code-block-header {
-        padding: 0.65rem 1rem;
-    }
-
-    /* Larger text for readability */
-    .text-message {
-        font-size: 15px;
-        line-height: 1.75;
-    }
-
-    /* Bigger headings */
-    .text-message h1 {
-        font-size: 1.4rem;
-    }
-
-    .text-message h2 {
-        font-size: 1.2rem;
-    }
-
-    .text-message h3 {
-        font-size: 1.05rem;
-    }
-
-    /* Touch-friendly list items */
-    .text-message li {
-        padding: 0.35rem 0.25rem;
-        min-height: 44px;
-        display: flex;
-        align-items: center;
-    }
-
-    /* Disable hover effects on touch */
-    @media (hover: none) {
-        .text-message li:hover,
-        .text-message blockquote:hover,
-        .text-message a:hover {
-            transform: none;
-            background: transparent;
-        }
-    }
-}
+/* Mobile premium styles (touch targets, tables, code blocks, headings) are in mobile.css */
 
 /* ═══════════════════════════════════════════════════════════════
    CALLOUT AUTO-STYLING (via JS detection)
