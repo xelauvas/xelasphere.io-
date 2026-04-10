@@ -559,7 +559,14 @@
                     var pill = document.createElement('span');
                     pill.className = 'citation-pill';
                     pill.setAttribute('data-citations', validNums.join(','));
-                    pill.textContent = label;
+
+                    // Mobile: compact superscript numbers; Desktop: domain name label
+                    if (window.innerWidth <= 640) {
+                        pill.textContent = validNums.join(',');
+                        pill.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; min-height: 22px; min-width: 22px; border-radius: 10px; background: rgba(255,255,255,0.08); font-size: 0.6rem; font-weight: 600; color: rgba(255,255,255,0.6); vertical-align: super; margin: 0 1px; cursor: pointer; user-select: none;';
+                    } else {
+                        pill.textContent = label;
+                    }
 
                     // Click → open sources sidebar
                     pill.addEventListener('click', function () {
@@ -567,8 +574,8 @@
                         openSidebarForCitations(messageEl, indices);
                     });
 
-                    // Hover → tooltip preview card
-                    (function (p, vn, sm) {
+                    // Hover → tooltip preview card (desktop only)
+                    if (window.innerWidth > 640) (function (p, vn, sm) {
                         p.addEventListener('mouseenter', function () {
                             // Remove any existing tooltip
                             var old = document.querySelector('.citation-tooltip');
@@ -631,6 +638,11 @@
             openSidebar(sources);
         });
 
+        // Mobile: larger touch-friendly pill
+        if (window.innerWidth <= 640) {
+            btn.style.cssText = 'display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 6px; border-radius: 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; font-size: 0.8rem; color: rgba(255,255,255,0.7); font-weight: 500;';
+        }
+
         return btn;
     }
 
@@ -686,6 +698,29 @@
         sidebar.classList.add('sources-sidebar--open');
         sidebar.setAttribute('aria-hidden', 'false');
 
+        // Mobile: convert sidebar to bottom sheet
+        if (window.innerWidth <= 640) {
+            sidebar.style.cssText = 'position: fixed; bottom: 0; left: 0; right: 0; top: auto; width: 100%; max-height: 70vh; height: auto; border-radius: 16px 16px 0 0; border-left: none; border-top: 1px solid rgba(255,255,255,0.1); transform: translateY(0); z-index: 1000; background: #1a1a1a; display: flex; flex-direction: column; overflow: hidden;';
+            // Add drag handle
+            var handle = sidebar.querySelector('.sources-sidebar__drag-handle');
+            if (!handle) {
+                handle = document.createElement('div');
+                handle.className = 'sources-sidebar__drag-handle';
+                handle.style.cssText = 'width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); margin: 8px auto 4px; flex-shrink: 0;';
+                sidebar.insertBefore(handle, sidebar.firstChild);
+            }
+            // Add overlay backdrop
+            var overlay = document.getElementById('sources-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'sources-overlay';
+                overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999;';
+                overlay.addEventListener('click', function () { closeSidebar(); });
+                document.body.appendChild(overlay);
+            }
+            overlay.style.display = 'block';
+        }
+
         // Close on outside click (delayed to avoid catching the opening click)
         setTimeout(function () {
             _outsideClickBound = function (e) {
@@ -704,7 +739,12 @@
         if (sidebar) {
             sidebar.classList.remove('sources-sidebar--open');
             sidebar.setAttribute('aria-hidden', 'true');
+            sidebar.style.cssText = ''; // Reset inline styles
         }
+        var overlay = document.getElementById('sources-overlay');
+        if (overlay) overlay.style.display = 'none';
+        var handle = sidebar && sidebar.querySelector('.sources-sidebar__drag-handle');
+        if (handle) handle.remove();
         if (_outsideClickBound) {
             document.removeEventListener('click', _outsideClickBound);
             _outsideClickBound = null;
