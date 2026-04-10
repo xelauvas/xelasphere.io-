@@ -54,15 +54,9 @@
 
             if (ch === '\n') {
                 lastNewline = i + 1;
-
-                // Check for code fence at line start
-                if (next === '`' && next2 === '`' && i + 3 < len && text[i + 3] === '`' ||
-                    (i === 0 || text[i - 1] === '\n') && false) {
-                    // handled below
-                }
             }
 
-            // Code fence: ``` at start of line
+            // Code fence: ``` (typically at start of line)
             if (ch === '`' && next === '`' && next2 === '`') {
                 if (!openFence) {
                     openFence = true;
@@ -74,6 +68,10 @@
                     openFence = false;
                     fenceStart = -1;
                     i += 2; // skip past ```
+                    // Track safe point after closing fence
+                    if (!openStrong && !openEm && !openCode && !openLink) {
+                        lastSafe = i + 1;
+                    }
                     continue;
                 }
             }
@@ -84,6 +82,9 @@
             // Inline code: `
             if (ch === '`') {
                 openCode = !openCode;
+                if (!openCode && !openStrong && !openEm && !openFence && !openLink) {
+                    lastSafe = i + 1;
+                }
                 continue;
             }
 
@@ -94,12 +95,18 @@
             if (ch === '*' && next === '*') {
                 openStrong = openStrong ? 0 : 1;
                 i++; // skip second *
+                if (!openStrong && !openEm && !openCode && !openFence && !openLink) {
+                    lastSafe = i + 1;
+                }
                 continue;
             }
 
             // Emphasis: single *
             if (ch === '*' && next !== '*') {
                 openEm = openEm ? 0 : 1;
+                if (!openEm && !openStrong && !openCode && !openFence && !openLink) {
+                    lastSafe = i + 1;
+                }
                 continue;
             }
 
@@ -110,20 +117,20 @@
             }
             if (ch === ']') {
                 if (openLink > 0) {
-                    if (next === '(') {
-                        // Wait for closing )
-                        continue;
-                    }
+                    if (next === '(') continue;
                     openLink--;
                 }
                 continue;
             }
             if (ch === ')' && openLink > 0) {
                 openLink--;
+                if (!openLink && !openStrong && !openEm && !openCode && !openFence) {
+                    lastSafe = i + 1;
+                }
                 continue;
             }
 
-            // Track safe points — all constructs closed
+            // Track safe points — all constructs closed (regular characters)
             if (!openStrong && !openEm && !openCode && !openFence && !openLink) {
                 lastSafe = i + 1;
             }
@@ -133,11 +140,10 @@
         if (openFence) {
             var fenceContentLen = len - fenceStart;
             if (fenceContentLen > 500) {
-                // Render up to current position (partial code block)
                 return len;
             }
             // Don't render past fence start
-            return fenceStart > 0 ? fenceStart : lastNewline || 0;
+            return fenceStart >= 0 ? fenceStart : 0;
         }
 
         // If all constructs closed, safe at end
@@ -151,7 +157,6 @@
             return lastNewline;
         }
 
-        // Incomplete line rule: back up to last newline
         return lastSafe || lastNewline || 0;
     }
 
