@@ -278,11 +278,27 @@
             this.rafId = null;
         }
 
-        // Final render with complete buffer — no safe boundary needed
-        this._render(this.rawBuffer, true);
+        // Strip ACTION protocol lines
+        var cleanText = this.rawBuffer.replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
+
+        // Final render — use innerHTML for a clean slate (no morphdom artifacts)
+        var target = this.renderTarget || this.container;
+        if (!target) return;
+
+        var rawHTML = '';
+        if (typeof window.marked !== 'undefined') {
+            rawHTML = window.marked.parse(cleanText);
+        } else if (window.md) {
+            rawHTML = window.md.render(cleanText);
+        } else {
+            rawHTML = cleanText;
+        }
+        if (typeof DOMPurify !== 'undefined') {
+            rawHTML = DOMPurify.sanitize(rawHTML);
+        }
+        target.innerHTML = rawHTML;
 
         // Post-render transforms
-        var target = this.renderTarget || this.container;
         if (typeof renderMathInMessage === 'function') {
             renderMathInMessage(target);
         }
