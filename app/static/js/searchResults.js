@@ -285,12 +285,42 @@
             wrap.appendChild(item);
         });
 
-        // Mobile: ensure horizontal scroll works
+        // Mobile: touch-swipe carousel via translateX (overflow-x blocked by parent)
         if (window.innerWidth <= 640) {
-            wrap.style.cssText = 'display: flex; gap: 8px; overflow-x: scroll; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding: 4px 0 8px; margin-bottom: 12px; overscroll-behavior-x: contain; flex-wrap: nowrap;';
-            Array.from(wrap.children).forEach(function (item) {
-                item.style.cssText = 'flex: 0 0 120px; height: 85px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); position: relative; background: rgba(255,255,255,0.03); scroll-snap-align: start;';
+            wrap.style.cssText = 'position: relative; overflow: hidden; padding: 4px 0 8px; margin-bottom: 12px;';
+            var track = document.createElement('div');
+            track.style.cssText = 'display: flex; gap: 8px; transition: transform 0.3s ease; will-change: transform;';
+            while (wrap.firstChild) track.appendChild(wrap.firstChild);
+            wrap.appendChild(track);
+
+            Array.from(track.children).forEach(function (item) {
+                item.style.cssText = 'flex: 0 0 120px; height: 85px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); position: relative; background: rgba(255,255,255,0.03);';
             });
+
+            // Touch swipe
+            var startX = 0, currentX = 0, offsetX = 0;
+            var maxOffset = -(track.scrollWidth - wrap.clientWidth);
+
+            track.addEventListener('touchstart', function (e) {
+                startX = e.touches[0].clientX;
+                currentX = offsetX;
+                track.style.transition = 'none';
+            }, { passive: true });
+
+            track.addEventListener('touchmove', function (e) {
+                var dx = e.touches[0].clientX - startX;
+                var newX = Math.max(maxOffset, Math.min(0, currentX + dx));
+                track.style.transform = 'translateX(' + newX + 'px)';
+                offsetX = newX;
+            }, { passive: true });
+
+            track.addEventListener('touchend', function () {
+                track.style.transition = 'transform 0.3s ease';
+                // Recalculate max in case layout changed
+                maxOffset = -(track.scrollWidth - wrap.clientWidth);
+                offsetX = Math.max(maxOffset, Math.min(0, offsetX));
+                track.style.transform = 'translateX(' + offsetX + 'px)';
+            }, { passive: true });
         }
 
         return wrap.children.length ? wrap : null;
