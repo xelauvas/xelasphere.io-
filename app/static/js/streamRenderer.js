@@ -166,18 +166,6 @@
 
     var CURSOR_HTML = '<span class="stream-cursor"></span>';
 
-    // Streaming markdown instance: breaks: false prevents single \n → <br>
-    // which causes cramped paragraphs. \n\n still creates proper <p> tags.
-    var _streamMd = null;
-    if (typeof window.markdownit !== 'undefined') {
-        _streamMd = window.markdownit({
-            html: false,
-            linkify: true,
-            typographer: true,
-            breaks: false  // Key difference from global parser
-        });
-    }
-
     function StreamRenderer(container) {
         this.container = container;
         this.rawBuffer = '';
@@ -231,18 +219,16 @@
         // Strip ACTION protocol lines (e.g., "ACTION: chat", "ACTION: web_search")
         text = text.replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
 
-        // Parse markdown → HTML
-        // During streaming: use _streamMd (breaks: false) to avoid \n → <br> cramping
-        // During finalize (isFinal): use global parser for exact history match
-        var rawHTML = '';
-        if (isFinal && typeof window.marked !== 'undefined') {
-            rawHTML = window.marked.parse(text);
-        } else if (_streamMd) {
-            rawHTML = _streamMd.render(text);
-        } else if (typeof window.marked !== 'undefined') {
-            rawHTML = window.marked.parse(text);
-        } else {
-            rawHTML = text;
+        // Parse markdown → HTML using the exact same pipeline as appendTextMessage
+        var rawHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
+
+        // Diagnostic: log paragraph structure during streaming
+        if (!isFinal && rawHTML.indexOf('<p>') >= 0) {
+            var pCount = (rawHTML.match(/<p>/g) || []).length;
+            var brCount = (rawHTML.match(/<br>/g) || []).length;
+            if (brCount > 0) {
+                console.log('[StreamRenderer] paragraphs:', pCount, 'br:', brCount, 'text newlines:', (text.match(/\n/g) || []).length, 'double:', (text.match(/\n\n/g) || []).length);
+            }
         }
 
         // Sanitize
