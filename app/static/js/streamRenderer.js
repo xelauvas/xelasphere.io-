@@ -298,16 +298,17 @@
         style.textContent =
             '.stream-cursor {\n' +
             '    display: inline-block;\n' +
-            '    width: 2px;\n' +
-            '    height: 1.1em;\n' +
-            '    background: var(--text-primary, #e2e8f0);\n' +
-            '    margin-left: 1px;\n' +
-            '    vertical-align: text-bottom;\n' +
-            '    animation: cursor-blink 0.8s steps(2) infinite;\n' +
+            '    width: 12px;\n' +
+            '    height: 12px;\n' +
+            '    border-radius: 50%;\n' +
+            '    background: rgba(255, 255, 255, 0.85);\n' +
+            '    margin-left: 4px;\n' +
+            '    vertical-align: middle;\n' +
+            '    animation: stream-pulse 1.5s ease-in-out infinite;\n' +
             '}\n' +
-            '@keyframes cursor-blink {\n' +
-            '    0%, 100% { opacity: 1; }\n' +
-            '    50% { opacity: 0; }\n' +
+            '@keyframes stream-pulse {\n' +
+            '    0%, 100% { transform: scale(1); opacity: 0.4; }\n' +
+            '    50% { transform: scale(1.3); opacity: 1; }\n' +
             '}\n';
         document.head.appendChild(style);
     })();
