@@ -3005,6 +3005,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let artifactStreamActive = false;
                 let searchMsgId = null; // Track message element for search banner
                 let searchBannerDismissed = false; // Track if search banner was dismissed
+                let _streamRenderer = null; // Phase 2: live SSE-to-DOM renderer
+                let _streamMsgId = null;    // Message ID for StreamRenderer container
                 let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
                 // Use array to avoid O(n²) string concatenation per chunk.
@@ -3109,6 +3111,29 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     isFirstContentChunk = false;
                                     window.scrollState?.contentArrived?.();
                                     ThinkingIndicator.setContentMode();
+
+                                    // Phase 2: Create StreamRenderer on first content chunk
+                                    if (isSessionActive() && typeof StreamRenderer !== 'undefined') {
+                                        // Find or create the message element
+                                        _streamMsgId = searchMsgId || placeholderId || generateMessageId();
+                                        var targetEl = document.getElementById(_streamMsgId);
+                                        if (!targetEl) {
+                                            displayMessage('\u200B', 'ai', 'text', prompt, false, _streamMsgId);
+                                            targetEl = document.getElementById(_streamMsgId);
+                                        }
+                                        var targetContent = targetEl?.querySelector('.message-content');
+                                        if (targetContent) {
+                                            targetContent.innerHTML = ''; // clear placeholder
+                                            _streamRenderer = new StreamRenderer(targetContent);
+                                        } else {
+                                            console.warn('[StreamRenderer] No target element — falling back');
+                                            _streamRenderer = null;
+                                        }
+                                    }
+                                }
+                                // Feed StreamRenderer with live tokens
+                                if (_streamRenderer) {
+                                    _streamRenderer.append(chunkText);
                                 }
                                 // Dismiss search banner on first synthesis content chunk
                                 if (searchMsgId && !searchBannerDismissed && window.SearchResults) {
@@ -3421,7 +3446,16 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                 // Create the AI message container - prefer backend's response_id for consistency
                 // Reuse searchMsgId if search created a placeholder element
-                const aiMsgId = streamResponseId || searchMsgId || placeholderId || generateMessageId();
+                // If StreamRenderer created the element, use its ID (or rename to response_id)
+                let aiMsgId = streamResponseId || searchMsgId || placeholderId || generateMessageId();
+                if (_streamRenderer && _streamMsgId && _streamMsgId !== aiMsgId) {
+                    // Rename the element to match the canonical response ID
+                    var streamEl = document.getElementById(_streamMsgId);
+                    if (streamEl) {
+                        streamEl.id = aiMsgId;
+                        streamEl.dataset.messageId = aiMsgId;
+                    }
+                }
 
                 // generate_image done: placeholder already replaced, show chat text below image and save
                 if (window._streamDoneImageUrl) {
@@ -3472,17 +3506,61 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                 const hasCode = displayContent.includes('```');
 
-                const messageContainer = displayMessage(
-                    displayContent,
-                    'ai',
-                    hasCode ? 'code' : 'text',
-                    prompt,
-                    true,
-                    aiMsgId,
-                    null,  // attachmentsMeta
-                    null,  // searchResults
-                    streamModelMeta
-                );
+                // Phase 3: If StreamRenderer was active, finalize instead of re-rendering
+                let messageContainer;
+                if (_streamRenderer) {
+                    // Destroy StreamRenderer for artifact responses — artifact panel takes over
+                    if (streamRenderMode === 'artifact' || (streamArtifact && streamArtifact.artifactId)) {
+                        _streamRenderer.destroy();
+                        _streamRenderer = null;
+                    }
+                }
+
+                if (_streamRenderer) {
+                    // Content was rendered live — just finalize (remove cursor, final parse)
+                    _streamRenderer.finalize();
+                    _streamRenderer = null;
+                    messageContainer = document.getElementById(aiMsgId);
+                    // Ensure the message div has correct metadata
+                    if (messageContainer) {
+                        messageContainer.dataset.originalPrompt = prompt;
+                        messageContainer.dataset.sender = 'ai';
+                        messageContainer.dataset.timestamp = new Date().toISOString();
+                        if (streamModelMeta) {
+                            messageContainer._modelMeta = streamModelMeta;
+                            if (typeof window.addModelAttribution === 'function') {
+                                window.addModelAttribution(messageContainer, streamModelMeta);
+                            }
+                        }
+                        // Add action buttons if not present
+                        if (!messageContainer.querySelector('.action-buttons') && typeof appendActionButtons === 'function') {
+                            appendActionButtons(messageContainer.querySelector('.message-content'), aiMsgId);
+                        }
+                    }
+                    // Run post-render transforms
+                    if (messageContainer) {
+                        var mc = messageContainer.querySelector('.message-content');
+                        if (mc && typeof renderMathInMessage === 'function') {
+                            renderMathInMessage(mc);
+                        }
+                        if (mc && typeof Prism !== 'undefined') {
+                            Prism.highlightAllUnder(mc);
+                        }
+                    }
+                } else {
+                    // Non-streaming or artifact fallback — existing path
+                    messageContainer = displayMessage(
+                        displayContent,
+                        'ai',
+                        hasCode ? 'code' : 'text',
+                        prompt,
+                        true,
+                        aiMsgId,
+                        null,  // attachmentsMeta
+                        null,  // searchResults
+                        streamModelMeta
+                    );
+                }
 
                 // Add reasoning section if available (only for R1 model)
                 if (isDeepSeekR1 && streamedReasoning && messageContainer) {
