@@ -123,6 +123,16 @@ class StreamNormalizer:
         output.append('\n')
         return output
 
+    def _is_complete_header_field(self, text: str) -> bool:
+        """Return True if text looks like a complete ACTION header field.
+
+        Matches: key: value
+        Where key is a known ACTION field name.
+        Does NOT match partial lines like 'rea' or 'query: wea'
+        — we need the value to be present and non-empty.
+        """
+        return bool(_HEADER_FIELD_PATTERN.match(text.strip()))
+
 
 # ---------------------------------------------------------------------------
 # Paragraph break normalization (for SSE output, not action parsing)
@@ -152,13 +162,3 @@ def normalize_paragraph_breaks(text: str) -> str:
     - Already-doubled \\n\\n
     """
     return _PARA_BREAK_RE.sub('\n\n', text)
-
-    def _is_complete_header_field(self, text: str) -> bool:
-        """Return True if text looks like a complete ACTION header field.
-
-        Matches: key: value
-        Where key is a known ACTION field name.
-        Does NOT match partial lines like 'rea' or 'query: wea'
-        — we need the value to be present and non-empty.
-        """
-        return bool(_HEADER_FIELD_PATTERN.match(text.strip()))

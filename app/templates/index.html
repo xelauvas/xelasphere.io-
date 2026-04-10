@@ -62,7 +62,7 @@
             html: false,          // Disable raw HTML for security
             linkify: true,        // Auto-convert URLs to links
             typographer: true,    // Smart quotes, dashes
-            breaks: true          // Convert \n to <br>
+            breaks: false         // \n\n → <p>, single \n ignored (standard markdown)
         }).use(window.markdownitTaskLists, {
             enabled: true,
             label: true,

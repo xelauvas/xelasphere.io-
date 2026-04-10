@@ -63,7 +63,7 @@ from app.artifacts import (
     apply_patches, ArtifactStore,
 )
 from app.context.action_parser import ActionParser, StreamingActionBuffer
-from app.services.stream_normalizer import StreamNormalizer, get_model_family, normalize_paragraph_breaks
+from app.services.stream_normalizer import StreamNormalizer, get_model_family
 from app.context.context_builder import ContextBuilder, extract_turn_metadata
 from app.context.artifact_state_tracker import get_tracker, ArtifactStateTracker
 from app.file_processor import (

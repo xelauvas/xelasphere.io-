@@ -101,8 +101,8 @@
                 continue;
             }
 
-            // Emphasis: single *
-            if (ch === '*' && next !== '*') {
+            // Emphasis: single * — but NOT if followed by space (list item)
+            if (ch === '*' && next !== '*' && next !== ' ') {
                 openEm = openEm ? 0 : 1;
                 if (!openEm && !openStrong && !openCode && !openFence && !openLink) {
                     lastSafe = i + 1;
@@ -218,16 +218,6 @@
 
         // Strip ACTION protocol lines
         text = text.replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
-
-        // Normalize paragraph breaks: single \n between prose → \n\n
-        // Must be done on accumulated buffer, not per-token
-        var beforeDouble = (text.match(/\n\n/g) || []).length;
-        text = text.replace(/(?<!\n)\n(?!\n)(?![-*+#>]|[0-9]+\.|[ \t]*```)/g, '\n\n');
-        var afterDouble = (text.match(/\n\n/g) || []).length;
-        if (!this._normLogDone && afterDouble > beforeDouble) {
-            this._normLogDone = true;
-            console.log('[StreamRenderer] normalize: before \\n\\n:', beforeDouble, 'after:', afterDouble, 'text len:', text.length);
-        }
 
         // Parse markdown → HTML using the exact same pipeline as appendTextMessage
         var rawHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
