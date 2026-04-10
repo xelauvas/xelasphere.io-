@@ -222,15 +222,6 @@
         // Parse markdown → HTML using the exact same pipeline as appendTextMessage
         var rawHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
 
-        // Diagnostic: log paragraph structure during streaming
-        if (!isFinal && rawHTML.indexOf('<p>') >= 0) {
-            var pCount = (rawHTML.match(/<p>/g) || []).length;
-            var brCount = (rawHTML.match(/<br>/g) || []).length;
-            if (brCount > 0) {
-                console.log('[StreamRenderer] paragraphs:', pCount, 'br:', brCount, 'text newlines:', (text.match(/\n/g) || []).length, 'double:', (text.match(/\n\n/g) || []).length);
-            }
-        }
-
         // Sanitize
         if (typeof DOMPurify !== 'undefined') {
             rawHTML = DOMPurify.sanitize(rawHTML);
@@ -266,7 +257,7 @@
         }
     };
 
-    StreamRenderer.prototype.finalize = function () {
+    StreamRenderer.prototype.finalize = function (finalText) {
         if (this.destroyed || this.finalized) return;
         this.finalized = true;
 
@@ -276,8 +267,8 @@
             this.rafId = null;
         }
 
-        // Strip ACTION protocol lines
-        var cleanText = this.rawBuffer.replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
+        // Use finalText from done chunk (has proper \n\n) over rawBuffer (single \n)
+        var cleanText = (finalText || this.rawBuffer).replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
 
         // Final render — use innerHTML for a clean slate (no morphdom artifacts)
         var target = this.renderTarget || this.container;
