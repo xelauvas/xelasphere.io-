@@ -3491,6 +3491,7 @@ body.is-ios .arrow-down {
     .search-news-card__image {
         width: 100%;
         height: 120px;
+        aspect-ratio: auto;
         object-fit: cover;
         border-radius: 10px 10px 0 0;
     }
@@ -3516,11 +3517,6 @@ body.is-ios .arrow-down {
         -webkit-box-orient: vertical;
         overflow: hidden;
         margin-bottom: 4px;
-    }
-
-    .search-news-card__image {
-        min-height: 120px;
-        max-height: 120px;
     }
 
     .search-carousel-arrow {
