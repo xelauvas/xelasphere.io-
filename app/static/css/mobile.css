@@ -3467,22 +3467,19 @@ body.is-ios .arrow-down {
         width: 100vw;
     }
 
-    /* News carousel — override parent overflow:hidden, enable swipe scroll */
+    /* News carousel — stack vertically on mobile */
     .search-news-carousel {
         overflow: visible;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
     }
 
     .search-news-cards {
-        overflow-x: auto;
-        scroll-snap-type: x mandatory;
-        -webkit-overflow-scrolling: touch;
+        flex-direction: column;
+        gap: 8px;
     }
 
     .search-news-card {
-        flex: 0 0 85%;
-        scroll-snap-align: start;
+        flex: none;
+        width: 100%;
     }
 
     .search-carousel-arrow {
