@@ -1123,8 +1123,8 @@ h1 {
     color: #e6edf3;
     font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
     font-size: 0.875em;
-    padding: 0.2em 0.4em;
-    border-radius: 6px;
+    padding: 0.3em 0.5em;
+    border-radius: 8px;
     border: none;
     font-weight: 400;
     word-break: break-word;
