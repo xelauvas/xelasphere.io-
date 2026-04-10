@@ -3106,7 +3106,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 }
                             } else {
                                 // Detection phase: not yet in artifact/patch mode.
-                                console.log('[STREAM-DBG] content chunk, len:', chunkText.length, 'isFirst:', isFirstContentChunk, 'hasRenderer:', !!_streamRenderer, 'artStream:', artifactStreamActive, 'patchStream:', patchStreamActive);
                                 if (isFirstContentChunk) {
                                     isFirstContentChunk = false;
                                     window.scrollState?.contentArrived?.();

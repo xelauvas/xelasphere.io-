@@ -965,7 +965,7 @@ def chat_stream():
                     if ct == 'content':
                         text = chunk.get('text', '')
                         _search_synthesis_content.append(text)
-                        yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(text)})}\n\n"
+                        yield f"data: {json.dumps({'type': 'content', 'text': text})}\n\n"
                     elif ct == 'reasoning':
                         text = chunk.get('text', '')
                         reasoning_buffer.append(text)
@@ -1031,7 +1031,7 @@ def chat_stream():
 
                                 # Forward remainder after the ACTION line (skip if search did 2nd pass)
                                 if not _search_second_pass_done and action_buffer.remainder:
-                                    yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(action_buffer.remainder)})}\n\n"
+                                    yield f"data: {json.dumps({'type': 'content', 'text': action_buffer.remainder})}\n\n"
                                 break  # Action resolved, stop feeding normalizer output
                         continue  # Buffer until action resolved
 
@@ -1039,7 +1039,7 @@ def chat_stream():
                     if _search_second_pass_done:
                         continue
 
-                    yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(text)})}\n\n"
+                    yield f"data: {json.dumps({'type': 'content', 'text': text})}\n\n"
 
                 elif chunk_type == 'done':
                     # Flush normalizer for models that don't emit trailing \n

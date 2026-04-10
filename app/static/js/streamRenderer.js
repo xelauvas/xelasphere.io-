@@ -216,8 +216,12 @@
         var target = this.renderTarget || this.container;
         if (!target) return;
 
-        // Strip ACTION protocol lines (e.g., "ACTION: chat", "ACTION: web_search")
+        // Strip ACTION protocol lines
         text = text.replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
+
+        // Normalize paragraph breaks: single \n between prose → \n\n
+        // Must be done on accumulated buffer, not per-token (per-token doubles \n\n → \n\n\n\n)
+        text = text.replace(/(?<!\n)\n(?!\n)(?![-*+#>]|[0-9]+\.|[ \t]*```)/g, '\n\n');
 
         // Parse markdown → HTML using the exact same pipeline as appendTextMessage
         var rawHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
