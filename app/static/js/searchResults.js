@@ -560,12 +560,11 @@
                     pill.className = 'citation-pill';
                     pill.setAttribute('data-citations', validNums.join(','));
 
-                    // Mobile: compact superscript numbers; Desktop: domain name label
+                    pill.textContent = label;
+
+                    // Mobile: compact pill with name, touch-friendly
                     if (window.innerWidth <= 640) {
-                        pill.textContent = validNums.join(',');
-                        pill.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; min-height: 22px; min-width: 22px; border-radius: 10px; background: rgba(255,255,255,0.08); font-size: 0.6rem; font-weight: 600; color: rgba(255,255,255,0.6); vertical-align: super; margin: 0 1px; cursor: pointer; user-select: none;';
-                    } else {
-                        pill.textContent = label;
+                        pill.style.cssText = 'display: inline-flex; align-items: center; padding: 3px 8px; min-height: 26px; border-radius: 12px; background: rgba(255,255,255,0.08); font-size: 0.65rem; font-weight: 500; color: rgba(255,255,255,0.6); margin: 0 2px; cursor: pointer; user-select: none; white-space: nowrap;';
                     }
 
                     // Click → open sources sidebar
