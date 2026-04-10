@@ -146,18 +146,8 @@
             return fenceStart >= 0 ? fenceStart : 0;
         }
 
-        // If all constructs closed, render up to the last confirmed paragraph
-        // boundary (\n\n). Text after the last \n\n might be mid-paragraph —
-        // a single \n followed by text renders as <br> (cramped) but could
-        // become a \n\n paragraph break when the next token arrives.
+        // If all constructs closed, safe at end
         if (!openStrong && !openEm && !openCode && !openLink) {
-            // Find the last \n\n in the text
-            var lastParaBreak = text.lastIndexOf('\n\n');
-            if (lastParaBreak >= 0) {
-                // Safe at the end of the last complete paragraph
-                return lastParaBreak + 2;
-            }
-            // No paragraph break yet — render everything (single paragraph)
             return len;
         }
 
@@ -175,6 +165,18 @@
     // ---------------------------------------------------------------------------
 
     var CURSOR_HTML = '<span class="stream-cursor"></span>';
+
+    // Streaming markdown instance: breaks: false prevents single \n → <br>
+    // which causes cramped paragraphs. \n\n still creates proper <p> tags.
+    var _streamMd = null;
+    if (typeof window.markdownit !== 'undefined') {
+        _streamMd = window.markdownit({
+            html: false,
+            linkify: true,
+            typographer: true,
+            breaks: false  // Key difference from global parser
+        });
+    }
 
     function StreamRenderer(container) {
         this.container = container;
@@ -230,11 +232,15 @@
         text = text.replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
 
         // Parse markdown → HTML
+        // During streaming: use _streamMd (breaks: false) to avoid \n → <br> cramping
+        // During finalize (isFinal): use global parser for exact history match
         var rawHTML = '';
-        if (typeof window.marked !== 'undefined') {
+        if (isFinal && typeof window.marked !== 'undefined') {
             rawHTML = window.marked.parse(text);
-        } else if (typeof window.markdownit !== 'undefined') {
-            rawHTML = window.md ? window.md.render(text) : text;
+        } else if (_streamMd) {
+            rawHTML = _streamMd.render(text);
+        } else if (typeof window.marked !== 'undefined') {
+            rawHTML = window.marked.parse(text);
         } else {
             rawHTML = text;
         }
