@@ -63,7 +63,7 @@ from app.artifacts import (
     apply_patches, ArtifactStore,
 )
 from app.context.action_parser import ActionParser, StreamingActionBuffer
-from app.services.stream_normalizer import StreamNormalizer, get_model_family
+from app.services.stream_normalizer import StreamNormalizer, get_model_family, normalize_paragraph_breaks
 from app.context.context_builder import ContextBuilder, extract_turn_metadata
 from app.context.artifact_state_tracker import get_tracker, ArtifactStateTracker
 from app.file_processor import (
@@ -965,7 +965,7 @@ def chat_stream():
                     if ct == 'content':
                         text = chunk.get('text', '')
                         _search_synthesis_content.append(text)
-                        yield f"data: {json.dumps({'type': 'content', 'text': text})}\n\n"
+                        yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(text)})}\n\n"
                     elif ct == 'reasoning':
                         text = chunk.get('text', '')
                         reasoning_buffer.append(text)
@@ -1039,7 +1039,7 @@ def chat_stream():
                     if _search_second_pass_done:
                         continue
 
-                    yield f"data: {json.dumps({'type': 'content', 'text': text})}\n\n"
+                    yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(text)})}\n\n"
 
                 elif chunk_type == 'done':
                     # Flush normalizer for models that don't emit trailing \n

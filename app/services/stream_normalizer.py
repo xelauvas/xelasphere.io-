@@ -123,6 +123,36 @@ class StreamNormalizer:
         output.append('\n')
         return output
 
+
+# ---------------------------------------------------------------------------
+# Paragraph break normalization (for SSE output, not action parsing)
+# ---------------------------------------------------------------------------
+
+# Pre-compiled regex: single \n between text lines → \n\n
+# Skips list items (- * + digit.), headers (#), blockquotes (>), code fences (```)
+# Lookahead checks what the NEXT line starts with (after the \n)
+_PARA_BREAK_RE = re.compile(
+    r'(?<!\n)\n(?!\n|[-*+#>]|[0-9]+\.|[ \t]*```)'
+)
+
+
+def normalize_paragraph_breaks(text: str) -> str:
+    """Convert single \\n between prose paragraphs to \\n\\n.
+
+    Models like DeepSeek, Llama, Groq send single \\n where markdown
+    expects \\n\\n for paragraph separation. This normalizes the stream
+    so markdown-it produces <p> tags (with CSS margins) instead of <br>
+    (no margin).
+
+    Preserves single \\n for:
+    - List items (- * + 1.)
+    - Headers (#)
+    - Blockquotes (>)
+    - Code fences (```)
+    - Already-doubled \\n\\n
+    """
+    return _PARA_BREAK_RE.sub('\n\n', text)
+
     def _is_complete_header_field(self, text: str) -> bool:
         """Return True if text looks like a complete ACTION header field.
 
