@@ -146,14 +146,18 @@
             return fenceStart >= 0 ? fenceStart : 0;
         }
 
-        // If all constructs closed, check for trailing newline ambiguity
+        // If all constructs closed, render up to the last confirmed paragraph
+        // boundary (\n\n). Text after the last \n\n might be mid-paragraph —
+        // a single \n followed by text renders as <br> (cramped) but could
+        // become a \n\n paragraph break when the next token arrives.
         if (!openStrong && !openEm && !openCode && !openLink) {
-            // If buffer ends with \n but NOT \n\n, the next token determines
-            // whether it's a paragraph break or a <br>. Wait for it.
-            if (len > 0 && text[len - 1] === '\n' && (len < 2 || text[len - 2] !== '\n')) {
-                // Back up to before the trailing \n
-                return lastNewline > 1 ? lastNewline - 1 : lastSafe;
+            // Find the last \n\n in the text
+            var lastParaBreak = text.lastIndexOf('\n\n');
+            if (lastParaBreak >= 0) {
+                // Safe at the end of the last complete paragraph
+                return lastParaBreak + 2;
             }
+            // No paragraph break yet — render everything (single paragraph)
             return len;
         }
 
