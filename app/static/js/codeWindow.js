@@ -4336,6 +4336,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         return messageContainer;
 
     } catch (error) {
+        // Clean up StreamRenderer if stream failed mid-render
+        if (_streamRenderer) {
+            _streamRenderer.finalize();
+            _streamRenderer = null;
+        }
         if (error.name === 'AbortError') {
             console.log('Request was aborted');
         } else {
