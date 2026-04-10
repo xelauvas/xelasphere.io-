@@ -758,9 +758,23 @@ You can learn the basics of almost anything in just 20 focused hours.
 
         // Allow "More" button to work in guest mode
         if (action === 'fetchMoreOptions') {
+            button.classList.add('terminal-tap');
             fetchMoreOptions();
             return;
         }
+
+        // Terminal tap feedback — flash bright then send
+        button.classList.add('terminal-tap');
+        const isMobile = document.body.classList.contains('device-phone') ||
+                         document.body.classList.contains('is-mobile') ||
+                         document.body.classList.contains('viewport-mobile');
+        const delay = isMobile ? 150 : 0;
+
+        setTimeout(() => { _executeOption(button, rawAction, action); }, delay);
+        return;
+    }
+
+    function _executeOption(button, rawAction, action) {
 
         // Report click for smart suggestions learning loop (fire-and-forget)
         if (!isGuestMode()) {

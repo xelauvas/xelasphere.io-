@@ -322,7 +322,7 @@ body.is-ios .mobile-header-bar {
     height: var(--mobile-header-height);
     padding: 0 4px;
     padding-top: env(safe-area-inset-top, 0px);
-    background: #212121 !important;
+    background: #2b2a27 !important;
     border-bottom: none;
     z-index: 9999 !important;
     box-sizing: content-box;
@@ -605,7 +605,7 @@ body.device-phone .left-sidebar {
     transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
                 visibility 0s linear 0.5s,
                 box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1);
-    background: #212121;
+    background: #2b2a27;
     will-change: transform;
 }
 
@@ -1054,7 +1054,7 @@ body.is-ios .arrow-down {
     left: 0;
     right: 0;
     height: var(--header-height);
-    background: var(--background-dark, #212121);
+    background: var(--background-dark, #2b2a27);
     z-index: var(--z-header-bar, 200);
     pointer-events: none;
 }
@@ -1142,7 +1142,7 @@ body.is-ios .arrow-down {
         box-shadow: none;
         min-height: 0;
         visibility: hidden;
-        background: #212121;
+        background: #2b2a27;
     }
 
     /* Enable transitions only after page is ready */
@@ -1614,17 +1614,17 @@ body.is-ios .arrow-down {
     /* Override CSS variables for dark theme on mobile */
     :root,
     body {
-        --background-dark: #212121;
-        --background-darker: #1a1a1a;
-        --card-bg: rgba(33, 33, 33, 0.9);
-        --card-bg-hover: rgba(40, 40, 40, 0.95);
-        --input-row-bg: #2d2d2d;
-        --input-row-bg-focus: #333;
+        --background-dark: #2b2a27;
+        --background-darker: #211f1d;
+        --card-bg: rgba(43, 42, 39, 0.9);
+        --card-bg-hover: rgba(52, 50, 47, 0.95);
+        --input-row-bg: #353330;
+        --input-row-bg-focus: #3d3b37;
     }
 
     body, html {
-        background: #212121;
-        background-color: #212121;
+        background: #2b2a27;
+        background-color: #2b2a27;
     }
 
     /* Header area */
@@ -1642,8 +1642,8 @@ body.is-ios .arrow-down {
     .message-input-container,
     .composer-container,
     .chat-shell__composer {
-        background: #212121;
-        background-color: #212121;
+        background: #2b2a27;
+        background-color: #2b2a27;
         border: none;
     }
 
@@ -1658,8 +1658,8 @@ body.is-ios .arrow-down {
     .input-container,
     .chat-shell__composer,
     .options {
-        background: #212121;
-        background-color: #212121;
+        background: #2b2a27;
+        background-color: #2b2a27;
         border: none;
         border-top: none;
         border-bottom: none;
@@ -1725,7 +1725,7 @@ body.is-ios .arrow-down {
         position: relative;
     }
 
-    /* Greeting container - fixed from start */
+    /* Greeting container - terminal theme */
     body:not(.has-messages) .greeting-container {
         position: fixed;
         top: 16%;
@@ -1736,86 +1736,30 @@ body.is-ios .arrow-down {
         align-items: center;
         justify-content: center;
         text-align: center;
-        padding: 0 0.5rem;
+        padding: 0 1.5rem;
         z-index: 10;
-        background: #212121;
+        background: transparent;
     }
 
-    /* Logo container */
+    /* Hide logo on mobile — terminal doesn't need it */
     body:not(.has-messages) .logo-container {
-        width: 2.75rem;
-        height: 2.75rem;
-        margin: 0 auto 0.75rem;
+        display: none;
     }
 
-    /* Greeting text */
+    /* Greeting text — monospace, dimmed, like a session header */
     body:not(.has-messages) .greeting-text {
-        font-size: 1.4rem;
-        line-height: 1.3;
+        font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+        font-size: 1.1rem;
+        font-weight: 400;
+        line-height: 1.4;
         text-align: center;
-        color: #ffffff;
+        color: rgba(255, 255, 255, 0.7);
         position: relative;
     }
 
-    /* Time-based icon container */
+    /* Hide time icons — keep it clean */
     body:not(.has-messages) .greeting-container .time-icon {
-        display: inline-block;
-        width: 28px;
-        height: 28px;
-        margin-right: 8px;
-        vertical-align: middle;
-        position: relative;
-        top: -2px;
-    }
-
-    /* Sun icon (morning/afternoon) */
-    body:not(.has-messages) .greeting-container .time-icon.sun {
-        color: #fbbf24;
-        animation: sun-glow 3s ease-in-out infinite;
-    }
-
-    @keyframes sun-glow {
-        0%, 100% {
-            filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.4));
-        }
-        50% {
-            filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.7));
-        }
-    }
-
-    /* Sun rays animation */
-    body:not(.has-messages) .greeting-container .time-icon.sun svg {
-        animation: sun-spin 20s linear infinite;
-    }
-
-    @keyframes sun-spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-
-    /* Moon icon (evening/night) */
-    body:not(.has-messages) .greeting-container .time-icon.moon {
-        color: #a5b4fc;
-        animation: moon-glow 4s ease-in-out infinite;
-    }
-
-    @keyframes moon-glow {
-        0%, 100% {
-            filter: drop-shadow(0 0 4px rgba(165, 180, 252, 0.3));
-        }
-        50% {
-            filter: drop-shadow(0 0 10px rgba(165, 180, 252, 0.6));
-        }
-    }
-
-    /* Stars around moon */
-    body:not(.has-messages) .greeting-container .time-icon.moon::before,
-    body:not(.has-messages) .greeting-container .time-icon.moon::after {
-        content: '✦';
-        position: absolute;
-        font-size: 8px;
-        color: rgba(255, 255, 255, 0.6);
-        animation: twinkle 2s ease-in-out infinite;
+        display: none;
     }
 
     body:not(.has-messages) .greeting-container .time-icon.moon::before {
@@ -1863,6 +1807,9 @@ body.is-ios .arrow-down {
        MOBILE OPTIONS - Minimal with Icons
        Clean vertical list with icons
        ============================================= */
+    /* =============================================
+       TERMINAL LINES — typing-feel prompt suggestions
+       ============================================= */
     body:not(.has-messages) .options {
         position: fixed;
         top: 24%;
@@ -1873,7 +1820,7 @@ body.is-ios .arrow-down {
         flex-direction: column;
         align-items: center;
         gap: 0;
-        padding: 0 20px;
+        padding: 0 1.5rem;
         padding-bottom: 20px;
         max-width: 100%;
         width: 100%;
@@ -1881,79 +1828,122 @@ body.is-ios .arrow-down {
         -webkit-overflow-scrolling: touch;
     }
 
-    /* Show all options on mobile */
     .options button:nth-child(n) {
         display: flex !important;
     }
 
-    /* Show More button on mobile */
     .options .more-button {
         display: flex !important;
     }
 
-    /* Enhanced button cards */
+    /* Each line: > prompt text with typing cursor */
     .options button {
         width: 100%;
-        max-width: 340px;
         height: auto;
-        min-height: unset;
-        padding: 14px 16px;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.03) !important;
+        min-height: 44px;
+        max-width: none;
+        padding: 0.5rem 0;
+        border-radius: 0 !important;
+        background: transparent !important;
         border: none !important;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 15px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+        color: rgba(255, 255, 255, 0.55);
+        font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+        font-size: 14px;
         font-weight: 400;
         display: flex;
         flex-direction: row;
         align-items: center;
         justify-content: flex-start;
-        gap: 14px;
-        white-space: normal;
+        gap: 0;
+        white-space: nowrap;
         text-align: left;
         -webkit-tap-highlight-color: transparent;
-        transition: all 0.2s ease;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
-        margin-bottom: 10px;
+        transition: color 0.15s ease;
+        box-shadow: none !important;
+        margin-bottom: 0;
+        overflow: hidden;
+        /* Stagger type-in animation */
+        opacity: 0;
+        animation: terminal-line-in 0.3s ease forwards;
+    }
+
+    .options button:nth-child(1) { animation-delay: 0.1s; }
+    .options button:nth-child(2) { animation-delay: 0.25s; }
+    .options button:nth-child(3) { animation-delay: 0.4s; }
+    .options button:nth-child(4) { animation-delay: 0.55s; }
+
+    @keyframes terminal-line-in {
+        from {
+            opacity: 0;
+            transform: translateX(-8px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .options button:last-child {
+        border-bottom: none !important;
     }
 
     .options button:active {
-        background: rgba(59, 130, 246, 0.1) !important;
-        border-color: rgba(59, 130, 246, 0.3) !important;
-        transform: scale(0.98);
+        color: rgba(255, 255, 255, 1) !important;
+        background: transparent !important;
+        transform: scale(0.97);
+        transition: all 0.08s ease;
     }
 
-    /* Icon with blue accent */
+    /* Flash highlight on tap then fade */
+    .options button.terminal-tap {
+        color: rgba(255, 255, 255, 1) !important;
+        text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+        transition: all 0.4s ease-out;
+    }
+
+    .options button.terminal-tap .button-text::before {
+        color: rgba(255, 255, 255, 0.8) !important;
+    }
+
+    /* Hide icon */
     .options button .option-icon {
-        display: flex !important;
-        align-items: center;
-        justify-content: center;
-        width: 40px;
-        height: 40px;
-        min-width: 40px;
-        border-radius: 12px;
-        padding: 0;
-        margin: 0;
-        /* Default subtle style */
-        background: transparent;
-        border: none;
-    }
-
-    .options button.more-button .option-icon {
         display: none !important;
     }
 
+    /* > prefix via CSS */
+    .options button .button-text::before {
+        content: '>';
+        margin-right: 0.6em;
+        color: rgba(255, 255, 255, 0.25);
+        font-weight: 600;
+    }
+
+    /* Blinking cursor on last suggestion */
+    .options button:nth-last-child(2) .button-text::after {
+        content: '▎';
+        margin-left: 2px;
+        color: rgba(255, 255, 255, 0.4);
+        animation: terminal-blink 1s step-end infinite;
+    }
+
+    @keyframes terminal-blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+    }
+
+    /* More button — sparkle prefix instead of > */
     .options button.more-button .button-text::before {
         content: '✦';
-        margin-right: 0.3em;
-        opacity: 0.7;
-        display: inline-block;
+        margin-right: 0.5em;
+        color: rgba(255, 255, 255, 0.35);
+        font-weight: 400;
         animation: mobile-sparkle-idle 3s ease-in-out infinite;
     }
 
-    /* Loading state: shimmer on text + spinning sparkle */
+    /* Loading: shimmer + spinning sparkle */
     .options button.more-button.loading .button-text {
-        background: linear-gradient(90deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.4) 100%);
+        background: linear-gradient(90deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.3) 100%);
         background-size: 200% 100%;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -1968,8 +1958,8 @@ body.is-ios .arrow-down {
     }
 
     @keyframes mobile-sparkle-idle {
-        0%, 100% { opacity: 0.5; transform: scale(1); }
-        50% { opacity: 1; transform: scale(1.15); }
+        0%, 100% { opacity: 0.4; transform: scale(1); }
+        50% { opacity: 0.9; transform: scale(1.15); }
     }
 
     @keyframes mobile-sparkle-spin {
@@ -1982,31 +1972,26 @@ body.is-ios .arrow-down {
         100% { background-position: -200% 0; }
     }
 
-    .options button .option-icon svg {
-        width: 18px;
-        height: 18px;
-        stroke-width: 2;
-        /* Default subtle */
-        color: rgba(255, 255, 255, 0.6);
-    }
-
     /* Hide subtitle */
     .options button .subtitle {
         display: none !important;
     }
 
-    /* Text styling */
+    /* Text styling — monospace, prompt-like */
     .options button .option-content {
         display: flex;
         flex: 1;
+        min-width: 0;
     }
 
     .options button .button-text {
         display: inline;
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 400;
         color: inherit;
         line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     /* === Chat with messages - ONLY #chat-scroll-region scrolls === */
@@ -2069,55 +2054,12 @@ body.is-ios .arrow-down {
     }
 
     body:not(.has-messages) .options {
-        bottom: calc(var(--composer-reserved-height, 80px) + env(safe-area-inset-bottom, 0px)) !important;
-        padding: 0.4rem 12px !important;
-        gap: 6px !important;
+        padding: 0 1.25rem !important;
     }
 
     body:not(.has-messages) .options button {
+        font-size: 13px !important;
         min-height: 40px !important;
-        max-height: 40px !important;
-        padding: 0 14px !important;
-        font-size: 0.82rem !important;
-        border-radius: 20px !important;
-    }
-
-    body:not(.has-messages) .options button .option-icon {
-        width: 36px !important;
-        height: 36px !important;
-        min-width: 36px !important;
-        display: flex !important;
-        align-items: center;
-        justify-content: center;
-        border-radius: 10px !important;
-    }
-
-    body:not(.has-messages) .options button.more-button .option-icon {
-        display: none !important;
-    }
-
-    /* Daytime - golden/warm icons */
-    body:not(.has-messages).is-daytime .options button .option-icon {
-        background: transparent !important;
-        border: none !important;
-    }
-
-    body:not(.has-messages).is-daytime .options button .option-icon svg {
-        width: 18px !important;
-        height: 18px !important;
-        color: rgba(255, 255, 255, 0.6) !important;
-    }
-
-    /* Nighttime - blue/cool icons */
-    body:not(.has-messages).is-nighttime .options button .option-icon {
-        background: transparent !important;
-        border: none !important;
-    }
-
-    body:not(.has-messages).is-nighttime .options button .option-icon svg {
-        width: 18px !important;
-        height: 18px !important;
-        color: #3b82f6 !important;
     }
 
     body:not(.has-messages) .logo-container {
@@ -2137,10 +2079,8 @@ body.is-ios .arrow-down {
 
     body:not(.has-messages) .options button {
         min-height: 36px !important;
-        max-height: 36px !important;
-        padding: 0 12px !important;
-        font-size: 0.78rem !important;
-        border-radius: 18px !important;
+        font-size: 12px !important;
+        padding: 0.35rem 0 !important;
     }
 
     body:not(.has-messages) .logo-container {
@@ -2895,11 +2835,16 @@ body.is-ios .arrow-down {
         width: 100%;
         max-width: 100%;
         margin: 0;
-        padding: 8px 16px;
+        padding: 10px 14px;
         padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-        background: linear-gradient(to top, #212121 85%, transparent);
+        background: linear-gradient(to top, #2b2a27 80%, transparent);
         z-index: 100;
         box-sizing: border-box;
+        pointer-events: none; /* Let taps pass through the gradient area */
+    }
+    .chat-shell__composer .input-container .input-row,
+    .chat-shell__composer .input-container .arrow-down {
+        pointer-events: auto; /* Re-enable on actual interactive elements */
     }
 
     /* === Input Row - Full width flex container === */
@@ -2913,7 +2858,7 @@ body.is-ios .arrow-down {
         border: none;
         display: flex !important;
         flex-direction: row !important;
-        align-items: flex-end !important;
+        align-items: center !important;
         gap: 8px !important;
         box-sizing: border-box;
     }
@@ -2924,58 +2869,59 @@ body.is-ios .arrow-down {
         min-width: 0;
         max-width: none !important;
         display: flex;
-        align-items: flex-end;
+        align-items: center;
         gap: 4px;
-        padding: 3px 3px 3px 12px;
-        border-radius: 20px;
-        min-height: 38px;
-        background: #2f2f2f;
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 0 6px 0 16px;
+        border-radius: 22px;
+        height: 44px;
+        min-height: 44px;
+        background: #353331;
+        border: none;
         order: 1 !important;
+        transition: background 0.15s ease;
     }
 
-    /* === + Button - Flexbox positioning (NOT absolute) === */
+    /* === + Button - Left of pill, centered === */
     footer.chat-shell__composer .input-container .input-row .actions-menu,
     footer.chat-shell__composer .input-container .input-row.composer-expanded .actions-menu {
         position: static !important;
         flex-shrink: 0 !important;
-        order: 2 !important;
+        order: 0 !important;
         margin: 0 !important;
-        margin-bottom: 3px !important; /* Align with buttons inside pill */
-        align-self: flex-end !important;
+        align-self: center !important;
+        display: flex !important;
+        align-items: center !important;
     }
 
     .chat-shell__composer .input-row > .textarea-container:focus-within {
-        border-color: rgba(255, 255, 255, 0.15);
-        background: #333;
+        background: #3a3836;
     }
 
     /* === Send Button - Inside the pill === */
     .chat-shell__composer .textarea-container .send-button {
-        width: 32px;
-        height: 32px;
-        min-width: 32px;
-        min-height: 32px;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
         border-radius: 50%;
         padding: 0;
         align-items: center;
         justify-content: center;
-        background: #ffffff;
+        background: #fff;
         border: none;
         flex-shrink: 0;
         touch-action: manipulation;
         -webkit-tap-highlight-color: transparent;
-        transition: all 0.15s ease;
+        transition: background 0.15s ease;
     }
 
     .chat-shell__composer .textarea-container .send-button:active {
-        transform: scale(0.95);
-        background: #e5e5e5;
+        background: #e5e5ea;
     }
 
     .chat-shell__composer .textarea-container .send-button i {
         font-size: 13px;
-        color: #000000;
+        color: #000;
     }
 
     /* === Textarea Chat Input - iOS Compatibility === */
@@ -3029,9 +2975,9 @@ body.is-ios .arrow-down {
     }
 
     .chat-shell__composer .input-row textarea.chat-input::placeholder {
-        color: rgba(255, 255, 255, 0.5);
-        font-size: 13px;
-        line-height: 30px; /* Same as textarea for alignment */
+        color: rgba(255, 255, 255, 0.35);
+        font-size: 15px;
+        line-height: 34px;
     }
 
     /* === Microphone button === */
@@ -3046,29 +2992,35 @@ body.is-ios .arrow-down {
         justify-content: center;
         background: transparent;
         border: none;
-        color: rgba(255, 255, 255, 0.6);
+        color: rgba(255, 255, 255, 0.5);
         touch-action: manipulation;
+        padding: 4px;
     }
 
-    /* === Voice mode button === */
+    /* === Voice mode button — white circle like send === */
     .chat-shell__composer .textarea-container .voice-mode-button {
-        width: 32px;
-        height: 32px;
-        min-width: 32px;
-        min-height: 32px;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
         flex-shrink: 0;
         border-radius: 50%;
         align-items: center;
         justify-content: center;
-        background: transparent;
+        background: #fff;
         border: none;
-        color: rgba(255, 255, 255, 0.6);
+        color: #000;
         touch-action: manipulation;
+        transition: background 0.15s ease;
     }
 
-    /* Voice bars - grey color like mic icon */
+    .chat-shell__composer .textarea-container .voice-mode-button:active {
+        background: #e5e5ea;
+    }
+
+    /* Voice bars - black on white circle */
     .chat-shell__composer .textarea-container .voice-mode-button .voice-bar {
-        background: rgba(255, 255, 255, 0.6);
+        background: #000;
     }
 
     /* === Edit Textarea - Prevents iOS Zoom === */
@@ -3105,27 +3057,26 @@ body.is-ios .arrow-down {
 
     .chat-shell__composer .input-row .actions-toggle,
     .chat-shell__composer .input-row .actions-menu > button {
-        width: 38px;
-        height: 38px;
-        min-width: 38px;
-        min-height: 38px;
-        border-radius: 19px; /* Match pill curvature */
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        border-radius: 50%;
         padding: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #2f2f2f;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.7);
+        background: #353331;
+        border: none;
+        color: #fff;
         touch-action: manipulation;
         -webkit-tap-highlight-color: transparent;
-        transition: all 0.15s ease;
+        transition: background 0.15s ease;
     }
 
     .chat-shell__composer .input-row .actions-toggle:active,
     .chat-shell__composer .input-row .actions-menu > button:active {
-        background: #3a3a3a;
-        transform: scale(0.95);
+        background: #3a3836;
     }
 
     .chat-shell__composer .input-row .actions-toggle svg {
@@ -4225,7 +4176,7 @@ body.viewport-mobile:not(.has-messages) .chatbox {
 /* Greeting container - fixed from start */
 body.viewport-mobile:not(.has-messages) .greeting-container {
     position: fixed !important;
-    top: 22% !important;
+    top: 16% !important;
     left: 0 !important;
     right: 0 !important;
     display: flex !important;
@@ -4233,9 +4184,9 @@ body.viewport-mobile:not(.has-messages) .greeting-container {
     align-items: center !important;
     justify-content: center !important;
     text-align: center !important;
-    padding: 0 0.5rem !important;
+    padding: 0 1.5rem !important;
     z-index: 10 !important;
-    background: #212121 !important;
+    background: transparent !important;
 }
 
 /* Hide empty elements between greeting and options */
@@ -4244,19 +4195,25 @@ body.viewport-mobile:not(.has-messages) #chat-display {
     display: none !important;
 }
 
-/* Logo container */
+/* Hide logo — terminal theme */
 body.viewport-mobile:not(.has-messages) .logo-container {
-    width: 2.75rem !important;
-    height: 2.75rem !important;
-    margin: 0 auto 0.75rem !important;
+    display: none !important;
 }
 
-/* Greeting text */
+/* Greeting text — monospace terminal */
 body.viewport-mobile:not(.has-messages) .greeting-text {
-    font-size: 1.4rem !important;
-    line-height: 1.3 !important;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace !important;
+    font-size: 1.1rem !important;
+    font-weight: 400 !important;
+    line-height: 1.4 !important;
     text-align: center !important;
-    color: #ffffff !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Hide time/weather icons in terminal theme */
+body.viewport-mobile:not(.has-messages) .greeting-container .time-icon,
+body.viewport-mobile:not(.has-messages) .greeting-container .weather-icon {
+    display: none !important;
 }
 
 /* Time icon for greeting */
@@ -4401,116 +4358,40 @@ body.is-ios:not(.has-messages) .greeting-container .weather-icon svg {
     animation: lightning-flash 4s ease-in-out infinite;
 }
 
-/* === OPTIONS - Vertical list with icons === */
-/* Hide options when there are messages */
+/* === OPTIONS — Terminal lines (viewport-mobile) === */
 body.viewport-mobile.has-messages .options {
     display: none !important;
 }
 
 body.viewport-mobile:not(.has-messages) .options {
-    position: fixed !important;
-    top: 30% !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 90px !important;
-    display: flex !important;
-    flex-direction: column !important;
     align-items: center !important;
-    gap: 0 !important;
-    padding: 0 20px !important;
-    padding-bottom: 20px !important;
-    max-width: 100% !important;
-    width: 100% !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch !important;
+    padding: 0 1.5rem !important;
 }
 
-/* Show all options */
-body.viewport-mobile .options button:nth-child(n) {
-    display: flex !important;
-}
-
-/* Hide More button */
-body.viewport-mobile .options .more-button {
-    display: none !important;
-}
-
-/* Option buttons - compact style */
 body.viewport-mobile .options button {
-    width: 100% !important;
-    max-width: 340px !important;
-    height: auto !important;
-    min-height: unset !important;
-    padding: 10px 12px !important;
-    border-radius: 10px !important;
     background: transparent !important;
     border: none !important;
-    color: rgba(255, 255, 255, 0.6) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: rgba(255, 255, 255, 0.55) !important;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace !important;
     font-size: 14px !important;
     font-weight: 400 !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-    gap: 12px !important;
-    box-shadow: none !important;
+    gap: 0 !important;
+    max-width: none !important;
 }
 
-/* Icon styling - compact with time-based colors */
 body.viewport-mobile .options button .option-icon {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 28px !important;
-    height: 28px !important;
-    min-width: 28px !important;
-    border-radius: 8px !important;
-    /* Default to golden (daytime) */
-    background: transparent !important;
-    border: none !important;
-}
-
-body.viewport-mobile .options button.more-button .option-icon {
     display: none !important;
 }
 
-body.viewport-mobile .options button .option-icon svg {
-    width: 14px !important;
-    height: 14px !important;
-    color: rgba(255, 255, 255, 0.6) !important;
-}
-
-/* Daytime - golden/warm icons */
-body.viewport-mobile.is-daytime .options button .option-icon {
-    background: transparent !important;
-    border: none !important;
-}
-
-body.viewport-mobile.is-daytime .options button .option-icon svg {
-    width: 14px !important;
-    height: 14px !important;
-    color: rgba(255, 255, 255, 0.6) !important;
-}
-
-/* Nighttime - blue/cool icons */
-body.viewport-mobile.is-nighttime .options button .option-icon {
-    background: transparent !important;
-    border: none !important;
-}
-
-body.viewport-mobile.is-nighttime .options button .option-icon svg {
-    width: 14px !important;
-    height: 14px !important;
-    color: #3b82f6 !important;
-}
-
-/* Hide subtitle */
 body.viewport-mobile .options button .subtitle {
     display: none !important;
 }
 
-/* Text styling */
 body.viewport-mobile .options button .button-text {
-    font-size: 15px !important;
+    font-size: 14px !important;
     font-weight: 400 !important;
     color: inherit !important;
 }
@@ -4536,7 +4417,7 @@ body.viewport-mobile .left-sidebar {
     transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
                 visibility 0s linear 0.5s,
                 box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1) !important;
-    background: #171717 !important;
+    background: #2b2a27 !important;
     will-change: transform;
     box-shadow: none !important;
 }
@@ -4596,7 +4477,7 @@ body.viewport-mobile .mobile-header-bar {
     right: 0 !important;
     height: var(--mobile-header-height) !important;
     padding: 0 4px !important;
-    background: #212121 !important;
+    background: #2b2a27 !important;
     border-bottom: none !important;
     z-index: 9999 !important;
     box-sizing: content-box !important;
@@ -5086,7 +4967,7 @@ body.device-phone .left-sidebar,
 body.device-tablet .left-sidebar {
     width: 280px !important;
     transform: translateX(-100%) !important;
-    background: #212121 !important;
+    background: #2b2a27 !important;
     transition: transform 0.5s ease !important;
     box-shadow: none !important;
 }

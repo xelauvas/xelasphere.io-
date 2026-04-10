@@ -3688,20 +3688,25 @@ async loadChatHistory(pageToken = null, limit = 10) {
         modalOverlay.innerHTML = `
             <div class="modal-content">
                 <h2>Delete chat?</h2>
-                <p>This will delete the selected chat session.</p>
+                <p>This can\u2019t be undone.</p>
                 <div class="modal-actions">
-                    <button class="btn-cancel">Cancel</button>
                     <button class="btn-delete">Delete</button>
+                    <button class="btn-cancel">Cancel</button>
                 </div>
             </div>
         `;
     
         // Add modal to the document body
         document.body.appendChild(modalOverlay);
-    
+
+        // Tap backdrop to dismiss
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) modalOverlay.remove();
+        });
+
         // Event listener for Cancel button
         modalOverlay.querySelector('.btn-cancel').onclick = () => {
-            document.body.removeChild(modalOverlay);
+            modalOverlay.remove();
         };
     
         // Event listener for Delete button

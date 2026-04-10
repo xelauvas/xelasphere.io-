@@ -344,6 +344,7 @@ class SidebarManager {
       // Close sidebar when a chat tab is clicked on mobile (but not when clicking tab actions)
       document.addEventListener('click', (e) => {
         if (!this.shouldUseMobileLayout()) return;
+        if (!document.body.classList.contains('mobile-sidebar-open')) return;
 
         // Don't close if clicking on tab actions toggle or its dropdown
         const isTabActionsClick = e.target.closest('.tab-actions-toggle') ||
@@ -352,11 +353,18 @@ class SidebarManager {
         if (isTabActionsClick) return;
 
         const chatTab = e.target.closest('.chat-tab');
-        if (chatTab && document.body.classList.contains('mobile-sidebar-open')) {
+        if (chatTab) {
           // Small delay to allow the click action to complete
           setTimeout(() => {
             this.closeMobileSidebar();
           }, 150);
+          return;
+        }
+
+        // Tap outside sidebar closes it
+        const sidebar = this.elements.leftSidebar;
+        if (sidebar && !sidebar.contains(e.target) && !e.target.closest('.toggle-button') && !e.target.closest('#mobile-header-burger')) {
+          this.closeMobileSidebar();
         }
       });
     }

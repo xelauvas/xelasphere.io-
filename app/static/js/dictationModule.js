@@ -507,18 +507,13 @@ const DictationModule = (function() {
         const sendButton = textareaContainer.querySelector('.send-button');
         if (sendButton) sendButton.style.display = '';
 
-        // Update button visibility based on input state
-        if (typeof window.updateSendButtonState === 'function') {
-            window.updateSendButtonState();
-        }
-
         // Hide overlay
         recordingOverlay.classList.remove('active');
 
-        // Restore voice mode button (hidden in showRecordingUI)
-        const voiceModeButton = document.getElementById('voice-mode-button');
-        if (voiceModeButton) {
-            voiceModeButton.classList.remove('hidden');
+        // Let updateSendButtonState decide which button to show
+        // based on whether transcribed text was inserted
+        if (typeof window.updateSendButtonState === 'function') {
+            window.updateSendButtonState();
         }
     }
 

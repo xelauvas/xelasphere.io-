@@ -1547,7 +1547,15 @@ function resetEphemeralOptionsForNewChat() {
     optionsDismissed = false;
     // Clear server-side FOUC prevention style for new chat
     const options = document.querySelector('.options[data-ephemeral="true"]');
-    if (options) options.style.cssText = '';
+    if (options) {
+        options.style.cssText = '';
+        // Re-trigger button animations (they start opacity:0 and animate in once)
+        options.querySelectorAll('button').forEach(btn => {
+            btn.style.animation = 'none';
+            btn.offsetHeight; // force reflow
+            btn.style.animation = '';
+        });
+    }
     updateEphemeralOptionsVisibility();
 }
 
