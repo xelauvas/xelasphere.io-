@@ -1035,6 +1035,10 @@ def chat_stream():
                                 break  # Action resolved, stop feeding normalizer output
                         continue  # Buffer until action resolved
 
+                    # Don't forward first-LLM filler text after search synthesis completed
+                    if _search_second_pass_done:
+                        continue
+
                     yield f"data: {json.dumps({'type': 'content', 'text': text})}\n\n"
 
                 elif chunk_type == 'done':
