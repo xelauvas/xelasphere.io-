@@ -3553,9 +3553,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 }
 
                 if (_streamRenderer) {
-                    // Content was rendered live — finalize with done chunk's text
-                    // (has proper \n\n paragraph breaks vs raw stream's single \n)
-                    _streamRenderer.finalize(displayContent);
+                    // Content was rendered live — flush remaining buffer
+                    // (stream already has proper \n\n from backend normalization)
+                    _streamRenderer.finalize();
                     _streamRenderer = null;
                     messageContainer = document.getElementById(aiMsgId);
                     // Ensure the message div has correct metadata

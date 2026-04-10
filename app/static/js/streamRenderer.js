@@ -216,8 +216,7 @@
         var target = this.renderTarget || this.container;
         if (!target) return;
 
-        // Strip ACTION protocol lines
-        text = text.replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
+        // ACTION protocol lines are stripped on the backend before SSE yield
 
         // Parse markdown → HTML using the exact same pipeline as appendTextMessage
         var rawHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
@@ -257,7 +256,7 @@
         }
     };
 
-    StreamRenderer.prototype.finalize = function (finalText) {
+    StreamRenderer.prototype.finalize = function () {
         if (this.destroyed || this.finalized) return;
         this.finalized = true;
 
@@ -267,33 +266,12 @@
             this.rafId = null;
         }
 
-        // Use finalText from done chunk (has proper \n\n) over rawBuffer (single \n)
-        var cleanText = (finalText || this.rawBuffer).replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
+        // Flush remaining rawBuffer — stream already has proper \n\n from backend
+        this._render(this.rawBuffer, true);
 
-        // Final render — use innerHTML for a clean slate (no morphdom artifacts)
-        var target = this.renderTarget || this.container;
-        if (!target) return;
-
-        var rawHTML = '';
-        if (typeof window.marked !== 'undefined') {
-            rawHTML = window.marked.parse(cleanText);
-        } else if (window.md) {
-            rawHTML = window.md.render(cleanText);
-        } else {
-            rawHTML = cleanText;
-        }
-        if (typeof DOMPurify !== 'undefined') {
-            rawHTML = DOMPurify.sanitize(rawHTML);
-        }
-        target.innerHTML = rawHTML;
-
-        // Post-render transforms
-        if (typeof renderMathInMessage === 'function') {
-            renderMathInMessage(target);
-        }
-        if (typeof Prism !== 'undefined') {
-            Prism.highlightAllUnder(target);
-        }
+        // Remove cursor
+        var cursor = this.renderTarget && this.renderTarget.querySelector('.stream-cursor');
+        if (cursor) cursor.remove();
     };
 
     StreamRenderer.prototype.destroy = function () {
