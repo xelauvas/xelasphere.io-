@@ -3110,7 +3110,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 if (isFirstContentChunk) {
                                     isFirstContentChunk = false;
                                     window.scrollState?.contentArrived?.();
-                                    ThinkingIndicator.setContentMode();
+                                    ThinkingIndicator.hide(); hideSimplePulsingDot();
 
                                     // Phase 2: Create StreamRenderer on first content chunk
                                     if (isSessionActive() && typeof StreamRenderer !== 'undefined') {
