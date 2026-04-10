@@ -211,7 +211,7 @@
             rightArrow.style.display = 'none';
 
             Array.from(track.children).forEach(function (card) {
-                card.style.cssText = 'flex: 0 0 80%; display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; scroll-snap-align: start; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); text-decoration: none; color: inherit;';
+                card.style.cssText = 'flex: 0 0 42%; display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; scroll-snap-align: start; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); text-decoration: none; color: inherit;';
 
                 var img = card.querySelector('.search-news-card__image');
                 if (img) {
