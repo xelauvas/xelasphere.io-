@@ -1031,7 +1031,7 @@ def chat_stream():
 
                                 # Forward remainder after the ACTION line (skip if search did 2nd pass)
                                 if not _search_second_pass_done and action_buffer.remainder:
-                                    yield f"data: {json.dumps({'type': 'content', 'text': action_buffer.remainder})}\n\n"
+                                    yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(action_buffer.remainder)})}\n\n"
                                 break  # Action resolved, stop feeding normalizer output
                         continue  # Buffer until action resolved
 
