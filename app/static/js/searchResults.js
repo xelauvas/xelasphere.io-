@@ -36,6 +36,12 @@
         return d.innerHTML;
     }
 
+    function _ensureUrl(url) {
+        if (!url || url === '#') return '#';
+        if (/^https?:\/\//i.test(url)) return url;
+        return 'https://' + url;
+    }
+
     function _getDomain(r) {
         if (r.source_domain) return r.source_domain.replace(/^www\./, '');
         try { return new URL(r.url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
@@ -101,7 +107,7 @@
         webResults.forEach(function (r) {
             const card = document.createElement('a');
             card.className = 'search-news-card';
-            card.href = r.url || '#';
+            card.href = _ensureUrl(r.url);
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
 
@@ -387,7 +393,7 @@
         videos.forEach(function (v) {
             const card = document.createElement('a');
             card.className = 'search-video-card';
-            card.href = v.url || '#';
+            card.href = _ensureUrl(v.url);
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
 
@@ -813,7 +819,7 @@
         var item = document.createElement('div');
         item.className = 'source-item';
         item.addEventListener('click', function () {
-            window.open(s.url, '_blank');
+            window.open(_ensureUrl(s.url), '_blank');
         });
 
         var publisher = document.createElement('div');
