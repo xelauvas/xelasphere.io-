@@ -203,6 +203,38 @@
         wrapper.appendChild(track);
         wrapper.appendChild(rightArrow);
 
+        // Mobile: override to swipe carousel with compact cards
+        if (window.innerWidth <= 768) {
+            wrapper.style.cssText = 'overflow: visible; position: relative; margin: 0 0 16px 0;';
+            track.style.cssText = 'display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; gap: 10px; padding-bottom: 4px;';
+            leftArrow.style.display = 'none';
+            rightArrow.style.display = 'none';
+
+            Array.from(track.children).forEach(function (card) {
+                card.style.cssText = 'flex: 0 0 80%; display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; scroll-snap-align: start; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); text-decoration: none; color: inherit;';
+
+                var img = card.querySelector('.search-news-card__image');
+                if (img) {
+                    img.style.cssText = 'width: 100%; height: 120px; min-height: 120px; max-height: 120px; object-fit: cover; aspect-ratio: unset; display: block;';
+                }
+
+                var placeholder = card.querySelector('.search-news-card__image--placeholder');
+                if (placeholder) {
+                    placeholder.style.cssText += '; width: 100%; height: 120px; min-height: 120px; max-height: 120px;';
+                }
+
+                var title = card.querySelector('.search-news-card__title');
+                if (title) {
+                    title.style.cssText = 'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 0.82rem; font-weight: 600; color: rgba(255,255,255,0.9); line-height: 1.35; margin-bottom: 4px;';
+                }
+
+                var body = card.querySelector('.search-news-card__body');
+                if (body) {
+                    body.style.cssText = 'padding: 8px 10px;';
+                }
+            });
+        }
+
         return wrapper;
     }
 
