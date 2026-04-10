@@ -3460,6 +3460,71 @@ body.is-ios .arrow-down {
         max-width: 150px;
     }
 
+    /* === Search Results === */
+
+    /* Sources sidebar — full-width drawer */
+    .sources-sidebar {
+        width: 100vw;
+    }
+
+    /* News carousel — horizontal scroll */
+    .search-news-cards {
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .search-news-card {
+        flex: 0 0 85%;
+        scroll-snap-align: start;
+    }
+
+    .search-carousel-arrow {
+        display: none;
+    }
+
+    /* Video cards — single column */
+    .search-video-card {
+        width: 100%;
+    }
+
+    .search-video-card__thumb {
+        width: 88px;
+        height: 56px;
+    }
+
+    /* Image carousel — smaller thumbnails */
+    .search-images__item {
+        width: 120px;
+        height: 85px;
+    }
+
+    /* Citation pills — tappable touch targets */
+    .citation-pill {
+        padding: 4px 8px;
+        font-size: 0.7rem;
+        min-height: 32px;
+        border-radius: 6px;
+    }
+
+    /* Citation tooltip — constrain to viewport */
+    .citation-tooltip {
+        width: auto;
+        max-width: 90vw;
+    }
+
+    .citation-tooltip__nav button {
+        padding: 6px 12px;
+        min-height: 36px;
+    }
+
+    /* Sources button — larger touch target */
+    .sources-btn {
+        height: 32px;
+        padding: 0 10px 0 4px;
+        font-size: 0.8rem;
+    }
+
     /* === Action Buttons on Messages === */
     .message-bubble-footer {
         opacity: 1 !important;

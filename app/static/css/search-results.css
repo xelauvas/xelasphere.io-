@@ -708,23 +708,4 @@
     background: rgba(255, 255, 255, 0.2);
 }
 
-/* -----------------------------------------------------------
-   Responsive — mobile
-   ----------------------------------------------------------- */
-@media (max-width: 640px) {
-    .sources-sidebar { width: 100vw; }
-    .search-news-card { flex: 0 0 85%; }
-    .search-carousel-arrow { display: none; }
-
-    .search-video-card { width: 100%; }
-
-    .search-images__item {
-        width: 120px;
-        height: 85px;
-    }
-
-    .search-video-card__thumb {
-        width: 88px;
-        height: 56px;
-    }
-}
+/* Mobile overrides are in mobile.css */
