@@ -2922,7 +2922,7 @@ body.is-ios .arrow-down {
         padding: 0.5rem;
         display: flex;
         flex-direction: column;
-        gap: 0.75rem;
+        gap: 1rem;
     }
 
     /* =============================================
@@ -2950,14 +2950,14 @@ body.is-ios .arrow-down {
     /* === USER MESSAGE - Right aligned bubble === */
     .message.user-message {
         align-items: flex-end;
-        padding: 0 12px;
+        padding: 0 8px;
     }
 
     .message.user-message .message-content {
         display: flex;
         flex-direction: column;
         align-items: flex-end;
-        max-width: 85%;
+        max-width: 90%;
         width: auto;
         margin: 0;
         padding: 0;
@@ -3095,7 +3095,7 @@ body.is-ios .arrow-down {
     /* === AI MESSAGE - Left aligned, full width, no bubble === */
     .message.ai-message {
         align-items: flex-start;
-        padding: 0 12px;
+        padding: 0 8px;
     }
 
     .message.ai-message .message-content {
@@ -3137,10 +3137,21 @@ body.is-ios .arrow-down {
         margin-bottom: 0;
     }
 
-    .message.ai-message .text-message h1,
-    .message.ai-message .text-message h2,
+    .message.ai-message .text-message h1 {
+        font-size: 1.2rem;
+        margin: 12px 0 6px 0;
+        font-weight: 600;
+    }
+
+    .message.ai-message .text-message h2 {
+        font-size: 1.05rem;
+        margin: 12px 0 6px 0;
+        font-weight: 600;
+    }
+
     .message.ai-message .text-message h3 {
-        margin: 16px 0 8px 0;
+        font-size: 0.95rem;
+        margin: 10px 0 4px 0;
         font-weight: 600;
     }
 
