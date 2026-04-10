@@ -302,20 +302,14 @@
             var maxOffset = 0;
 
             function calcMaxOffset() {
-                var lastChild = track.lastElementChild;
-                if (!lastChild) return 0;
-                // Right edge of last item minus visible width
-                return -(lastChild.offsetLeft + lastChild.offsetWidth - wrap.clientWidth);
+                // Total track content minus visible area
+                var total = track.scrollWidth;
+                var visible = wrap.clientWidth;
+                return total > visible ? -(total - visible) : 0;
             }
 
             track.addEventListener('touchstart', function (e) {
                 maxOffset = calcMaxOffset();
-                var lastChild = track.lastElementChild;
-                var debug = document.createElement('div');
-                debug.style.cssText = 'position:fixed;top:10px;left:10px;z-index:9999;background:red;color:white;padding:8px;font-size:11px;border-radius:4px;max-width:90vw;';
-                debug.textContent = 'wrap:' + wrap.clientWidth + ' max:' + maxOffset + ' offsetX:' + Math.round(offsetX) + ' curX:' + Math.round(currentX) + ' trackW:' + track.scrollWidth + ' lastTag:' + (lastChild ? lastChild.tagName + '.' + lastChild.className : '?');
-                document.body.appendChild(debug);
-                setTimeout(function() { debug.remove(); }, 3000);
                 startX = e.touches[0].clientX;
                 currentX = offsetX;
                 track.style.transition = 'none';
