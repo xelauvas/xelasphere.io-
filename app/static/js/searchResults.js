@@ -302,10 +302,15 @@
             var maxOffset = 0;
 
             function calcMaxOffset() {
-                // Total track content minus visible area
-                var total = track.scrollWidth;
+                // Count only visible items to calculate real content width
+                var visibleCount = 0;
+                Array.from(track.children).forEach(function (c) {
+                    if (c.offsetWidth > 0) visibleCount++;
+                });
+                if (visibleCount === 0) return 0;
+                var contentWidth = (visibleCount * 120) + ((visibleCount - 1) * 8);
                 var visible = wrap.clientWidth;
-                return total > visible ? -(total - visible) : 0;
+                return contentWidth > visible ? -(contentWidth - visible) : 0;
             }
 
             track.addEventListener('touchstart', function (e) {
