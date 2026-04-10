@@ -3467,7 +3467,13 @@ body.is-ios .arrow-down {
         width: 100vw;
     }
 
-    /* News carousel — horizontal scroll */
+    /* News carousel — override parent overflow:hidden, enable swipe scroll */
+    .search-news-carousel {
+        overflow: visible;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
     .search-news-cards {
         overflow-x: auto;
         scroll-snap-type: x mandatory;
@@ -3480,7 +3486,7 @@ body.is-ios .arrow-down {
     }
 
     .search-carousel-arrow {
-        display: none;
+        display: none !important;
     }
 
     /* Video cards — single column */
