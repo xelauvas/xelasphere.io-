@@ -3114,17 +3114,39 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                                     // Phase 2: Create StreamRenderer on first content chunk
                                     if (isSessionActive() && typeof StreamRenderer !== 'undefined') {
-                                        // Find or create the message element
                                         _streamMsgId = searchMsgId || placeholderId || generateMessageId();
                                         var targetEl = document.getElementById(_streamMsgId);
                                         if (!targetEl) {
-                                            displayMessage('\u200B', 'ai', 'text', prompt, false, _streamMsgId);
-                                            targetEl = document.getElementById(_streamMsgId);
+                                            // Create message element directly — don't use displayMessage
+                                            // which would start ProgressiveTextDisplay and show the old cursor
+                                            if (window.setHasMessages) window.setHasMessages(true);
+                                            else document.body.classList.add('has-messages');
+                                            var chatDisplay = document.getElementById('chat-display');
+                                            if (chatDisplay) {
+                                                targetEl = createMessageDiv(_streamMsgId, 'ai');
+                                                chatDisplay.appendChild(targetEl);
+                                                createHeader('ai', targetEl);
+                                                var mc = document.createElement('div');
+                                                mc.className = 'message-content';
+                                                targetEl.appendChild(mc);
+                                                targetEl.dataset.originalPrompt = prompt;
+                                                targetEl.dataset.sender = 'ai';
+                                                targetEl.dataset.timestamp = new Date().toISOString();
+                                            }
                                         }
                                         var targetContent = targetEl?.querySelector('.message-content');
                                         if (targetContent) {
-                                            targetContent.innerHTML = ''; // clear placeholder
+                                            // Kill any existing ProgressiveTextDisplay cursor
+                                            var oldCursor = targetContent.querySelector('.streaming-cursor');
+                                            if (oldCursor) oldCursor.remove();
+                                            targetContent.innerHTML = '';
                                             _streamRenderer = new StreamRenderer(targetContent);
+                                            // Stop any active ProgressiveTextDisplay for this session
+                                            var sid = window.chatManager?.activeSessionId || 'default';
+                                            if (typeof ProgressiveTextDisplay !== 'undefined') {
+                                                ProgressiveTextDisplay.complete(sid);
+                                                ProgressiveTextDisplay.remove(sid);
+                                            }
                                         } else {
                                             console.warn('[StreamRenderer] No target element — falling back');
                                             _streamRenderer = null;
