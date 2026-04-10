@@ -241,31 +241,9 @@
         if (html === this.previousHTML) return;
         this.previousHTML = html;
 
-        // Use morphdom for minimal DOM patching
-        if (typeof morphdom !== 'undefined') {
-            // morphdom needs a single root element — wrap in div
-            var wrapper = '<div>' + html + '</div>';
-            try {
-                morphdom(target, wrapper, {
-                    childrenOnly: true,
-                    onBeforeElUpdated: function (fromEl, toEl) {
-                        // Preserve interactive elements
-                        if (fromEl.classList) {
-                            if (fromEl.classList.contains('citation-pill')) return false;
-                            if (fromEl.classList.contains('sources-btn')) return false;
-                            if (fromEl.classList.contains('search-news-carousel')) return false;
-                            if (fromEl.classList.contains('search-images')) return false;
-                        }
-                        return true;
-                    }
-                });
-            } catch (e) {
-                // Fallback to innerHTML if morphdom fails
-                target.innerHTML = html;
-            }
-        } else {
-            target.innerHTML = html;
-        }
+        // Direct innerHTML — simpler and guarantees identical CSS as history path.
+        // morphdom is reserved for post-stream patching (citations, sources).
+        target.innerHTML = html;
     };
 
     StreamRenderer.prototype.finalize = function () {
