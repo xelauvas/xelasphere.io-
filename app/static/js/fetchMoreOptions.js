@@ -399,7 +399,7 @@ You can learn the basics of almost anything in just 20 focused hours.
         picked.forEach(opt => guestShownTitles.add(opt.title));
 
         // "More" is always the 4th button
-        picked.push({ title: 'More', subtitle: 'Load new ideas', action: 'fetchMoreOptions()', icon: 'more' });
+        picked.push({ title: 'More', subtitle: 'Load new ideas', action: 'fetchMoreOptions()', icon: 'none' });
         return picked;
     }
 
@@ -501,10 +501,6 @@ You can learn the basics of almost anything in just 20 focused hours.
         if (!moreButton) return;
 
         moreButton.classList.toggle(CONFIG.CLASSES.LOADING, isLoading);
-        const buttonText = moreButton.querySelector(CONFIG.SELECTORS.BUTTON_TEXT);
-        if (buttonText) {
-            buttonText.textContent = isLoading ? CONFIG.TEXT.LOADING : CONFIG.TEXT.MORE;
-        }
     }
 
     // Greeting is now fixed via CSS, no JS needed

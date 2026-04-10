@@ -2729,7 +2729,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
         // Create a new abort controller for this specific request
         const requestAbortController = new AbortController();
-        
+        abortController = requestAbortController;
 
         // Get DOM elements and values
         const promptInput = document.getElementById('prompt');
@@ -3005,7 +3005,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let artifactStreamActive = false;
                 let searchMsgId = null; // Track message element for search banner
                 let searchBannerDismissed = false; // Track if search banner was dismissed
-                let _streamRenderer = null; // Phase 2: live SSE-to-DOM renderer
+                let _streamRenderer = null; window._activeStreamRenderer = null; // Phase 2: live SSE-to-DOM renderer
                 let _streamMsgId = null;    // Message ID for StreamRenderer container
                 let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
@@ -3140,6 +3140,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             if (oldCursor) oldCursor.remove();
                                             targetContent.innerHTML = '';
                                             _streamRenderer = new StreamRenderer(targetContent);
+                                            window._activeStreamRenderer = _streamRenderer;
                                             // Stop any active ProgressiveTextDisplay for this session
                                             var sid = window.chatManager?.activeSessionId || 'default';
                                             if (typeof ProgressiveTextDisplay !== 'undefined') {
@@ -3148,7 +3149,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             }
                                         } else {
                                             console.warn('[StreamRenderer] No target element — falling back');
-                                            _streamRenderer = null;
+                                            _streamRenderer = null; window._activeStreamRenderer = null;
                                         }
                                     }
                                 }
@@ -3292,7 +3293,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 if (chunk.type === 'search_started') {
                                     if (_streamRenderer) {
                                         _streamRenderer.destroy();
-                                        _streamRenderer = null;
+                                        _streamRenderer = null; window._activeStreamRenderer = null;
                                     }
                                     // Remove the element that had ACTION text
                                     if (_streamMsgId) {
@@ -3548,7 +3549,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     // Destroy StreamRenderer for artifact responses — artifact panel takes over
                     if (streamRenderMode === 'artifact' || (streamArtifact && streamArtifact.artifactId)) {
                         _streamRenderer.destroy();
-                        _streamRenderer = null;
+                        _streamRenderer = null; window._activeStreamRenderer = null;
                     }
                 }
 
@@ -3556,7 +3557,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     // Content was rendered live — flush remaining buffer
                     // (stream already has proper \n\n from backend normalization)
                     _streamRenderer.finalize();
-                    _streamRenderer = null;
+                    _streamRenderer = null; window._activeStreamRenderer = null;
                     messageContainer = document.getElementById(aiMsgId);
                     // Ensure the message div has correct metadata
                     if (messageContainer) {
@@ -4339,7 +4340,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         // Clean up StreamRenderer if stream failed mid-render
         if (_streamRenderer) {
             _streamRenderer.finalize();
-            _streamRenderer = null;
+            _streamRenderer = null; window._activeStreamRenderer = null;
         }
         if (error.name === 'AbortError') {
             console.log('Request was aborted');
@@ -4443,15 +4444,22 @@ function resetState() {
 
 // Abort handler function
 function abortMessage() {
+    // Abort the active session's background request (this is the controller wired to fetch)
+    const currentSessionId = window.chatManager?.activeSessionId;
+    if (currentSessionId) {
+        BackgroundRequestManager.abortRequest(currentSessionId);
+    }
+
+    // Also abort the global fallback controller
     if (abortController) {
         abortController.abort();
         abortController = null;
     }
+
     isRequestInProgress = false;
     isTypingStopped = true;
 
     // Stop ProgressiveTextDisplay for current session
-    const currentSessionId = window.chatManager?.activeSessionId;
     if (currentSessionId && ProgressiveTextDisplay) {
         ProgressiveTextDisplay.complete(currentSessionId);
         ProgressiveTextDisplay.remove(currentSessionId);
@@ -4461,6 +4469,19 @@ function abortMessage() {
     if (window.activeAnimator) {
         window.activeAnimator.stop();
     }
+
+    // Finalize active StreamRenderer if any (cancels RAF loop + removes cursor)
+    if (window._activeStreamRenderer) {
+        window._activeStreamRenderer.finalize();
+        window._activeStreamRenderer = null;
+    }
+
+    // Remove all cursors from the DOM (both StreamRenderer and ProgressiveTextDisplay)
+    document.querySelectorAll('.streaming-cursor, .stream-cursor').forEach(el => el.remove());
+
+    // Hide thinking indicator and pulsing dot
+    if (typeof ThinkingIndicator !== 'undefined') ThinkingIndicator.hide();
+    if (typeof hideSimplePulsingDot === 'function') hideSimplePulsingDot();
 
     const promptInput = document.getElementById('prompt');
     if (promptInput) {

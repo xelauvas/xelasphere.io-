@@ -26,11 +26,14 @@
     border-radius: 8px;
     cursor: pointer;
     user-select: none;
-    transition: background 0.15s ease;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    outline: none;
 }
 
 .ghost-model:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: transparent;
 }
 
 .ghost-model__label {
@@ -230,13 +233,20 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: #2a2a2a;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    width: 100%;
+    max-width: 100%;
+    background: #1a1a1a;
+    border: none;
     border-radius: 16px 16px 0 0;
     padding: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
     z-index: 2000;
     transform: translateY(100%);
     transition: transform 0.25s ease;
+    box-shadow: none;
+    box-sizing: border-box;
+    margin: 0;
+    overflow: visible;
 }
 
 .ghost-bottom-sheet.active {
@@ -246,7 +256,7 @@
 .ghost-bottom-sheet__backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.4);
     z-index: 1999;
     opacity: 0;
     pointer-events: none;
@@ -261,7 +271,9 @@
 .ghost-bottom-sheet__grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
+    gap: 0.4rem;
+    max-width: 400px;
+    margin: 0 auto;
 }
 
 .ghost-bottom-sheet__option {
@@ -275,9 +287,10 @@
     font-size: 0.8rem;
     cursor: pointer;
     transition: background 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
 }
 
-.ghost-bottom-sheet__option:hover,
+.ghost-bottom-sheet__option:active,
 .ghost-bottom-sheet__option.active {
     background: rgba(255, 255, 255, 0.12);
 }

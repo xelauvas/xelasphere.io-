@@ -1,5 +1,4 @@
 // State Variables
-let abortController = new AbortController(); // Used to manage and abort ongoing requests
 
 // Utility: Dismiss mobile keyboard reliably
 function dismissMobileKeyboard() {

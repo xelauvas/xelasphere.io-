@@ -1,6 +1,7 @@
 """WebFetcher — full page content fetching with HTML-to-Markdown and 2-tier LRU cache."""
 
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor, wait as futures_wait, FIRST_COMPLETED
 from urllib.parse import urlparse
 from typing import Dict, Any, List, Optional
@@ -29,12 +30,19 @@ USER_AGENT = 'XelaSphere/1.0 (Search Bot)'
 STRIP_TAGS = [
     'nav', 'footer', 'aside', 'script', 'style', 'noscript',
     'iframe', 'form', 'button', 'svg', 'header',
+    'time', 'figure', 'figcaption', 'meta', 'link',
 ]
 
-# CSS class fragments commonly found on ad/cookie banners
+# CSS class fragments commonly found on ad/cookie/UI noise
 _AD_COOKIE_CLASSES = [
     'cookie', 'gdpr', 'consent', 'banner', 'popup', 'modal',
     'overlay', 'advertisement', 'ad-', '-ad', 'promo', 'subscribe',
+    'live-blog', 'metadata', 'save-button', 'social-share',
+    'breaking-news-bar', 'newsletter', 'related-links',
+    'main-menu', 'skip-link', 'follow-us', 'terms-privacy',
+    'loading-error', 'error-message', 'js-error',
+    'paywall', 'subscribe-box', 'ad-banner', 'js-required',
+    'site-footer', 'site-header', 'nav-bar', 'breadcrumb',
 ]
 
 
@@ -95,7 +103,15 @@ class WebFetcher:
                 if len(raw) >= MAX_CONTENT_BYTES:
                     break
 
-            html = raw.decode(response.apparent_encoding or 'utf-8', errors='replace')
+            # Use apparent_encoding (chardet) for accuracy, but feed it
+            # the raw bytes we already collected instead of re-reading.
+            try:
+                import chardet
+                detected = chardet.detect(raw[:8192])
+                encoding = detected.get('encoding') or response.encoding or 'utf-8'
+            except Exception:
+                encoding = response.encoding or 'utf-8'
+            html = raw.decode(encoding, errors='replace')
 
             meta = self._extract_meta(html)
             result['og_image'] = meta.get('og_image')
@@ -208,14 +224,19 @@ class WebFetcher:
                 tag.decompose()
 
         # Remove elements whose class attribute contains ad/cookie-related tokens
-        for element in soup.find_all(class_=True):
-            classes = ' '.join(element.get('class', [])).lower()
-            if any(token in classes for token in _AD_COOKIE_CLASSES):
-                element.decompose()
+        for element in list(soup.find_all(class_=True)):
+            try:
+                cls = element.get('class')
+                if not cls:
+                    continue
+                classes = ' '.join(cls).lower()
+                if any(token in classes for token in _AD_COOKIE_CLASSES):
+                    element.decompose()
+            except Exception:
+                continue
 
-        markdown = md(str(soup), heading_style='ATX', strip=['a'])
+        markdown = md(str(soup), heading_style='ATX')
         # Collapse excessive blank lines
-        import re
         markdown = re.sub(r'\n{3,}', '\n\n', markdown).strip()
 
         if len(markdown) > max_chars:

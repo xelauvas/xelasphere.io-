@@ -43,70 +43,287 @@
     }
 
     /* -------------------------------------------------------
-       In-app browser — iframe overlay on mobile, window.open on desktop
+       Premium Reader — Pocket/Instapaper-style overlay
     ------------------------------------------------------- */
     function _openLink(url) {
-        url = _ensureUrl(url);
-        if (url === '#') return;
-
-        // Desktop: normal new tab
         if (window.innerWidth > 640) {
-            window.open(url, '_blank');
+            window.open(_ensureUrl(url), '_blank');
             return;
         }
 
-        // Mobile: in-app browser overlay
+        url = _ensureUrl(url);
         var existing = document.getElementById('inapp-browser');
         if (existing) existing.remove();
 
+        var domain = '';
+        var faviconUrl = '';
+        try {
+            var parsed = new URL(url);
+            domain = parsed.hostname.replace(/^www\./, '');
+            faviconUrl = 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=32';
+        } catch (e) { domain = url; }
+
+        // Overlay
         var overlay = document.createElement('div');
         overlay.id = 'inapp-browser';
-        overlay.style.cssText = 'position:fixed; inset:0; z-index:10000; background:#111; display:flex; flex-direction:column;';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:#0d0d0d;display:flex;flex-direction:column;';
 
-        // Header bar
-        var domain = '';
-        try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { domain = url; }
+        // Progress bar
+        var progress = document.createElement('div');
+        progress.style.cssText = 'height:3px;background:#7eb8ff;width:0%;transition:width 0.1s;flex-shrink:0;';
 
+        // Header
         var header = document.createElement('div');
-        header.style.cssText = 'display:flex; align-items:center; gap:10px; padding:10px 12px; background:#1a1a1a; border-bottom:1px solid rgba(255,255,255,0.1); flex-shrink:0; padding-top:calc(10px + env(safe-area-inset-top, 0px));';
+        header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:12px 16px;background:#0d0d0d;flex-shrink:0;padding-top:calc(12px + env(safe-area-inset-top,0px));border-bottom:1px solid rgba(255,255,255,0.08);';
 
-        // Close button
         var closeBtn = document.createElement('button');
-        closeBtn.textContent = '\u2715';
-        closeBtn.style.cssText = 'width:32px; height:32px; border-radius:50%; border:none; background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.8); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;';
-        closeBtn.addEventListener('click', function () { overlay.remove(); });
+        closeBtn.innerHTML = '&#10005;';
+        closeBtn.style.cssText = 'width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.8);font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
+        closeBtn.onclick = function () { overlay.remove(); };
 
-        // Domain label
+        var favEl = document.createElement('img');
+        favEl.src = faviconUrl;
+        favEl.style.cssText = 'width:18px;height:18px;border-radius:4px;flex-shrink:0;';
+        favEl.onerror = function () { this.style.display = 'none'; };
+
         var domainEl = document.createElement('span');
         domainEl.textContent = domain;
-        domainEl.style.cssText = 'flex:1; font-size:0.8rem; color:rgba(255,255,255,0.6); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+        domainEl.style.cssText = 'flex:1;font-size:0.78rem;color:rgba(255,255,255,0.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
 
-        // Open externally button
+        var aaBtn = document.createElement('button');
+        aaBtn.textContent = 'Aa';
+        aaBtn.style.cssText = 'border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:0.8rem;padding:6px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;';
+
         var extBtn = document.createElement('button');
         extBtn.innerHTML = '&#8599;';
-        extBtn.style.cssText = 'width:32px; height:32px; border-radius:50%; border:none; background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.8); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;';
-        extBtn.addEventListener('click', function () { window.open(url, '_blank'); });
+        extBtn.style.cssText = 'width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
+        extBtn.onclick = function () { window.open(url, '_blank'); };
 
         header.appendChild(closeBtn);
+        header.appendChild(favEl);
         header.appendChild(domainEl);
+        header.appendChild(aaBtn);
         header.appendChild(extBtn);
 
-        // Iframe
-        var iframe = document.createElement('iframe');
-        iframe.src = url;
-        iframe.style.cssText = 'flex:1; width:100%; border:none; background:#fff;';
-        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-forms');
+        // Scrollable content
+        var content = document.createElement('div');
+        content.style.cssText = 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;';
 
-        // Loading indicator
-        var loader = document.createElement('div');
-        loader.style.cssText = 'position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:rgba(255,255,255,0.4); font-size:0.85rem;';
-        loader.textContent = 'Loading...';
-        iframe.addEventListener('load', function () { loader.remove(); });
+        // Loading spinner
+        content.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;">'
+            + '<div style="width:36px;height:36px;border:2px solid rgba(255,255,255,0.1);border-top-color:rgba(255,255,255,0.6);border-radius:50%;animation:reader-spin 0.8s linear infinite;"></div>'
+            + '<span style="color:rgba(255,255,255,0.4);font-size:0.85rem;">Fetching article...</span>'
+            + '</div>';
 
+        overlay.appendChild(progress);
         overlay.appendChild(header);
-        overlay.appendChild(loader);
-        overlay.appendChild(iframe);
+        overlay.appendChild(content);
         document.body.appendChild(overlay);
+
+        // Scroll progress bar
+        content.addEventListener('scroll', function () {
+            var max = content.scrollHeight - content.clientHeight;
+            if (max > 0) progress.style.width = Math.min(100, content.scrollTop / max * 100) + '%';
+        });
+
+        // Font size toggle (persisted in sessionStorage)
+        var fontSizes = ['0.9rem', '1.05rem', '1.2rem'];
+        var sizeIndex = parseInt(sessionStorage.getItem('reader-font-size') || '1', 10);
+        if (sizeIndex < 0 || sizeIndex > 2) sizeIndex = 1;
+        var readerBody = null;
+        aaBtn.onclick = function () {
+            sizeIndex = (sizeIndex + 1) % 3;
+            sessionStorage.setItem('reader-font-size', sizeIndex);
+            if (readerBody) readerBody.style.fontSize = fontSizes[sizeIndex];
+        };
+
+        // Error UI builder (no inline onclick — uses event listeners)
+        function _showError(msg) {
+            content.innerHTML = '';
+            var wrap = document.createElement('div');
+            wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;padding:24px;';
+            var icon = document.createElement('div');
+            icon.style.fontSize = '2.5rem';
+            icon.innerHTML = '&#128196;';
+            var label = document.createElement('div');
+            label.style.cssText = 'color:rgba(255,255,255,0.6);font-size:0.95rem;text-align:center;';
+            label.textContent = msg;
+            var btn = document.createElement('button');
+            btn.style.cssText = 'background:#7eb8ff;color:#000;border:none;padding:12px 24px;border-radius:10px;font-size:0.9rem;font-weight:600;cursor:pointer;';
+            btn.textContent = 'Open in Browser \u2192';
+            btn.onclick = function () { window.open(url, '_blank'); };
+            wrap.appendChild(icon);
+            wrap.appendChild(label);
+            wrap.appendChild(btn);
+            content.appendChild(wrap);
+        }
+
+        // Fetch content
+        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        fetch('/reader', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfMeta ? csrfMeta.getAttribute('content') : ''
+            },
+            body: JSON.stringify({ url: url })
+        })
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function (data) {
+            if (data.error || !data.content) {
+                _showError("Couldn't load this article");
+                return;
+            }
+
+            // Strip markdown syntax for accurate word count
+            var plainText = data.content.replace(/[#*\[\]()>_`~!|-]/g, '');
+            var wordCount = plainText.split(/\s+/).filter(Boolean).length;
+            var readTime = Math.max(1, Math.ceil(wordCount / 200));
+            var articleHtml = '';
+
+            // Hero image
+            if (data.image) {
+                articleHtml += '<div style="position:relative;width:100%;height:240px;overflow:hidden;flex-shrink:0;">'
+                    + '<img src="' + _escHtml(data.image) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">'
+                    + '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,#0d0d0d);"></div>'
+                    + '</div>';
+            }
+
+            // Meta block
+            articleHtml += '<div style="padding:20px 20px 16px;">'
+                + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+                + '<div style="display:flex;align-items:center;gap:6px;">'
+                + '<img src="' + _escHtml(faviconUrl) + '" style="width:14px;height:14px;border-radius:3px;" onerror="this.style.display=\'none\'">'
+                + '<span style="font-size:0.78rem;color:rgba(255,255,255,0.45);font-weight:500;">' + _escHtml(domain) + '</span>'
+                + '</div>'
+                + '<span style="font-size:0.75rem;color:rgba(255,255,255,0.35);">' + readTime + ' min read</span>'
+                + '</div>'
+                + '<div style="height:1px;background:rgba(255,255,255,0.07);"></div>'
+                + '</div>';
+
+            // Article body
+            articleHtml += '<div class="reader-body" style="font-size:' + fontSizes[sizeIndex] + ';">'
+                + _markdownToHtml(data.content) + '</div>';
+
+            content.innerHTML = articleHtml;
+            readerBody = content.querySelector('.reader-body');
+        })
+        .catch(function () {
+            _showError('Failed to load article');
+        });
+    }
+
+    function _escHtml(s) {
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(s));
+        return d.innerHTML;
+    }
+
+    function _markdownToHtml(md) {
+        var lines = md.split('\n');
+        var html = '';
+        var inList = false;
+        var listTag = 'ul';
+        var inCodeBlock = false;
+        var codeLines = [];
+
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+
+            // Code block fences
+            if (/^```/.test(line)) {
+                if (inCodeBlock) {
+                    html += '<pre><code>' + codeLines.join('\n') + '</code></pre>';
+                    codeLines = [];
+                    inCodeBlock = false;
+                } else {
+                    if (inList) { html += '</' + listTag + '>'; inList = false; }
+                    inCodeBlock = true;
+                }
+                continue;
+            }
+            if (inCodeBlock) {
+                codeLines.push(line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+                continue;
+            }
+
+            // Horizontal rule
+            if (/^(\s*[-*_]\s*){3,}$/.test(line)) {
+                if (inList) { html += '</' + listTag + '>'; inList = false; }
+                html += '<hr>';
+                continue;
+            }
+
+            // Headers
+            var hMatch = line.match(/^(#{1,3})\s+(.*)/);
+            if (hMatch) {
+                if (inList) { html += '</' + listTag + '>'; inList = false; }
+                var lvl = hMatch[1].length;
+                html += '<h' + lvl + '>' + _inlineMd(hMatch[2]) + '</h' + lvl + '>';
+                continue;
+            }
+
+            // Blockquote
+            if (/^>\s*/.test(line)) {
+                if (inList) { html += '</' + listTag + '>'; inList = false; }
+                html += '<blockquote>' + _inlineMd(line.replace(/^>\s*/, '')) + '</blockquote>';
+                continue;
+            }
+
+            // Ordered list
+            if (/^\s*\d+\.\s+/.test(line)) {
+                if (!inList || listTag !== 'ol') {
+                    if (inList) html += '</' + listTag + '>';
+                    html += '<ol>'; inList = true; listTag = 'ol';
+                }
+                html += '<li>' + _inlineMd(line.replace(/^\s*\d+\.\s+/, '')) + '</li>';
+                continue;
+            }
+
+            // Unordered list
+            if (/^\s*[-*]\s+/.test(line)) {
+                if (!inList || listTag !== 'ul') {
+                    if (inList) html += '</' + listTag + '>';
+                    html += '<ul>'; inList = true; listTag = 'ul';
+                }
+                html += '<li>' + _inlineMd(line.replace(/^\s*[-*]\s+/, '')) + '</li>';
+                continue;
+            }
+
+            if (inList) { html += '</' + listTag + '>'; inList = false; }
+
+            // Blank line
+            if (!line.trim()) continue;
+
+            // Paragraph
+            html += '<p>' + _inlineMd(line) + '</p>';
+        }
+        if (inCodeBlock && codeLines.length) {
+            html += '<pre><code>' + codeLines.join('\n') + '</code></pre>';
+        }
+        if (inList) html += '</' + listTag + '>';
+        return html;
+    }
+
+    function _inlineMd(s) {
+        // Strip inline images first (before escaping)
+        s = s.replace(/!\[([^\]]*)\]\([^)]+\)/g, '');
+        // Escape HTML
+        s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // Inline code
+        s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+        // Bold
+        s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        // Italic
+        s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        // Links
+        s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (m, text, href) {
+            return '<a href="' + href.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener">' + text + '</a>';
+        });
+        return s;
     }
 
     function _getDomain(r) {
@@ -963,7 +1180,10 @@
                 link.rel = 'noopener noreferrer';
                 link.textContent = ' View source';
                 link.style.cssText = 'color: #60a5fa; margin-left: 8px; font-size: 0.85em;';
-                link.addEventListener('click', function (e) { e.stopPropagation(); });
+                link.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    if (window.innerWidth <= 640) { e.preventDefault(); _openLink(sourceUrl); }
+                });
                 cap.appendChild(link);
             }
             overlay.appendChild(cap);

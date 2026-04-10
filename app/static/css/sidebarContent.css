@@ -88,7 +88,7 @@ body.sidebar-collapsed .left-sidebar .sidebar-content {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.625rem 0.75rem;
+    padding: 1.2rem 0.75rem 0.5rem;
     background-color: inherit;
     width: 100%;
     box-shadow: none;
@@ -142,10 +142,11 @@ body.sidebar-collapsed .left-sidebar .sidebar-content {
     display: flex;
     justify-content: flex-start;
     align-items: center;
-    padding: 0.5rem 0.375rem;
+    padding: 0.5rem 0.75rem;
     width: 100%;
-    border-top: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
     box-sizing: border-box;
+    flex-shrink: 0;
 }
 
 .sidebar-item {
@@ -978,7 +979,7 @@ body.sidebar-collapsed .left-sidebar .sidebar-header {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 0.75rem 0.25rem;
+    padding: 1.2rem 0.25rem 0.5rem;
 }
 
 body.sidebar-collapsed .left-sidebar .sidebar-header img {
@@ -994,6 +995,24 @@ body.sidebar-collapsed .left-sidebar .sidebar-toggle-button::after {
     top: 50%;
     left: calc(100% + 0.75rem);
     transform: translateY(-50%);
+}
+
+/* Collapsed footer — center the avatar, hide text */
+body.sidebar-collapsed .left-sidebar .sidebar-footer {
+    padding: 0.5rem 0.25rem;
+    justify-content: center;
+}
+
+body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-header {
+    justify-content: center;
+    padding: 0.45rem;
+    border-radius: 50%;
+    width: auto;
+}
+
+body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-image {
+    width: 32px;
+    height: 32px;
 }
 
 /* --- Chat Tab Components --- */

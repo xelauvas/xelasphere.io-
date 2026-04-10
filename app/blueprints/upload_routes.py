@@ -400,6 +400,50 @@ def get_url_metadata():
         return jsonify({'error': str(e)}), 500
 
 
+@upload_bp.route('/reader', methods=['POST'])
+@limiter.limit("15 per minute")
+@csrf_required
+@error_handler
+def reader_view():
+    """Fetch a URL's content as clean markdown for in-app reader mode."""
+    from app.services.web_fetcher import WebFetcher
+
+    data = request.get_json()
+    url = data.get('url', '').strip()
+    if not url:
+        return jsonify({'error': 'No URL provided'}), 400
+
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+
+    fetcher = WebFetcher()
+    result = fetcher.fetch(url, max_chars=30_000)
+
+    if result.get('error'):
+        return jsonify({'error': result['error']}), 502
+
+    # Clean common navigation/UI noise from markdown
+    content = result.get('content') or ''
+    # Skip-to links: [Skip to Main Content](#main) or bare text
+    content = re.sub(r'\[Skip to[^\]]*\]\([^)]*\)\s*', '', content)
+    content = re.sub(r'^Skip to (Main )?[Cc]ontent\s*$', '', content, flags=re.MULTILINE)
+    content = re.sub(r'^Main Menu\s*$', '', content, flags=re.MULTILINE)
+    content = re.sub(r'^Follow Us\s*$', '', content, flags=re.MULTILINE)
+    content = re.sub(r'^Terms \| Privacy Policy[^\n]*$', '', content, flags=re.MULTILINE)
+    content = re.sub(r'^LOADING(ERROR)?\s*$', '', content, flags=re.MULTILINE)
+    # Strip empty image markdown and collapse blank lines
+    content = re.sub(r'!\[\]\([^)]+\)', '', content)
+    content = re.sub(r'\n{3,}', '\n\n', content).strip()
+
+    return jsonify({
+        'url': url,
+        'title': result.get('og_title') or '',
+        'description': result.get('description') or '',
+        'image': result.get('og_image') or '',
+        'content': content,
+    }), 200
+
+
 @upload_bp.route('/uploads/<path:requested_path>')
 @login_required
 def serve_uploaded_file(requested_path: str):

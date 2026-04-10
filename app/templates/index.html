@@ -116,7 +116,7 @@
     <!-- Custom CSS -->
     <!-- Responsive Foundation (load first for CSS variables) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-foundation.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=1.1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=1.2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/code-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tree-view.css') }}?v=1.1">
@@ -124,11 +124,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/recipe-card.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/prism.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/options-btn.css') }}?v=15">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/search-results.css') }}?v=4">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/options-btn.css') }}?v=18">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/search-results.css') }}?v=6">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=7">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}">
@@ -153,7 +153,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/email-edit-toolbar.css') }}">
 
     <!-- Mobile Responsive -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=26">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=33">
 
     <!-- Context Menu (long-press actions) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/context-menu.css') }}">
@@ -229,13 +229,19 @@
     <div class="page-wrapper">
         <!-- Mobile Header Bar -->
         <header class="mobile-header-bar" id="mobile-header-bar">
-            <!-- Left: Burger menu -->
-            <button class="mobile-header-burger" id="mobile-header-burger" aria-label="Open menu">
-                <span></span>
-                <span></span>
-            </button>
-
-            <!-- Center: Model selector removed — handled by ghost label below input -->
+            <!-- Left: Burger menu + Model selector -->
+            <div class="mobile-header-left">
+                <button class="mobile-header-burger" id="mobile-header-burger" aria-label="Open menu">
+                    <span></span>
+                    <span></span>
+                </button>
+                <button class="mobile-model-selector{% if is_guest %} guest-disabled{% endif %}" id="mobile-model-selector" type="button" aria-label="Select AI model">
+                    <span class="mobile-model-label" id="mobile-model-label">Auto</span>
+                    <svg class="mobile-model-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none">
+                        <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
 
             <!-- Right: Ghost button -->
             {% if not is_guest %}
@@ -292,8 +298,8 @@
                     <img src="{{ url_for('static', filename='images/logo.png') }}" alt="XelaSphere logo" class="sidebar-logo">
                 </a>
                 <button id="sidebar-toggle-button" class="sidebar-toggle-button" aria-label="Toggle sidebar" data-tooltip="Toggle sidebar">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" class="sidebar-icon-svg">
-                        <!-- outer shape -->
+                    <!-- Desktop: sidebar panel icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" class="sidebar-icon-svg sidebar-icon-desktop">
                         <rect
                           x="3"
                           y="4"
@@ -305,7 +311,6 @@
                           stroke-width="1.5"
                           fill="none"
                         />
-                        <!-- vertical divider (sidebar) -->
                         <line
                           x1="9"
                           y1="4"
@@ -314,6 +319,11 @@
                           stroke="#B3B3B3"
                           stroke-width="1.5"
                         />
+                    </svg>
+                    <!-- Mobile: X close icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" class="sidebar-icon-mobile">
+                        <line x1="6" y1="6" x2="18" y2="18" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" stroke-linecap="round"/>
+                        <line x1="18" y1="6" x2="6" y2="18" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" stroke-linecap="round"/>
                     </svg>
                 </button>
             </div>
@@ -914,8 +924,8 @@
     <script src="{{ url_for('static', filename='js/filePreview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/scrollState.js') }}"></script>
     <script src="{{ url_for('static', filename='js/recipeDetector.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=34"></script>
-    <script src="{{ url_for('static', filename='script.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=38"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=5"></script>
     <script>
     // Patch: intercept FormData append to inject image files for vision API
     (function() {
@@ -957,7 +967,7 @@
     <script src="{{ url_for('static', filename='js/sidebarHandler.js') }}"></script>
     <script src="{{ url_for('static', filename='js/weatherIcon.js') }}"></script>
     <script src="{{ url_for('static', filename='js/greeting.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/searchResults.js') }}?v=25"></script>
+    <script src="{{ url_for('static', filename='js/searchResults.js') }}?v=32"></script>
     <script src="{{ url_for('static', filename='js/cryptoChartModule.js') }}"></script>
     <script src="{{ url_for('static', filename='js/unreadManager.js') }}?v=2"></script>
     <script>
@@ -965,7 +975,7 @@
     </script>
     <script src="{{ url_for('static', filename='js/toast.js') }}?v=6"></script>
     <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=7"></script>
-    <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}?v=8"></script>
     <script src="{{ url_for('static', filename='js/typeTextWorker.js') }}"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=2"></script>

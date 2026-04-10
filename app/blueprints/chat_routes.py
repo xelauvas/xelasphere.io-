@@ -22,7 +22,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-from flask import Blueprint, Response, abort, current_app, g, jsonify, request, send_from_directory, session, url_for
+from flask import Blueprint, Response, abort, current_app, g, jsonify, request, send_from_directory, session, stream_with_context, url_for
 from google.cloud import firestore as gc_firestore
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -897,6 +897,11 @@ def chat_stream():
 
     def generate():
         import json
+
+        def _client_disconnected():
+            """Check if the client has closed the connection."""
+            return request.environ.get('werkzeug.request_closed', False)
+
         reasoning_buffer = []
         content_buffer = []
         parsed_action = None  # Set when response is complete
@@ -914,6 +919,9 @@ def chat_stream():
 
             # Phase 1: run search backends, yield all events including search_complete
             for event in search_orchestrator.search_progressive(ws_query, ws_type, stream_model):
+                if _client_disconnected():
+                    logger.info('[Stream] Client disconnected during search — aborting')
+                    return
                 yield f"data: {json.dumps({'type': event.type, **event.data})}\n\n"
 
             # Phase 2: content fetch (background) + synthesis (foreground) in parallel
@@ -961,6 +969,9 @@ def chat_stream():
             logger.info(f"[Stream] Starting search synthesis (2nd LLM call) with {stream_model}")
             try:
                 for chunk in stream_deepseek_response(synthesis_prompt, stream_model, system_prompt_override=_sys_prompt):
+                    if _client_disconnected():
+                        logger.info('[Stream] Client disconnected during search synthesis — aborting')
+                        return
                     ct = chunk.get('type')
                     if ct == 'content':
                         text = chunk.get('text', '')
@@ -973,6 +984,9 @@ def chat_stream():
                     elif ct == 'error':
                         logger.warning(f"[Stream] Search synthesis error: {chunk.get('text')}")
                         break
+            except GeneratorExit:
+                logger.info('[Stream] GeneratorExit during search synthesis — client disconnected')
+                return
             except Exception as e:
                 logger.error(f"[Stream] Search synthesis failed: {e}")
 
@@ -982,6 +996,10 @@ def chat_stream():
             if built_context.messages and built_context.messages[0].get('role') == 'system':
                 _sys_prompt = built_context.messages[0]['content']
             for chunk in stream_deepseek_response(enhanced_prompt, stream_model, system_prompt_override=_sys_prompt):
+                if _client_disconnected():
+                    logger.info('[Stream] Client disconnected — aborting generation')
+                    return
+
                 chunk_type = chunk.get('type')
 
                 if chunk_type == 'reasoning':
@@ -1685,12 +1703,15 @@ def chat_stream():
                 elif chunk_type == 'error':
                     yield f"data: {json.dumps({'type': 'error', 'text': chunk.get('text', 'Unknown error')})}\n\n"
 
+        except GeneratorExit:
+            logger.info('[Stream] GeneratorExit — client disconnected, stopping generation')
+            return
         except Exception as e:
             logger.error(f"Streaming error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'text': str(e)})}\n\n"
 
     return Response(
-        generate(),
+        stream_with_context(generate()),
         mimetype='text/event-stream',
         headers={
             'Cache-Control': 'no-cache',

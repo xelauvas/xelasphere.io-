@@ -116,6 +116,8 @@
             this.sheetEl = document.getElementById('ghost-bottom-sheet');
             this.sheetBackdrop = document.getElementById('ghost-bottom-sheet-backdrop');
             this.sheetGrid = document.getElementById('ghost-bottom-sheet-grid');
+            this.mobileSelectorEl = document.getElementById('mobile-model-selector');
+            this.mobileLabelEl = document.getElementById('mobile-model-label');
 
             if (!this.ghostEl || !this.inputEl) return;
 
@@ -156,6 +158,11 @@
                 this.togglePills();
             });
 
+            // Mobile model selector → open bottom sheet
+            this.mobileSelectorEl?.addEventListener('click', () => {
+                this.toggleSheet();
+            });
+
             // Close pills on outside click
             document.addEventListener('click', (e) => {
                 if (this.pillsOpen &&
@@ -163,9 +170,11 @@
                     !this.pillsEl.contains(e.target)) {
                     this.closePills();
                 }
+                const mobileSelector = this.mobileSelectorEl;
                 if (this.sheetEl?.classList.contains('active') &&
                     !this.sheetEl.contains(e.target) &&
-                    !this.ghostEl.contains(e.target)) {
+                    !this.ghostEl.contains(e.target) &&
+                    !(mobileSelector && mobileSelector.contains(e.target))) {
                     this.closeSheet();
                 }
             });
@@ -221,6 +230,11 @@
             const info = this.getModelInfo(modelId);
 
             this.labelEl.textContent = info.label;
+
+            // Sync mobile header label
+            if (this.mobileLabelEl) {
+                this.mobileLabelEl.textContent = info.label;
+            }
 
             // Show/hide clear button
             if (this.clearEl) {
@@ -360,12 +374,14 @@
                 this.updateSheetActive();
                 this.sheetEl?.classList.add('active');
                 this.sheetBackdrop?.classList.add('active');
+                this.mobileSelectorEl?.setAttribute('aria-expanded', 'true');
             }
         }
 
         closeSheet() {
             this.sheetEl?.classList.remove('active');
             this.sheetBackdrop?.classList.remove('active');
+            this.mobileSelectorEl?.setAttribute('aria-expanded', 'false');
         }
 
         updateSheetActive() {

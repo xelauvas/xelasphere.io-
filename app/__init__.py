@@ -1,4 +1,4 @@
-from flask import Flask, render_template, Response, request
+from flask import Flask, render_template, Response, request, jsonify
 from flask_session import Session
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_cors import CORS  # Import CORS
@@ -233,6 +233,8 @@ def create_app():
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         app.logger.warning(f"CSRF error: {e.description}")
+        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'error': 'CSRF token invalid.'}), 403
         return render_template('csrf_error.html', reason=e.description), 400
 
     return app
