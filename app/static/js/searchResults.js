@@ -287,7 +287,7 @@
 
         // Mobile: touch-swipe carousel via translateX (overflow-x blocked by parent)
         if (window.innerWidth <= 640) {
-            wrap.style.cssText = 'position: relative; overflow: hidden; padding: 4px 0 8px; margin-bottom: 12px;';
+            wrap.style.cssText = 'position: relative; overflow: hidden; padding: 4px 0 8px; margin-bottom: 12px; width: 100%; max-width: 100%;';
             var track = document.createElement('div');
             track.style.cssText = 'display: flex; gap: 8px; transition: transform 0.3s ease; will-change: transform;';
             while (wrap.firstChild) track.appendChild(wrap.firstChild);
