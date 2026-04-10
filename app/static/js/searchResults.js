@@ -699,7 +699,14 @@
 
         // Mobile: convert sidebar to bottom sheet
         if (window.innerWidth <= 640) {
-            sidebar.style.cssText = 'position: fixed; bottom: 0; left: 0; right: 0; top: auto; width: 100%; max-height: 70vh; height: auto; border-radius: 16px 16px 0 0; border-left: none; border-top: 1px solid rgba(255,255,255,0.1); transform: translateY(0); z-index: 1000; background: #1a1a1a; display: flex; flex-direction: column; overflow: hidden;';
+            sidebar.style.cssText = 'position: fixed; bottom: 0; left: 0; right: 0; top: auto; width: 100%; max-height: 70vh; height: auto; border-radius: 16px 16px 0 0; border-left: none; border-top: 1px solid rgba(255,255,255,0.1); transform: translateY(0); z-index: 1000; background: #1a1a1a; display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: contain;';
+            // Prevent pull-to-refresh on the scrollable body
+            var sidebarBody = document.getElementById('sources-sidebar-body');
+            if (sidebarBody) {
+                sidebarBody.style.overscrollBehavior = 'contain';
+                sidebarBody.style.webkitOverflowScrolling = 'touch';
+                sidebarBody.style.overflowY = 'auto';
+            }
             // Add drag handle
             var handle = sidebar.querySelector('.sources-sidebar__drag-handle');
             if (!handle) {
@@ -713,8 +720,9 @@
             if (!overlay) {
                 overlay = document.createElement('div');
                 overlay.id = 'sources-overlay';
-                overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999;';
+                overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; touch-action: none;';
                 overlay.addEventListener('click', function () { closeSidebar(); });
+                overlay.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
                 document.body.appendChild(overlay);
             }
             overlay.style.display = 'block';
