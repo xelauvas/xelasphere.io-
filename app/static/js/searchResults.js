@@ -301,8 +301,15 @@
             var startX = 0, currentX = 0, offsetX = 0;
             var maxOffset = 0;
 
+            function calcMaxOffset() {
+                var lastChild = track.lastElementChild;
+                if (!lastChild) return 0;
+                // Right edge of last item minus visible width
+                return -(lastChild.offsetLeft + lastChild.offsetWidth - wrap.clientWidth);
+            }
+
             track.addEventListener('touchstart', function (e) {
-                maxOffset = -(track.scrollWidth - wrap.clientWidth);
+                maxOffset = calcMaxOffset();
                 startX = e.touches[0].clientX;
                 currentX = offsetX;
                 track.style.transition = 'none';
@@ -310,6 +317,7 @@
 
             track.addEventListener('touchmove', function (e) {
                 var dx = e.touches[0].clientX - startX;
+                // Hard clamp — no overscroll past edges
                 var newX = Math.max(maxOffset, Math.min(0, currentX + dx));
                 track.style.transform = 'translateX(' + newX + 'px)';
                 offsetX = newX;
@@ -317,8 +325,7 @@
 
             track.addEventListener('touchend', function () {
                 track.style.transition = 'transform 0.3s ease';
-                // Recalculate max in case layout changed
-                maxOffset = -(track.scrollWidth - wrap.clientWidth);
+                maxOffset = calcMaxOffset();
                 offsetX = Math.max(maxOffset, Math.min(0, offsetX));
                 track.style.transform = 'translateX(' + offsetX + 'px)';
             }, { passive: true });
