@@ -77,8 +77,6 @@ class Config:
     # Finnhub API for stock news
     FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY', '')
 
-    # GNews API for home page news headlines
-    GNEWS_API_KEY = os.getenv('GNEWS_API_KEY', '')
     SEARCH_BLOCKED_DOMAINS = os.getenv('SEARCH_BLOCKED_DOMAINS', 'zhihu.com,baidu.com,weibo.com,qq.com').split(',')
     options_sets = []
 

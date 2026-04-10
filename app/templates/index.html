@@ -487,16 +487,6 @@
                         <div class="chatbox" id="chatbox">
                             <div class="greeting-container" id="greeting-container" data-username="{{ session['user']['name'] if session.get('user') else '' }}" data-is-guest="{{ 'true' if is_guest else 'false' }}"{% if session_has_messages %} style="display: none !important;"{% endif %}>
                                 <h1 class="greeting-text" id="greeting-text"></h1>
-                                {% if news_headlines %}
-                                <div class="greeting-news" id="greeting-news">
-                                    {% for h in news_headlines %}
-                                    <div class="greeting-news-item{% if loop.first %} active{% endif %}" data-headline="{{ h.title }}">
-                                        <span class="news-title">{{ h.title }}</span>
-                                        <span class="news-meta">{{ h.source }}</span>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
                             </div>
                             <div id="page-controls" class="page-controls hidden" aria-live="polite"></div>
                             <div id="chat-display">
@@ -980,43 +970,6 @@
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=47"></script>
-    <script>
-        // --- Greeting News Fade ---
-        (function() {
-            const container = document.getElementById('greeting-news');
-            if (!container) return;
-
-            const items = container.querySelectorAll('.greeting-news-item');
-            if (items.length <= 1) return;
-
-            let current = 0;
-            const INTERVAL = 6000;
-
-            // Restart progress bar CSS animation in sync
-            function restartProgress() {
-                container.style.setProperty('--news-progress', '0');
-                // Force reflow to restart animation
-                container.offsetHeight;
-                container.style.removeProperty('--news-progress');
-            }
-
-            setInterval(() => {
-                items[current].classList.remove('active');
-                current = (current + 1) % items.length;
-                items[current].classList.add('active');
-                restartProgress();
-            }, INTERVAL);
-
-            container.addEventListener('click', () => {
-                const active = container.querySelector('.greeting-news-item.active');
-                if (!active) return;
-                const headline = active.dataset.headline;
-                if (headline && typeof window.sendMessage === 'function') {
-                    window.sendMessage('Tell me more about this: ' + headline);
-                }
-            });
-        })();
-    </script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Dropdown Menu Logic ---

@@ -104,15 +104,7 @@ def index():
             session['guest_messages'] = []
             session.modified = True
 
-        # Fetch news headlines — personalized for logged-in users, generic for guests
-        from app.news import get_news_headlines
-        news_user_id = session['user']['uid'] if not guest_mode else None
-        news_headlines = get_news_headlines(
-            count=50, db=db if news_user_id else None, user_id=news_user_id
-        )
-
         # Mobile gets 7 suggestions (no More), desktop gets 3 + More = 4 (2x2 grid)
-        # News is now in greeting area, not in the options grid
         mobile = _is_mobile()
         num_suggestions = 6 if mobile else 3
 
@@ -186,7 +178,7 @@ def index():
         return render_template(
             'index.html',
             options=options,
-            news_headlines=news_headlines,
+            news_headlines=None,
             shared_session_id=None,
             is_guest=guest_mode,
             guest_message_count=guest_count,
