@@ -3467,19 +3467,30 @@ body.is-ios .arrow-down {
         width: 100vw;
     }
 
-    /* News carousel — stack vertically on mobile */
+    /* News carousel — horizontal swipe, full-width cards */
     .search-news-carousel {
         overflow: visible;
     }
 
     .search-news-cards {
-        flex-direction: column;
-        gap: 8px;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        gap: 10px;
+        padding-bottom: 4px;
     }
 
     .search-news-card {
-        flex: none;
+        flex: 0 0 100%;
+        scroll-snap-align: start;
+    }
+
+    /* HD image rendering */
+    .search-news-card__image {
+        aspect-ratio: 16 / 9;
         width: 100%;
+        object-fit: cover;
+        image-rendering: -webkit-optimize-contrast;
     }
 
     .search-carousel-arrow {
