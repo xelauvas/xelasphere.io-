@@ -241,9 +241,27 @@
         if (html === this.previousHTML) return;
         this.previousHTML = html;
 
-        // Direct innerHTML — simpler and guarantees identical CSS as history path.
-        // morphdom is reserved for post-stream patching (citations, sources).
-        target.innerHTML = html;
+        // Use morphdom for minimal DOM patching (preserves event listeners)
+        if (typeof morphdom !== 'undefined') {
+            var wrapper = document.createElement('div');
+            wrapper.innerHTML = html;
+            try {
+                morphdom(target, wrapper, {
+                    childrenOnly: true,
+                    onBeforeElUpdated: function (fromEl, toEl) {
+                        if (fromEl.classList) {
+                            if (fromEl.classList.contains('citation-pill')) return false;
+                            if (fromEl.classList.contains('sources-btn')) return false;
+                        }
+                        return true;
+                    }
+                });
+            } catch (e) {
+                target.innerHTML = html;
+            }
+        } else {
+            target.innerHTML = html;
+        }
     };
 
     StreamRenderer.prototype.finalize = function () {
