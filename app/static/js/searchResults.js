@@ -231,7 +231,7 @@
 
             item.appendChild(el);
             item.addEventListener('click', function () {
-                openLightbox(img.url || thumbUrl, img.title || '');
+                openLightbox(thumbUrl, img.title || '', img.url);
             });
 
             wrap.appendChild(item);
@@ -707,7 +707,7 @@
     /* -------------------------------------------------------
        openLightbox
     ------------------------------------------------------- */
-    function openLightbox(url, title) {
+    function openLightbox(imageUrl, title, sourceUrl) {
         var existing = document.querySelector('.search-lightbox');
         if (existing) existing.remove();
 
@@ -716,7 +716,7 @@
 
         var img = document.createElement('img');
         img.className = 'search-lightbox__img';
-        img.src = url;
+        img.src = imageUrl;
         img.alt = title || '';
 
         var closeBtn = document.createElement('button');
@@ -727,10 +727,20 @@
         overlay.appendChild(img);
         overlay.appendChild(closeBtn);
 
-        if (title) {
+        if (title || sourceUrl) {
             var cap = document.createElement('div');
             cap.className = 'search-lightbox__title';
-            cap.textContent = title;
+            if (title) cap.textContent = title;
+            if (sourceUrl) {
+                var link = document.createElement('a');
+                link.href = sourceUrl;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.textContent = ' View source';
+                link.style.cssText = 'color: #60a5fa; margin-left: 8px; font-size: 0.85em;';
+                link.addEventListener('click', function (e) { e.stopPropagation(); });
+                cap.appendChild(link);
+            }
             overlay.appendChild(cap);
         }
 
