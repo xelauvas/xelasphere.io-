@@ -42,6 +42,73 @@
         return 'https://' + url;
     }
 
+    /* -------------------------------------------------------
+       In-app browser — iframe overlay on mobile, window.open on desktop
+    ------------------------------------------------------- */
+    function _openLink(url) {
+        url = _ensureUrl(url);
+        if (url === '#') return;
+
+        // Desktop: normal new tab
+        if (window.innerWidth > 640) {
+            window.open(url, '_blank');
+            return;
+        }
+
+        // Mobile: in-app browser overlay
+        var existing = document.getElementById('inapp-browser');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.id = 'inapp-browser';
+        overlay.style.cssText = 'position:fixed; inset:0; z-index:10000; background:#111; display:flex; flex-direction:column;';
+
+        // Header bar
+        var domain = '';
+        try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { domain = url; }
+
+        var header = document.createElement('div');
+        header.style.cssText = 'display:flex; align-items:center; gap:10px; padding:10px 12px; background:#1a1a1a; border-bottom:1px solid rgba(255,255,255,0.1); flex-shrink:0; padding-top:calc(10px + env(safe-area-inset-top, 0px));';
+
+        // Close button
+        var closeBtn = document.createElement('button');
+        closeBtn.textContent = '\u2715';
+        closeBtn.style.cssText = 'width:32px; height:32px; border-radius:50%; border:none; background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.8); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;';
+        closeBtn.addEventListener('click', function () { overlay.remove(); });
+
+        // Domain label
+        var domainEl = document.createElement('span');
+        domainEl.textContent = domain;
+        domainEl.style.cssText = 'flex:1; font-size:0.8rem; color:rgba(255,255,255,0.6); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+
+        // Open externally button
+        var extBtn = document.createElement('button');
+        extBtn.innerHTML = '&#8599;';
+        extBtn.style.cssText = 'width:32px; height:32px; border-radius:50%; border:none; background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.8); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;';
+        extBtn.addEventListener('click', function () { window.open(url, '_blank'); });
+
+        header.appendChild(closeBtn);
+        header.appendChild(domainEl);
+        header.appendChild(extBtn);
+
+        // Iframe
+        var iframe = document.createElement('iframe');
+        iframe.src = url;
+        iframe.style.cssText = 'flex:1; width:100%; border:none; background:#fff;';
+        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-forms');
+
+        // Loading indicator
+        var loader = document.createElement('div');
+        loader.style.cssText = 'position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:rgba(255,255,255,0.4); font-size:0.85rem;';
+        loader.textContent = 'Loading...';
+        iframe.addEventListener('load', function () { loader.remove(); });
+
+        overlay.appendChild(header);
+        overlay.appendChild(loader);
+        overlay.appendChild(iframe);
+        document.body.appendChild(overlay);
+    }
+
     function _getDomain(r) {
         if (r.source_domain) return r.source_domain.replace(/^www\./, '');
         try { return new URL(r.url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
@@ -110,6 +177,9 @@
             card.href = _ensureUrl(r.url);
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
+            if (window.innerWidth <= 640) {
+                card.addEventListener('click', function (e) { e.preventDefault(); _openLink(r.url); });
+            }
 
             // Image or placeholder
             if (r.thumbnail) {
@@ -396,6 +466,9 @@
             card.href = _ensureUrl(v.url);
             card.target = '_blank';
             card.rel = 'noopener noreferrer';
+            if (window.innerWidth <= 640) {
+                card.addEventListener('click', function (e) { e.preventDefault(); _openLink(v.url); });
+            }
 
             const thumbWrap = document.createElement('div');
             thumbWrap.className = 'search-video-card__thumb';
@@ -819,7 +892,7 @@
         var item = document.createElement('div');
         item.className = 'source-item';
         item.addEventListener('click', function () {
-            window.open(_ensureUrl(s.url), '_blank');
+            _openLink(s.url);
         });
 
         var publisher = document.createElement('div');
@@ -1106,6 +1179,7 @@
         openSidebar:          openSidebar,
         openSidebarForCitations: openSidebarForCitations,
         closeSidebar:         closeSidebar,
+        openLink:             _openLink,
         // Helpers exposed for testing
         createSearchBanner:   createSearchBanner,
         createNewsCarousel:   createNewsCarousel,
