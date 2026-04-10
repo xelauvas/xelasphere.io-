@@ -216,6 +216,9 @@
         var target = this.renderTarget || this.container;
         if (!target) return;
 
+        // Strip ACTION protocol lines (e.g., "ACTION: chat", "ACTION: web_search")
+        text = text.replace(/^ACTION:\s*\w+.*$/gm, '').replace(/^\s*\n/gm, '');
+
         // Parse markdown → HTML
         var rawHTML = '';
         if (typeof window.marked !== 'undefined') {
