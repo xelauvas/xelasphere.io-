@@ -175,6 +175,16 @@
         this.destroyed = false;
         this.finalized = false;
 
+        // Create the standard message wrapper structure so CSS applies correctly
+        // .message-content > .text-message-container > .text-message (render target)
+        var wrapper = document.createElement('div');
+        wrapper.className = 'text-message-container';
+        var inner = document.createElement('div');
+        inner.className = 'text-message';
+        wrapper.appendChild(inner);
+        this.container.appendChild(wrapper);
+        this.renderTarget = inner;
+
         // Bind the RAF callback
         this._tick = this._tick.bind(this);
     }
@@ -203,7 +213,8 @@
     };
 
     StreamRenderer.prototype._render = function (text, isFinal) {
-        if (!this.container) return;
+        var target = this.renderTarget || this.container;
+        if (!target) return;
 
         // Parse markdown → HTML
         var rawHTML = '';
@@ -232,7 +243,7 @@
             // morphdom needs a single root element — wrap in div
             var wrapper = '<div>' + html + '</div>';
             try {
-                morphdom(this.container, wrapper, {
+                morphdom(target, wrapper, {
                     childrenOnly: true,
                     onBeforeElUpdated: function (fromEl, toEl) {
                         // Preserve interactive elements
@@ -247,10 +258,10 @@
                 });
             } catch (e) {
                 // Fallback to innerHTML if morphdom fails
-                this.container.innerHTML = html;
+                target.innerHTML = html;
             }
         } else {
-            this.container.innerHTML = html;
+            target.innerHTML = html;
         }
     };
 
@@ -268,11 +279,12 @@
         this._render(this.rawBuffer, true);
 
         // Post-render transforms
+        var target = this.renderTarget || this.container;
         if (typeof renderMathInMessage === 'function') {
-            renderMathInMessage(this.container);
+            renderMathInMessage(target);
         }
         if (typeof Prism !== 'undefined') {
-            Prism.highlightAllUnder(this.container);
+            Prism.highlightAllUnder(target);
         }
     };
 
