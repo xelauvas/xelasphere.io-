@@ -222,6 +222,28 @@
         // Parse markdown → HTML using the exact same pipeline as appendTextMessage
         var rawHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
 
+        // DIAGNOSTIC: dump what's actually being rendered
+        if (!this._diagLogged && rawHTML.length > 100) {
+            this._diagLogged = true;
+            console.log('[StreamRenderer DIAG] target tag:', target.tagName, 'class:', target.className);
+            console.log('[StreamRenderer DIAG] target parent:', target.parentElement?.className);
+            console.log('[StreamRenderer DIAG] target grandparent:', target.parentElement?.parentElement?.className);
+            console.log('[StreamRenderer DIAG] HTML (first 300):', rawHTML.substring(0, 300));
+            console.log('[StreamRenderer DIAG] <p> count:', (rawHTML.match(/<p>/g) || []).length);
+            console.log('[StreamRenderer DIAG] <br> count:', (rawHTML.match(/<br>/g) || []).length);
+            console.log('[StreamRenderer DIAG] \\n\\n count:', (text.match(/\n\n/g) || []).length);
+            console.log('[StreamRenderer DIAG] \\n count:', (text.match(/\n/g) || []).length);
+            setTimeout(function() {
+                var p = target.querySelector('p');
+                if (p) {
+                    var cs = getComputedStyle(p);
+                    console.log('[StreamRenderer DIAG] p computed margin-bottom:', cs.marginBottom);
+                    console.log('[StreamRenderer DIAG] p computed color:', cs.color);
+                    console.log('[StreamRenderer DIAG] p computed font-size:', cs.fontSize);
+                }
+            }, 100);
+        }
+
         // Sanitize
         if (typeof DOMPurify !== 'undefined') {
             rawHTML = DOMPurify.sanitize(rawHTML);
