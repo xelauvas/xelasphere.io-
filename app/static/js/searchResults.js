@@ -297,11 +297,12 @@
                 item.style.cssText = 'flex: 0 0 120px; height: 85px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); position: relative; background: rgba(255,255,255,0.03);';
             });
 
-            // Touch swipe
+            // Touch swipe — calculate maxOffset lazily (element not in DOM yet)
             var startX = 0, currentX = 0, offsetX = 0;
-            var maxOffset = -(track.scrollWidth - wrap.clientWidth);
+            var maxOffset = 0;
 
             track.addEventListener('touchstart', function (e) {
+                maxOffset = -(track.scrollWidth - wrap.clientWidth);
                 startX = e.touches[0].clientX;
                 currentX = offsetX;
                 track.style.transition = 'none';
