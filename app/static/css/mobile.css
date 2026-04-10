@@ -3482,11 +3482,7 @@ body.is-ios .arrow-down {
         height: 56px;
     }
 
-    /* Image carousel — smaller thumbnails */
-    .search-images__item {
-        width: 120px;
-        height: 85px;
-    }
+    /* Image carousel mobile styles applied via JS in searchResults.js */
 
     /* Citation pills — tappable touch targets */
     .citation-pill {

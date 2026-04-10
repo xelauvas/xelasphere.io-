@@ -285,6 +285,14 @@
             wrap.appendChild(item);
         });
 
+        // Mobile: fix scroll behavior and sizing
+        if (window.innerWidth <= 640) {
+            wrap.style.cssText = 'display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding: 4px 0 8px; margin-bottom: 12px; overscroll-behavior-x: contain; touch-action: pan-x;';
+            Array.from(wrap.children).forEach(function (item) {
+                item.style.cssText = 'flex-shrink: 0; scroll-snap-align: start; width: 120px; height: 85px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); position: relative; background: rgba(255,255,255,0.03);';
+            });
+        }
+
         return wrap.children.length ? wrap : null;
     }
 
