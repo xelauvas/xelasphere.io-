@@ -3289,6 +3289,21 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                    chunk.type === 'search_content' || chunk.type === 'search_complete') {
                             if (isSessionActive()) {
                                 ThinkingIndicator.hide(); hideSimplePulsingDot();
+                                // Destroy StreamRenderer that has ACTION text from 1st LLM call
+                                if (chunk.type === 'search_started') {
+                                    if (_streamRenderer) {
+                                        _streamRenderer.destroy();
+                                        _streamRenderer = null;
+                                    }
+                                    // Remove the element that had ACTION text
+                                    if (_streamMsgId) {
+                                        var actionEl = document.getElementById(_streamMsgId);
+                                        if (actionEl) actionEl.remove();
+                                        _streamMsgId = null;
+                                    }
+                                    // Reset so synthesis chunks create a fresh StreamRenderer
+                                    isFirstContentChunk = true;
+                                }
                                 if (!searchMsgId) {
                                     searchMsgId = placeholderId || generateMessageId();
                                 }
