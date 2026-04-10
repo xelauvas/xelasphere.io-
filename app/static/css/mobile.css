@@ -2919,10 +2919,10 @@ body.is-ios .arrow-down {
     /* === Messages Display === */
     /* Bottom clearance for composer is on #chat-scroll-region only — not here. */
     #chat-display {
-        padding: 0.5rem !important;
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 0.75rem !important;
+        padding: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
     }
 
     /* =============================================
@@ -2932,62 +2932,62 @@ body.is-ios .arrow-down {
 
     /* === BASE MESSAGE RESET === */
     .message {
-        width: 100% !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        display: flex !important;
-        flex-direction: column !important;
+        width: 100%;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
     }
 
     /* Hide all message headers on mobile */
     .message .message-header {
         display: none !important;
-        height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
+        height: 0;
+        padding: 0;
+        margin: 0;
     }
 
     /* === USER MESSAGE - Right aligned bubble === */
     .message.user-message {
-        align-items: flex-end !important;
-        padding: 0 12px !important;
+        align-items: flex-end;
+        padding: 0 12px;
     }
 
     .message.user-message .message-content {
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: flex-end !important;
-        max-width: 85% !important;
-        width: auto !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        gap: 0 !important;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        max-width: 85%;
+        width: auto;
+        margin: 0;
+        padding: 0;
+        gap: 0;
     }
 
     .message.user-message .text-message-container {
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: flex-end !important;
-        width: auto !important;
-        max-width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        width: auto;
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
     }
 
     .message.user-message .text-message {
-        background: #2f2f2f !important;
-        color: #ececec !important;
-        border-radius: 20px 20px 4px 20px !important;
-        padding: 10px 14px !important;
-        font-size: 15px !important;
-        line-height: 1.5 !important;
-        width: auto !important;
-        max-width: 100% !important;
-        margin: 0 !important;
-        word-wrap: break-word !important;
-        overflow-wrap: break-word !important;
-        box-shadow: none !important;
-        border: none !important;
+        background: #2f2f2f;
+        color: #ececec;
+        border-radius: 20px 20px 4px 20px;
+        padding: 10px 14px;
+        font-size: 15px;
+        line-height: 1.6;
+        width: auto;
+        max-width: 100%;
+        margin: 0;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        box-shadow: none;
+        border: none;
     }
 
     /* User message footer - HIDDEN on mobile, shown via long-press popup */
@@ -3014,13 +3014,13 @@ body.is-ios .arrow-down {
 
     /* Long-press visual feedback */
     .message.user-message.holding .text-message {
-        opacity: 0.7 !important;
-        transform: scale(0.98) !important;
-        transition: all 0.1s ease !important;
+        opacity: 0.7;
+        transform: scale(0.98);
+        transition: all 0.1s ease;
     }
 
     .message.user-message.action-active .text-message {
-        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2) !important;
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
     }
 
     /* Message Actions Popup */
@@ -3094,156 +3094,156 @@ body.is-ios .arrow-down {
 
     /* === AI MESSAGE - Left aligned, full width, no bubble === */
     .message.ai-message {
-        align-items: flex-start !important;
-        padding: 0 12px !important;
+        align-items: flex-start;
+        padding: 0 12px;
     }
 
     .message.ai-message .message-content {
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: flex-start !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        gap: 0 !important;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+        gap: 0;
     }
 
     .message.ai-message .text-message-container {
-        width: 100% !important;
-        max-width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
     }
 
     .message.ai-message .text-message {
-        background: transparent !important;
-        color: rgba(244, 244, 245, 0.9) !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        font-size: 15px !important;
-        line-height: 1.6 !important;
-        width: 100% !important;
-        border: none !important;
-        box-shadow: none !important;
+        background: transparent;
+        color: rgba(244, 244, 245, 0.9);
+        padding: 0;
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.6;
+        width: 100%;
+        border: none;
+        box-shadow: none;
     }
 
     /* AI message text formatting */
     .message.ai-message .text-message p {
-        margin: 0 0 12px 0 !important;
+        margin: 0 0 12px 0;
     }
 
     .message.ai-message .text-message p:last-child {
-        margin-bottom: 0 !important;
+        margin-bottom: 0;
     }
 
     .message.ai-message .text-message h1,
     .message.ai-message .text-message h2,
     .message.ai-message .text-message h3 {
-        margin: 16px 0 8px 0 !important;
-        font-weight: 600 !important;
+        margin: 16px 0 8px 0;
+        font-weight: 600;
     }
 
     .message.ai-message .text-message h1:first-child,
     .message.ai-message .text-message h2:first-child,
     .message.ai-message .text-message h3:first-child {
-        margin-top: 0 !important;
+        margin-top: 0;
     }
 
     .message.ai-message .text-message ul,
     .message.ai-message .text-message ol {
-        margin: 8px 0 !important;
-        padding-left: 20px !important;
+        margin: 8px 0;
+        padding-left: 20px;
     }
 
     .message.ai-message .text-message li {
-        margin-bottom: 4px !important;
+        margin-bottom: 4px;
     }
 
     .message.ai-message .text-message strong {
-        font-weight: 600 !important;
-        color: #fff !important;
+        font-weight: 600;
+        color: #fff;
     }
 
     /* AI message footer */
     .message.ai-message .message-bubble-footer {
-        display: flex !important;
-        flex-direction: row !important;
-        justify-content: flex-start !important;
-        align-items: center !important;
-        gap: 4px !important;
-        margin: 8px 0 0 0 !important;
-        padding: 0 !important;
-        width: auto !important;
+        display: flex;
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 4px;
+        margin: 8px 0 0 0;
+        padding: 0;
+        width: auto;
     }
 
     /* === ACTION BUTTONS - Small, subtle === */
     .message.user-message .edit-button,
     .message.user-message .copy-message-button {
-        width: 24px !important;
-        height: 24px !important;
-        min-width: 24px !important;
-        min-height: 24px !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        background: transparent !important;
-        border: none !important;
-        border-radius: 4px !important;
-        opacity: 0.4 !important;
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        cursor: pointer !important;
-        touch-action: manipulation !important;
-        -webkit-tap-highlight-color: transparent !important;
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
+        min-height: 24px;
+        padding: 0;
+        margin: 0;
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        opacity: 0.4;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
     }
 
     .message.user-message .edit-button i,
     .message.user-message .copy-message-button i {
-        font-size: 10px !important;
-        color: rgba(255, 255, 255, 0.6) !important;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.6);
     }
 
     .message.user-message .edit-button:active,
     .message.user-message .copy-message-button:active {
-        opacity: 1 !important;
-        background: rgba(255, 255, 255, 0.1) !important;
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.1);
     }
 
     /* AI message action buttons */
     .message.ai-message .action-btn,
     .message.ai-message .edit-button,
     .message.ai-message .copy-message-button {
-        width: 28px !important;
-        height: 28px !important;
-        min-width: 28px !important;
-        min-height: 28px !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        background: transparent !important;
-        border: none !important;
-        border-radius: 6px !important;
-        opacity: 0.5 !important;
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        cursor: pointer !important;
-        touch-action: manipulation !important;
-        -webkit-tap-highlight-color: transparent !important;
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        min-height: 28px;
+        padding: 0;
+        margin: 0;
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        opacity: 0.5;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
     }
 
     .message.ai-message .action-btn i,
     .message.ai-message .edit-button i,
     .message.ai-message .copy-message-button i {
-        font-size: 12px !important;
-        color: rgba(255, 255, 255, 0.6) !important;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
     }
 
     .message.ai-message .action-btn:active,
     .message.ai-message .edit-button:active,
     .message.ai-message .copy-message-button:active {
-        opacity: 1 !important;
-        background: rgba(255, 255, 255, 0.1) !important;
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.1);
     }
 
     /* === Three Dots More Menu - Mobile === */
@@ -3252,19 +3252,19 @@ body.is-ios .arrow-down {
     }
 
     .action-more-menu {
-        position: absolute !important;
-        bottom: calc(100% + 8px) !important;
-        left: 50% !important;
-        top: auto !important;
-        transform: translateX(-50%) !important;
-        right: auto !important;
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        top: auto;
+        transform: translateX(-50%);
+        right: auto;
         min-width: 180px;
-        background: #252525 !important;
-        border: 1px solid rgba(255, 255, 255, 0.12) !important;
-        border-radius: 12px !important;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
-        padding: 6px 0 !important;
-        z-index: 10000 !important;
+        background: #252525;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        padding: 6px 0;
+        z-index: 10000;
     }
 
     .action-more-menu.open {
@@ -3273,11 +3273,11 @@ body.is-ios .arrow-down {
     }
 
     .action-more-menu-header {
-        padding: 12px 16px 10px !important;
-        font-size: 12px !important;
-        color: rgba(255, 255, 255, 0.6) !important;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-        margin-bottom: 2px !important;
+        padding: 12px 16px 10px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 2px;
     }
 
     @keyframes mobileMenuSlideUp {
@@ -3292,152 +3292,161 @@ body.is-ios .arrow-down {
     }
 
     .action-more-menu button {
-        padding: 12px 16px !important;
-        font-size: 14px !important;
-        color: rgba(255, 255, 255, 0.9) !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: 10px !important;
-        background: transparent !important;
-        border: none !important;
-        width: 100% !important;
-        text-align: left !important;
+        padding: 12px 16px;
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.9);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: transparent;
+        border: none;
+        width: 100%;
+        text-align: left;
         touch-action: manipulation;
         -webkit-tap-highlight-color: transparent;
     }
 
     .action-more-menu button:active {
-        background: rgba(255, 255, 255, 0.1) !important;
+        background: rgba(255, 255, 255, 0.1);
     }
 
     .action-more-menu button svg {
-        width: 18px !important;
-        height: 18px !important;
+        width: 18px;
+        height: 18px;
         flex-shrink: 0;
     }
 
     /* Make the three dots button easier to tap */
     .action-more-button,
     .action-more-wrapper .action-btn {
-        min-width: 36px !important;
-        min-height: 36px !important;
-        padding: 8px !important;
+        min-width: 36px;
+        min-height: 36px;
+        padding: 8px;
     }
 
     /* === ATTACHMENTS === */
     .message.user-message .message-attachments {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        justify-content: flex-end !important;
-        gap: 6px !important;
-        margin-top: 6px !important;
-        width: auto !important;
-        max-width: 100% !important;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+        margin-top: 6px;
+        width: auto;
+        max-width: 100%;
     }
 
     .message.ai-message .message-attachments {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        justify-content: flex-start !important;
-        gap: 8px !important;
-        margin-top: 8px !important;
-        width: 100% !important;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 8px;
+        margin-top: 8px;
+        width: 100%;
     }
 
     /* === Code Blocks - Horizontal Scroll === */
     .message .text-message pre,
     .code-block-wrapper {
-        margin: 0.5rem -0.5rem !important;
-        border-radius: 10px !important;
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch !important;
+        margin: 0.5rem 0;
+        border-radius: 10px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .message .text-message pre code {
-        font-size: 13px !important;
-        line-height: 1.5 !important;
-        white-space: pre !important;
-        word-break: normal !important;
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre;
+        word-break: normal;
     }
 
     /* Code block header */
     .code-block-header {
-        padding: 0.5rem 0.75rem !important;
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 1 !important;
+        padding: 0.5rem 0.75rem;
+        position: sticky;
+        top: 0;
+        z-index: 1;
     }
 
     .code-block-copy {
-        padding: 0.4rem 0.6rem !important;
-        min-height: 32px !important;
-        touch-action: manipulation !important;
+        padding: 0.5rem 0.7rem;
+        min-height: 44px;
+        min-width: 44px;
+        touch-action: manipulation;
     }
 
     /* === Lists in Messages === */
     .message.ai-message .text-message ul,
     .message.ai-message .text-message ol {
-        padding-left: 1.25rem !important;
-        margin: 0.5rem 0 !important;
+        padding-left: 1rem;
+        margin: 0.5rem 0;
     }
 
     .message.ai-message .text-message li {
-        margin-bottom: 0.35rem !important;
-        min-height: 28px !important;
-        padding: 0.1rem 0 !important;
+        margin-bottom: 0.35rem;
+        min-height: 28px;
+        padding: 0.1rem 0;
+    }
+
+    /* Nested lists: reduce indent */
+    .message.ai-message .text-message ul ul,
+    .message.ai-message .text-message ol ol,
+    .message.ai-message .text-message ul ol,
+    .message.ai-message .text-message ol ul {
+        padding-left: 0.75rem;
     }
 
     /* === Tables - Scrollable === */
     .message .text-message table {
-        display: block !important;
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch !important;
-        margin: 0.75rem 0 !important;
-        font-size: 13px !important;
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0.75rem 0;
+        font-size: 13px;
     }
 
     .message .text-message th,
     .message .text-message td {
-        padding: 0.5rem 0.75rem !important;
-        white-space: nowrap !important;
+        padding: 0.5rem 0.75rem;
+        white-space: nowrap;
     }
 
     /* === Blockquotes === */
     .message .text-message blockquote {
-        margin: 0.75rem 0 !important;
-        padding: 0.65rem 0.85rem !important;
-        font-size: 14px !important;
+        margin: 0.75rem 0;
+        padding: 0.65rem 0.85rem;
+        font-size: 14px;
     }
 
     /* === Inline Code === */
     .message .text-message code:not(pre code) {
-        font-size: 13px !important;
-        padding: 0.15rem 0.35rem !important;
-        border-radius: 4px !important;
+        font-size: 13px;
+        padding: 0.2rem 0.4rem;
+        border-radius: 6px;
     }
 
     /* === Links - Touch Targets === */
     .message .text-message a {
-        padding: 0.1rem 0 !important;
-        display: inline !important;
+        padding: 0.1rem 0;
+        display: inline;
     }
 
     /* === Image Attachments === */
     .message .attachment-card.image-attachment {
-        max-width: 100% !important;
+        max-width: 100%;
     }
 
     .message .attachment-card.image-attachment .attachment-thumb {
-        max-width: 280px !important;
-        width: 100% !important;
-        height: auto !important;
-        aspect-ratio: auto !important;
+        max-width: 280px;
+        width: 100%;
+        height: auto;
+        aspect-ratio: auto;
     }
 
     /* === File Attachments === */
     .message .file-preview-card {
-        width: calc(50% - 0.25rem) !important;
-        max-width: 150px !important;
+        width: calc(50% - 0.25rem);
+        max-width: 150px;
     }
 
     /* === Action Buttons on Messages === */
