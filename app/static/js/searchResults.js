@@ -303,6 +303,12 @@
 
             track.addEventListener('touchstart', function (e) {
                 maxOffset = -(track.scrollWidth - wrap.clientWidth);
+                // Visual debug — remove after confirming
+                var debug = document.createElement('div');
+                debug.style.cssText = 'position:fixed;top:10px;left:10px;z-index:9999;background:red;color:white;padding:8px;font-size:12px;border-radius:4px;';
+                debug.textContent = 'track:' + track.scrollWidth + ' wrap:' + wrap.clientWidth + ' max:' + maxOffset;
+                document.body.appendChild(debug);
+                setTimeout(function() { debug.remove(); }, 3000);
                 startX = e.touches[0].clientX;
                 currentX = offsetX;
                 track.style.transition = 'none';
