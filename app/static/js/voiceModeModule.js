@@ -188,20 +188,19 @@ const VoiceModeModule = (function() {
     // Waveform State Parameters (lower opacity for subtle bg)
     // ────────────────────────────────────────
 
-    // ── Vintage oscilloscope — warm phosphor palette ──
     const STATE_PARAMS = {
-        idle:      { amp: 3,  freq: 0.6, noiseAmt: 0.20, opacity: 0.20, glowMul: 0.5 },
-        listening: { amp: 28, freq: 1.0, noiseAmt: 0.35, opacity: 0.45, glowMul: 1.0 },
-        thinking:  { amp: 10, freq: 1.3, noiseAmt: 0.30, opacity: 0.35, glowMul: 0.8 },
-        speaking:  { amp: 24, freq: 2.0, noiseAmt: 0.45, opacity: 0.50, glowMul: 1.2 },
+        idle:      { amp: 3,  freq: 0.8, noiseAmt: 0.15, opacity: 0.25, glowMul: 0.3 },
+        listening: { amp: 28, freq: 1.2, noiseAmt: 0.30, opacity: 0.40, glowMul: 0.5 },
+        thinking:  { amp: 10, freq: 1.5, noiseAmt: 0.25, opacity: 0.30, glowMul: 0.4 },
+        speaking:  { amp: 24, freq: 2.5, noiseAmt: 0.40, opacity: 0.45, glowMul: 0.5 },
     };
 
-    // Warm phosphor tones — amber idle, warm cyan listen, gold think, green speak
+    // Waveform is always white — only label + button change color
     const STATE_COLORS = {
-        idle:      [200, 170, 110],   // warm amber phosphor
-        listening: [120, 200, 180],   // warm teal CRT
-        thinking:  [220, 180, 80],    // gold filament
-        speaking:  [140, 210, 100],   // green phosphor (classic scope)
+        idle:      [255, 255, 255],
+        listening: [255, 255, 255],
+        thinking:  [255, 255, 255],
+        speaking:  [255, 255, 255],
     };
 
     let _wp = { amp: 3, freq: 0.8, noiseAmt: 0.15, opacity: 0.15, glowMul: 0.3 };
@@ -333,47 +332,26 @@ const VoiceModeModule = (function() {
             if (_trailBuf.length > TRAIL_LEN) _trailBuf.shift();
         }
 
-        // ── Vintage phosphor persistence (long ghost trails) ──
+        // Ghost trails — thin, fading
         for (let t = 0; t < _trailBuf.length; t++) {
-            const age = (t + 1) / _trailBuf.length;
-            const ghostAlpha = 0.06 * age * _wp.opacity; // brighter persistence
-            _ctx.lineWidth = 1 + age * 0.5; // trails thicken slightly as they fade
-            _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${ghostAlpha.toFixed(3)})`;
+            const ghostAlpha = 0.03 * (t + 1) / _trailBuf.length * _wp.opacity;
+            _ctx.lineWidth = 0.5;
+            _ctx.strokeStyle = `rgba(255, 255, 255, ${ghostAlpha.toFixed(3)})`;
             _drawCurve(_ctx, _trailBuf[t].top);
             _drawCurve(_ctx, _trailBuf[t].bottom);
         }
 
-        // ── CRT phosphor bloom — wide soft glow ──
-        _ctx.lineWidth = 8;
-        _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.025 * _wp.glowMul).toFixed(3)})`;
+        // Soft glow layer
+        _ctx.lineWidth = 3;
+        _ctx.strokeStyle = `rgba(255, 255, 255, ${(0.04 * _wp.glowMul).toFixed(3)})`;
         _drawCurve(_ctx, topPoints);
         _drawCurve(_ctx, bottomPoints);
 
-        _ctx.lineWidth = 5;
-        _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.05 * _wp.glowMul).toFixed(3)})`;
-        _drawCurve(_ctx, topPoints);
-        _drawCurve(_ctx, bottomPoints);
-
-        // ── Hot core — bright narrow line ──
-        _ctx.lineWidth = 2;
-        _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(_wp.opacity * 0.7).toFixed(3)})`;
-        _drawCurve(_ctx, topPoints);
-        _drawCurve(_ctx, bottomPoints);
-
-        // ── White-hot center — the "beam" ──
-        const wr = Math.min(255, r + 80), wg = Math.min(255, g + 80), wb = Math.min(255, b + 60);
+        // Core line — slim and white
         _ctx.lineWidth = 1;
-        _ctx.strokeStyle = `rgba(${wr}, ${wg}, ${wb}, ${(_wp.opacity * 0.9).toFixed(3)})`;
+        _ctx.strokeStyle = `rgba(255, 255, 255, ${_wp.opacity.toFixed(3)})`;
         _drawCurve(_ctx, topPoints);
         _drawCurve(_ctx, bottomPoints);
-
-        // ── Subtle scanlines (every 4px, very faint) ──
-        if (_wp.opacity > 0.15) {
-            _ctx.fillStyle = `rgba(0, 0, 0, 0.04)`;
-            for (let y = 0; y < h; y += 4) {
-                _ctx.fillRect(0, y, w, 1);
-            }
-        }
 
         // Particles (half alpha for subtlety)
         for (const p of _particles) {
@@ -383,17 +361,10 @@ const VoiceModeModule = (function() {
             p.vy *= 0.96;
             p.vx *= 0.98;
             p.life -= 16.67;
-            const alpha = Math.max(0, (p.life / p.maxLife) * 0.5);
-            const pr = Math.min(255, r + 40), pg = Math.min(255, g + 40), pb = Math.min(255, b + 20);
-            // Hot spark core
+            const alpha = Math.max(0, (p.life / p.maxLife) * 0.4);
             _ctx.beginPath();
             _ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
-            _ctx.fillStyle = `rgba(${pr}, ${pg}, ${pb}, ${alpha.toFixed(3)})`;
-            _ctx.fill();
-            // Warm glow around spark
-            _ctx.beginPath();
-            _ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-            _ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(alpha * 0.15).toFixed(3)})`;
+            _ctx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
             _ctx.fill();
         }
 

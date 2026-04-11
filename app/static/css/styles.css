@@ -2032,24 +2032,14 @@ img.composer-attachment-thumb--empty {
     50% { opacity: 1; box-shadow: 0 0 8px rgba(200, 170, 110, 0.6); }
 }
 
-/* State-colored border — vintage warm phosphor tones */
+/* Textarea border stays neutral during voice mode */
 .textarea-container {
     transition: border-color 500ms ease, box-shadow 500ms ease;
 }
 
-.textarea-container.voice-active[data-voice-state="listening"] {
-    border-color: rgba(120, 200, 180, 0.35);
-    box-shadow: 0 0 16px rgba(120, 200, 180, 0.07), inset 0 1px 0 rgba(120, 200, 180, 0.05);
-}
-
-.textarea-container.voice-active[data-voice-state="thinking"] {
-    border-color: rgba(220, 180, 80, 0.35);
-    box-shadow: 0 0 16px rgba(220, 180, 80, 0.06), inset 0 1px 0 rgba(220, 180, 80, 0.05);
-}
-
-.textarea-container.voice-active[data-voice-state="speaking"] {
-    border-color: rgba(140, 210, 100, 0.35);
-    box-shadow: 0 0 16px rgba(140, 210, 100, 0.07), inset 0 1px 0 rgba(140, 210, 100, 0.05);
+.textarea-container.voice-active {
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.03);
 }
 
 /* State-colored label — warm vintage tones */
