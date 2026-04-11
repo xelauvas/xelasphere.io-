@@ -873,8 +873,8 @@ def generate_groq_tts():
         voice = _pick_voice_for_content(pick_text)
         logger.info(f"TTS: dynamic voice → {voice}, lang={lang}")
 
-    # ── 1. Try Kokoro first (local, free, unlimited) ──
-    kokoro_result = _generate_kokoro_tts(text, voice, lang)
+    # ── 1. Try Kokoro first (local, free, unlimited) — only for supported languages ──
+    kokoro_result = _generate_kokoro_tts(text, voice, lang) if lang in KOKORO_LANG_MAP else None
     if kokoro_result:
         audio_bytes, mime_type = kokoro_result
         logger.info(f"TTS: Kokoro success, {len(audio_bytes)} bytes")
