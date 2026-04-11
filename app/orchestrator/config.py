@@ -12,7 +12,6 @@ PROVIDER_ENDPOINTS = {
     "deepseek": "https://api.deepseek.com/models",
     "gemini":   "https://generativelanguage.googleapis.com/v1beta/openai/models",
     # "ollama":   None,   # removed — no local LLM
-    "moonshot": None,   # no /models endpoint — use ping
 }
 
 # Known free tier limits (conservative — 80% of actual)
@@ -39,7 +38,6 @@ FALLBACK_CHAINS = {
         ("cerebras", "qwen-3-235b-a22b-instruct-2507",         "tier1"),
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD
         ("gemini",   "gemini-2.5-flash",                       "tier1"),  # 20 RPD reasoning
-        ("moonshot", "kimi-k2.5",                              "tier1"),
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
     "reasoning": [
@@ -48,7 +46,6 @@ FALLBACK_CHAINS = {
         ("cerebras", "qwen-3-235b-a22b-instruct-2507",         "tier1"),
         ("gemini",   "gemini-2.5-flash",                       "tier1"),  # 20 RPD but best for reasoning
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD fallback
-        ("moonshot", "kimi-latest",                            "tier1"),
         ("openai",   "gpt-4.1-mini",                           "tier0"),
     ],
     "general_chat": [
@@ -57,7 +54,6 @@ FALLBACK_CHAINS = {
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD
         ("gemini",   "gemma-4-26b-a4b-it",                    "tier1"),  # 1500 RPD
         ("deepseek", "deepseek-chat",                          "tier1"),
-        ("moonshot", "kimi-latest",                            "tier1"),
         ("openai",   "gpt-4.1-nano",                           "tier0"),
     ],
     "fast_chat": [
@@ -69,7 +65,6 @@ FALLBACK_CHAINS = {
     ],
     "long_context": [
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD, 1M context
-        ("moonshot", "kimi-latest",                            "tier1"),
         ("deepseek", "deepseek-chat",                          "tier1"),
         ("groq",     "llama-3.3-70b-versatile",                "tier1"),
         ("openai",   "gpt-4.1",                                "tier0"),
@@ -102,7 +97,6 @@ MODEL_FAMILIES = {
     "llama":    ["llama"],
     "qwen":     ["qwen"],
     "deepseek": ["deepseek"],
-    "kimi":     ["kimi"],
     "gemma":    ["gemma"],
     "gpt":      ["gpt"],
     "gemini":   ["gemini"],

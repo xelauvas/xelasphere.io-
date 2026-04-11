@@ -59,7 +59,6 @@ def _check_all_providers():
         "gemini":   getattr(Config, "GEMINI_API_KEY", ""),
         "openai":   getattr(Config, "OPENAI_API_KEY", ""),
         "deepseek": getattr(Config, "DEEPSEEK_API_KEY", ""),
-        "moonshot": getattr(Config, "MOONSHOT_API_KEY", ""),
     }
 
     # Ollama is local — check separately
@@ -179,9 +178,6 @@ def _fetch_live_models(provider: str, api_key: str) -> Optional[Dict]:
     """Fetch available models from provider API."""
     endpoint = PROVIDER_ENDPOINTS.get(provider)
 
-    if provider == "moonshot":
-        return _ping_moonshot(api_key)
-
     if not endpoint:
         return None
 
@@ -196,29 +192,6 @@ def _fetch_live_models(provider: str, api_key: str) -> Optional[Dict]:
         return {m["id"]: m for m in data.get("data", [])}
     except Exception as e:
         logger.warning(f"[Watcher] {provider} /models failed: {e}")
-        return None
-
-
-def _ping_moonshot(api_key: str) -> Optional[Dict]:
-    """Moonshot has no /models endpoint — ping with 1-token completion."""
-    try:
-        resp = http_requests.post(
-            "https://api.moonshot.cn/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "kimi-latest",
-                "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 1,
-            },
-            timeout=10,
-        )
-        if resp.status_code == 200:
-            return {"kimi-latest": {}, "kimi-k2.5": {}}
-        return None
-    except Exception:
         return None
 
 
