@@ -45,11 +45,11 @@ FALLBACK_CHAINS = {
     ],
     "reasoning": [
         ("deepseek", "deepseek-reasoner",                      "tier1"),
+        ("moonshot", "kimi-k2-thinking",                       "tier1"),  # deep reasoning + agent, 256k
         ("groq",     "qwen/qwen3-32b",                         "tier1"),
         ("cerebras", "qwen-3-235b-a22b-instruct-2507",         "tier1"),
         ("gemini",   "gemini-2.5-flash",                       "tier1"),  # 20 RPD but best for reasoning
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD fallback
-        ("moonshot", "kimi-k2-thinking",                       "tier1"),  # deep reasoning, 256k
         ("moonshot", "kimi-k2-thinking-turbo",                 "tier1"),  # fast reasoning, 60-100 tok/s
         ("openai",   "gpt-4.1-mini",                           "tier0"),
     ],
