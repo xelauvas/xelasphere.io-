@@ -659,6 +659,21 @@ def _detect_language(text, hint=''):
                              ' les ', ' des ', ' est ', ' une ', ' sont ', ' dans ',
                              ' pour ', ' avec ', ' très ', ' être ', ' bien ']):
         return 'fr'
+    # Romanian markers (diacritics ă â î ș ț or common words)
+    if any(ch in text for ch in 'ăâîșțĂÂÎȘȚ') or \
+       any(w in t for w in [' sunt ', ' este ', ' pentru ', ' foarte ', ' bună ', ' mulțumesc ',
+                             ' salut ', ' acest ', ' aceasta ', ' care ', ' când ', ' unde ',
+                             ' ce ', ' și ', ' nu ', ' da ', ' eu ', ' tu ', ' noi ', ' voi ']):
+        return 'ro'
+    # German markers (umlauts or common words)
+    if any(ch in text for ch in 'äöüßÄÖÜ') or \
+       any(w in t for w in [' und ', ' der ', ' die ', ' das ', ' ist ', ' nicht ', ' sie ',
+                             ' auch ', ' aber ', ' wenn ', ' sehr ', ' schon ', ' hallo ']):
+        return 'de'
+    # Portuguese markers
+    if any(w in t for w in ['olá', 'obrigado', 'obrigada', ' está ', ' você ', ' não ',
+                             ' muito ', ' como ', ' para ', ' com ', ' isso ', ' porque ']):
+        return 'pt'
 
     return 'en'
 
