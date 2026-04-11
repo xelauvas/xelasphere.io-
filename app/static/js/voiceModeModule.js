@@ -37,9 +37,7 @@ const VoiceModeModule = (function() {
 
     // ── Pill Bar ──
     let _pillEl = null;
-    let _pillBars = [];
     let _pillAnimId = null;
-    let _pillTime = 0;
 
     // ── Voice shortcuts ──
     let _preferredVoice = 'auto';
@@ -147,10 +145,6 @@ const VoiceModeModule = (function() {
 
             const source = audioContext.createMediaStreamSource(stream);
             source.connect(analyser);
-
-            // Reset waveform history
-            _waveHistory = new Array(WAVE_HISTORY_LEN).fill(0);
-            _lastWaveUpdate = 0;
 
             setState('listening');
         } catch (e) {
@@ -610,12 +604,67 @@ const VoiceModeModule = (function() {
     }
 
     // ────────────────────────────────────────
-    // Pill Bar UI
+    // Pill Bar UI — Canvas Waveform
     // ────────────────────────────────────────
 
     let _pillLabel = null;
     let _inputRow = null;
-    const NUM_BARS = 40;
+    let _canvas = null;
+    let _ctx = null;
+    let _dpr = 1;
+
+    // ── Simplex Noise (lightweight 2D, pure JS) ──
+    const _noiseP = new Uint8Array(512);
+    const _noiseG = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+    (function _initNoise() {
+        const p = new Uint8Array(256);
+        for (let i = 0; i < 256; i++) p[i] = i;
+        for (let i = 255; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [p[i], p[j]] = [p[j], p[i]]; }
+        for (let i = 0; i < 512; i++) _noiseP[i] = p[i & 255];
+    })();
+    function _noise2D(x, y) {
+        const F2 = 0.5 * (Math.sqrt(3) - 1), G2 = (3 - Math.sqrt(3)) / 6;
+        const s = (x + y) * F2, i = Math.floor(x + s), j = Math.floor(y + s);
+        const t = (i + j) * G2, x0 = x - (i - t), y0 = y - (j - t);
+        const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+        const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2, x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+        const ii = i & 255, jj = j & 255;
+        const dot = (gi, dx, dy) => { const g = _noiseG[gi % 8]; return g[0] * dx + g[1] * dy; };
+        let n0 = 0, n1 = 0, n2 = 0;
+        let t0 = 0.5 - x0 * x0 - y0 * y0;
+        if (t0 > 0) { t0 *= t0; n0 = t0 * t0 * dot(_noiseP[ii + _noiseP[jj]], x0, y0); }
+        let t1 = 0.5 - x1 * x1 - y1 * y1;
+        if (t1 > 0) { t1 *= t1; n1 = t1 * t1 * dot(_noiseP[ii + i1 + _noiseP[jj + j1]], x1, y1); }
+        let t2 = 0.5 - x2 * x2 - y2 * y2;
+        if (t2 > 0) { t2 *= t2; n2 = t2 * t2 * dot(_noiseP[ii + 1 + _noiseP[jj + 1]], x2, y2); }
+        return 70 * (n0 + n1 + n2);
+    }
+
+    // ── Waveform State Parameters (lerp targets) ──
+    const STATE_PARAMS = {
+        idle:      { amp: 3,  freq: 0.8, noiseAmt: 0.15, opacity: 0.3, glowMul: 0.5 },
+        listening: { amp: 28, freq: 1.2, noiseAmt: 0.30, opacity: 0.9, glowMul: 0.8 },
+        thinking:  { amp: 10, freq: 1.5, noiseAmt: 0.25, opacity: 0.5, glowMul: 0.6 },
+        speaking:  { amp: 24, freq: 2.5, noiseAmt: 0.40, opacity: 1.0, glowMul: 1.0 },
+    };
+
+    let _wp = { amp: 3, freq: 0.8, noiseAmt: 0.15, opacity: 0.3, glowMul: 0.5 };
+    let _waveTime = 0;
+
+    // Spring physics for listening decay
+    let _springAmp = 0;
+    let _springVel = 0;
+
+    // Particle system (pool of 16)
+    const _particles = Array.from({ length: 16 }, () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0 }));
+    let _particleIdx = 0;
+
+    // Ghost trail ring buffer (12 frames)
+    const TRAIL_LEN = 12;
+    let _trailBuf = [];
+    let _trailFrame = 0;
+
+    function _lerp(a, b, t) { return a + (b - a) * t; }
 
     function _createPill() {
         if (_pillEl) return;
@@ -626,51 +675,228 @@ const VoiceModeModule = (function() {
         pill.className = 'voice-pill-bar';
         pill.dataset.state = 'idle';
 
-        // Left: status label
         const label = document.createElement('span');
         label.className = 'voice-pill-label';
         label.textContent = 'Listening...';
         _pillLabel = label;
 
-        // Center: waveform bars — fill the width
-        const wave = document.createElement('div');
-        wave.className = 'voice-pill-wave';
-        _pillBars = [];
-        for (let i = 0; i < NUM_BARS; i++) {
-            const bar = document.createElement('span');
-            bar.className = 'voice-pill-bar-segment';
-            wave.appendChild(bar);
-            _pillBars.push(bar);
-        }
+        const waveContainer = document.createElement('div');
+        waveContainer.className = 'voice-pill-wave';
+        _canvas = document.createElement('canvas');
+        waveContainer.appendChild(_canvas);
 
-        // Right: End button
         const endBtn = document.createElement('button');
         endBtn.className = 'voice-pill-end';
-        endBtn.textContent = 'End';
+        endBtn.innerHTML = '<i class="fas fa-xmark"></i>';
         endBtn.addEventListener('click', (e) => { e.stopPropagation(); exit(); });
 
         pill.appendChild(label);
-        pill.appendChild(wave);
+        pill.appendChild(waveContainer);
         pill.appendChild(endBtn);
 
-        // Insert as overlay child of input-row
         _inputRow.appendChild(pill);
         _pillEl = pill;
+
+        _resizeCanvas();
+    }
+
+    function _resizeCanvas() {
+        if (!_canvas || !_canvas.parentElement) return;
+        _dpr = window.devicePixelRatio || 1;
+        const rect = _canvas.parentElement.getBoundingClientRect();
+        _canvas.width = rect.width * _dpr;
+        _canvas.height = rect.height * _dpr;
+        _ctx = _canvas.getContext('2d');
+        _ctx.scale(_dpr, _dpr);
+    }
+
+    function _burstParticles() {
+        if (!_canvas) return;
+        const w = _canvas.width / _dpr;
+        const cy = (_canvas.height / _dpr) / 2;
+        for (let i = 0; i < 8; i++) {
+            const p = _particles[_particleIdx % _particles.length];
+            _particleIdx++;
+            p.x = Math.random() * w;
+            p.y = cy + (Math.random() - 0.5) * _wp.amp * 1.5;
+            p.vx = (Math.random() - 0.5) * 4;
+            p.vy = (Math.random() - 0.5) * 12;
+            p.life = 400;
+            p.maxLife = 400;
+        }
+    }
+
+    function _buildWavePath(w, cy, time, amp, phaseOffset) {
+        const points = [];
+        const step = 8;
+        for (let x = 0; x <= w; x += step) {
+            const nx = x / w;
+            const target = _wp;
+
+            let val = Math.sin(2 * Math.PI * target.freq * time + nx * Math.PI * 2.5 + phaseOffset);
+            if (currentState === 'speaking' || currentState === 'thinking') {
+                val += 0.4 * Math.sin(2 * Math.PI * target.freq * 1.7 * time + nx * Math.PI * 3.5 + phaseOffset);
+                val += 0.2 * Math.sin(2 * Math.PI * target.freq * 3.1 * time + nx * Math.PI * 1.8 + phaseOffset);
+                val /= 1.6;
+            }
+
+            val += _noise2D(nx * 3, time * 0.8 + phaseOffset) * target.noiseAmt;
+
+            const taper = Math.sin(nx * Math.PI);
+            points.push({ x, y: cy + val * amp * taper });
+        }
+        return points;
+    }
+
+    function _drawCurve(ctx, points) {
+        if (points.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const xc = (points[i].x + points[i + 1].x) / 2;
+            const yc = (points[i].y + points[i + 1].y) / 2;
+            ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+        }
+        const last = points[points.length - 1];
+        ctx.lineTo(last.x, last.y);
+        ctx.stroke();
+    }
+
+    function _animatePill(timestamp) {
+        if (!isActive || !_pillEl || !_ctx) return;
+
+        const dt = 1 / 60;
+        _waveTime += dt;
+
+        const target = STATE_PARAMS[currentState] || STATE_PARAMS.idle;
+        const lerpSpeed = 0.08;
+        _wp.freq = _lerp(_wp.freq, target.freq, lerpSpeed);
+        _wp.noiseAmt = _lerp(_wp.noiseAmt, target.noiseAmt, lerpSpeed);
+        _wp.opacity = _lerp(_wp.opacity, target.opacity, lerpSpeed);
+        _wp.glowMul = _lerp(_wp.glowMul, target.glowMul, lerpSpeed);
+
+        let ampTarget = target.amp;
+        if (currentState === 'listening') {
+            const raw = getAudioLevel();
+            ampTarget = Math.min(28, raw * 4 * 28);
+            const springForce = 0.15;
+            const damping = 0.85;
+            _springVel += (ampTarget - _springAmp) * springForce;
+            _springVel *= damping;
+            _springAmp += _springVel;
+            _wp.amp = Math.max(2, _springAmp);
+            _wp.opacity = _lerp(0.6, 0.9, Math.min(1, raw * 4));
+        } else {
+            _wp.amp = _lerp(_wp.amp, ampTarget, lerpSpeed);
+            _springAmp = _wp.amp;
+            _springVel = 0;
+        }
+
+        const w = _canvas.width / _dpr;
+        const h = _canvas.height / _dpr;
+        const cy = h / 2;
+        _ctx.clearRect(0, 0, w, h);
+
+        const topPhase = 0;
+        const bottomPhase = (currentState === 'speaking') ? Math.PI / 6 : 0;
+        const topPoints = _buildWavePath(w, cy, _waveTime, -_wp.amp, topPhase);
+        const bottomPoints = _buildWavePath(w, cy, _waveTime, _wp.amp, bottomPhase);
+
+        // Ghost trail
+        _trailFrame++;
+        if (_trailFrame % 2 === 0) {
+            _trailBuf.push({ top: topPoints.map(p => ({ ...p })), bottom: bottomPoints.map(p => ({ ...p })) });
+            if (_trailBuf.length > TRAIL_LEN) _trailBuf.shift();
+        }
+
+        for (let t = 0; t < _trailBuf.length; t++) {
+            const ghostAlpha = 0.08 * (t + 1) / _trailBuf.length * _wp.opacity;
+            _ctx.lineWidth = 1.5;
+            _ctx.strokeStyle = `rgba(255, 255, 255, ${ghostAlpha.toFixed(3)})`;
+            _drawCurve(_ctx, _trailBuf[t].top);
+            _drawCurve(_ctx, _trailBuf[t].bottom);
+        }
+
+        // Chromatic aberration
+        if (currentState === 'speaking' && _wp.amp > 24 * 0.7) {
+            const abIntensity = (_wp.amp - 24 * 0.7) / (24 * 0.3);
+            const abAlpha = 0.12 * abIntensity;
+
+            _ctx.save();
+            _ctx.translate(-1, 0);
+            _ctx.lineWidth = 2;
+            _ctx.strokeStyle = `rgba(255, 40, 40, ${abAlpha.toFixed(3)})`;
+            _drawCurve(_ctx, topPoints);
+            _drawCurve(_ctx, bottomPoints);
+            _ctx.restore();
+
+            _ctx.save();
+            _ctx.translate(1, 0);
+            _ctx.lineWidth = 2;
+            _ctx.strokeStyle = `rgba(40, 40, 255, ${abAlpha.toFixed(3)})`;
+            _drawCurve(_ctx, topPoints);
+            _drawCurve(_ctx, bottomPoints);
+            _ctx.restore();
+        }
+
+        // 3-layer glow
+        _ctx.lineWidth = 8;
+        _ctx.strokeStyle = `rgba(200, 220, 255, ${(0.08 * _wp.glowMul).toFixed(3)})`;
+        _drawCurve(_ctx, topPoints);
+        _drawCurve(_ctx, bottomPoints);
+
+        _ctx.lineWidth = 4;
+        _ctx.strokeStyle = `rgba(255, 255, 255, ${(0.15 * _wp.glowMul).toFixed(3)})`;
+        _drawCurve(_ctx, topPoints);
+        _drawCurve(_ctx, bottomPoints);
+
+        _ctx.lineWidth = 2;
+        _ctx.strokeStyle = `rgba(255, 255, 255, ${_wp.opacity.toFixed(3)})`;
+        _drawCurve(_ctx, topPoints);
+        _drawCurve(_ctx, bottomPoints);
+
+        // Particles
+        for (const p of _particles) {
+            if (p.life <= 0) continue;
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy *= 0.96;
+            p.vx *= 0.98;
+            p.life -= 16.67;
+            const alpha = Math.max(0, (p.life / p.maxLife) * 0.8);
+            _ctx.beginPath();
+            _ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+            _ctx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
+            _ctx.fill();
+        }
+
+        // Label opacity
+        if (_pillLabel) {
+            const labelOpacity = { idle: 0.35, listening: 0.6, thinking: 0.5, speaking: 0.7 }[currentState] || 0.35;
+            _pillLabel.style.opacity = labelOpacity;
+        }
+
+        _pillAnimId = requestAnimationFrame((ts) => _animatePill(ts));
     }
 
     function _showPill() {
         _createPill();
         if (!_pillEl) return;
 
-        // Add class to input-row to hide its children
         if (_inputRow) _inputRow.classList.add('voice-active');
 
         _pillEl.style.display = 'flex';
-        _pillEl.offsetHeight; // reflow
+        _pillEl.offsetHeight;
         requestAnimationFrame(() => { _pillEl.classList.add('active'); });
 
-        _pillTime = 0;
-        _animatePill();
+        _waveTime = 0;
+        _springAmp = 0;
+        _springVel = 0;
+        _trailBuf = [];
+        _trailFrame = 0;
+        _wp = { ...STATE_PARAMS.idle };
+
+        requestAnimationFrame(() => { _resizeCanvas(); _animatePill(); });
     }
 
     function _hidePill() {
@@ -684,85 +910,10 @@ const VoiceModeModule = (function() {
             }, 200);
         }
 
-        // Restore input row
         setTimeout(() => {
             if (_inputRow) _inputRow.classList.remove('voice-active');
             if (window.updateSendButtonState) window.updateSendButtonState();
         }, 200);
-    }
-
-    // Scrolling waveform history — same style as dictation mic
-    const WAVE_HISTORY_LEN = NUM_BARS; // one per bar
-    let _waveHistory = new Array(WAVE_HISTORY_LEN).fill(0);
-    let _lastWaveUpdate = 0;
-    const WAVE_UPDATE_MS = 80; // push a new sample every 80ms
-
-    const MAX_BAR_H = 28; // px, matches wave container height minus padding
-    const MIN_BAR_H = 2;
-
-    function _animatePill(timestamp) {
-        if (!isActive || !_pillEl) return;
-
-        _pillTime += 1 / 60;
-        const now = timestamp || performance.now();
-        const n = _pillBars.length;
-
-        // ── Listening: scrolling amplitude bars from real mic ──
-        if (currentState === 'listening') {
-            if (now - _lastWaveUpdate > WAVE_UPDATE_MS) {
-                const raw = getAudioLevel();
-                const level = Math.min(1, raw * 4);
-                _waveHistory.shift();
-                _waveHistory.push(level);
-                _lastWaveUpdate = now;
-            }
-            for (let i = 0; i < n; i++) {
-                const level = _waveHistory[i] || 0;
-                // Fade: older bars (left) dimmer
-                const age = i / n;
-                const faded = level * (0.4 + age * 0.6);
-                const h = MIN_BAR_H + faded * (MAX_BAR_H - MIN_BAR_H);
-                _pillBars[i].style.height = Math.min(MAX_BAR_H, Math.max(MIN_BAR_H, h)) + 'px';
-                _pillBars[i].style.opacity = (0.35 + age * 0.65).toFixed(2);
-            }
-
-        // ── Thinking: traveling pulse wave ──
-        } else if (currentState === 'thinking') {
-            for (let i = 0; i < n; i++) {
-                const phase = i / n;
-                // Two slow waves traveling in opposite directions
-                const w1 = Math.sin(2 * Math.PI * 0.8 * _pillTime + phase * Math.PI * 3);
-                const w2 = Math.sin(2 * Math.PI * 1.3 * _pillTime - phase * Math.PI * 2 + 1.5);
-                const combined = (w1 * 0.6 + w2 * 0.4) * 0.5 + 0.5;
-                const h = MIN_BAR_H + combined * 12;
-                _pillBars[i].style.height = Math.max(MIN_BAR_H, h) + 'px';
-                _pillBars[i].style.opacity = (0.5 + combined * 0.5).toFixed(2);
-            }
-
-        // ── Speaking: lively dual-frequency wave ──
-        } else if (currentState === 'speaking') {
-            for (let i = 0; i < n; i++) {
-                const phase = i / n;
-                const w1 = Math.sin(2 * Math.PI * 2.5 * _pillTime + phase * Math.PI * 2.5);
-                const w2 = Math.sin(2 * Math.PI * 4.2 * _pillTime + phase * Math.PI * 3.5);
-                const w3 = Math.sin(2 * Math.PI * 7.0 * _pillTime + phase * Math.PI * 1.8);
-                const combined = (w1 * 0.45 + w2 * 0.35 + w3 * 0.2) * 0.5 + 0.5;
-                const h = MIN_BAR_H + combined * (MAX_BAR_H - 6);
-                _pillBars[i].style.height = Math.min(MAX_BAR_H, Math.max(MIN_BAR_H, h)) + 'px';
-                _pillBars[i].style.opacity = '';
-            }
-
-        // ── Idle: gentle breathing ──
-        } else {
-            const breath = Math.sin(_pillTime * 1.5) * 0.5 + 0.5;
-            for (let i = 0; i < n; i++) {
-                const h = MIN_BAR_H + breath * 3;
-                _pillBars[i].style.height = h + 'px';
-                _pillBars[i].style.opacity = (0.2 + breath * 0.15).toFixed(2);
-            }
-        }
-
-        _pillAnimId = requestAnimationFrame((ts) => _animatePill(ts));
     }
 
     // ────────────────────────────────────────
@@ -777,7 +928,11 @@ const VoiceModeModule = (function() {
     };
 
     function setState(state) {
+        const prev = currentState;
         currentState = state;
+
+        // Particle burst on state transition
+        if (prev !== state && isActive) _burstParticles();
 
         // Update pill visuals
         if (_pillEl) _pillEl.dataset.state = state;
