@@ -1903,9 +1903,10 @@ img.composer-attachment-thumb--empty {
     align-items: center;
     gap: 12px;
     width: 100%;
-    height: 100%;
-    min-height: var(--composer-single-line-height);
+    height: var(--composer-single-line-height);
     padding: 0 8px 0 14px;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .textarea-container.voice-active .voice-bar-row {
@@ -1940,9 +1941,9 @@ img.composer-attachment-thumb--empty {
 
 /* End button inside the voice bar */
 .voice-bar-end {
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
     padding: 0;
     background: transparent;
     border: 2px solid rgba(255, 255, 255, 0.25);
@@ -2040,6 +2041,8 @@ img.composer-attachment-thumb--empty {
 .textarea-container.voice-active {
     border-color: rgba(255, 255, 255, 0.12);
     box-shadow: 0 0 12px rgba(255, 255, 255, 0.03);
+    height: var(--composer-single-line-height);
+    overflow: hidden;
 }
 
 /* Label — white text, dims per state */
