@@ -2017,7 +2017,7 @@ img.composer-attachment-thumb--empty {
     width: 2px;
     height: 1.1em;
     vertical-align: text-bottom;
-    background: rgba(200, 170, 110, 0.8);
+    background: rgba(255, 255, 255, 0.8);
     border-radius: 1px;
     animation: voiceCursorPulse 1.5s ease-in-out infinite;
 }
@@ -2028,8 +2028,8 @@ img.composer-attachment-thumb--empty {
 }
 
 @keyframes voiceCursorPulse {
-    0%, 100% { opacity: 0.4; box-shadow: 0 0 4px rgba(200, 170, 110, 0.3); }
-    50% { opacity: 1; box-shadow: 0 0 8px rgba(200, 170, 110, 0.6); }
+    0%, 100% { opacity: 0.4; box-shadow: 0 0 4px rgba(255, 255, 255, 0.2); }
+    50% { opacity: 1; box-shadow: 0 0 8px rgba(255, 255, 255, 0.5); }
 }
 
 /* Textarea border stays neutral during voice mode */
@@ -2042,46 +2042,24 @@ img.composer-attachment-thumb--empty {
     box-shadow: 0 0 12px rgba(255, 255, 255, 0.03);
 }
 
-/* State-colored label — warm vintage tones */
-.textarea-container.voice-active[data-voice-state="listening"] .voice-bar-label { color: rgba(120, 200, 180, 0.8); }
-.textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-label { color: rgba(220, 180, 80, 0.8); }
-.textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-label { color: rgba(140, 210, 100, 0.8); }
+/* Label — white text, dims per state */
+.textarea-container.voice-active .voice-bar-label { color: rgba(255, 255, 255, 0.6); }
+.textarea-container.voice-active[data-voice-state="listening"] .voice-bar-label { color: rgba(255, 255, 255, 0.7); }
+.textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-label { color: rgba(255, 255, 255, 0.45); }
+.textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-label { color: rgba(255, 255, 255, 0.7); }
 
-/* State-colored end button — warm phosphor glow */
-.textarea-container.voice-active[data-voice-state="listening"] .voice-bar-end {
-    border-color: rgba(120, 200, 180, 0.4);
-    box-shadow: 0 0 10px rgba(120, 200, 180, 0.1);
+/* End button — white border + icon */
+.textarea-container.voice-active .voice-bar-end {
+    border-color: rgba(255, 255, 255, 0.25);
 }
-.textarea-container.voice-active[data-voice-state="listening"] .voice-bar-end::before {
-    background: rgba(120, 200, 180, 0.7);
-    box-shadow: 0 0 6px rgba(120, 200, 180, 0.3);
+.textarea-container.voice-active .voice-bar-end::before {
+    background: rgba(255, 255, 255, 0.6);
 }
-.textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-end {
-    border-color: rgba(220, 180, 80, 0.35);
-    box-shadow: 0 0 10px rgba(220, 180, 80, 0.08);
+.textarea-container.voice-active .voice-bar-end:hover {
+    border-color: rgba(255, 255, 255, 0.5);
 }
-.textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-end::before {
-    background: rgba(220, 180, 80, 0.7);
-    box-shadow: 0 0 6px rgba(220, 180, 80, 0.25);
-}
-.textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-end {
-    border-color: rgba(140, 210, 100, 0.35);
-    box-shadow: 0 0 10px rgba(140, 210, 100, 0.08);
-}
-.textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-end::before {
-    background: rgba(140, 210, 100, 0.7);
-    box-shadow: 0 0 6px rgba(140, 210, 100, 0.25);
-}
-
-/* State-colored cursor — warm phosphor */
-.textarea-container.voice-active[data-voice-state="listening"] .voice-cursor {
-    background: rgba(120, 200, 180, 0.8);
-}
-.textarea-container.voice-active[data-voice-state="thinking"] .voice-cursor {
-    background: rgba(220, 180, 80, 0.8);
-}
-.textarea-container.voice-active[data-voice-state="speaking"] .voice-cursor {
-    background: rgba(140, 210, 100, 0.8);
+.textarea-container.voice-active .voice-bar-end:hover::before {
+    background: rgba(255, 255, 255, 0.9);
 }
 
 /* Controls fade during voice mode */
@@ -2096,7 +2074,7 @@ img.composer-attachment-thumb--empty {
 .textarea-container .voice-ripple {
     position: absolute;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(200, 170, 110, 0.15) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
     pointer-events: none;
     z-index: 5;
     transform: scale(0);
