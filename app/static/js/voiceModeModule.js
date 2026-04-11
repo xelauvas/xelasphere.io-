@@ -696,7 +696,7 @@ const VoiceModeModule = (function() {
 
         const endBtn = document.createElement('button');
         endBtn.className = 'voice-pill-end';
-        endBtn.textContent = 'End';
+        endBtn.setAttribute('aria-label', 'End voice mode');
         endBtn.addEventListener('click', (e) => { e.stopPropagation(); exit(); });
 
         pill.appendChild(label);
