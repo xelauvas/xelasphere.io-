@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("kokoro-sidecar")
 
 app = FastAPI()
-semaphore = asyncio.Semaphore(2)
+semaphore = asyncio.Semaphore(3)
 
 # ── Lazy-loaded pipelines (one per lang_code) ──
 _pipelines = {}

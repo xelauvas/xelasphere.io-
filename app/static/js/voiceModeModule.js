@@ -504,6 +504,33 @@ const VoiceModeModule = (function() {
         let _responseLang = null; // locked after first chunk
         const streamStart = Date.now();
         const FIRST_CHUNK_MIN = 80; // wait for enough text for language detection
+        const MAX_TTS_INFLIGHT = 2; // 1 playing + 1 prefetching — prevents sidecar pile-up
+        const _pendingSentences = []; // sentences waiting to be sent to TTS
+
+        function _fireTTS(text) {
+            const lang = _responseLang || _detectedLang;
+            _ttsInflight++;
+            _fetchTTSChunk(text, lang).then(audio => {
+                _ttsInflight--;
+                if (audio) _enqueueAudio(audio);
+                _drainPending();
+            });
+        }
+
+        function _drainPending() {
+            while (_pendingSentences.length > 0 && _ttsInflight < MAX_TTS_INFLIGHT && !_interrupted) {
+                _fireTTS(_pendingSentences.shift());
+            }
+        }
+
+        function _dispatchTTS(text) {
+            if (_interrupted) return;
+            if (_ttsInflight < MAX_TTS_INFLIGHT) {
+                _fireTTS(text);
+            } else {
+                _pendingSentences.push(text);
+            }
+        }
 
         try {
             const resp = await fetch('/chat/stream', {
@@ -548,12 +575,7 @@ const VoiceModeModule = (function() {
                                     console.log(`[VoiceMode] first TTS chunk at ${firstChunkTime}ms`);
                                 }
                                 chunkIndex++;
-                                _ttsInflight++;
-                                const lang = _responseLang || _detectedLang;
-                                _fetchTTSChunk(sentence, lang).then(audio => {
-                                    _ttsInflight--;
-                                    if (audio) _enqueueAudio(audio);
-                                });
+                                _dispatchTTS(sentence);
                             }
                         }
                         if (parsed.type === 'done' && parsed.content) fullContent = parsed.content;
@@ -562,12 +584,7 @@ const VoiceModeModule = (function() {
             }
 
             if (ttsBuffer.trim() && !_interrupted) {
-                _ttsInflight++;
-                const lang = _responseLang || _detectedLang;
-                _fetchTTSChunk(ttsBuffer, lang).then(audio => {
-                    _ttsInflight--;
-                    if (audio) _enqueueAudio(audio);
-                });
+                _dispatchTTS(ttsBuffer);
             }
             _streamDone = true;
 
