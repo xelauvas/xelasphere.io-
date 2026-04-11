@@ -916,17 +916,23 @@ const VoiceModeModule = (function() {
         _transcriptOverlay.classList.add('has-text');
         if (_voiceBarRow) _voiceBarRow.classList.add('has-transcript');
 
-        // Animate characters appearing one by one
-        const chars = text.split('');
+        // Animate words appearing one by one
+        const words = text.split(/(\s+)/); // split keeping whitespace
         const fragment = document.createDocumentFragment();
-        const spans = [];
+        const wordSpans = [];
 
-        for (let i = 0; i < chars.length; i++) {
+        for (let i = 0; i < words.length; i++) {
+            if (!words[i]) continue;
             const span = document.createElement('span');
-            span.className = 'voice-char-pending';
-            span.textContent = chars[i];
+            // Whitespace tokens stay visible, content words start ghostly
+            if (/^\s+$/.test(words[i])) {
+                span.className = 'voice-char-confirmed';
+            } else {
+                span.className = 'voice-char-pending';
+                wordSpans.push(span);
+            }
+            span.textContent = words[i];
             fragment.appendChild(span);
-            spans.push(span);
         }
         // Add cursor
         const cursor = document.createElement('span');
@@ -934,12 +940,12 @@ const VoiceModeModule = (function() {
         fragment.appendChild(cursor);
         _transcriptOverlay.appendChild(fragment);
 
-        // Solidify characters progressively
-        const charDelay = Math.min(30, 600 / chars.length); // max 600ms total
-        for (let i = 0; i < spans.length; i++) {
-            await new Promise(r => setTimeout(r, charDelay));
+        // Solidify words progressively
+        const wordDelay = Math.min(80, 600 / Math.max(1, wordSpans.length));
+        for (let i = 0; i < wordSpans.length; i++) {
+            await new Promise(r => setTimeout(r, wordDelay));
             if (!isActive) return;
-            spans[i].className = 'voice-char-confirmed';
+            wordSpans[i].className = 'voice-char-confirmed';
         }
 
         // Remove cursor after all confirmed

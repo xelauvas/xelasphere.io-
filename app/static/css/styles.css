@@ -1983,16 +1983,17 @@ img.composer-attachment-thumb--empty {
     inset: 0;
     z-index: 2;
     pointer-events: none;
-    padding: 0 56px 0 14px;
+    padding: 0 48px 0 14px;
     display: none;
     align-items: center;
-    font-family: inherit;
+    font-family: 'Inter', 'Söhne', 'Segoe UI', system-ui, -apple-system, sans-serif;
     font-size: 14px;
-    line-height: var(--composer-single-line-height);
+    line-height: 1.4;
+    letter-spacing: 0.01em;
     color: rgba(255, 255, 255, 0.9);
-    white-space: nowrap;
+    white-space: pre-wrap;
+    word-break: break-word;
     overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .textarea-container.voice-active .voice-transcript-overlay.has-text {
