@@ -68,14 +68,6 @@ def _check_all_providers():
         "deepseek": getattr(Config, "DEEPSEEK_API_KEY", ""),
     }
 
-    # Ollama is local — check separately
-    ollama_url = getattr(Config, "OLLAMA_API_URL", None)
-    if ollama_url:
-        try:
-            _check_ollama(ollama_url)
-        except Exception as e:
-            logger.warning(f"[Watcher] Ollama check failed: {e}")
-
     for provider, api_key in providers.items():
         if not api_key:
             continue
@@ -204,26 +196,6 @@ def _fetch_live_models(provider: str, api_key: str) -> Optional[Dict]:
         return None
 
 
-def _check_ollama(ollama_url: str):
-    """Check local Ollama health."""
-    from app.orchestrator import registry
-
-    # Ollama uses /api/tags not /v1/models
-    base = ollama_url.rstrip("/").replace("/v1/chat/completions", "")
-    try:
-        resp = http_requests.get(f"{base}/api/tags", timeout=5)
-        if resp.status_code == 200:
-            for model in registry.get_by_provider("ollama"):
-                if model.status in ("down", "degraded"):
-                    model.status = "healthy"
-        else:
-            for model in registry.get_by_provider("ollama"):
-                model.status = "down"
-    except Exception:
-        for model in registry.get_by_provider("ollama"):
-            model.status = "down"
-
-
 def _handle_provider_down(provider: str, health_ref, health_doc):
     """Handle a provider that didn't respond."""
     from google.cloud import firestore
@@ -304,7 +276,7 @@ def _classify_new_model(model_id: str, meta: dict, provider: str) -> Optional[Mo
     elif not any(s in strengths for s in ("safety", "uncensored")):
         strengths.append("general_chat")
 
-    cost_tier = "free" if provider in ("groq", "cerebras", "ollama") else "paid"
+    cost_tier = "free" if provider in ("groq", "cerebras") else "paid"
     context = meta.get("context_window", 32_000) if isinstance(meta, dict) else 32_000
 
     return Model(
