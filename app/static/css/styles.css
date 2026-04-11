@@ -1982,31 +1982,36 @@ img.composer-attachment-thumb--empty {
     will-change: transform;
 }
 
-/* ── End Button ── */
+/* ── End Button — frosted glass, no red ── */
 .voice-pill-end {
-    background: #ff3b30;
-    color: white;
-    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 22px;
     padding: 8px 20px;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
     line-height: 1;
     flex-shrink: 0;
-    letter-spacing: 0.02em;
-    transition: background 150ms ease, transform 100ms ease, box-shadow 150ms ease;
-    box-shadow: 0 2px 8px rgba(255, 59, 48, 0.25);
+    letter-spacing: 0.03em;
+    transition: background 200ms ease, color 200ms ease, border-color 200ms ease,
+                transform 100ms ease, box-shadow 200ms ease;
+    box-shadow: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 .voice-pill-end:hover {
-    background: #e0332b;
-    box-shadow: 0 4px 14px rgba(255, 59, 48, 0.35);
+    background: rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.95);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 2px 12px rgba(255, 255, 255, 0.06);
 }
 
 .voice-pill-end:active {
-    background: #c42a24;
+    background: rgba(255, 255, 255, 0.06);
     transform: scale(0.96);
     box-shadow: 0 1px 4px rgba(255, 59, 48, 0.2);
 }
