@@ -2002,22 +2002,22 @@ img.composer-attachment-thumb--empty {
     display: block;
 }
 
-.voice-transcript-overlay .voice-char-pending {
+.voice-transcript .voice-char-pending {
     opacity: 0.35;
     animation: voiceCharShimmer 1.2s ease-in-out infinite;
 }
 
-.voice-transcript-overlay .voice-char-confirmed {
+.voice-transcript .voice-char-confirmed {
     opacity: 1;
     transition: opacity 150ms ease;
 }
 
-.voice-transcript-overlay .voice-cursor {
+.voice-transcript .voice-cursor {
     display: inline-block;
     width: 2px;
     height: 1.1em;
     vertical-align: text-bottom;
-    background: rgba(96, 165, 250, 0.8);
+    background: rgba(200, 170, 110, 0.8);
     border-radius: 1px;
     animation: voiceCursorPulse 1.5s ease-in-out infinite;
 }
@@ -2028,70 +2028,70 @@ img.composer-attachment-thumb--empty {
 }
 
 @keyframes voiceCursorPulse {
-    0%, 100% { opacity: 0.4; box-shadow: 0 0 4px rgba(96, 165, 250, 0.3); }
-    50% { opacity: 1; box-shadow: 0 0 8px rgba(96, 165, 250, 0.6); }
+    0%, 100% { opacity: 0.4; box-shadow: 0 0 4px rgba(200, 170, 110, 0.3); }
+    50% { opacity: 1; box-shadow: 0 0 8px rgba(200, 170, 110, 0.6); }
 }
 
-/* State-colored border on .textarea-container */
+/* State-colored border — vintage warm phosphor tones */
 .textarea-container {
     transition: border-color 500ms ease, box-shadow 500ms ease;
 }
 
 .textarea-container.voice-active[data-voice-state="listening"] {
-    border-color: rgba(96, 165, 250, 0.4);
-    box-shadow: 0 0 16px rgba(96, 165, 250, 0.08), inset 0 1px 0 rgba(96, 165, 250, 0.06);
+    border-color: rgba(120, 200, 180, 0.35);
+    box-shadow: 0 0 16px rgba(120, 200, 180, 0.07), inset 0 1px 0 rgba(120, 200, 180, 0.05);
 }
 
 .textarea-container.voice-active[data-voice-state="thinking"] {
-    border-color: rgba(251, 191, 36, 0.35);
-    box-shadow: 0 0 16px rgba(251, 191, 36, 0.06), inset 0 1px 0 rgba(251, 191, 36, 0.05);
+    border-color: rgba(220, 180, 80, 0.35);
+    box-shadow: 0 0 16px rgba(220, 180, 80, 0.06), inset 0 1px 0 rgba(220, 180, 80, 0.05);
 }
 
 .textarea-container.voice-active[data-voice-state="speaking"] {
-    border-color: rgba(74, 222, 128, 0.35);
-    box-shadow: 0 0 16px rgba(74, 222, 128, 0.07), inset 0 1px 0 rgba(74, 222, 128, 0.05);
+    border-color: rgba(140, 210, 100, 0.35);
+    box-shadow: 0 0 16px rgba(140, 210, 100, 0.07), inset 0 1px 0 rgba(140, 210, 100, 0.05);
 }
 
-/* State-colored label */
-.textarea-container.voice-active[data-voice-state="listening"] .voice-bar-label { color: #93bbfc; }
-.textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-label { color: #d4a94e; }
-.textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-label { color: #6dd49a; }
+/* State-colored label — warm vintage tones */
+.textarea-container.voice-active[data-voice-state="listening"] .voice-bar-label { color: rgba(120, 200, 180, 0.8); }
+.textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-label { color: rgba(220, 180, 80, 0.8); }
+.textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-label { color: rgba(140, 210, 100, 0.8); }
 
-/* State-colored end button */
+/* State-colored end button — warm phosphor glow */
 .textarea-container.voice-active[data-voice-state="listening"] .voice-bar-end {
-    border-color: rgba(96, 165, 250, 0.4);
-    box-shadow: 0 0 10px rgba(96, 165, 250, 0.1);
+    border-color: rgba(120, 200, 180, 0.4);
+    box-shadow: 0 0 10px rgba(120, 200, 180, 0.1);
 }
 .textarea-container.voice-active[data-voice-state="listening"] .voice-bar-end::before {
-    background: rgba(96, 165, 250, 0.7);
-    box-shadow: 0 0 6px rgba(96, 165, 250, 0.3);
+    background: rgba(120, 200, 180, 0.7);
+    box-shadow: 0 0 6px rgba(120, 200, 180, 0.3);
 }
 .textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-end {
-    border-color: rgba(251, 191, 36, 0.35);
-    box-shadow: 0 0 10px rgba(251, 191, 36, 0.08);
+    border-color: rgba(220, 180, 80, 0.35);
+    box-shadow: 0 0 10px rgba(220, 180, 80, 0.08);
 }
 .textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-end::before {
-    background: rgba(251, 191, 36, 0.7);
-    box-shadow: 0 0 6px rgba(251, 191, 36, 0.25);
+    background: rgba(220, 180, 80, 0.7);
+    box-shadow: 0 0 6px rgba(220, 180, 80, 0.25);
 }
 .textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-end {
-    border-color: rgba(74, 222, 128, 0.35);
-    box-shadow: 0 0 10px rgba(74, 222, 128, 0.08);
+    border-color: rgba(140, 210, 100, 0.35);
+    box-shadow: 0 0 10px rgba(140, 210, 100, 0.08);
 }
 .textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-end::before {
-    background: rgba(74, 222, 128, 0.7);
-    box-shadow: 0 0 6px rgba(74, 222, 128, 0.25);
+    background: rgba(140, 210, 100, 0.7);
+    box-shadow: 0 0 6px rgba(140, 210, 100, 0.25);
 }
 
-/* State-colored cursor in transcript overlay */
+/* State-colored cursor — warm phosphor */
 .textarea-container.voice-active[data-voice-state="listening"] .voice-cursor {
-    background: rgba(96, 165, 250, 0.8);
+    background: rgba(120, 200, 180, 0.8);
 }
 .textarea-container.voice-active[data-voice-state="thinking"] .voice-cursor {
-    background: rgba(251, 191, 36, 0.8);
+    background: rgba(220, 180, 80, 0.8);
 }
 .textarea-container.voice-active[data-voice-state="speaking"] .voice-cursor {
-    background: rgba(74, 222, 128, 0.8);
+    background: rgba(140, 210, 100, 0.8);
 }
 
 /* Controls fade during voice mode */
@@ -2106,7 +2106,7 @@ img.composer-attachment-thumb--empty {
 .textarea-container .voice-ripple {
     position: absolute;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(96, 165, 250, 0.15) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(200, 170, 110, 0.15) 0%, transparent 70%);
     pointer-events: none;
     z-index: 5;
     transform: scale(0);
