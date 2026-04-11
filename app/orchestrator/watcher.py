@@ -17,6 +17,13 @@ from app.orchestrator.models import Model
 
 logger = logging.getLogger(__name__)
 
+# Models that should never be auto-registered as chat candidates
+IGNORED_MODEL_PATTERNS = frozenset({
+    'whisper', 'tts-', 'dall-e', 'davinci-', 'babbage-',
+    'embedding', 'moderation', 'realtime', 'audio',
+    'canopylabs/', 'allam-',
+})
+
 _running = False
 _thread: Optional[threading.Thread] = None
 
@@ -143,6 +150,8 @@ def _check_provider(provider: str, api_key: str):
     for model_id in new_ids:
         meta = live_models[model_id]
         new_model = _classify_new_model(model_id, meta, provider)
+        if new_model is None:
+            continue
         registry.add_discovered(new_model)
         new_models_list.append(model_id)
 
@@ -268,10 +277,14 @@ def _find_replacement(model: Model, live_ids: Set[str], provider: str) -> Option
     return None
 
 
-def _classify_new_model(model_id: str, meta: dict, provider: str) -> Model:
+def _classify_new_model(model_id: str, meta: dict, provider: str) -> Optional[Model]:
     """Auto-classify a newly discovered model."""
     strengths = []
     name = model_id.lower()
+
+    # Skip non-chat models (TTS, whisper, embeddings, legacy, etc.)
+    if any(pat in name for pat in IGNORED_MODEL_PATTERNS):
+        return None
 
     if any(x in name for x in ["vision", "vl", "maverick", "visual"]):
         strengths.append("vision")
