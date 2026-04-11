@@ -39,9 +39,9 @@ const VoiceModeModule = (function() {
     function _ensurePlaybackAnalyser() {
         if (!playbackCtx || _playbackAnalyser) return;
         _playbackAnalyser = playbackCtx.createAnalyser();
-        _playbackAnalyser.fftSize = 512;
-        _playbackAnalyser.smoothingTimeConstant = 0.3; // slightly more smoothing to bridge between TTS chunks
-        _playbackAnalyser.minDecibels = -80;
+        _playbackAnalyser.fftSize = 256;
+        _playbackAnalyser.smoothingTimeConstant = 0.7; // smooth — flows with speech, no jitter
+        _playbackAnalyser.minDecibels = -70;
         _playbackAnalyser.maxDecibels = -10;
         _playbackFreqData = new Uint8Array(_playbackAnalyser.frequencyBinCount);
         _playbackAnalyser.connect(playbackCtx.destination);
@@ -264,21 +264,16 @@ const VoiceModeModule = (function() {
                 const binIdx = Math.floor(nx * numBins * 0.5);
                 let binVal = (bins[Math.min(binIdx, numBins - 1)] || 0) / 255;
 
-                // Boost playback signal — TTS decoded audio is quieter than raw mic
-                if (currentState === 'speaking') binVal = Math.min(1, binVal * 2.5);
+                // Gentle boost for playback (decoded TTS is a bit quieter)
+                if (currentState === 'speaking') binVal = Math.min(1, binVal * 1.5);
 
-                // Smooth the bin value for fluid motion
-                const smoothSpeed = currentState === 'speaking' ? 0.45 : 0.35;
+                // Smooth the bin value — slower for speaking to avoid glitch
+                const smoothSpeed = currentState === 'speaking' ? 0.18 : 0.35;
                 _smoothBins[idx] = _smoothBins[idx] + (binVal - _smoothBins[idx]) * smoothSpeed;
                 const sv = _smoothBins[idx];
 
                 // Frequency data drives the displacement
                 val = sv * Math.sin(2 * Math.PI * _wp.freq * time + nx * Math.PI * 3 + phaseOffset);
-                // Add some higher frequency detail from nearby bins
-                const binIdx2 = Math.min(binIdx + 4, numBins - 1);
-                let detail = (bins[binIdx2] || 0) / 255;
-                if (currentState === 'speaking') detail = Math.min(1, detail * 2.5);
-                val += detail * 0.3 * Math.sin(4 * Math.PI * _wp.freq * time + nx * Math.PI * 5 + phaseOffset);
             } else {
                 // Idle / thinking — gentle mathematical wave
                 val = Math.sin(2 * Math.PI * _wp.freq * time + nx * Math.PI * 2.5 + phaseOffset);
@@ -338,9 +333,9 @@ const VoiceModeModule = (function() {
             _wp.opacity = _lerp(0.20, 0.45, Math.min(1, raw * 5));
         } else if (currentState === 'speaking') {
             const raw = _getSpeakingLevel();
-            ampTarget = 4 + raw * 26; // wider range
-            const springForce = 0.3;
-            const damping = 0.75;
+            ampTarget = 5 + raw * 20;
+            const springForce = 0.18;  // smoother than mic — no glitch
+            const damping = 0.85;
             _springVel += (ampTarget - _springAmp) * springForce;
             _springVel *= damping;
             _springAmp += _springVel;
