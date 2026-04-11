@@ -18,6 +18,25 @@ const VoiceModeModule = (function() {
 
     // Shared playback context — created once on user gesture, reused for all TTS
     let playbackCtx = null;
+    let _playbackAnalyser = null;
+    let _playbackFreqData = null;
+
+    function _ensurePlaybackAnalyser() {
+        if (!playbackCtx || _playbackAnalyser) return;
+        _playbackAnalyser = playbackCtx.createAnalyser();
+        _playbackAnalyser.fftSize = 256;
+        _playbackAnalyser.smoothingTimeConstant = 0.6;
+        _playbackFreqData = new Uint8Array(_playbackAnalyser.frequencyBinCount);
+        _playbackAnalyser.connect(playbackCtx.destination);
+    }
+
+    function _getSpeakingLevel() {
+        if (!_playbackAnalyser || !_playbackFreqData) return 0;
+        _playbackAnalyser.getByteFrequencyData(_playbackFreqData);
+        let sum = 0;
+        for (let i = 0; i < _playbackFreqData.length; i++) sum += _playbackFreqData[i];
+        return sum / (_playbackFreqData.length * 255);
+    }
 
     // Recording
     let mediaRecorder = null;
@@ -419,7 +438,12 @@ const VoiceModeModule = (function() {
         const buffer = _audioQueue.shift();
         const source = playbackCtx.createBufferSource();
         source.buffer = buffer;
-        source.connect(playbackCtx.destination);
+        _ensurePlaybackAnalyser();
+        if (_playbackAnalyser) {
+            source.connect(_playbackAnalyser);
+        } else {
+            source.connect(playbackCtx.destination);
+        }
         _currentSource = source;
         window._voiceTtsAudio = { pause: () => { try { source.stop(); } catch(_){} } };
 
@@ -800,6 +824,17 @@ const VoiceModeModule = (function() {
             _springAmp += _springVel;
             _wp.amp = Math.max(2, _springAmp);
             _wp.opacity = _lerp(0.6, 0.9, Math.min(1, raw * 4));
+        } else if (currentState === 'speaking') {
+            // React to actual TTS audio output
+            const raw = _getSpeakingLevel();
+            ampTarget = 6 + raw * 22; // 6px base + up to 22px from audio
+            const springForce = 0.2;
+            const damping = 0.82;
+            _springVel += (ampTarget - _springAmp) * springForce;
+            _springVel *= damping;
+            _springAmp += _springVel;
+            _wp.amp = Math.max(4, _springAmp);
+            _wp.opacity = _lerp(0.7, 1.0, Math.min(1, raw * 2.5));
         } else {
             _wp.amp = _lerp(_wp.amp, ampTarget, lerpSpeed);
             _springAmp = _wp.amp;
@@ -1012,6 +1047,8 @@ const VoiceModeModule = (function() {
             playbackCtx.close().catch(() => {});
             playbackCtx = null;
         }
+        _playbackAnalyser = null;
+        _playbackFreqData = null;
         setState('idle');
     }
 
