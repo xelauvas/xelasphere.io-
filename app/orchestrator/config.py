@@ -39,7 +39,8 @@ FALLBACK_CHAINS = {
         ("cerebras", "qwen-3-235b-a22b-instruct-2507",         "tier1"),
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD
         ("gemini",   "gemini-2.5-flash",                       "tier1"),  # 20 RPD reasoning
-        ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k context, SoTA coding
+        ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k, SoTA coding
+        ("moonshot", "kimi-k2-0905-preview",                   "tier1"),  # 256k, enhanced agentic coding
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
     "reasoning": [
@@ -49,6 +50,7 @@ FALLBACK_CHAINS = {
         ("gemini",   "gemini-2.5-flash",                       "tier1"),  # 20 RPD but best for reasoning
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD fallback
         ("moonshot", "kimi-k2-thinking",                       "tier1"),  # deep reasoning, 256k
+        ("moonshot", "kimi-k2-thinking-turbo",                 "tier1"),  # fast reasoning, 60-100 tok/s
         ("openai",   "gpt-4.1-mini",                           "tier0"),
     ],
     "general_chat": [
@@ -65,6 +67,7 @@ FALLBACK_CHAINS = {
         ("cerebras", "llama3.1-8b",                            "tier1"),
         ("gemini",   "gemma-4-26b-a4b-it",                    "tier1"),  # 1500 RPD, unlimited TPM
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD
+        ("moonshot", "kimi-k2-turbo-preview",                  "tier1"),  # 60-100 tok/s, 256k
         ("openai",   "gpt-4.1-nano",                           "tier0"),
     ],
     "long_context": [
@@ -78,6 +81,7 @@ FALLBACK_CHAINS = {
         ("groq",     "meta-llama/llama-4-scout-17b-16e-instruct", "tier1"),
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),
         ("gemini",   "gemma-4-26b-a4b-it",                    "tier1"),
+        ("moonshot", "kimi-k2.5",                              "tier1"),  # native multimodal (image+video)
         ("openai",   "gpt-4.1-mini",                           "tier0"),
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
