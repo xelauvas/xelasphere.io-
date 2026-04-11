@@ -142,6 +142,15 @@ GEMINI_VOICES = {
     'coral': 'Leda',
 }
 
+# Reverse: Gemini voice → Groq voice (for fallback)
+GROQ_VOICES = {v: k for k, v in GEMINI_VOICES.items()}
+# Groq only supports: autumn diana hannah austin daniel troy
+GROQ_VOICE_FALLBACK = {
+    'Kore': 'hannah', 'Puck': 'austin', 'Charon': 'daniel',
+    'Fenrir': 'troy', 'Orus': 'daniel', 'Zephyr': 'diana',
+    'Aoede': 'autumn', 'Leda': 'hannah',
+}
+
 
 def _generate_gemini_tts(text, voice='Kore'):
     """Generate TTS using Gemini. Returns (audio_bytes, mime_type) or None."""
@@ -258,11 +267,15 @@ def generate_groq_tts():
     if not api_key:
         return jsonify({'error': 'TTS provider not available.'}), 502
 
+    # Map Gemini voice name to Groq-compatible voice
+    groq_voice = GROQ_VOICE_FALLBACK.get(voice, 'autumn')
+    logger.info(f"TTS: Groq voice mapping {voice} → {groq_voice}")
+
     groq_endpoint = "https://api.groq.com/openai/v1/audio/speech"
     body = {
         "model": "canopylabs/orpheus-v1-english",
         "input": text,
-        "voice": voice,
+        "voice": groq_voice,
         "response_format": requested_format
     }
 
@@ -308,6 +321,7 @@ def generate_groq_tts():
         data_size = audio_length - (data_index + 8)
         repaired_bytes[data_index + 4:data_index + 8] = data_size.to_bytes(4, byteorder='little', signed=False)
     audio_bytes = bytes(repaired_bytes)
+    logger.info(f"Groq TTS repaired header: {audio_bytes[:12]!r}")
 
     response = current_app.response_class(
         audio_bytes,
