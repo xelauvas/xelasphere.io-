@@ -157,18 +157,20 @@ function buildSourcesButton(messageElement, messageId, messageSources = null) {
     return sourcesInline;
 }
 
-async function requestGroqTts(text, format = DEFAULT_TTS_FORMAT, voice = DEFAULT_TTS_VOICE) {
+async function requestGroqTts(text, format = DEFAULT_TTS_FORMAT, voice = DEFAULT_TTS_VOICE, lang = '') {
     const csrfToken = getCsrfToken();
     const controller = new AbortController();
     ttsAbortController = controller;
     try {
+        const body = { text, format, voice };
+        if (lang) body.lang = lang;
         const response = await fetch('/tts/groq', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
             },
-            body: JSON.stringify({ text, format, voice }),
+            body: JSON.stringify(body),
             signal: controller.signal
         });
         const contentType = response.headers.get('content-type') || '';
@@ -189,6 +191,7 @@ async function requestGroqTts(text, format = DEFAULT_TTS_FORMAT, voice = DEFAULT
         }
 
         const selectedVoice = response.headers.get('x-tts-voice') || '';
+        const selectedLang = response.headers.get('x-tts-lang') || '';
 
         if (contentType.includes('application/json')) {
             const payload = await response.json();
@@ -196,11 +199,11 @@ async function requestGroqTts(text, format = DEFAULT_TTS_FORMAT, voice = DEFAULT
                 throw new Error('Audio payload is empty.');
             }
             const arrayBuffer = base64ToArrayBuffer(payload.audio_base64);
-            return { audio: arrayBuffer, voice: selectedVoice };
+            return { audio: arrayBuffer, voice: selectedVoice, lang: selectedLang };
         }
 
         const arrayBuffer = await response.arrayBuffer();
-        return { audio: arrayBuffer, voice: selectedVoice };
+        return { audio: arrayBuffer, voice: selectedVoice, lang: selectedLang };
     } finally {
         ttsAbortController = null;
     }
@@ -310,19 +313,19 @@ async function speakText(text, button) {
 
     try {
         const chunks = splitIntoChunks(sanitized, 400);
-        let lockedVoice = null; // Lock voice after first chunk
+        let lockedVoice = null;
+        let lockedLang = null;
 
         for (let i = 0; i < chunks.length; i++) {
             if (_ttsAborted) break;
 
             const voice = lockedVoice || DEFAULT_TTS_VOICE;
-            const result = await requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, voice);
+            const result = await requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, voice, lockedLang || '');
             if (_ttsAborted) break;
 
-            // Lock voice from first chunk's response for consistency
-            if (!lockedVoice && result.voice) {
-                lockedVoice = result.voice;
-            }
+            // Lock voice + language from first chunk for consistency
+            if (!lockedVoice && result.voice) lockedVoice = result.voice;
+            if (!lockedLang && result.lang) lockedLang = result.lang;
 
             isFetchingAudio = false;
             await playAudioBuffer(result.audio);

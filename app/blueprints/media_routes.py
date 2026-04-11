@@ -857,7 +857,7 @@ def generate_groq_tts():
     lang_hint = (payload.get('lang') or '').strip()
 
     # ── Auto-detect language from text if not provided ──
-    lang = _detect_language(text, lang_hint)
+    lang = lang_hint if lang_hint in ('en', 'fr', 'ja', 'zh', 'es', 'hi', 'it') else _detect_language(text, lang_hint)
 
     # ── Dynamic voice based on content ──
     if voice == 'autumn' or voice == 'auto':
@@ -873,6 +873,7 @@ def generate_groq_tts():
         return Response(audio_bytes, mimetype=mime_type, headers={
             'Content-Disposition': 'inline; filename="speech.wav"',
             'X-TTS-Voice': voice,
+            'X-TTS-Lang': lang,
         })
 
     # ── 2. Try Gemini (cloud, rate-limited) ──
@@ -884,6 +885,7 @@ def generate_groq_tts():
         return Response(audio_bytes, mimetype=mime_type, headers={
             'Content-Disposition': 'inline; filename="speech.wav"',
             'X-TTS-Voice': voice,
+            'X-TTS-Lang': lang,
         })
 
     # ── 3. Fallback: Groq Orpheus (200 char limit) ──
