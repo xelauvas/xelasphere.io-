@@ -3097,6 +3097,12 @@ body.is-ios .arrow-down {
         background: #000;
     }
 
+    /* Voice mode — mobile adjustments */
+    .voice-transcript-overlay {
+        padding: 8px 70px 8px 10px;
+        font-size: 14px;
+    }
+
     /* === Edit Textarea - Prevents iOS Zoom === */
     .message .edit-textarea {
         font-size: 16px;
