@@ -1925,18 +1925,20 @@ img.composer-attachment-thumb--empty {
     transition: color 300ms ease;
 }
 
-/* Waveform canvas — fills the middle */
-.voice-waveform-bg {
+/* Waveform canvas wrapper — fills the middle of the flex row */
+.voice-wave-wrap {
     flex: 1;
     min-width: 0;
     height: 32px;
-    display: block;
-    opacity: 0;
-    transition: opacity 300ms ease;
+    position: relative;
+    overflow: hidden;
 }
 
-.textarea-container.voice-active .voice-waveform-bg {
-    opacity: 1;
+.voice-wave-wrap canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
 }
 
 /* End button inside the voice bar */
@@ -1995,7 +1997,7 @@ img.composer-attachment-thumb--empty {
 
 /* When transcript has text, show it and hide label + waveform */
 .voice-bar-row.has-transcript .voice-bar-label,
-.voice-bar-row.has-transcript .voice-waveform-bg {
+.voice-bar-row.has-transcript .voice-wave-wrap {
     display: none;
 }
 

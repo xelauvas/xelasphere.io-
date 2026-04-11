@@ -115,8 +115,10 @@ const VoiceModeModule = (function() {
         _voiceBarLabel.className = 'voice-bar-label';
         _voiceBarLabel.textContent = 'Listening...';
 
+        const waveWrap = document.createElement('div');
+        waveWrap.className = 'voice-wave-wrap';
         _canvas = document.createElement('canvas');
-        _canvas.className = 'voice-waveform-bg';
+        waveWrap.appendChild(_canvas);
 
         _voiceBarEnd = document.createElement('button');
         _voiceBarEnd.className = 'voice-bar-end';
@@ -124,7 +126,7 @@ const VoiceModeModule = (function() {
         _voiceBarEnd.addEventListener('click', (e) => { e.stopPropagation(); exit(); });
 
         _voiceBarRow.appendChild(_voiceBarLabel);
-        _voiceBarRow.appendChild(_canvas);
+        _voiceBarRow.appendChild(waveWrap);
         _voiceBarRow.appendChild(_voiceBarEnd);
 
         _textareaContainer.appendChild(_voiceBarRow);
@@ -142,10 +144,11 @@ const VoiceModeModule = (function() {
     function _resizeCanvas() {
         if (!_canvas || !_canvas.parentElement) return;
         _dpr = window.devicePixelRatio || 1;
-        const rect = _canvas.parentElement.getBoundingClientRect();
-        // Canvas fills its flex container
-        const w = _canvas.clientWidth || rect.width;
-        const h = _canvas.clientHeight || 32;
+        const wrap = _canvas.parentElement;
+        const rect = wrap.getBoundingClientRect();
+        const w = Math.floor(rect.width);
+        const h = Math.floor(rect.height);
+        if (w < 10 || h < 5) return; // not laid out yet
         _canvas.width = w * _dpr;
         _canvas.height = h * _dpr;
         _ctx = _canvas.getContext('2d');
@@ -253,8 +256,17 @@ const VoiceModeModule = (function() {
         ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
     }
 
+    let _resizeRetries = 0;
+
     function _animateWaveform() {
-        if (!isActive || !_ctx) return;
+        if (!isActive) return;
+
+        // Re-check canvas size on first few frames (layout may settle late)
+        if (!_ctx || _resizeRetries < 10) {
+            _resizeCanvas();
+            _resizeRetries++;
+        }
+        if (!_ctx) { _animId = requestAnimationFrame(_animateWaveform); return; }
 
         _waveTime += 1 / 60;
 
@@ -1048,17 +1060,18 @@ const VoiceModeModule = (function() {
         // Clear textarea for when voice exits
         _textarea.value = '';
 
-        // Resize canvas after layout settles
-        requestAnimationFrame(() => _resizeCanvas());
-
         // Init animation state
         _waveTime = 0;
+        _resizeRetries = 0;
         _wp = { ...STATE_PARAMS.idle };
         _bands.fill(0);
         _smoothEnergy = 0;
 
-        // Start waveform animation
-        _animateWaveform();
+        // Resize canvas after layout settles, then start animation
+        requestAnimationFrame(() => {
+            _resizeCanvas();
+            _animateWaveform();
+        });
 
         // Auto-start mic
         setTimeout(async () => {
