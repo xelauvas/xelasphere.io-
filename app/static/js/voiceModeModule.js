@@ -648,6 +648,15 @@ const VoiceModeModule = (function() {
         speaking:  { amp: 24, freq: 2.5, noiseAmt: 0.40, opacity: 1.0, glowMul: 1.0 },
     };
 
+    // State colors — [R, G, B] for waveform glow
+    const STATE_COLORS = {
+        idle:      [255, 255, 255],   // neutral white
+        listening: [96, 165, 250],    // blue
+        thinking:  [251, 191, 36],    // amber
+        speaking:  [74, 222, 128],    // green
+    };
+    let _color = [255, 255, 255]; // current interpolated color
+
     let _wp = { amp: 3, freq: 0.8, noiseAmt: 0.15, opacity: 0.3, glowMul: 0.5 };
     let _waveTime = 0;
 
@@ -687,7 +696,7 @@ const VoiceModeModule = (function() {
 
         const endBtn = document.createElement('button');
         endBtn.className = 'voice-pill-end';
-        endBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+        endBtn.textContent = 'End';
         endBtn.addEventListener('click', (e) => { e.stopPropagation(); exit(); });
 
         pill.appendChild(label);
@@ -769,11 +778,16 @@ const VoiceModeModule = (function() {
         _waveTime += dt;
 
         const target = STATE_PARAMS[currentState] || STATE_PARAMS.idle;
+        const tc = STATE_COLORS[currentState] || STATE_COLORS.idle;
         const lerpSpeed = 0.08;
         _wp.freq = _lerp(_wp.freq, target.freq, lerpSpeed);
         _wp.noiseAmt = _lerp(_wp.noiseAmt, target.noiseAmt, lerpSpeed);
         _wp.opacity = _lerp(_wp.opacity, target.opacity, lerpSpeed);
         _wp.glowMul = _lerp(_wp.glowMul, target.glowMul, lerpSpeed);
+        _color[0] = _lerp(_color[0], tc[0], lerpSpeed);
+        _color[1] = _lerp(_color[1], tc[1], lerpSpeed);
+        _color[2] = _lerp(_color[2], tc[2], lerpSpeed);
+        const r = Math.round(_color[0]), g = Math.round(_color[1]), b = Math.round(_color[2]);
 
         let ampTarget = target.amp;
         if (currentState === 'listening') {
@@ -812,50 +826,50 @@ const VoiceModeModule = (function() {
         for (let t = 0; t < _trailBuf.length; t++) {
             const ghostAlpha = 0.08 * (t + 1) / _trailBuf.length * _wp.opacity;
             _ctx.lineWidth = 1.5;
-            _ctx.strokeStyle = `rgba(255, 255, 255, ${ghostAlpha.toFixed(3)})`;
+            _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${ghostAlpha.toFixed(3)})`;
             _drawCurve(_ctx, _trailBuf[t].top);
             _drawCurve(_ctx, _trailBuf[t].bottom);
         }
 
-        // Chromatic aberration
+        // Chromatic aberration (speaking at high amplitude)
         if (currentState === 'speaking' && _wp.amp > 24 * 0.7) {
             const abIntensity = (_wp.amp - 24 * 0.7) / (24 * 0.3);
-            const abAlpha = 0.12 * abIntensity;
+            const abAlpha = 0.15 * abIntensity;
 
             _ctx.save();
-            _ctx.translate(-1, 0);
+            _ctx.translate(-1.5, 0);
             _ctx.lineWidth = 2;
-            _ctx.strokeStyle = `rgba(255, 40, 40, ${abAlpha.toFixed(3)})`;
+            _ctx.strokeStyle = `rgba(255, 100, 80, ${abAlpha.toFixed(3)})`;
             _drawCurve(_ctx, topPoints);
             _drawCurve(_ctx, bottomPoints);
             _ctx.restore();
 
             _ctx.save();
-            _ctx.translate(1, 0);
+            _ctx.translate(1.5, 0);
             _ctx.lineWidth = 2;
-            _ctx.strokeStyle = `rgba(40, 40, 255, ${abAlpha.toFixed(3)})`;
+            _ctx.strokeStyle = `rgba(80, 160, 255, ${abAlpha.toFixed(3)})`;
             _drawCurve(_ctx, topPoints);
             _drawCurve(_ctx, bottomPoints);
             _ctx.restore();
         }
 
-        // 3-layer glow
+        // 3-layer glow — state colored
         _ctx.lineWidth = 8;
-        _ctx.strokeStyle = `rgba(200, 220, 255, ${(0.08 * _wp.glowMul).toFixed(3)})`;
+        _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.08 * _wp.glowMul).toFixed(3)})`;
         _drawCurve(_ctx, topPoints);
         _drawCurve(_ctx, bottomPoints);
 
         _ctx.lineWidth = 4;
-        _ctx.strokeStyle = `rgba(255, 255, 255, ${(0.15 * _wp.glowMul).toFixed(3)})`;
+        _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.2 * _wp.glowMul).toFixed(3)})`;
         _drawCurve(_ctx, topPoints);
         _drawCurve(_ctx, bottomPoints);
 
         _ctx.lineWidth = 2;
-        _ctx.strokeStyle = `rgba(255, 255, 255, ${_wp.opacity.toFixed(3)})`;
+        _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${_wp.opacity.toFixed(3)})`;
         _drawCurve(_ctx, topPoints);
         _drawCurve(_ctx, bottomPoints);
 
-        // Particles
+        // Particles — state colored
         for (const p of _particles) {
             if (p.life <= 0) continue;
             p.x += p.vx;
@@ -866,7 +880,7 @@ const VoiceModeModule = (function() {
             const alpha = Math.max(0, (p.life / p.maxLife) * 0.8);
             _ctx.beginPath();
             _ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-            _ctx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
+            _ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
             _ctx.fill();
         }
 
