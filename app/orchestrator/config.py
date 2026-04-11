@@ -35,11 +35,11 @@ FREE_TIER_LIMITS = {
 FALLBACK_CHAINS = {
     "coding": [
         ("deepseek", "deepseek-chat",                          "tier1"),
+        ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k, SoTA coding
         ("groq",     "qwen/qwen3-32b",                         "tier1"),
         ("cerebras", "qwen-3-235b-a22b-instruct-2507",         "tier1"),
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD
         ("gemini",   "gemini-2.5-flash",                       "tier1"),  # 20 RPD reasoning
-        ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k, SoTA coding
         ("moonshot", "kimi-k2-0905-preview",                   "tier1"),  # 256k, enhanced agentic coding
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
