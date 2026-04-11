@@ -1695,6 +1695,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (fileInput) fileInput.addEventListener('change', handleFileChange);
     sendButton.addEventListener('click', () => {
+        // If voice mode is active, clicking end button exits voice mode
+        if (sendButton.classList.contains('voice-end')) {
+            if (window.VoiceModeModule) window.VoiceModeModule.exit();
+            return;
+        }
+
         // Mobile: Dismiss keyboard immediately
         dismissMobileKeyboard();
 
