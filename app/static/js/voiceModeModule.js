@@ -40,7 +40,9 @@ const VoiceModeModule = (function() {
         if (!playbackCtx || _playbackAnalyser) return;
         _playbackAnalyser = playbackCtx.createAnalyser();
         _playbackAnalyser.fftSize = 512;
-        _playbackAnalyser.smoothingTimeConstant = 0.2; // snappy for word-level reaction
+        _playbackAnalyser.smoothingTimeConstant = 0.3; // slightly more smoothing to bridge between TTS chunks
+        _playbackAnalyser.minDecibels = -80;
+        _playbackAnalyser.maxDecibels = -10;
         _playbackFreqData = new Uint8Array(_playbackAnalyser.frequencyBinCount);
         _playbackAnalyser.connect(playbackCtx.destination);
     }
@@ -260,10 +262,13 @@ const VoiceModeModule = (function() {
             if (bins && numBins > 0) {
                 // Map x position to frequency bin — use lower half (speech range)
                 const binIdx = Math.floor(nx * numBins * 0.5);
-                const binVal = (bins[Math.min(binIdx, numBins - 1)] || 0) / 255;
+                let binVal = (bins[Math.min(binIdx, numBins - 1)] || 0) / 255;
+
+                // Boost playback signal — TTS decoded audio is quieter than raw mic
+                if (currentState === 'speaking') binVal = Math.min(1, binVal * 2.5);
 
                 // Smooth the bin value for fluid motion
-                const smoothSpeed = 0.35;
+                const smoothSpeed = currentState === 'speaking' ? 0.45 : 0.35;
                 _smoothBins[idx] = _smoothBins[idx] + (binVal - _smoothBins[idx]) * smoothSpeed;
                 const sv = _smoothBins[idx];
 
@@ -271,7 +276,8 @@ const VoiceModeModule = (function() {
                 val = sv * Math.sin(2 * Math.PI * _wp.freq * time + nx * Math.PI * 3 + phaseOffset);
                 // Add some higher frequency detail from nearby bins
                 const binIdx2 = Math.min(binIdx + 4, numBins - 1);
-                const detail = (bins[binIdx2] || 0) / 255;
+                let detail = (bins[binIdx2] || 0) / 255;
+                if (currentState === 'speaking') detail = Math.min(1, detail * 2.5);
                 val += detail * 0.3 * Math.sin(4 * Math.PI * _wp.freq * time + nx * Math.PI * 5 + phaseOffset);
             } else {
                 // Idle / thinking — gentle mathematical wave
