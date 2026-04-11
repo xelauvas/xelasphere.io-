@@ -486,6 +486,7 @@ const VoiceModeModule = (function() {
         _currentSource = null;
         _ttsInflight = 0;
         _streamDone = false;
+        _preferredVoice = 'auto';  // Reset voice for new turn — tts_voice SSE event will lock it
 
         const csrfMeta = document.querySelector('meta[name="csrf-token"]');
         const chatHeaders = { 'Content-Type': 'application/x-www-form-urlencoded' };
@@ -502,7 +503,7 @@ const VoiceModeModule = (function() {
         let firstChunkTime = null;
         let _responseLang = null; // locked after first chunk
         const streamStart = Date.now();
-        const FIRST_CHUNK_MIN = 150; // wait for enough text to detect language + voice
+        const FIRST_CHUNK_MIN = 80; // wait for enough text for language detection
 
         try {
             const resp = await fetch('/chat/stream', {
