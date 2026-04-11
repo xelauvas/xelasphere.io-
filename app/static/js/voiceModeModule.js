@@ -540,18 +540,26 @@ const VoiceModeModule = (function() {
                             const [sentence, remainder] = _splitAtSentenceBoundary(ttsBuffer);
                             if (sentence) {
                                 ttsBuffer = remainder;
-                                if (chunkIndex++ === 0) {
-                                    // First chunk: detect language and lock it for the entire response
+                                const isFirst = chunkIndex === 0;
+                                if (isFirst) {
                                     _responseLang = _detectedLang;
                                     firstChunkTime = Date.now() - streamStart;
                                     console.log(`[VoiceMode] first TTS chunk at ${firstChunkTime}ms, lang=${_responseLang}`);
                                 }
+                                chunkIndex++;
                                 _ttsInflight++;
                                 const lang = _responseLang || _detectedLang;
-                                _fetchTTSChunk(sentence, lang).then(audio => {
+                                if (isFirst) {
+                                    // Await first chunk to lock voice before firing subsequent chunks
+                                    const audio = await _fetchTTSChunk(sentence, lang);
                                     _ttsInflight--;
                                     if (audio) _enqueueAudio(audio);
-                                });
+                                } else {
+                                    _fetchTTSChunk(sentence, lang).then(audio => {
+                                        _ttsInflight--;
+                                        if (audio) _enqueueAudio(audio);
+                                    });
+                                }
                             }
                         }
                         if (parsed.type === 'done' && parsed.content) fullContent = parsed.content;
