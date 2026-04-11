@@ -39,8 +39,8 @@ const VoiceModeModule = (function() {
     function _ensurePlaybackAnalyser() {
         if (!playbackCtx || _playbackAnalyser) return;
         _playbackAnalyser = playbackCtx.createAnalyser();
-        _playbackAnalyser.fftSize = 256;
-        _playbackAnalyser.smoothingTimeConstant = 0.6;
+        _playbackAnalyser.fftSize = 512;
+        _playbackAnalyser.smoothingTimeConstant = 0.2; // snappy for word-level reaction
         _playbackFreqData = new Uint8Array(_playbackAnalyser.frequencyBinCount);
         _playbackAnalyser.connect(playbackCtx.destination);
     }
@@ -236,21 +236,52 @@ const VoiceModeModule = (function() {
         }
     }
 
+    // Smoothed frequency bins for waveform shape (lerped each frame)
+    let _smoothBins = null;
+
     function _buildWavePath(w, cy, time, amp, phaseOffset) {
         const points = [];
-        const step = 8;
+        const step = 4; // finer resolution for detailed shape
+        const bins = (currentState === 'listening') ? _getFrequencyBins()
+                   : (currentState === 'speaking') ? _getPlaybackBins()
+                   : null;
+        const numBins = bins ? bins.length : 0;
+
+        // Init smooth bins
+        if (!_smoothBins || _smoothBins.length !== Math.ceil(w / step) + 1) {
+            _smoothBins = new Float32Array(Math.ceil(w / step) + 1);
+        }
+
+        let idx = 0;
         for (let x = 0; x <= w; x += step) {
             const nx = x / w;
-            const target = _wp;
-            let val = Math.sin(2 * Math.PI * target.freq * time + nx * Math.PI * 2.5 + phaseOffset);
-            if (currentState === 'speaking' || currentState === 'thinking') {
-                val += 0.4 * Math.sin(2 * Math.PI * target.freq * 1.7 * time + nx * Math.PI * 3.5 + phaseOffset);
-                val += 0.2 * Math.sin(2 * Math.PI * target.freq * 3.1 * time + nx * Math.PI * 1.8 + phaseOffset);
-                val /= 1.6;
+
+            let val;
+            if (bins && numBins > 0) {
+                // Map x position to frequency bin — use lower half (speech range)
+                const binIdx = Math.floor(nx * numBins * 0.5);
+                const binVal = (bins[Math.min(binIdx, numBins - 1)] || 0) / 255;
+
+                // Smooth the bin value for fluid motion
+                const smoothSpeed = 0.35;
+                _smoothBins[idx] = _smoothBins[idx] + (binVal - _smoothBins[idx]) * smoothSpeed;
+                const sv = _smoothBins[idx];
+
+                // Frequency data drives the displacement
+                val = sv * Math.sin(2 * Math.PI * _wp.freq * time + nx * Math.PI * 3 + phaseOffset);
+                // Add some higher frequency detail from nearby bins
+                const binIdx2 = Math.min(binIdx + 4, numBins - 1);
+                const detail = (bins[binIdx2] || 0) / 255;
+                val += detail * 0.3 * Math.sin(4 * Math.PI * _wp.freq * time + nx * Math.PI * 5 + phaseOffset);
+            } else {
+                // Idle / thinking — gentle mathematical wave
+                val = Math.sin(2 * Math.PI * _wp.freq * time + nx * Math.PI * 2.5 + phaseOffset);
+                val += _noise2D(nx * 3, time * 0.8 + phaseOffset) * _wp.noiseAmt;
             }
-            val += _noise2D(nx * 3, time * 0.8 + phaseOffset) * target.noiseAmt;
+
             const taper = Math.sin(nx * Math.PI);
             points.push({ x, y: cy + val * amp * taper });
+            idx++;
         }
         return points;
     }
@@ -291,24 +322,24 @@ const VoiceModeModule = (function() {
         let ampTarget = target.amp;
         if (currentState === 'listening') {
             const raw = getAudioLevel();
-            ampTarget = Math.min(28, raw * 4 * 28);
-            const springForce = 0.15;
-            const damping = 0.85;
+            ampTarget = Math.min(30, raw * 6 * 30); // more sensitive
+            const springForce = 0.3;  // snappy — jumps to syllables
+            const damping = 0.75;     // less damping — faster decay between words
             _springVel += (ampTarget - _springAmp) * springForce;
             _springVel *= damping;
             _springAmp += _springVel;
             _wp.amp = Math.max(2, _springAmp);
-            _wp.opacity = _lerp(0.15, 0.25, Math.min(1, raw * 4));
+            _wp.opacity = _lerp(0.20, 0.45, Math.min(1, raw * 5));
         } else if (currentState === 'speaking') {
             const raw = _getSpeakingLevel();
-            ampTarget = 6 + raw * 22;
-            const springForce = 0.2;
-            const damping = 0.82;
+            ampTarget = 4 + raw * 26; // wider range
+            const springForce = 0.3;
+            const damping = 0.75;
             _springVel += (ampTarget - _springAmp) * springForce;
             _springVel *= damping;
             _springAmp += _springVel;
-            _wp.amp = Math.max(4, _springAmp);
-            _wp.opacity = _lerp(0.18, 0.25, Math.min(1, raw * 2.5));
+            _wp.amp = Math.max(3, _springAmp);
+            _wp.opacity = _lerp(0.20, 0.45, Math.min(1, raw * 3));
         } else {
             _wp.amp = _lerp(_wp.amp, ampTarget, lerpSpeed);
             _springAmp = _wp.amp;
@@ -386,13 +417,27 @@ const VoiceModeModule = (function() {
         return Math.sqrt(sumSquares / frequencyData.length);
     }
 
+    // Get frequency spectrum as array of 0-1 values (for waveform shape)
+    function _getFrequencyBins() {
+        if (!analyser || !frequencyData) return null;
+        analyser.getByteFrequencyData(frequencyData);
+        return frequencyData; // 0-255 per bin
+    }
+
+    // Get playback frequency spectrum
+    function _getPlaybackBins() {
+        if (!_playbackAnalyser || !_playbackFreqData) return null;
+        _playbackAnalyser.getByteFrequencyData(_playbackFreqData);
+        return _playbackFreqData;
+    }
+
     async function startListening() {
         try {
             stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             analyser = audioContext.createAnalyser();
-            analyser.fftSize = 256;
-            analyser.smoothingTimeConstant = 0.3;
+            analyser.fftSize = 512;  // more bins for detailed shape
+            analyser.smoothingTimeConstant = 0.15; // snappy response
             analyser.minDecibels = -90;
             analyser.maxDecibels = -10;
             frequencyData = new Uint8Array(analyser.frequencyBinCount);
