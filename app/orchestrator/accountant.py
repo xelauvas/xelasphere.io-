@@ -83,7 +83,7 @@ def get_status() -> Dict:
     from app.orchestrator.config import FREE_TIER_LIMITS
 
     status = {}
-    for provider in ("groq", "cerebras", "gemini", "deepseek", "openai"):
+    for provider in ("groq", "cerebras", "gemini", "deepseek", "moonshot", "openai"):
         limits = FREE_TIER_LIMITS.get(provider, {})
         token_limit = limits.get("daily_tokens", 0)
         req_limit = limits.get("daily_requests", 0)
@@ -171,7 +171,7 @@ def _load_today_from_firestore():
 
     today = str(datetime.utcnow().date())
     try:
-        for provider in ("groq", "cerebras", "deepseek", "openai"):
+        for provider in ("groq", "cerebras", "deepseek", "moonshot", "openai"):
             doc = db.collection("orchestrator_quota").document(
                 f"{provider}_{today}"
             ).get()

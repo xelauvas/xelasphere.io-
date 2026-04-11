@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 IGNORED_MODEL_PATTERNS = frozenset({
     'whisper', 'tts-', 'dall-e', 'davinci-', 'babbage-',
     'embedding', 'moderation', 'realtime', 'audio',
-    'canopylabs/', 'allam-',
+    'canopylabs/', 'allam-', 'moonshot-v1-',
 })
 
 _running = False
@@ -66,6 +66,7 @@ def _check_all_providers():
         "gemini":   getattr(Config, "GEMINI_API_KEY", ""),
         "openai":   getattr(Config, "OPENAI_API_KEY", ""),
         "deepseek": getattr(Config, "DEEPSEEK_API_KEY", ""),
+        "moonshot": getattr(Config, "MOONSHOT_API_KEY", ""),
     }
 
     for provider, api_key in providers.items():

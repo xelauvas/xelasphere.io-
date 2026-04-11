@@ -95,6 +95,7 @@ def create_app():
             "img-src 'self' data: https:",
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net",
             "connect-src 'self' https://api.groq.com https://openrouter.ai https://cdn.jsdelivr.net https://unpkg.com",
+            "media-src 'self' blob:",
             "frame-src 'self' data: blob: https://www.youtube.com https://www.youtube-nocookie.com",
             "frame-ancestors 'none'",
             "object-src 'none'",

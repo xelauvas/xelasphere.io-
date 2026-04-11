@@ -43,7 +43,9 @@ function stopActiveAudio() {
         } catch (_) {
             // ignore
         }
-        activeBufferSource.disconnect();
+        if (typeof activeBufferSource.disconnect === 'function') {
+            activeBufferSource.disconnect();
+        }
         activeBufferSource = null;
     }
     isSpeaking = false;
@@ -228,15 +230,12 @@ function base64ToArrayBuffer(base64Data) {
 }
 
 async function playAudioBuffer(arrayBuffer) {
-    // Convert to base64 data URL (blob URLs get blocked by Chrome URL safety check)
-    const bytes = new Uint8Array(arrayBuffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    const dataUrl = 'data:audio/wav;base64,' + btoa(binary);
+    const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+    const blobUrl = URL.createObjectURL(blob);
 
     return new Promise((resolve, reject) => {
         const audio = document.createElement('audio');
-        audio.src = dataUrl;
+        audio.src = blobUrl;
         audio.volume = 1.0;
         audio.setAttribute('playsinline', '');
         document.body.appendChild(audio);
@@ -247,13 +246,16 @@ async function playAudioBuffer(arrayBuffer) {
         isSpeaking = true;
 
         audio.addEventListener('ended', () => {
+            URL.revokeObjectURL(blobUrl);
             audio.remove();
-            stopActiveAudio();
+            activeBufferSource = null;
+            isSpeaking = false;
             resolve();
         }, { once: true });
 
         audio.addEventListener('error', (e) => {
             console.error('TTS playback error:', audio.error);
+            URL.revokeObjectURL(blobUrl);
             audio.remove();
             stopActiveAudio();
             reject(e);
@@ -262,6 +264,7 @@ async function playAudioBuffer(arrayBuffer) {
         const p = audio.play();
         if (p && p.catch) p.catch((e) => {
             console.error('TTS play() blocked:', e.message);
+            URL.revokeObjectURL(blobUrl);
             audio.remove();
             reject(e);
         });
@@ -338,6 +341,7 @@ async function speakText(text, button) {
             }
         }
         isFetchingAudio = false;
+        stopActiveAudio();
     } catch (error) {
         isFetchingAudio = false;
         console.error('Failed to play TTS audio:', error);

@@ -11,6 +11,7 @@ PROVIDER_ENDPOINTS = {
     "openai":   "https://api.openai.com/v1/models",
     "deepseek": "https://api.deepseek.com/models",
     "gemini":   "https://generativelanguage.googleapis.com/v1beta/openai/models",
+    "moonshot": "https://api.moonshot.ai/v1/models",
     # "ollama":   None,   # removed — no local LLM
 }
 
@@ -38,6 +39,7 @@ FALLBACK_CHAINS = {
         ("cerebras", "qwen-3-235b-a22b-instruct-2507",         "tier1"),
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD
         ("gemini",   "gemini-2.5-flash",                       "tier1"),  # 20 RPD reasoning
+        ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k context, SoTA coding
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
     "reasoning": [
@@ -46,6 +48,7 @@ FALLBACK_CHAINS = {
         ("cerebras", "qwen-3-235b-a22b-instruct-2507",         "tier1"),
         ("gemini",   "gemini-2.5-flash",                       "tier1"),  # 20 RPD but best for reasoning
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD fallback
+        ("moonshot", "kimi-k2-thinking",                       "tier1"),  # deep reasoning, 256k
         ("openai",   "gpt-4.1-mini",                           "tier0"),
     ],
     "general_chat": [
@@ -54,6 +57,7 @@ FALLBACK_CHAINS = {
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD
         ("gemini",   "gemma-4-26b-a4b-it",                    "tier1"),  # 1500 RPD
         ("deepseek", "deepseek-chat",                          "tier1"),
+        ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k context
         ("openai",   "gpt-4.1-nano",                           "tier0"),
     ],
     "fast_chat": [
@@ -65,6 +69,7 @@ FALLBACK_CHAINS = {
     ],
     "long_context": [
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD, 1M context
+        ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k context
         ("deepseek", "deepseek-chat",                          "tier1"),
         ("groq",     "llama-3.3-70b-versatile",                "tier1"),
         ("openai",   "gpt-4.1",                                "tier0"),
@@ -97,6 +102,7 @@ MODEL_FAMILIES = {
     "llama":    ["llama"],
     "qwen":     ["qwen"],
     "deepseek": ["deepseek"],
+    "kimi":     ["kimi"],
     "gemma":    ["gemma"],
     "gpt":      ["gpt"],
     "gemini":   ["gemini"],
