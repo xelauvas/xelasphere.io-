@@ -1158,6 +1158,7 @@ const VoiceModeModule = (function() {
         if (_transcriptOverlay) _transcriptOverlay.innerHTML = '';
 
         // Restore button visibility
+        if (_voiceModeButton) _voiceModeButton.classList.remove('hidden');
         if (window.updateSendButtonState) window.updateSendButtonState();
 
         // Stop sounds and audio
