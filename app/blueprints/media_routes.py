@@ -98,34 +98,165 @@ def check_generation_status():
         return jsonify({'error': 'Failed to check generation status'}), 500
 
 
+import re as _re
+
+
+def _pick_voice_for_content(text: str) -> str:
+    """Pick the best Gemini voice based on what the text is about."""
+    t = text.lower()
+    length = len(text)
+
+    # Code/technical — precise, authoritative
+    if any(x in t for x in ['```', 'function', 'def ', 'class ', 'import ', 'const ', 'var ', 'error', 'debug', 'api', 'http']):
+        return 'Charon'
+
+    # Reasoning/analysis — calm, measured
+    if any(x in t for x in ['because', 'therefore', 'however', 'in conclusion', 'step 1', 'first,', 'the reason', 'analysis', 'comparing']):
+        return 'Orus'
+
+    # Creative/stories — expressive
+    if any(x in t for x in ['once upon', 'story', 'imagine', 'poem', 'chapter', 'narrator', 'fiction']):
+        return 'Zephyr'
+
+    # Lists/instructions — crisp, clear
+    if _re.search(r'^\s*[\d\-\*•]', text, _re.MULTILINE) and length > 300:
+        return 'Kore'
+
+    # Short snappy answers
+    if length < 150:
+        return 'Puck'
+
+    # Default: warm conversational
+    return 'Aoede'
+
+
+# Gemini TTS voice mapping (Groq voice → Gemini voice)
+GEMINI_VOICES = {
+    'autumn': 'Kore',
+    'alloy': 'Puck',
+    'echo': 'Charon',
+    'fable': 'Fenrir',
+    'onyx': 'Orus',
+    'nova': 'Zephyr',
+    'shimmer': 'Aoede',
+    'coral': 'Leda',
+}
+
+
+def _generate_gemini_tts(text, voice='Kore'):
+    """Generate TTS using Gemini. Returns (audio_bytes, mime_type) or None."""
+    import base64
+    import struct
+    import io
+    import wave
+
+    api_key = Config.GEMINI_API_KEY
+    if not api_key:
+        return None
+
+    # Cap text length — long text causes timeouts
+    if len(text) > 3000:
+        text = text[:3000]
+
+    gemini_voice = GEMINI_VOICES.get(voice, voice)
+    # Capitalize first letter for Gemini
+    if gemini_voice and gemini_voice[0].islower():
+        gemini_voice = gemini_voice[0].upper() + gemini_voice[1:]
+
+    try:
+        import time as _time
+        resp = None
+        for _attempt in range(2):
+            resp = requests.post(
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent",
+                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": text}]}],
+                    "generationConfig": {
+                        "responseModalities": ["AUDIO"],
+                        "speechConfig": {
+                            "voiceConfig": {
+                                "prebuiltVoiceConfig": {"voiceName": gemini_voice}
+                            }
+                        }
+                    }
+                },
+                timeout=60,
+            )
+            if resp.status_code == 200:
+                break
+            if resp.status_code == 500 and _attempt == 0:
+                logger.info("Gemini TTS 500, retrying...")
+                _time.sleep(0.5)
+                continue
+            logger.warning(f"Gemini TTS returned {resp.status_code}: {resp.text[:200]}")
+            return None
+
+        data = resp.json()
+        parts = data.get('candidates', [{}])[0].get('content', {}).get('parts', [])
+        for part in parts:
+            inline = part.get('inlineData', {})
+            if inline.get('data'):
+                pcm_bytes = base64.b64decode(inline['data'])
+                # Convert raw PCM (L16, 24kHz, mono) to WAV
+                wav_buf = io.BytesIO()
+                with wave.open(wav_buf, 'wb') as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)  # 16-bit
+                    wf.setframerate(24000)
+                    wf.writeframes(pcm_bytes)
+                return wav_buf.getvalue(), 'audio/wav'
+
+        return None
+    except Exception as e:
+        logger.warning(f"Gemini TTS failed: {e}")
+        return None
+
+
 @media_bp.route('/tts/groq', methods=['POST'])
 @limiter.limit("10 per minute")
 @csrf_required
 @error_handler
 @login_required
 def generate_groq_tts():
-    """Generate text-to-speech audio using Groq."""
+    """Generate text-to-speech: Gemini (primary, free, no length limit) → Groq (fallback)."""
     payload = request.get_json(silent=True) or {}
     text = (payload.get('text') or '').strip()
     if not text:
         return jsonify({'error': 'Text input is required.'}), 400
+
+    voice = (payload.get('voice') or 'autumn').strip() or 'autumn'
+
+    # ── Dynamic voice based on content ──
+    if voice == 'autumn' or voice == 'auto':
+        voice = _pick_voice_for_content(text)
+        logger.info(f"TTS: dynamic voice → {voice}")
+
+    # ── Try Gemini first (free, no char limit) ──
+    gemini_result = _generate_gemini_tts(text, voice)
+    if gemini_result:
+        audio_bytes, mime_type = gemini_result
+        logger.info(f"TTS: Gemini success, {len(audio_bytes)} bytes")
+        from flask import Response
+        return Response(audio_bytes, mimetype=mime_type, headers={
+            'Content-Disposition': 'inline; filename="speech.wav"'
+        })
+
+    # ── Fallback: Groq Orpheus (200 char limit) ──
+    logger.info("TTS: Gemini failed, falling back to Groq")
     if len(text) > 200:
-        return jsonify({'error': 'Text exceeds maximum length of 200 characters.'}), 400
+        text = text[:200]
 
     requested_format = (payload.get('format') or 'wav').lower()
     if requested_format not in SUPPORTED_TTS_FORMATS:
         requested_format = 'wav'
     mime_type = SUPPORTED_TTS_FORMATS[requested_format]
 
-    voice = (payload.get('voice') or 'autumn').strip()
-    if not voice:
-        voice = 'autumn'
-
     api_keys = getattr(g, 'api_keys', {}) if hasattr(g, 'api_keys') else {}
     user_override = api_keys.get('groq') if isinstance(api_keys, dict) else None
     api_key = user_override or Config.GROQ_API_KEY
     if not api_key:
-        return jsonify({'error': 'Groq API key is not configured.'}), 400
+        return jsonify({'error': 'TTS provider not available.'}), 502
 
     groq_endpoint = "https://api.groq.com/openai/v1/audio/speech"
     body = {

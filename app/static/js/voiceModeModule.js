@@ -456,22 +456,198 @@ const VoiceModeModule = (function() {
         }
     }
 
-    function onCanvasClick() {
+    // Voice conversation: record → transcribe → send → TTS → loop
+    let mediaRecorder = null;
+    let recordedChunks = [];
+
+    async function onCanvasClick() {
         if (currentState === 'idle') {
-            startListening();
+            await startListening();
+            startRecording();
         } else if (currentState === 'listening') {
-            // Demo: cycle through states
-            setState('thinking');
-            setTimeout(() => {
-                if (currentState === 'thinking' && isActive) {
-                    setState('speaking');
-                    setTimeout(() => {
-                        if (currentState === 'speaking' && isActive) {
-                            startListening();
-                        }
-                    }, 2500);
+            stopRecordingAndProcess();
+        } else if (currentState === 'speaking') {
+            if (window._voiceTtsAudio) {
+                window._voiceTtsAudio.pause();
+                window._voiceTtsAudio = null;
+            }
+            await startListening();
+            startRecording();
+        }
+    }
+
+    function startRecording() {
+        recordedChunks = [];
+        if (!stream) return;
+        const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+        let mimeType = '';
+        for (const mt of mimeTypes) {
+            if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mt)) {
+                mimeType = mt;
+                break;
+            }
+        }
+        try {
+            mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+            };
+            mediaRecorder.start(100);
+        } catch (e) {
+            console.error('Voice mode recording error:', e);
+        }
+    }
+
+    async function stopRecordingAndProcess() {
+        if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+            setState('idle');
+            return;
+        }
+
+        setState('thinking');
+
+        // Stop recording and collect audio
+        const audioBlob = await new Promise((resolve) => {
+            mediaRecorder.onstop = () => {
+                const mime = mediaRecorder.mimeType || 'audio/webm';
+                resolve(new Blob(recordedChunks, { type: mime }));
+            };
+            mediaRecorder.stop();
+        });
+
+        console.log('Voice mode: audio blob size =', audioBlob.size, 'type =', audioBlob.type);
+        if (audioBlob.size < 100) {
+            console.warn('Voice mode: audio too short, restarting');
+            await startListening();
+            startRecording();
+            return;
+        }
+
+        try {
+            // 1. Transcribe with Whisper
+            const transcript = await transcribeVoice(audioBlob);
+            if (!transcript || !transcript.trim()) {
+                await startListening();
+                startRecording();
+                return;
+            }
+
+            // 2. Send as chat message and get response
+            const response = await sendVoiceMessage(transcript);
+            if (!response || !isActive) {
+                if (isActive) { await startListening(); startRecording(); }
+                return;
+            }
+
+            // 3. Speak the response with TTS
+            setState('speaking');
+            await speakVoiceResponse(response);
+
+            // 4. Loop back to listening
+            if (isActive) {
+                await startListening();
+                startRecording();
+            }
+        } catch (e) {
+            console.error('Voice mode error:', e);
+            if (isActive) { await startListening(); startRecording(); }
+        }
+    }
+
+    async function transcribeVoice(audioBlob) {
+        const formData = new FormData();
+        const ext = audioBlob.type.includes('mp4') ? 'mp4' : audioBlob.type.includes('ogg') ? 'ogg' : 'webm';
+        formData.append('audio', audioBlob, `voice.${ext}`);
+        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        const headers = {};
+        if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
+
+        const resp = await fetch('/speech-to-text/groq', {
+            method: 'POST', body: formData, headers, credentials: 'same-origin'
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        return data.text || null;
+    }
+
+    async function sendVoiceMessage(text) {
+        // Use the existing sendMessage flow but capture the response
+        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+        if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
+
+        const formBody = new URLSearchParams({
+            prompt: text,
+            model: 'auto',
+        });
+
+        try {
+            const resp = await fetch('/chat/stream', {
+                method: 'POST', headers, body: formBody, credentials: 'same-origin'
+            });
+            if (!resp.ok) return null;
+
+            // Read SSE stream, collect content
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let content = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                for (const line of chunk.split('\n')) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const parsed = JSON.parse(line.slice(6));
+                        if (parsed.type === 'content' && parsed.text) content += parsed.text;
+                        if (parsed.type === 'done' && parsed.content) content = parsed.content;
+                    } catch (_) {}
                 }
-            }, 1800);
+            }
+            return content || null;
+        } catch (e) {
+            console.error('Voice sendMessage error:', e);
+            return null;
+        }
+    }
+
+    async function speakVoiceResponse(text) {
+        if (!text) return;
+        // Limit TTS to first 5000 chars
+        const ttsText = text.length > 5000 ? text.substring(0, 5000) : text;
+        // Strip markdown
+        const clean = ttsText.replace(/```[\s\S]*?```/g, '').replace(/[*_#`>|]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim();
+        if (!clean) return;
+
+        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        const headers = { 'Content-Type': 'application/json' };
+        if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
+
+        try {
+            const resp = await fetch('/tts/groq', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ text: clean, voice: 'auto', format: 'wav' }),
+                credentials: 'same-origin'
+            });
+            if (!resp.ok) return;
+
+            const arrayBuffer = await resp.arrayBuffer();
+            const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            window._voiceTtsAudio = audio;
+
+            await new Promise((resolve) => {
+                audio.onended = resolve;
+                audio.onerror = resolve;
+                audio.play().catch(resolve);
+            });
+
+            URL.revokeObjectURL(url);
+            window._voiceTtsAudio = null;
+        } catch (e) {
+            console.error('Voice TTS error:', e);
         }
     }
 

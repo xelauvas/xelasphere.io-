@@ -1706,23 +1706,41 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     stopIcon.addEventListener('click', (e) => { e.stopPropagation(); abortMessage(); });
-    if (actionsToggle && actionsMenu) {
+    // ─── Action Sheet Modal (positioned above + button) ───
+    const actionModal = document.getElementById('action-sheet-modal');
+    const actionBackdrop = document.getElementById('action-sheet-backdrop');
+
+    if (actionsToggle && actionModal && actionBackdrop) {
         const closeActions = () => {
-            actionsMenu.classList.remove('open');
+            actionModal.style.display = 'none';
+            actionBackdrop.style.display = 'none';
             actionsToggle.setAttribute('aria-expanded', 'false');
+            if (actionsMenu) actionsMenu.classList.remove('open');
+            // Close submenus
+            document.querySelectorAll('[data-submenu]').forEach(el => {
+                const sub = document.getElementById(el.dataset.submenu);
+                if (sub) sub.style.display = 'none';
+                el.style.background = '';
+                el.style.borderRadius = '';
+                el.style.margin = '';
+            });
         };
         closeActionsMenu = closeActions;
 
         actionsToggle.addEventListener('click', (e) => {
             e.stopPropagation();
-            const willOpen = !actionsMenu.classList.contains('open');
-            actionsMenu.classList.toggle('open');
-            actionsToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!actionsMenu.contains(e.target)) {
+            const isOpen = actionModal.style.display === 'block';
+            if (isOpen) {
                 closeActions();
+            } else {
+                // Position above the + button
+                const rect = actionsToggle.getBoundingClientRect();
+                actionModal.style.display = 'block';
+                actionBackdrop.style.display = 'block';
+                actionModal.style.left = rect.left + 'px';
+                actionModal.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
+                actionsToggle.setAttribute('aria-expanded', 'true');
+                if (actionsMenu) actionsMenu.classList.add('open');
             }
         });
     }
@@ -1731,8 +1749,210 @@ document.addEventListener('DOMContentLoaded', () => {
         searchCheckbox.addEventListener('change', () => {
             searchToggleLabel.setAttribute('aria-checked', searchCheckbox.checked ? 'true' : 'false');
             searchToggleLabel.classList.toggle('active', searchCheckbox.checked);
+            // Sync with action sheet toggle
+            const webBtn = document.getElementById('action-web-search');
+            if (webBtn) webBtn.classList.toggle('active', searchCheckbox.checked);
         });
         searchToggleLabel.classList.toggle('active', searchCheckbox.checked);
+    }
+
+    // ─── Action Sheet Handlers ───
+    const cameraBtn = document.getElementById('action-camera');
+    const cameraInput = document.getElementById('camera-capture');
+    if (cameraBtn && cameraInput) {
+        cameraBtn.addEventListener('click', () => {
+            if (closeActionsMenu) closeActionsMenu();
+            cameraInput.click();
+        });
+        cameraInput.addEventListener('change', function() {
+            // Reuse existing file handler
+            const files = Array.from(this.files);
+            if (files.length && fileInput) {
+                const dt = new DataTransfer();
+                files.forEach(f => dt.items.add(f));
+                fileInput.files = dt.files;
+                fileInput.dispatchEvent(new Event('change'));
+            }
+            this.value = '';
+        });
+    }
+
+    // ─── Submenu toggle logic ───
+    const _closeAllSubmenus = () => {
+        document.querySelectorAll('[data-submenu]').forEach(el => {
+            const sub = document.getElementById(el.dataset.submenu);
+            if (sub) sub.style.display = 'none';
+            el.style.background = '';
+            el.style.borderRadius = '';
+            el.style.margin = '';
+        });
+    };
+
+    document.querySelectorAll('[data-submenu]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const subId = btn.dataset.submenu;
+            const sub = document.getElementById(subId);
+            if (!sub) return;
+            const wasOpen = sub.style.display === 'block';
+            _closeAllSubmenus();
+            if (!wasOpen) {
+                sub.style.display = 'block';
+                btn.style.background = '#353331';
+                btn.style.borderRadius = '8px';
+                btn.style.margin = '2px 4px';
+            }
+        });
+    });
+
+    // ─── Generate image ───
+    const genImageBtn = document.getElementById('action-generate-image');
+    if (genImageBtn) {
+        genImageBtn.addEventListener('click', () => {
+            if (closeActionsMenu) closeActionsMenu();
+            _closeAllSubmenus();
+            if (promptInput) {
+                promptInput.value = '/image ';
+                promptInput.focus();
+                promptInput.dispatchEvent(new Event('input'));
+            }
+        });
+    }
+
+    // ─── Artifact type submenu ───
+    document.querySelectorAll('[data-artifact]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (closeActionsMenu) closeActionsMenu();
+            _closeAllSubmenus();
+            const type = btn.dataset.artifact;
+            const prompts = {
+                'app': 'Create a web app that ',
+                'dashboard': 'Create a dashboard that shows ',
+                'game': 'Create a game: ',
+            };
+            if (promptInput) {
+                promptInput.value = prompts[type] || 'Create ';
+                promptInput.focus();
+                promptInput.dispatchEvent(new Event('input'));
+            }
+        });
+    });
+
+    // ─── Add to project (placeholder) ───
+    const addToProjectBtn = document.getElementById('action-add-to-project');
+    if (addToProjectBtn) {
+        addToProjectBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // placeholder — no submenu content yet
+        });
+    }
+
+    // ─── Skills submenu items (placeholders) ───
+    const manageSkillsBtn = document.getElementById('action-manage-skills');
+    if (manageSkillsBtn) {
+        manageSkillsBtn.addEventListener('click', () => {
+            if (closeActionsMenu) closeActionsMenu();
+            _closeAllSubmenus();
+        });
+    }
+    const addSkillBtn = document.getElementById('action-add-skill');
+    if (addSkillBtn) {
+        addSkillBtn.addEventListener('click', () => {
+            if (closeActionsMenu) closeActionsMenu();
+            _closeAllSubmenus();
+        });
+    }
+
+    // ─── Connectors (placeholder) ───
+    const connectorsBtn = document.getElementById('action-connectors');
+    if (connectorsBtn) {
+        connectorsBtn.addEventListener('click', () => {
+            if (closeActionsMenu) closeActionsMenu();
+            _closeAllSubmenus();
+        });
+    }
+
+    // ─── Deep research ───
+    const deepResearchBtn = document.getElementById('action-deep-research');
+    if (deepResearchBtn) {
+        deepResearchBtn.addEventListener('click', () => {
+            if (closeActionsMenu) closeActionsMenu();
+            _closeAllSubmenus();
+            if (searchCheckbox && !searchCheckbox.checked) {
+                searchCheckbox.checked = true;
+                searchCheckbox.dispatchEvent(new Event('change'));
+            }
+            if (promptInput) {
+                promptInput.value = '';
+                promptInput.focus();
+                promptInput.setAttribute('placeholder', 'What would you like to research?');
+                promptInput.dispatchEvent(new Event('input'));
+            }
+        });
+    }
+
+    // ─── Web search toggle ───
+    const webSearchBtn = document.getElementById('action-web-search');
+    if (webSearchBtn) {
+        const _setWebState = (on) => {
+            const icon = webSearchBtn.querySelector('.asi-web-icon');
+            const label = webSearchBtn.querySelector('.asi-web-label');
+            const check = webSearchBtn.querySelector('.asi-web-check');
+            if (on) {
+                if (icon) { icon.style.color = '#378ADD'; icon.style.opacity = '1'; }
+                if (label) label.style.color = '#378ADD';
+                if (check) check.style.display = 'flex';
+            } else {
+                if (icon) { icon.style.color = '#fff'; icon.style.opacity = '0.8'; }
+                if (label) label.style.color = '#fff';
+                if (check) check.style.display = 'none';
+            }
+            webSearchBtn.dataset.webOn = on ? 'true' : 'false';
+        };
+        _setWebState(searchCheckbox && searchCheckbox.checked);
+        webSearchBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (searchCheckbox) {
+                searchCheckbox.checked = !searchCheckbox.checked;
+                searchCheckbox.dispatchEvent(new Event('change'));
+            }
+            _setWebState(searchCheckbox ? searchCheckbox.checked : webSearchBtn.dataset.webOn !== 'true');
+        });
+    }
+
+    // ─── Style submenu ───
+    document.querySelectorAll('.action-style-opt').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.action-style-opt').forEach(b => {
+                b.style.background = '';
+                b.style.borderRadius = '';
+                b.style.margin = '';
+                const chk = b.querySelector('.style-check');
+                if (chk) chk.style.display = 'none';
+            });
+            btn.style.background = '#353331';
+            btn.style.borderRadius = '8px';
+            btn.style.margin = '2px 4px';
+            const chk = btn.querySelector('.style-check');
+            if (chk) chk.style.display = 'flex';
+            const style = btn.dataset.style;
+            if (window.chatManager) window.chatManager._activeStyle = style;
+            if (closeActionsMenu) closeActionsMenu();
+            _closeAllSubmenus();
+        });
+    });
+
+    const createStyleBtn = document.getElementById('action-create-style');
+    if (createStyleBtn) {
+        createStyleBtn.addEventListener('click', () => {
+            if (closeActionsMenu) closeActionsMenu();
+            _closeAllSubmenus();
+            if (promptInput) {
+                promptInput.value = 'Create a writing style that ';
+                promptInput.focus();
+                promptInput.dispatchEvent(new Event('input'));
+            }
+        });
     }
 
     updateSendButtonState();

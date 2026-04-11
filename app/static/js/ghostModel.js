@@ -12,24 +12,9 @@
     // ============================================
 
     const MODELS = [
-        { id: 'auto', label: 'Auto', icon: '⚡', note: 'smart routing', host: '' },
-        // OpenAI
-        { id: 'gpt-4.1', label: 'GPT-4.1', icon: '✨', note: 'best coding', host: 'OpenAI' },
-        { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', icon: '✨', note: 'fast & smart', host: 'OpenAI' },
-        // DeepSeek
-        { id: 'deepseek-chat', label: 'DeepSeek V3', icon: '💻', note: 'top-tier coding', host: 'DeepSeek' },
-        { id: 'deepseek-reasoner', label: 'DeepSeek R1', icon: '💻', note: 'deep reasoning', host: 'DeepSeek' },
-        // Groq Cloud
-        { id: 'llama-3.3-70b-versatile', label: 'Llama 70B', icon: '🦙', note: 'fast all-rounder', host: 'Groq' },
-        { id: 'qwen/qwen3-32b', label: 'Qwen 32B', icon: '🧠', note: 'coding & math', host: 'Groq' },
-        { id: 'qwen-3-235b-a22b-instruct-2507', label: 'Qwen 235B', icon: '🧠', note: 'complex reasoning', host: 'Groq' },
-        { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', icon: '🤖', note: 'large model', host: 'Groq' },
-        // Moonshot
-        { id: 'kimi-k2.5', label: 'Kimi K2.5', icon: '📚', note: 'reasoning', host: 'Moonshot' },
-        { id: 'kimi-latest', label: 'Kimi Latest', icon: '📚', note: 'long context', host: 'Moonshot' },
-        // Local
-        { id: 'dolphin3', label: 'Dolphin 3', icon: '🔓', note: 'uncensored', host: 'Local' },
-        { id: 'gemma4:e2b', label: 'Gemma 4', icon: '🏠', note: 'on-device', host: 'Local' },
+        { id: 'auto',              label: 'CHAT',  icon: '', note: '', host: '', mono: false },
+        { id: 'deepseek-chat',     label: 'CODE',  icon: '', note: '', host: '', mono: true },
+        { id: 'deepseek-reasoner', label: 'THINK', icon: '', note: '', host: '', mono: false },
     ];
 
     const TASK_ICON_MAP = {
@@ -44,10 +29,7 @@
 
     const TASK_MODEL_MAP = {
         coding: 'deepseek-chat',
-        reasoning: 'qwen/qwen3-32b',
-        uncensored: 'dolphin3',
-        long_context: 'kimi-latest',
-        vision: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+        reasoning: 'deepseek-reasoner',
     };
 
     // ============================================
@@ -139,57 +121,25 @@
         }
 
         init() {
-            // Render initial state
+            // Build always-visible pills
+            this.buildPills();
             this.updateGhostDisplay();
+
+            // Pills are always visible — show immediately
+            if (this.pillsEl) this.pillsEl.classList.add('active');
+
+            // Mobile: move pills into header center
+            const mobileCenter = document.getElementById('mobile-header-center');
+            if (mobileCenter && window.innerWidth <= 768 && this.pillsEl) {
+                mobileCenter.appendChild(this.pillsEl);
+            }
 
             // Input listener (debounced intent detection)
             this.inputEl.addEventListener('input', () => {
-                if (this.lockedModel) return; // Skip detection when locked
+                if (this.lockedModel) return;
                 clearTimeout(this.debounceTimer);
                 this.debounceTimer = setTimeout(() => this.detectAndUpdate(), 400);
             });
-
-            // Ghost click → toggle pills
-            this.ghostEl.addEventListener('click', (e) => {
-                if (e.target === this.clearEl || e.target.closest('.ghost-model__clear')) {
-                    this.clearLock();
-                    return;
-                }
-                this.togglePills();
-            });
-
-            // Mobile model selector → open bottom sheet
-            this.mobileSelectorEl?.addEventListener('click', () => {
-                this.toggleSheet();
-            });
-
-            // Close pills on outside click
-            document.addEventListener('click', (e) => {
-                if (this.pillsOpen &&
-                    !this.ghostEl.contains(e.target) &&
-                    !this.pillsEl.contains(e.target)) {
-                    this.closePills();
-                }
-                const mobileSelector = this.mobileSelectorEl;
-                if (this.sheetEl?.classList.contains('active') &&
-                    !this.sheetEl.contains(e.target) &&
-                    !this.ghostEl.contains(e.target) &&
-                    !(mobileSelector && mobileSelector.contains(e.target))) {
-                    this.closeSheet();
-                }
-            });
-
-            // Escape key closes pills/sheet
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    this.closePills();
-                    this.closeSheet();
-                }
-            });
-
-            // Build pill elements
-            this.buildPills();
-            this.buildSheet();
 
             // Clear override after message is sent
             document.addEventListener('messageSent', () => {
@@ -269,32 +219,30 @@
             this.pillsEl.innerHTML = '';
 
             const activeModelId = this.getDisplayModel();
-            let lastHost = '';
 
             MODELS.forEach(model => {
-                if (model.id === activeModelId) return;
-
-                // Provider group divider
-                if (model.host && model.host !== lastHost) {
-                    const divider = document.createElement('div');
-                    divider.className = 'ghost-pill__group';
-                    divider.textContent = model.host;
-                    this.pillsEl.appendChild(divider);
-                    lastHost = model.host;
-                }
-
                 const pill = document.createElement('button');
                 pill.className = 'ghost-pill';
+                if (model.id === activeModelId) pill.classList.add('active');
                 pill.dataset.model = model.id;
-                pill.title = model.note;
                 pill.setAttribute('role', 'option');
-                pill.setAttribute('tabindex', '-1');
 
-                pill.innerHTML = `<span class="ghost-pill__icon">${model.icon}</span><span class="ghost-pill__label">${model.label}</span><span class="ghost-pill__note">${model.note}</span>`;
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'ghost-pill__label';
+                labelSpan.textContent = model.label;
+                if (model.mono) labelSpan.style.fontFamily = "'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace";
+                pill.appendChild(labelSpan);
 
                 pill.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    this.selectModel(model.id);
+                    if (model.id === 'auto') {
+                        this.clearLock();
+                    } else {
+                        this.lockModel(model.id);
+                    }
+                    // Update active pill
+                    this.pillsEl.querySelectorAll('.ghost-pill').forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
                 });
 
                 pill.addEventListener('dblclick', (e) => {

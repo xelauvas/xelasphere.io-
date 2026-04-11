@@ -416,6 +416,80 @@ body.is-ios .mobile-header-bar {
     min-width: 0;
 }
 
+.mobile-header-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+}
+
+/* On mobile, ghost-model-wrapper becomes static inside header center */
+.mobile-header-center .ghost-pills {
+    background: none !important;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    gap: 12px;
+}
+
+.mobile-header-center .ghost-pill {
+    padding: 0;
+    border-radius: 0;
+    background: none !important;
+    box-shadow: none !important;
+    position: relative;
+}
+
+.mobile-header-center .ghost-pill__label {
+    font-size: 11px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.18);
+    letter-spacing: 0.06em;
+    text-transform: none;
+    transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+
+/* Dot separator between pills */
+.mobile-header-center .ghost-pill + .ghost-pill::before {
+    content: '';
+    position: absolute;
+    left: -7px;
+    top: 50%;
+    width: 2px;
+    height: 2px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* Active states */
+.mobile-header-center .ghost-pill.active .ghost-pill__label,
+.mobile-header-center .ghost-pill.locked .ghost-pill__label {
+    font-weight: 550;
+    letter-spacing: 0.08em;
+}
+
+/* Chat — warm cream glow */
+.mobile-header-center .ghost-pill[data-model="auto"].active .ghost-pill__label,
+.mobile-header-center .ghost-pill[data-model="auto"].locked .ghost-pill__label {
+    color: rgba(255, 245, 230, 0.9);
+    text-shadow: 0 0 12px rgba(255, 220, 180, 0.15);
+}
+
+/* Code — electric ice */
+.mobile-header-center .ghost-pill[data-model="deepseek-chat"].active .ghost-pill__label,
+.mobile-header-center .ghost-pill[data-model="deepseek-chat"].locked .ghost-pill__label {
+    color: rgba(160, 195, 255, 0.9);
+    text-shadow: 0 0 12px rgba(120, 160, 255, 0.15);
+}
+
+/* Think — molten gold */
+.mobile-header-center .ghost-pill[data-model="deepseek-reasoner"].active .ghost-pill__label,
+.mobile-header-center .ghost-pill[data-model="deepseek-reasoner"].locked .ghost-pill__label {
+    color: rgba(235, 195, 120, 0.9);
+    text-shadow: 0 0 12px rgba(220, 170, 80, 0.15);
+}
+
 /* Model selector — ChatGPT style next to burger */
 .mobile-model-selector {
     display: inline-flex;
@@ -5022,4 +5096,19 @@ body.device-tablet .mobile-overlay {
     .user-doc-card.is-expanded {
         max-width: 95% !important;
     }
+
+    /* ═══ Action Sheet — mobile ═══ */
+    #action-sheet-modal {
+        max-width: calc(100vw - 24px) !important;
+    }
+    /* Submenus: open above parent instead of to the right (no room) */
+    #submenu-styles,
+    #submenu-skills {
+        left: 0 !important;
+        bottom: 100% !important;
+        top: auto !important;
+        margin-bottom: 6px !important;
+        width: 100% !important;
+    }
+    /* ═══ End Action Sheet mobile ═══ */
 }

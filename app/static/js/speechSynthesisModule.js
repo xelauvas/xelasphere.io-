@@ -68,7 +68,7 @@ function buildTtsError(payload, status) {
 
 const DEFAULT_TTS_VOICE = 'autumn';
 const DEFAULT_TTS_FORMAT = 'wav';
-const MAX_TTS_CHARACTERS = 200;
+const MAX_TTS_CHARACTERS = 10000;
 
 function parseMessageSources(messageElement) {
     if (!messageElement) return [];
@@ -255,33 +255,75 @@ async function playAudioBuffer(arrayBuffer) {
     });
 }
 
+function splitIntoChunks(text, maxLen = 400) {
+    // Split by sentences, then group into chunks under maxLen
+    const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+    const chunks = [];
+    let current = '';
+    for (const s of sentences) {
+        if (current.length + s.length > maxLen && current) {
+            chunks.push(current.trim());
+            current = s;
+        } else {
+            current += s;
+        }
+    }
+    if (current.trim()) chunks.push(current.trim());
+    return chunks.length ? chunks : [text];
+}
+
+let _ttsAborted = false;
+
 async function speakText(text, button) {
     if (!text) return;
-    const sanitized = text.replace(/^XelasGPT\s*/i, '').replace(/\*/g, '').trim();
+    const sanitized = text.replace(/^XelasGPT\s*/i, '').replace(/\*/g, '').replace(/```[\s\S]*?```/g, '').replace(/[#>`|]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim();
     if (!sanitized) return;
-    if (sanitized.length > MAX_TTS_CHARACTERS) {
-        const manager = window.chatManager;
-        if (manager?.showNotification) {
-            manager.showNotification(`Read Aloud is limited to ${MAX_TTS_CHARACTERS} characters. Please shorten the text.`, 'error');
-        } else {
-            alert(`Read Aloud is limited to ${MAX_TTS_CHARACTERS} characters. Please shorten the text.`);
-        }
-        return;
-    }
 
     if (isSpeaking || isFetchingAudio) {
         stopActiveAudio();
+        _ttsAborted = true;
         return;
     }
 
+    _ttsAborted = false;
     isFetchingAudio = true;
     activeButton = button;
     updateButtonIcon(button, 'stop');
 
     try {
-        const audioBuffer = await requestGroqTts(sanitized, DEFAULT_TTS_FORMAT, DEFAULT_TTS_VOICE);
+        const chunks = splitIntoChunks(sanitized, 400);
+        // Fetch first chunk immediately, start playing as soon as it arrives
+        // Prefetch next chunk while current is playing
+        for (let i = 0; i < chunks.length; i++) {
+            if (_ttsAborted) break;
+
+            // Fetch current chunk audio
+            const audioPromise = requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, DEFAULT_TTS_VOICE);
+
+            // Prefetch next chunk in parallel
+            let nextAudioPromise = null;
+            if (i + 1 < chunks.length && !_ttsAborted) {
+                nextAudioPromise = requestGroqTts(chunks[i + 1], DEFAULT_TTS_FORMAT, DEFAULT_TTS_VOICE).catch(() => null);
+            }
+
+            const audioBuffer = await audioPromise;
+            if (_ttsAborted) break;
+
+            isFetchingAudio = false;
+            await playAudioBuffer(audioBuffer);
+            if (_ttsAborted) break;
+
+            // If we prefetched next, swap it in
+            if (nextAudioPromise && i + 1 < chunks.length) {
+                const nextBuffer = await nextAudioPromise;
+                if (nextBuffer && !_ttsAborted) {
+                    isFetchingAudio = false;
+                    await playAudioBuffer(nextBuffer);
+                    i++; // Skip next iteration since we already played it
+                }
+            }
+        }
         isFetchingAudio = false;
-        await playAudioBuffer(audioBuffer);
     } catch (error) {
         isFetchingAudio = false;
         console.error('Failed to play TTS audio:', error);

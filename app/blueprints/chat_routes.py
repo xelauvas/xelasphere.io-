@@ -98,6 +98,8 @@ from app.orchestrator import (
     signal_followup as orchestrator_signal_followup,
     signal_error as orchestrator_signal_error,
     signal_short_response as orchestrator_signal_short,
+    check_cache as orchestrator_check_cache,
+    store_cache as orchestrator_store_cache,
 )
 from app.encryption import encrypt_api_key, decrypt_api_key, is_encrypted
 from app.system_rules import get_system_rules, should_skip_memory, should_skip_reflection, should_skip_memory_write, get_message_mode
@@ -314,6 +316,15 @@ def chat_feedback():
         logger.info(f"😞 [Quality] Negative feedback for {model_id}/{job}")
 
     return jsonify({'status': 'ok'}), 200
+
+
+@chat_bp.route('/admin/orchestrator', methods=['GET'])
+@error_handler
+@login_required
+def orchestrator_dashboard():
+    """Orchestrator status dashboard — quota, models, cache, quality scores."""
+    from app.orchestrator import get_full_status
+    return jsonify(get_full_status())
 
 
 def handle_image_request(user_id: str, user_prompt: str, page_id: Optional[str] = None):
@@ -1047,6 +1058,19 @@ def chat_stream():
             except Exception as e:
                 logger.error(f"[Stream] Search synthesis failed: {e}")
 
+        # ── Semantic cache check (before hitting any model) ──
+        _cache_job = {"chat": "general_chat", "image_gen": "general_chat"}.get(task_type, task_type) if task_type else "general_chat"
+        try:
+            _cached = orchestrator_check_cache(user_prompt_raw, _cache_job)
+            if _cached:
+                _cached_resp, _cached_model = _cached
+                logger.info(f"[Stream] CACHE HIT: {user_prompt_raw[:40]}... (model={_cached_model})")
+                yield f"data: {json.dumps({'type': 'content', 'text': _cached_resp})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'content': _cached_resp, 'chat_summary': _cached_resp, 'render_mode': 'inline', 'reasoning': None, 'artifact': None, 'artifact_error': None, 'artifact_patches': None, 'response_id': f'cached_{hash(user_prompt_raw) % 99999}', 'is_email': False, 'email': None, 'crypto_chart': None, 'session_name': None, 'model_meta': {'model_id': _cached_model, 'model_label': 'Cached', 'model_provider': 'cache', 'auto_selected': True, 'task_type': _cache_job}, 'cached': True})}\n\n"
+                return
+        except Exception:
+            pass
+
         try:
             # Extract system prompt from built context for proper streaming
             _sys_prompt = None
@@ -1771,6 +1795,13 @@ def chat_stream():
                         if full_content and len(full_content.strip()) < 50:
                             _q_job = {"chat": "general_chat", "image_gen": "general_chat"}.get(task_type, task_type) if task_type else "general_chat"
                             orchestrator_signal_short(stream_model, _q_job)
+                    except Exception:
+                        pass
+
+                    # Store in semantic cache (good responses only)
+                    try:
+                        if full_content and len(full_content.strip()) > 50:
+                            orchestrator_store_cache(user_prompt_raw, full_content, stream_model, _cache_job)
                     except Exception:
                         pass
 

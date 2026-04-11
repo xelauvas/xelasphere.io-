@@ -1447,6 +1447,12 @@ img.composer-attachment-thumb--empty {
     padding: 0;
 }
 
+/* ═══ Action Sheet Modal ═══ */
+.asi:hover {
+    background: #353331 !important;
+}
+/* ═══ End Action Sheet ═══ */
+
 
 /* --- Microphone Button (absolute inside pill, left of send) --- */
 .microphone-button {
