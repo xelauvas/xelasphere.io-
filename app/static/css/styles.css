@@ -1977,34 +1977,29 @@ img.composer-attachment-thumb--empty {
     transform: scale(0.92);
 }
 
-/* Transcript overlay — sits on top of the voice bar for ghostly text */
-.voice-transcript-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    pointer-events: none;
-    padding: 0 48px 0 14px;
+/* Transcript text — lives inside voice-bar-row, replaces label + waveform */
+.voice-transcript {
     display: none;
-    align-items: center;
+    flex: 1;
+    min-width: 0;
     font-family: 'Inter', 'Söhne', 'Segoe UI', system-ui, -apple-system, sans-serif;
     font-size: 14px;
-    line-height: 1.4;
+    line-height: 1.5;
     letter-spacing: 0.01em;
     color: rgba(255, 255, 255, 0.9);
-    white-space: pre-wrap;
-    word-break: break-word;
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.textarea-container.voice-active .voice-transcript-overlay.has-text {
-    display: flex;
-}
-
-/* Hide label + waveform when transcript is showing */
+/* When transcript has text, show it and hide label + waveform */
 .voice-bar-row.has-transcript .voice-bar-label,
 .voice-bar-row.has-transcript .voice-waveform-bg {
-    opacity: 0 !important;
-    transition: opacity 150ms ease;
+    display: none;
+}
+
+.voice-bar-row.has-transcript .voice-transcript {
+    display: block;
 }
 
 .voice-transcript-overlay .voice-char-pending {
@@ -2137,8 +2132,8 @@ img.composer-attachment-thumb--empty {
     to { transform: scale(0); opacity: 0.6; }
 }
 
-/* Text fade-out-up from textarea on send */
-.voice-transcript-overlay.sending {
+/* Text fade-out-up from transcript on send */
+.voice-transcript.sending {
     animation: voiceTextSendUp 200ms ease-out forwards;
 }
 

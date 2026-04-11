@@ -132,11 +132,12 @@ const VoiceModeModule = (function() {
         _resizeCanvas();
     }
 
-    function _ensureTranscriptOverlay() {
-        if (_transcriptOverlay && _transcriptOverlay.parentElement === _textareaContainer) return;
-        _transcriptOverlay = document.createElement('div');
-        _transcriptOverlay.className = 'voice-transcript-overlay';
-        _textareaContainer.appendChild(_transcriptOverlay);
+    function _ensureTranscriptEl() {
+        if (_transcriptOverlay && _voiceBarRow && _transcriptOverlay.parentElement === _voiceBarRow) return;
+        _transcriptOverlay = document.createElement('span');
+        _transcriptOverlay.className = 'voice-transcript';
+        // Insert after canvas, before end button
+        _voiceBarRow.insertBefore(_transcriptOverlay, _voiceBarEnd);
     }
 
     function _resizeCanvas() {
@@ -913,7 +914,6 @@ const VoiceModeModule = (function() {
         _confirmedText = '';
         _pendingText = text;
         _transcriptOverlay.innerHTML = '';
-        _transcriptOverlay.classList.add('has-text');
         if (_voiceBarRow) _voiceBarRow.classList.add('has-transcript');
 
         // Animate words appearing one by one
@@ -959,7 +959,7 @@ const VoiceModeModule = (function() {
         if (_transcriptOverlay) {
             _transcriptOverlay.classList.add('sending');
             await new Promise(r => setTimeout(r, 200));
-            _transcriptOverlay.classList.remove('sending', 'has-text');
+            _transcriptOverlay.classList.remove('sending');
             _transcriptOverlay.innerHTML = '';
             if (_voiceBarRow) _voiceBarRow.classList.remove('has-transcript');
         }
@@ -1080,7 +1080,7 @@ const VoiceModeModule = (function() {
 
         // Setup DOM — voice bar: [Label] [Canvas] [End]
         _ensureVoiceBar();
-        _ensureTranscriptOverlay();
+        _ensureTranscriptEl();
 
         // Fire ripple
         _fireRipple(true);
@@ -1149,11 +1149,8 @@ const VoiceModeModule = (function() {
             _textarea.removeEventListener('keydown', _onKeydown);
         }
 
-        // Clear transcript overlay
-        if (_transcriptOverlay) {
-            _transcriptOverlay.innerHTML = '';
-            _transcriptOverlay.classList.remove('has-text');
-        }
+        // Clear transcript
+        if (_transcriptOverlay) _transcriptOverlay.innerHTML = '';
         if (_voiceBarRow) _voiceBarRow.classList.remove('has-transcript');
 
         // Restore button visibility
