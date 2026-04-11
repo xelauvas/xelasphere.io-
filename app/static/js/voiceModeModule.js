@@ -86,9 +86,6 @@ const VoiceModeModule = (function() {
     // ── Animation ──
     let _animId = null;
     let _waveTime = 0;
-    let _springAmp = 0;
-    let _springVel = 0;
-    let _color = [255, 255, 255];
 
     // ── Transcript state ──
     let _confirmedText = '';
@@ -207,36 +204,44 @@ const VoiceModeModule = (function() {
 
     let _wp = { amp: 3, freq: 0.8, noiseAmt: 0.15, opacity: 0.15, glowMul: 0.3 };
 
-    // Ghost trail ring buffer
-    const TRAIL_LEN = 10;
-    let _trailBuf = [];
-    let _trailFrame = 0;
 
     function _lerp(a, b, t) { return a + (b - a) * t; }
 
     // ────────────────────────────────────────
-    // Waveform Drawing — real audio oscilloscope
+    // Waveform — mirrored frequency bands, smooth and beautiful
     // ────────────────────────────────────────
 
-    // Time-domain buffer for drawing the actual waveform shape
-    let _timeDomainData = null;
-    let _playbackTimeDomain = null;
+    // 32 smoothed band values — drives the wave shape
+    const NUM_BANDS = 32;
+    let _bands = new Float32Array(NUM_BANDS);
+    let _freqData = null;
+    let _playFreqData = null;
+    let _smoothEnergy = 0;
 
-    function _getTimeDomain() {
-        if (!analyser) return null;
-        if (!_timeDomainData) _timeDomainData = new Uint8Array(analyser.fftSize);
-        analyser.getByteTimeDomainData(_timeDomainData);
-        return _timeDomainData;
+    function _analyseBands(analyserNode, dataArray) {
+        if (!analyserNode || !dataArray) return;
+        analyserNode.getByteFrequencyData(dataArray);
+        const binCount = dataArray.length;
+        const binsPerBand = Math.floor(binCount / NUM_BANDS);
+        for (let b = 0; b < NUM_BANDS; b++) {
+            let sum = 0;
+            const start = b * binsPerBand;
+            for (let i = start; i < start + binsPerBand && i < binCount; i++) {
+                sum += dataArray[i];
+            }
+            const avg = sum / (binsPerBand * 255); // 0..1
+            // Smooth: fast attack, slower release — snaps to sound, fades gracefully
+            const speed = avg > _bands[b] ? 0.5 : 0.12;
+            _bands[b] += (avg - _bands[b]) * speed;
+        }
+        // Overall energy
+        let total = 0;
+        for (let b = 0; b < NUM_BANDS; b++) total += _bands[b];
+        const energy = total / NUM_BANDS;
+        _smoothEnergy += (energy - _smoothEnergy) * 0.2;
     }
 
-    function _getPlaybackTimeDomain() {
-        if (!_playbackAnalyser) return null;
-        if (!_playbackTimeDomain) _playbackTimeDomain = new Uint8Array(_playbackAnalyser.fftSize);
-        _playbackAnalyser.getByteTimeDomainData(_playbackTimeDomain);
-        return _playbackTimeDomain;
-    }
-
-    function _drawCurve(ctx, points) {
+    function _drawMirrorPath(ctx, points) {
         if (points.length < 2) return;
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
@@ -245,37 +250,7 @@ const VoiceModeModule = (function() {
             const yc = (points[i].y + points[i + 1].y) / 2;
             ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
         }
-        const last = points[points.length - 1];
-        ctx.lineTo(last.x, last.y);
-        ctx.stroke();
-    }
-
-    // Build waveform points from real time-domain audio data
-    function _buildAudioWave(w, cy, samples, gain) {
-        const points = [];
-        const len = samples.length;
-        const step = Math.max(1, Math.floor(len / (w / 2))); // ~2px per sample
-        for (let i = 0; i < len; i += step) {
-            const x = (i / len) * w;
-            const sample = (samples[i] - 128) / 128; // normalize to -1..1
-            const taper = Math.sin((i / len) * Math.PI); // fade edges
-            const y = cy + sample * gain * taper;
-            points.push({ x, y });
-        }
-        return points;
-    }
-
-    // Build gentle idle wave (no audio)
-    function _buildIdleWave(w, cy, time) {
-        const points = [];
-        for (let x = 0; x <= w; x += 4) {
-            const nx = x / w;
-            let val = Math.sin(2 * Math.PI * 0.8 * time + nx * Math.PI * 2.5);
-            val += _noise2D(nx * 3, time * 0.8) * 0.15;
-            const taper = Math.sin(nx * Math.PI);
-            points.push({ x, y: cy + val * 3 * taper });
-        }
-        return points;
+        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
     }
 
     function _animateWaveform() {
@@ -283,65 +258,101 @@ const VoiceModeModule = (function() {
 
         _waveTime += 1 / 60;
 
-        // Lerp opacity based on state
         const target = STATE_PARAMS[currentState] || STATE_PARAMS.idle;
-        const lerpSpeed = 0.08;
-        _wp.opacity = _lerp(_wp.opacity, target.opacity, lerpSpeed);
-        _wp.glowMul = _lerp(_wp.glowMul, target.glowMul, lerpSpeed);
+        _wp.opacity = _lerp(_wp.opacity, target.opacity, 0.08);
+        _wp.glowMul = _lerp(_wp.glowMul, target.glowMul, 0.08);
 
         const w = _canvas.width / _dpr;
         const h = _canvas.height / _dpr;
         const cy = h / 2;
+        const maxAmp = h * 0.42; // max displacement from center
+
         _ctx.clearRect(0, 0, w, h);
 
-        let points;
-
-        if (currentState === 'listening') {
-            const samples = _getTimeDomain();
-            if (samples) {
-                // Gain from live audio level — amplifies quiet speech
-                const raw = getAudioLevel();
-                const gain = Math.max(4, raw * 200); // quiet = small wave, loud = big wave
-                points = _buildAudioWave(w, cy, samples, gain);
-            }
-        } else if (currentState === 'speaking') {
-            const samples = _getPlaybackTimeDomain();
-            if (samples) {
-                const raw = _getSpeakingLevel();
-                const gain = Math.max(4, raw * 250);
-                points = _buildAudioWave(w, cy, samples, gain);
-            }
+        // ── Analyse audio ──
+        if (currentState === 'listening' && analyser) {
+            if (!_freqData) _freqData = new Uint8Array(analyser.frequencyBinCount);
+            _analyseBands(analyser, _freqData);
+        } else if (currentState === 'speaking' && _playbackAnalyser) {
+            if (!_playFreqData) _playFreqData = new Uint8Array(_playbackAnalyser.frequencyBinCount);
+            _analyseBands(_playbackAnalyser, _playFreqData);
+        } else {
+            // Decay to silence
+            for (let b = 0; b < NUM_BANDS; b++) _bands[b] *= 0.92;
+            _smoothEnergy *= 0.92;
         }
 
-        // Fallback: idle/thinking or no audio data
-        if (!points || points.length < 2) {
-            points = _buildIdleWave(w, cy, _waveTime);
+        // ── Build wave points — frequency bands shape the amplitude at each x ──
+        const numPoints = 64;
+        const topPoints = [];
+        const bottomPoints = [];
+
+        for (let i = 0; i <= numPoints; i++) {
+            const nx = i / numPoints; // 0..1
+            const x = nx * w;
+
+            // Map x to a band — center bands get more energy (speech lives in mids)
+            const bandF = nx * (NUM_BANDS - 1);
+            const bLow = Math.floor(bandF);
+            const bHigh = Math.min(bLow + 1, NUM_BANDS - 1);
+            const bFrac = bandF - bLow;
+            const bandVal = _bands[bLow] * (1 - bFrac) + _bands[bHigh] * bFrac;
+
+            // Base wave motion — slow sine so the shape breathes
+            const wave = Math.sin(_waveTime * 2.5 + nx * Math.PI * 2) * 0.15;
+            // Noise for organic movement
+            const noise = _noise2D(nx * 4, _waveTime * 0.6) * 0.1;
+
+            // Combined displacement: audio drives amplitude, wave adds organic motion
+            const audioDisp = bandVal * maxAmp;
+            const idleDisp = (wave + noise) * 3; // tiny breathing when silent
+            const disp = audioDisp + idleDisp;
+
+            // Edge taper — fades to zero at both ends
+            const taper = Math.sin(nx * Math.PI);
+            const y = disp * taper;
+
+            topPoints.push({ x, y: cy - y });
+            bottomPoints.push({ x, y: cy + y });
         }
 
-        // Ghost trail — store every 3rd frame
-        _trailFrame++;
-        if (_trailFrame % 3 === 0) {
-            _trailBuf.push(points.map(p => ({ ...p })));
-            if (_trailBuf.length > TRAIL_LEN) _trailBuf.shift();
+        // ── Draw layers ──
+
+        // Layer 1: Gradient fill between the mirrored curves
+        _ctx.save();
+        _drawMirrorPath(_ctx, topPoints);
+        // Continue path along bottom in reverse to close the shape
+        for (let i = bottomPoints.length - 1; i >= 0; i--) {
+            _ctx.lineTo(bottomPoints[i].x, bottomPoints[i].y);
         }
+        _ctx.closePath();
+        const fillAlpha = Math.min(0.12, _smoothEnergy * 0.5 + 0.02);
+        const grad = _ctx.createLinearGradient(0, cy - maxAmp, 0, cy + maxAmp);
+        grad.addColorStop(0, `rgba(255, 255, 255, 0)`);
+        grad.addColorStop(0.3, `rgba(255, 255, 255, ${fillAlpha.toFixed(3)})`);
+        grad.addColorStop(0.5, `rgba(255, 255, 255, ${(fillAlpha * 1.5).toFixed(3)})`);
+        grad.addColorStop(0.7, `rgba(255, 255, 255, ${fillAlpha.toFixed(3)})`);
+        grad.addColorStop(1, `rgba(255, 255, 255, 0)`);
+        _ctx.fillStyle = grad;
+        _ctx.fill();
+        _ctx.restore();
 
-        // Draw ghost trails — very faint
-        for (let t = 0; t < _trailBuf.length; t++) {
-            const alpha = 0.025 * (t + 1) / _trailBuf.length * _wp.opacity;
-            _ctx.lineWidth = 0.5;
-            _ctx.strokeStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
-            _drawCurve(_ctx, _trailBuf[t]);
-        }
+        // Layer 2: Soft outer glow
+        _ctx.lineWidth = 4;
+        _ctx.strokeStyle = `rgba(255, 255, 255, ${(0.04 * _wp.glowMul).toFixed(3)})`;
+        _drawMirrorPath(_ctx, topPoints); _ctx.stroke();
+        _drawMirrorPath(_ctx, bottomPoints); _ctx.stroke();
 
-        // Soft glow
-        _ctx.lineWidth = 3;
-        _ctx.strokeStyle = `rgba(255, 255, 255, ${(0.06 * _wp.glowMul).toFixed(3)})`;
-        _drawCurve(_ctx, points);
-
-        // Core line
+        // Layer 3: Core lines — crisp and white
         _ctx.lineWidth = 1.5;
+        _ctx.strokeStyle = `rgba(255, 255, 255, ${(_wp.opacity * 0.9).toFixed(3)})`;
+        _drawMirrorPath(_ctx, topPoints); _ctx.stroke();
+        _drawMirrorPath(_ctx, bottomPoints); _ctx.stroke();
+
+        // Layer 4: Bright hot center on the top line only
+        _ctx.lineWidth = 0.5;
         _ctx.strokeStyle = `rgba(255, 255, 255, ${_wp.opacity.toFixed(3)})`;
-        _drawCurve(_ctx, points);
+        _drawMirrorPath(_ctx, topPoints); _ctx.stroke();
 
         _animId = requestAnimationFrame(_animateWaveform);
     }
@@ -1042,9 +1053,9 @@ const VoiceModeModule = (function() {
 
         // Init animation state
         _waveTime = 0;
-        _trailBuf = [];
-        _trailFrame = 0;
         _wp = { ...STATE_PARAMS.idle };
+        _bands.fill(0);
+        _smoothEnergy = 0;
 
         // Start waveform animation
         _animateWaveform();
