@@ -871,7 +871,8 @@ def generate_groq_tts():
         logger.info(f"TTS: Kokoro success, {len(audio_bytes)} bytes")
         from flask import Response
         return Response(audio_bytes, mimetype=mime_type, headers={
-            'Content-Disposition': 'inline; filename="speech.wav"'
+            'Content-Disposition': 'inline; filename="speech.wav"',
+            'X-TTS-Voice': voice,
         })
 
     # ── 2. Try Gemini (cloud, rate-limited) ──
@@ -881,7 +882,8 @@ def generate_groq_tts():
         logger.info(f"TTS: Gemini success, {len(audio_bytes)} bytes")
         from flask import Response
         return Response(audio_bytes, mimetype=mime_type, headers={
-            'Content-Disposition': 'inline; filename="speech.wav"'
+            'Content-Disposition': 'inline; filename="speech.wav"',
+            'X-TTS-Voice': voice,
         })
 
     # ── 3. Fallback: Groq Orpheus (200 char limit) ──

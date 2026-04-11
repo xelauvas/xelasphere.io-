@@ -188,18 +188,19 @@ async function requestGroqTts(text, format = DEFAULT_TTS_FORMAT, voice = DEFAULT
             throw error;
         }
 
+        const selectedVoice = response.headers.get('x-tts-voice') || '';
+
         if (contentType.includes('application/json')) {
             const payload = await response.json();
             if (!payload || !payload.audio_base64) {
                 throw new Error('Audio payload is empty.');
             }
             const arrayBuffer = base64ToArrayBuffer(payload.audio_base64);
-            return arrayBuffer;
+            return { audio: arrayBuffer, voice: selectedVoice };
         }
 
         const arrayBuffer = await response.arrayBuffer();
-        console.log('Groq TTS arrayBuffer size', arrayBuffer.byteLength, 'type', contentType);
-        return arrayBuffer;
+        return { audio: arrayBuffer, voice: selectedVoice };
     } finally {
         ttsAbortController = null;
     }
@@ -309,36 +310,23 @@ async function speakText(text, button) {
 
     try {
         const chunks = splitIntoChunks(sanitized, 400);
-        // Fetch first chunk immediately, start playing as soon as it arrives
-        // Prefetch next chunk while current is playing
+        let lockedVoice = null; // Lock voice after first chunk
+
         for (let i = 0; i < chunks.length; i++) {
             if (_ttsAborted) break;
 
-            // Fetch current chunk audio
-            const audioPromise = requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, DEFAULT_TTS_VOICE);
-
-            // Prefetch next chunk in parallel
-            let nextAudioPromise = null;
-            if (i + 1 < chunks.length && !_ttsAborted) {
-                nextAudioPromise = requestGroqTts(chunks[i + 1], DEFAULT_TTS_FORMAT, DEFAULT_TTS_VOICE).catch(() => null);
-            }
-
-            const audioBuffer = await audioPromise;
+            const voice = lockedVoice || DEFAULT_TTS_VOICE;
+            const result = await requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, voice);
             if (_ttsAborted) break;
+
+            // Lock voice from first chunk's response for consistency
+            if (!lockedVoice && result.voice) {
+                lockedVoice = result.voice;
+            }
 
             isFetchingAudio = false;
-            await playAudioBuffer(audioBuffer);
+            await playAudioBuffer(result.audio);
             if (_ttsAborted) break;
-
-            // If we prefetched next, swap it in
-            if (nextAudioPromise && i + 1 < chunks.length) {
-                const nextBuffer = await nextAudioPromise;
-                if (nextBuffer && !_ttsAborted) {
-                    isFetchingAudio = false;
-                    await playAudioBuffer(nextBuffer);
-                    i++; // Skip next iteration since we already played it
-                }
-            }
         }
         isFetchingAudio = false;
         stopActiveAudio();
