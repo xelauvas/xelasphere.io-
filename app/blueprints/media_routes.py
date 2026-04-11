@@ -713,6 +713,13 @@ def _generate_kokoro_tts(text, voice='Sulafat', lang='en'):
     else:
         kokoro_voice = KOKORO_VOICES.get(voice, 'af_heart')
 
+    # Match phonemizer to voice — British voices need British English phonemizer
+    voice_prefix = kokoro_voice.split('_')[0] if '_' in kokoro_voice else ''
+    if voice_prefix in ('bf', 'bm'):
+        lang_code = 'b'
+    elif voice_prefix in ('af', 'am') and lang_code == 'b':
+        lang_code = 'a'
+
     # Emotion-aware speed
     speed_val = _detect_speech_speed(text)
 
