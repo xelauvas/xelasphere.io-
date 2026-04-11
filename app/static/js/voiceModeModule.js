@@ -380,16 +380,18 @@ const VoiceModeModule = (function() {
         return [null, buffer];
     }
 
-    async function _fetchTTSChunk(text, lang) {
+    async function _fetchTTSChunk(text, lang, voiceContext) {
         const clean = _cleanTextForTTS(text);
         if (!clean || clean.length < 3) return null;
         const csrfMeta = document.querySelector('meta[name="csrf-token"]');
         const headers = { 'Content-Type': 'application/json' };
         if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
+        const body = { text: clean, voice: _preferredVoice, format: 'wav', lang: lang || _detectedLang };
+        if (voiceContext) body.voice_context = voiceContext;
         try {
             const resp = await fetch('/tts/groq', {
                 method: 'POST', headers,
-                body: JSON.stringify({ text: clean, voice: _preferredVoice, format: 'wav', lang: lang || _detectedLang }),
+                body: JSON.stringify(body),
                 credentials: 'same-origin'
             });
             if (!resp.ok) return null;
@@ -507,7 +509,7 @@ const VoiceModeModule = (function() {
         let firstChunkTime = null;
         let _responseLang = null; // locked after first chunk
         const streamStart = Date.now();
-        const FIRST_CHUNK_MIN = 80; // wait for enough text to detect language
+        const FIRST_CHUNK_MIN = 150; // wait for enough text to detect language + voice
 
         try {
             const resp = await fetch('/chat/stream', {
@@ -551,7 +553,8 @@ const VoiceModeModule = (function() {
                                 const lang = _responseLang || _detectedLang;
                                 if (isFirst) {
                                     // Await first chunk to lock voice before firing subsequent chunks
-                                    const audio = await _fetchTTSChunk(sentence, lang);
+                                    // Pass full accumulated content for smart voice picking
+                                    const audio = await _fetchTTSChunk(sentence, lang, fullContent);
                                     _ttsInflight--;
                                     if (audio) _enqueueAudio(audio);
                                 } else {

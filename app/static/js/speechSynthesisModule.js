@@ -157,13 +157,14 @@ function buildSourcesButton(messageElement, messageId, messageSources = null) {
     return sourcesInline;
 }
 
-async function requestGroqTts(text, format = DEFAULT_TTS_FORMAT, voice = DEFAULT_TTS_VOICE, lang = '') {
+async function requestGroqTts(text, format = DEFAULT_TTS_FORMAT, voice = DEFAULT_TTS_VOICE, lang = '', voiceContext = '') {
     const csrfToken = getCsrfToken();
     const controller = new AbortController();
     ttsAbortController = controller;
     try {
         const body = { text, format, voice };
         if (lang) body.lang = lang;
+        if (voiceContext) body.voice_context = voiceContext;
         const response = await fetch('/tts/groq', {
             method: 'POST',
             headers: {
@@ -320,7 +321,8 @@ async function speakText(text, button) {
             if (_ttsAborted) break;
 
             const voice = lockedVoice || DEFAULT_TTS_VOICE;
-            const result = await requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, voice, lockedLang || '');
+            const context = (i === 0 && !lockedVoice) ? sanitized : '';
+            const result = await requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, voice, lockedLang || '', context);
             if (_ttsAborted) break;
 
             // Lock voice + language from first chunk for consistency
