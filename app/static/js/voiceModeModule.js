@@ -914,6 +914,7 @@ const VoiceModeModule = (function() {
         _pendingText = text;
         _transcriptOverlay.innerHTML = '';
         _transcriptOverlay.classList.add('has-text');
+        if (_voiceBarRow) _voiceBarRow.classList.add('has-transcript');
 
         // Animate characters appearing one by one
         const chars = text.split('');
@@ -954,6 +955,7 @@ const VoiceModeModule = (function() {
             await new Promise(r => setTimeout(r, 200));
             _transcriptOverlay.classList.remove('sending', 'has-text');
             _transcriptOverlay.innerHTML = '';
+            if (_voiceBarRow) _voiceBarRow.classList.remove('has-transcript');
         }
 
         // 2. Render user bubble with fade-in class
@@ -1146,6 +1148,7 @@ const VoiceModeModule = (function() {
             _transcriptOverlay.innerHTML = '';
             _transcriptOverlay.classList.remove('has-text');
         }
+        if (_voiceBarRow) _voiceBarRow.classList.remove('has-transcript');
 
         // Restore button visibility
         if (window.updateSendButtonState) window.updateSendButtonState();

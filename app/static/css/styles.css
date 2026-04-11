@@ -1999,6 +1999,13 @@ img.composer-attachment-thumb--empty {
     display: flex;
 }
 
+/* Hide label + waveform when transcript is showing */
+.voice-bar-row.has-transcript .voice-bar-label,
+.voice-bar-row.has-transcript .voice-waveform-bg {
+    opacity: 0 !important;
+    transition: opacity 150ms ease;
+}
+
 .voice-transcript-overlay .voice-char-pending {
     opacity: 0.35;
     animation: voiceCharShimmer 1.2s ease-in-out infinite;
