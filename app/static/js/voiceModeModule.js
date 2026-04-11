@@ -208,83 +208,32 @@ const VoiceModeModule = (function() {
     let _wp = { amp: 3, freq: 0.8, noiseAmt: 0.15, opacity: 0.15, glowMul: 0.3 };
 
     // Ghost trail ring buffer
-    const TRAIL_LEN = 12;
+    const TRAIL_LEN = 10;
     let _trailBuf = [];
     let _trailFrame = 0;
-
-    // Particle pool
-    const _particles = Array.from({ length: 16 }, () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0 }));
-    let _particleIdx = 0;
 
     function _lerp(a, b, t) { return a + (b - a) * t; }
 
     // ────────────────────────────────────────
-    // Waveform Drawing (same algorithms, subtle rendering)
+    // Waveform Drawing — real audio oscilloscope
     // ────────────────────────────────────────
 
-    function _burstParticles() {
-        if (!_canvas) return;
-        const w = _canvas.width / _dpr;
-        const cy = (_canvas.height / _dpr) / 2;
-        for (let i = 0; i < 8; i++) {
-            const p = _particles[_particleIdx % _particles.length];
-            _particleIdx++;
-            p.x = Math.random() * w;
-            p.y = cy + (Math.random() - 0.5) * _wp.amp * 1.5;
-            p.vx = (Math.random() - 0.5) * 4;
-            p.vy = (Math.random() - 0.5) * 12;
-            p.life = 400;
-            p.maxLife = 400;
-        }
+    // Time-domain buffer for drawing the actual waveform shape
+    let _timeDomainData = null;
+    let _playbackTimeDomain = null;
+
+    function _getTimeDomain() {
+        if (!analyser) return null;
+        if (!_timeDomainData) _timeDomainData = new Uint8Array(analyser.fftSize);
+        analyser.getByteTimeDomainData(_timeDomainData);
+        return _timeDomainData;
     }
 
-    // Smoothed frequency bins for waveform shape (lerped each frame)
-    let _smoothBins = null;
-
-    function _buildWavePath(w, cy, time, amp, phaseOffset) {
-        const points = [];
-        const step = 4; // finer resolution for detailed shape
-        const bins = (currentState === 'listening') ? _getFrequencyBins()
-                   : (currentState === 'speaking') ? _getPlaybackBins()
-                   : null;
-        const numBins = bins ? bins.length : 0;
-
-        // Init smooth bins
-        if (!_smoothBins || _smoothBins.length !== Math.ceil(w / step) + 1) {
-            _smoothBins = new Float32Array(Math.ceil(w / step) + 1);
-        }
-
-        let idx = 0;
-        for (let x = 0; x <= w; x += step) {
-            const nx = x / w;
-
-            let val;
-            if (bins && numBins > 0) {
-                // Map x position to frequency bin — use lower half (speech range)
-                const binIdx = Math.floor(nx * numBins * 0.5);
-                let binVal = (bins[Math.min(binIdx, numBins - 1)] || 0) / 255;
-
-                // Gentle boost for playback (decoded TTS is a bit quieter)
-                if (currentState === 'speaking') binVal = Math.min(1, binVal * 1.5);
-
-                // Smooth the bin value — slower for speaking to avoid glitch
-                const smoothSpeed = currentState === 'speaking' ? 0.18 : 0.35;
-                _smoothBins[idx] = _smoothBins[idx] + (binVal - _smoothBins[idx]) * smoothSpeed;
-                const sv = _smoothBins[idx];
-
-                // Frequency data drives the displacement
-                val = sv * Math.sin(2 * Math.PI * _wp.freq * time + nx * Math.PI * 3 + phaseOffset);
-            } else {
-                // Idle / thinking — gentle mathematical wave
-                val = Math.sin(2 * Math.PI * _wp.freq * time + nx * Math.PI * 2.5 + phaseOffset);
-                val += _noise2D(nx * 3, time * 0.8 + phaseOffset) * _wp.noiseAmt;
-            }
-
-            const taper = Math.sin(nx * Math.PI);
-            points.push({ x, y: cy + val * amp * taper });
-            idx++;
-        }
-        return points;
+    function _getPlaybackTimeDomain() {
+        if (!_playbackAnalyser) return null;
+        if (!_playbackTimeDomain) _playbackTimeDomain = new Uint8Array(_playbackAnalyser.fftSize);
+        _playbackAnalyser.getByteTimeDomainData(_playbackTimeDomain);
+        return _playbackTimeDomain;
     }
 
     function _drawCurve(ctx, points) {
@@ -301,104 +250,98 @@ const VoiceModeModule = (function() {
         ctx.stroke();
     }
 
+    // Build waveform points from real time-domain audio data
+    function _buildAudioWave(w, cy, samples, gain) {
+        const points = [];
+        const len = samples.length;
+        const step = Math.max(1, Math.floor(len / (w / 2))); // ~2px per sample
+        for (let i = 0; i < len; i += step) {
+            const x = (i / len) * w;
+            const sample = (samples[i] - 128) / 128; // normalize to -1..1
+            const taper = Math.sin((i / len) * Math.PI); // fade edges
+            const y = cy + sample * gain * taper;
+            points.push({ x, y });
+        }
+        return points;
+    }
+
+    // Build gentle idle wave (no audio)
+    function _buildIdleWave(w, cy, time) {
+        const points = [];
+        for (let x = 0; x <= w; x += 4) {
+            const nx = x / w;
+            let val = Math.sin(2 * Math.PI * 0.8 * time + nx * Math.PI * 2.5);
+            val += _noise2D(nx * 3, time * 0.8) * 0.15;
+            const taper = Math.sin(nx * Math.PI);
+            points.push({ x, y: cy + val * 3 * taper });
+        }
+        return points;
+    }
+
     function _animateWaveform() {
         if (!isActive || !_ctx) return;
 
-        const dt = 1 / 60;
-        _waveTime += dt;
+        _waveTime += 1 / 60;
 
+        // Lerp opacity based on state
         const target = STATE_PARAMS[currentState] || STATE_PARAMS.idle;
-        const tc = STATE_COLORS[currentState] || STATE_COLORS.idle;
         const lerpSpeed = 0.08;
-
-        _wp.freq = _lerp(_wp.freq, target.freq, lerpSpeed);
-        _wp.noiseAmt = _lerp(_wp.noiseAmt, target.noiseAmt, lerpSpeed);
         _wp.opacity = _lerp(_wp.opacity, target.opacity, lerpSpeed);
         _wp.glowMul = _lerp(_wp.glowMul, target.glowMul, lerpSpeed);
-        _color[0] = _lerp(_color[0], tc[0], lerpSpeed);
-        _color[1] = _lerp(_color[1], tc[1], lerpSpeed);
-        _color[2] = _lerp(_color[2], tc[2], lerpSpeed);
-        const r = Math.round(_color[0]), g = Math.round(_color[1]), b = Math.round(_color[2]);
-
-        let ampTarget = target.amp;
-        if (currentState === 'listening') {
-            const raw = getAudioLevel();
-            ampTarget = Math.min(30, raw * 6 * 30); // more sensitive
-            const springForce = 0.3;  // snappy — jumps to syllables
-            const damping = 0.75;     // less damping — faster decay between words
-            _springVel += (ampTarget - _springAmp) * springForce;
-            _springVel *= damping;
-            _springAmp += _springVel;
-            _wp.amp = Math.max(2, _springAmp);
-            _wp.opacity = _lerp(0.20, 0.45, Math.min(1, raw * 5));
-        } else if (currentState === 'speaking') {
-            const raw = _getSpeakingLevel();
-            ampTarget = 5 + raw * 20;
-            const springForce = 0.18;  // smoother than mic — no glitch
-            const damping = 0.85;
-            _springVel += (ampTarget - _springAmp) * springForce;
-            _springVel *= damping;
-            _springAmp += _springVel;
-            _wp.amp = Math.max(3, _springAmp);
-            _wp.opacity = _lerp(0.20, 0.45, Math.min(1, raw * 3));
-        } else {
-            _wp.amp = _lerp(_wp.amp, ampTarget, lerpSpeed);
-            _springAmp = _wp.amp;
-            _springVel = 0;
-        }
 
         const w = _canvas.width / _dpr;
         const h = _canvas.height / _dpr;
         const cy = h / 2;
         _ctx.clearRect(0, 0, w, h);
 
-        const topPhase = 0;
-        const bottomPhase = (currentState === 'speaking') ? Math.PI / 6 : 0;
-        const topPoints = _buildWavePath(w, cy, _waveTime, -_wp.amp, topPhase);
-        const bottomPoints = _buildWavePath(w, cy, _waveTime, _wp.amp, bottomPhase);
+        let points;
 
-        // Ghost trail
+        if (currentState === 'listening') {
+            const samples = _getTimeDomain();
+            if (samples) {
+                // Gain from live audio level — amplifies quiet speech
+                const raw = getAudioLevel();
+                const gain = Math.max(4, raw * 200); // quiet = small wave, loud = big wave
+                points = _buildAudioWave(w, cy, samples, gain);
+            }
+        } else if (currentState === 'speaking') {
+            const samples = _getPlaybackTimeDomain();
+            if (samples) {
+                const raw = _getSpeakingLevel();
+                const gain = Math.max(4, raw * 250);
+                points = _buildAudioWave(w, cy, samples, gain);
+            }
+        }
+
+        // Fallback: idle/thinking or no audio data
+        if (!points || points.length < 2) {
+            points = _buildIdleWave(w, cy, _waveTime);
+        }
+
+        // Ghost trail — store every 3rd frame
         _trailFrame++;
-        if (_trailFrame % 2 === 0) {
-            _trailBuf.push({ top: topPoints.map(p => ({ ...p })), bottom: bottomPoints.map(p => ({ ...p })) });
+        if (_trailFrame % 3 === 0) {
+            _trailBuf.push(points.map(p => ({ ...p })));
             if (_trailBuf.length > TRAIL_LEN) _trailBuf.shift();
         }
 
-        // Ghost trails — thin, fading
+        // Draw ghost trails — very faint
         for (let t = 0; t < _trailBuf.length; t++) {
-            const ghostAlpha = 0.03 * (t + 1) / _trailBuf.length * _wp.opacity;
+            const alpha = 0.025 * (t + 1) / _trailBuf.length * _wp.opacity;
             _ctx.lineWidth = 0.5;
-            _ctx.strokeStyle = `rgba(255, 255, 255, ${ghostAlpha.toFixed(3)})`;
-            _drawCurve(_ctx, _trailBuf[t].top);
-            _drawCurve(_ctx, _trailBuf[t].bottom);
+            _ctx.strokeStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
+            _drawCurve(_ctx, _trailBuf[t]);
         }
 
-        // Soft glow layer
+        // Soft glow
         _ctx.lineWidth = 3;
-        _ctx.strokeStyle = `rgba(255, 255, 255, ${(0.04 * _wp.glowMul).toFixed(3)})`;
-        _drawCurve(_ctx, topPoints);
-        _drawCurve(_ctx, bottomPoints);
+        _ctx.strokeStyle = `rgba(255, 255, 255, ${(0.06 * _wp.glowMul).toFixed(3)})`;
+        _drawCurve(_ctx, points);
 
-        // Core line — slim and white
-        _ctx.lineWidth = 1;
+        // Core line
+        _ctx.lineWidth = 1.5;
         _ctx.strokeStyle = `rgba(255, 255, 255, ${_wp.opacity.toFixed(3)})`;
-        _drawCurve(_ctx, topPoints);
-        _drawCurve(_ctx, bottomPoints);
-
-        // Particles (half alpha for subtlety)
-        for (const p of _particles) {
-            if (p.life <= 0) continue;
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy *= 0.96;
-            p.vx *= 0.98;
-            p.life -= 16.67;
-            const alpha = Math.max(0, (p.life / p.maxLife) * 0.4);
-            _ctx.beginPath();
-            _ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
-            _ctx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
-            _ctx.fill();
-        }
+        _drawCurve(_ctx, points);
 
         _animId = requestAnimationFrame(_animateWaveform);
     }
@@ -416,20 +359,6 @@ const VoiceModeModule = (function() {
             sumSquares += normalized * normalized;
         }
         return Math.sqrt(sumSquares / frequencyData.length);
-    }
-
-    // Get frequency spectrum as array of 0-1 values (for waveform shape)
-    function _getFrequencyBins() {
-        if (!analyser || !frequencyData) return null;
-        analyser.getByteFrequencyData(frequencyData);
-        return frequencyData; // 0-255 per bin
-    }
-
-    // Get playback frequency spectrum
-    function _getPlaybackBins() {
-        if (!_playbackAnalyser || !_playbackFreqData) return null;
-        _playbackAnalyser.getByteFrequencyData(_playbackFreqData);
-        return _playbackFreqData;
     }
 
     async function startListening() {
@@ -1057,8 +986,6 @@ const VoiceModeModule = (function() {
         const prev = currentState;
         currentState = state;
 
-        if (prev !== state && isActive) _burstParticles();
-
         // Update textarea container data attribute for CSS
         if (_textareaContainer) {
             _textareaContainer.dataset.voiceState = state;
@@ -1067,13 +994,6 @@ const VoiceModeModule = (function() {
         // Update voice bar label
         if (_voiceBarLabel) {
             _voiceBarLabel.textContent = STATE_LABELS[state] || '';
-        }
-
-        // Thinking sounds
-        if (state === 'thinking') {
-            if (window.ThinkingSounds) window.ThinkingSounds.start();
-        } else {
-            if (window.ThinkingSounds) window.ThinkingSounds.stop();
         }
 
         if (state !== 'listening') stopListening();
@@ -1122,12 +1042,9 @@ const VoiceModeModule = (function() {
 
         // Init animation state
         _waveTime = 0;
-        _springAmp = 0;
-        _springVel = 0;
         _trailBuf = [];
         _trailFrame = 0;
         _wp = { ...STATE_PARAMS.idle };
-        _color = [...STATE_COLORS.idle];
 
         // Start waveform animation
         _animateWaveform();
@@ -1178,8 +1095,7 @@ const VoiceModeModule = (function() {
         // Restore button visibility
         if (window.updateSendButtonState) window.updateSendButtonState();
 
-        // Stop sounds and audio
-        if (window.ThinkingSounds) window.ThinkingSounds.stop();
+        // Stop audio
         stopSilenceDetection();
         stopListening();
         if (window._voiceTtsAudio) {
