@@ -859,8 +859,8 @@ const VoiceModeModule = (function() {
         }
 
         for (let t = 0; t < _trailBuf.length; t++) {
-            const ghostAlpha = 0.08 * (t + 1) / _trailBuf.length * _wp.opacity;
-            _ctx.lineWidth = 1.5;
+            const ghostAlpha = 0.06 * (t + 1) / _trailBuf.length * _wp.opacity;
+            _ctx.lineWidth = 0.5;
             _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${ghostAlpha.toFixed(3)})`;
             _drawCurve(_ctx, _trailBuf[t].top);
             _drawCurve(_ctx, _trailBuf[t].bottom);
@@ -869,19 +869,19 @@ const VoiceModeModule = (function() {
         // Chromatic aberration (speaking at high amplitude)
         if (currentState === 'speaking' && _wp.amp > 24 * 0.7) {
             const abIntensity = (_wp.amp - 24 * 0.7) / (24 * 0.3);
-            const abAlpha = 0.15 * abIntensity;
+            const abAlpha = 0.12 * abIntensity;
 
             _ctx.save();
-            _ctx.translate(-1.5, 0);
-            _ctx.lineWidth = 2;
+            _ctx.translate(-1, 0);
+            _ctx.lineWidth = 1;
             _ctx.strokeStyle = `rgba(255, 100, 80, ${abAlpha.toFixed(3)})`;
             _drawCurve(_ctx, topPoints);
             _drawCurve(_ctx, bottomPoints);
             _ctx.restore();
 
             _ctx.save();
-            _ctx.translate(1.5, 0);
-            _ctx.lineWidth = 2;
+            _ctx.translate(1, 0);
+            _ctx.lineWidth = 1;
             _ctx.strokeStyle = `rgba(80, 160, 255, ${abAlpha.toFixed(3)})`;
             _drawCurve(_ctx, topPoints);
             _drawCurve(_ctx, bottomPoints);
@@ -889,17 +889,17 @@ const VoiceModeModule = (function() {
         }
 
         // 3-layer glow — state colored
-        _ctx.lineWidth = 8;
-        _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.08 * _wp.glowMul).toFixed(3)})`;
-        _drawCurve(_ctx, topPoints);
-        _drawCurve(_ctx, bottomPoints);
-
         _ctx.lineWidth = 4;
-        _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.2 * _wp.glowMul).toFixed(3)})`;
+        _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.05 * _wp.glowMul).toFixed(3)})`;
         _drawCurve(_ctx, topPoints);
         _drawCurve(_ctx, bottomPoints);
 
         _ctx.lineWidth = 2;
+        _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.12 * _wp.glowMul).toFixed(3)})`;
+        _drawCurve(_ctx, topPoints);
+        _drawCurve(_ctx, bottomPoints);
+
+        _ctx.lineWidth = 1;
         _ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${_wp.opacity.toFixed(3)})`;
         _drawCurve(_ctx, topPoints);
         _drawCurve(_ctx, bottomPoints);
