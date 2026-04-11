@@ -1889,50 +1889,114 @@ img.composer-attachment-thumb--empty {
 
 /* ══ Voice Mode — In-Place Textarea Transform ══ */
 
-/* Waveform canvas behind textarea */
-.voice-waveform-bg {
-    position: absolute;
-    inset: 0;
+/* Hide textarea + buttons when voice is active */
+.textarea-container.voice-active .chat-input,
+.textarea-container.voice-active .microphone-button,
+.textarea-container.voice-active .voice-mode-button,
+.textarea-container.voice-active .send-button:not(.voice-end) {
+    display: none !important;
+}
+
+/* Voice bar — flex row: [Label] [Canvas] [End button] */
+.voice-bar-row {
+    display: none;
+    align-items: center;
+    gap: 12px;
     width: 100%;
     height: 100%;
-    z-index: 0;
-    pointer-events: none;
+    min-height: var(--composer-single-line-height);
+    padding: 0 8px 0 14px;
+}
+
+.textarea-container.voice-active .voice-bar-row {
+    display: flex;
+}
+
+/* State label */
+.voice-bar-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.45);
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    flex-shrink: 0;
+    user-select: none;
+    transition: color 300ms ease;
+}
+
+/* Waveform canvas — fills the middle */
+.voice-waveform-bg {
+    flex: 1;
+    min-width: 0;
+    height: 32px;
+    display: block;
     opacity: 0;
     transition: opacity 300ms ease;
-    border-radius: inherit;
 }
 
 .textarea-container.voice-active .voice-waveform-bg {
     opacity: 1;
 }
 
-/* Textarea becomes transparent over canvas */
-.textarea-container.voice-active .chat-input {
+/* End button inside the voice bar */
+.voice-bar-end {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    padding: 0;
     background: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-radius: 50%;
+    cursor: pointer;
+    flex-shrink: 0;
     position: relative;
-    z-index: 1;
-    caret-color: transparent;
+    transition: transform 150ms ease, border-color 500ms ease, box-shadow 500ms ease;
 }
 
-/* Transcript overlay — sits on top of textarea for ghostly text */
+.voice-bar-end::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 2.5px;
+    background: rgba(255, 255, 255, 0.6);
+    transition: background 500ms ease, box-shadow 500ms ease;
+}
+
+.voice-bar-end:hover {
+    transform: scale(1.08);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+.voice-bar-end:hover::before {
+    background: rgba(255, 255, 255, 0.9);
+}
+.voice-bar-end:active {
+    transform: scale(0.92);
+}
+
+/* Transcript overlay — sits on top of the voice bar for ghostly text */
 .voice-transcript-overlay {
     position: absolute;
     inset: 0;
     z-index: 2;
     pointer-events: none;
-    padding: 10px 90px 10px 12px;
-    font-family: inherit;
-    font-size: inherit;
-    line-height: inherit;
-    color: rgba(255, 255, 255, 0.9);
-    white-space: pre-wrap;
-    word-break: break-word;
-    overflow: hidden;
+    padding: 0 56px 0 14px;
     display: none;
+    align-items: center;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: var(--composer-single-line-height);
+    color: rgba(255, 255, 255, 0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.textarea-container.voice-active .voice-transcript-overlay {
-    display: block;
+.textarea-container.voice-active .voice-transcript-overlay.has-text {
+    display: flex;
 }
 
 .voice-transcript-overlay .voice-char-pending {
@@ -1985,16 +2049,38 @@ img.composer-attachment-thumb--empty {
     box-shadow: 0 0 16px rgba(74, 222, 128, 0.07), inset 0 1px 0 rgba(74, 222, 128, 0.05);
 }
 
-.textarea-container.voice-active[data-voice-state="listening"] .chat-input::placeholder {
-    color: rgba(147, 187, 252, 0.7);
+/* State-colored label */
+.textarea-container.voice-active[data-voice-state="listening"] .voice-bar-label { color: #93bbfc; }
+.textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-label { color: #d4a94e; }
+.textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-label { color: #6dd49a; }
+
+/* State-colored end button */
+.textarea-container.voice-active[data-voice-state="listening"] .voice-bar-end {
+    border-color: rgba(96, 165, 250, 0.4);
+    box-shadow: 0 0 10px rgba(96, 165, 250, 0.1);
 }
-.textarea-container.voice-active[data-voice-state="thinking"] .chat-input::placeholder {
-    color: rgba(212, 169, 78, 0.7);
+.textarea-container.voice-active[data-voice-state="listening"] .voice-bar-end::before {
+    background: rgba(96, 165, 250, 0.7);
+    box-shadow: 0 0 6px rgba(96, 165, 250, 0.3);
 }
-.textarea-container.voice-active[data-voice-state="speaking"] .chat-input::placeholder {
-    color: rgba(109, 212, 154, 0.7);
+.textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-end {
+    border-color: rgba(251, 191, 36, 0.35);
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.08);
+}
+.textarea-container.voice-active[data-voice-state="thinking"] .voice-bar-end::before {
+    background: rgba(251, 191, 36, 0.7);
+    box-shadow: 0 0 6px rgba(251, 191, 36, 0.25);
+}
+.textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-end {
+    border-color: rgba(74, 222, 128, 0.35);
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.08);
+}
+.textarea-container.voice-active[data-voice-state="speaking"] .voice-bar-end::before {
+    background: rgba(74, 222, 128, 0.7);
+    box-shadow: 0 0 6px rgba(74, 222, 128, 0.25);
 }
 
+/* State-colored cursor in transcript overlay */
 .textarea-container.voice-active[data-voice-state="listening"] .voice-cursor {
     background: rgba(96, 165, 250, 0.8);
 }
@@ -2012,71 +2098,6 @@ img.composer-attachment-thumb--empty {
     transition: opacity 200ms ease-out;
 }
 
-/* Send button → End button morph */
-.send-button .voice-end-icon {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    opacity: 0;
-    transform: scale(0.6);
-    transition: opacity 200ms ease, transform 200ms ease;
-    pointer-events: none;
-}
-
-.send-button .voice-end-icon::before {
-    content: '';
-    width: 12px;
-    height: 12px;
-    border-radius: 2.5px;
-    background: rgba(255, 255, 255, 0.85);
-}
-
-.send-button.voice-end .fa-arrow-up {
-    opacity: 0;
-    transform: scale(0.6);
-}
-
-.send-button.voice-end .voice-end-icon {
-    opacity: 1;
-    transform: scale(1);
-}
-
-.send-button.voice-end {
-    border-color: rgba(96, 165, 250, 0.4);
-    transition: border-color 500ms ease, box-shadow 500ms ease, opacity 0.14s ease, transform 0.16s ease;
-}
-
-.send-button.voice-end[data-voice-state="listening"] {
-    border-color: rgba(96, 165, 250, 0.4);
-    box-shadow: 0 0 8px rgba(96, 165, 250, 0.15);
-}
-
-.send-button.voice-end[data-voice-state="thinking"] {
-    border-color: rgba(251, 191, 36, 0.35);
-    box-shadow: 0 0 8px rgba(251, 191, 36, 0.12);
-}
-
-.send-button.voice-end[data-voice-state="speaking"] {
-    border-color: rgba(74, 222, 128, 0.35);
-    box-shadow: 0 0 8px rgba(74, 222, 128, 0.12);
-}
-
-.send-button.voice-end .voice-end-icon::before {
-    transition: background 500ms ease;
-}
-
-.send-button.voice-end[data-voice-state="listening"] .voice-end-icon::before {
-    background: rgba(96, 165, 250, 0.85);
-}
-
-.send-button.voice-end[data-voice-state="thinking"] .voice-end-icon::before {
-    background: rgba(251, 191, 36, 0.85);
-}
-
-.send-button.voice-end[data-voice-state="speaking"] .voice-end-icon::before {
-    background: rgba(74, 222, 128, 0.85);
-}
 
 /* Ripple transition on entry/exit */
 .textarea-container .voice-ripple {

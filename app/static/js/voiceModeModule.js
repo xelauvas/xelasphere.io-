@@ -21,6 +21,9 @@ const VoiceModeModule = (function() {
     let _ctx = null;
     let _dpr = 1;
     let _transcriptOverlay = null;
+    let _voiceBarRow = null;
+    let _voiceBarLabel = null;
+    let _voiceBarEnd = null;
 
     // ── Audio capture ──
     let audioContext = null;
@@ -102,12 +105,30 @@ const VoiceModeModule = (function() {
         _actionsMenu = document.getElementById('actions-menu');
     }
 
-    function _ensureCanvas() {
-        if (_canvas && _canvas.parentElement === _textareaContainer) return;
+    function _ensureVoiceBar() {
+        if (_voiceBarRow && _voiceBarRow.parentElement === _textareaContainer) return;
+
+        // Build: [Label] [Canvas] [End button]
+        _voiceBarRow = document.createElement('div');
+        _voiceBarRow.className = 'voice-bar-row';
+
+        _voiceBarLabel = document.createElement('span');
+        _voiceBarLabel.className = 'voice-bar-label';
+        _voiceBarLabel.textContent = 'Listening...';
+
         _canvas = document.createElement('canvas');
         _canvas.className = 'voice-waveform-bg';
-        // Insert as first child so it's behind textarea
-        _textareaContainer.insertBefore(_canvas, _textareaContainer.firstChild);
+
+        _voiceBarEnd = document.createElement('button');
+        _voiceBarEnd.className = 'voice-bar-end';
+        _voiceBarEnd.setAttribute('aria-label', 'End voice mode');
+        _voiceBarEnd.addEventListener('click', (e) => { e.stopPropagation(); exit(); });
+
+        _voiceBarRow.appendChild(_voiceBarLabel);
+        _voiceBarRow.appendChild(_canvas);
+        _voiceBarRow.appendChild(_voiceBarEnd);
+
+        _textareaContainer.appendChild(_voiceBarRow);
         _resizeCanvas();
     }
 
@@ -119,13 +140,14 @@ const VoiceModeModule = (function() {
     }
 
     function _resizeCanvas() {
-        if (!_canvas || !_textareaContainer) return;
+        if (!_canvas || !_canvas.parentElement) return;
         _dpr = window.devicePixelRatio || 1;
-        const rect = _textareaContainer.getBoundingClientRect();
-        _canvas.width = rect.width * _dpr;
-        _canvas.height = rect.height * _dpr;
-        _canvas.style.width = rect.width + 'px';
-        _canvas.style.height = rect.height + 'px';
+        const rect = _canvas.parentElement.getBoundingClientRect();
+        // Canvas fills its flex container
+        const w = _canvas.clientWidth || rect.width;
+        const h = _canvas.clientHeight || 32;
+        _canvas.width = w * _dpr;
+        _canvas.height = h * _dpr;
         _ctx = _canvas.getContext('2d');
         _ctx.scale(_dpr, _dpr);
     }
@@ -891,6 +913,7 @@ const VoiceModeModule = (function() {
         _confirmedText = '';
         _pendingText = text;
         _transcriptOverlay.innerHTML = '';
+        _transcriptOverlay.classList.add('has-text');
 
         // Animate characters appearing one by one
         const chars = text.split('');
@@ -929,7 +952,7 @@ const VoiceModeModule = (function() {
         if (_transcriptOverlay) {
             _transcriptOverlay.classList.add('sending');
             await new Promise(r => setTimeout(r, 200));
-            _transcriptOverlay.classList.remove('sending');
+            _transcriptOverlay.classList.remove('sending', 'has-text');
             _transcriptOverlay.innerHTML = '';
         }
 
@@ -955,8 +978,11 @@ const VoiceModeModule = (function() {
     // ────────────────────────────────────────
 
     function _fireRipple(expanding) {
-        if (!_textareaContainer || !_sendButton) return;
-        const btnRect = _sendButton.getBoundingClientRect();
+        if (!_textareaContainer) return;
+        // Use end button if available, otherwise voice mode button, otherwise center
+        const btn = _voiceBarEnd || _voiceModeButton || _sendButton;
+        if (!btn) return;
+        const btnRect = btn.getBoundingClientRect();
         const containerRect = _textareaContainer.getBoundingClientRect();
         const ripple = document.createElement('div');
         ripple.className = 'voice-ripple';
@@ -997,15 +1023,6 @@ const VoiceModeModule = (function() {
         speaking: 'Speaking...'
     };
 
-    const STATE_PLACEHOLDERS = {
-        idle: null, // restore original
-        listening: 'Listening...',
-        thinking: 'Thinking...',
-        speaking: 'Speaking...'
-    };
-
-    let _originalPlaceholder = '';
-
     function setState(state) {
         const prev = currentState;
         currentState = state;
@@ -1017,19 +1034,9 @@ const VoiceModeModule = (function() {
             _textareaContainer.dataset.voiceState = state;
         }
 
-        // Update send button data attribute for CSS
-        if (_sendButton) {
-            _sendButton.dataset.voiceState = state;
-        }
-
-        // Update placeholder
-        if (_textarea) {
-            const ph = STATE_PLACEHOLDERS[state];
-            if (ph) {
-                _textarea.placeholder = ph;
-            } else if (_originalPlaceholder) {
-                _textarea.placeholder = _originalPlaceholder;
-            }
+        // Update voice bar label
+        if (_voiceBarLabel) {
+            _voiceBarLabel.textContent = STATE_LABELS[state] || '';
         }
 
         // Thinking sounds
@@ -1057,43 +1064,31 @@ const VoiceModeModule = (function() {
             return;
         }
 
-        // Save original placeholder
-        _originalPlaceholder = _textarea.placeholder;
-
         // Create playback AudioContext on user gesture
         if (!playbackCtx || playbackCtx.state === 'closed') {
             playbackCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
         if (playbackCtx.state === 'suspended') playbackCtx.resume();
 
-        // Setup DOM
-        _ensureCanvas();
+        // Setup DOM — voice bar: [Label] [Canvas] [End]
+        _ensureVoiceBar();
         _ensureTranscriptOverlay();
-        _resizeCanvas();
 
         // Fire ripple
         _fireRipple(true);
 
-        // Activate classes
+        // Activate classes — hides textarea + buttons, shows voice bar
         _textareaContainer.classList.add('voice-active');
         if (_inputRow) _inputRow.classList.add('voice-active');
 
-        // Morph send button → end button
-        if (_sendButton) {
-            _sendButton.classList.add('voice-end');
-            _sendButton.style.display = 'flex';
-        }
-        // Hide voice mode button
-        if (_voiceModeButton) {
-            _voiceModeButton.classList.add('hidden');
-        }
-
-        // Typing escape hatch
+        // Typing escape hatch (textarea still exists, just hidden)
         _textarea.addEventListener('keydown', _onKeydown);
 
-        // Clear textarea
+        // Clear textarea for when voice exits
         _textarea.value = '';
-        _textarea.style.color = 'transparent'; // hide native text
+
+        // Resize canvas after layout settles
+        requestAnimationFrame(() => _resizeCanvas());
 
         // Init animation state
         _waveTime = 0;
@@ -1134,31 +1129,25 @@ const VoiceModeModule = (function() {
         // Stop animation
         if (_animId) { cancelAnimationFrame(_animId); _animId = null; }
 
-        // Remove classes
+        // Remove classes — restores textarea + buttons, hides voice bar
         if (_textareaContainer) {
             _textareaContainer.classList.remove('voice-active');
             delete _textareaContainer.dataset.voiceState;
         }
         if (_inputRow) _inputRow.classList.remove('voice-active');
 
-        // Unmorph send button
-        if (_sendButton) {
-            _sendButton.classList.remove('voice-end');
-            delete _sendButton.dataset.voiceState;
-        }
-
         // Restore textarea
         if (_textarea) {
-            _textarea.style.color = '';
             _textarea.removeEventListener('keydown', _onKeydown);
-            if (_originalPlaceholder) _textarea.placeholder = _originalPlaceholder;
         }
 
         // Clear transcript overlay
-        if (_transcriptOverlay) _transcriptOverlay.innerHTML = '';
+        if (_transcriptOverlay) {
+            _transcriptOverlay.innerHTML = '';
+            _transcriptOverlay.classList.remove('has-text');
+        }
 
         // Restore button visibility
-        if (_voiceModeButton) _voiceModeButton.classList.remove('hidden');
         if (window.updateSendButtonState) window.updateSendButtonState();
 
         // Stop sounds and audio
