@@ -388,14 +388,15 @@ function appendActionButtons(container, messageId, { skipSourcesRefresh = false 
         if (typeof tooltipText === 'string' && tooltipText.trim().length) {
             tooltip = createTooltip(tooltipText);
             btn.appendChild(tooltip);
-            btn.onmouseover = () => {
-                tooltip.style.visibility = "visible";
-                tooltip.style.opacity = "1";
-            };
-            btn.onmouseout = () => {
-                tooltip.style.visibility = "hidden";
-                tooltip.style.opacity = "0";
-            };
+            const showTip = () => { tooltip.style.visibility = "visible"; tooltip.style.opacity = "1"; };
+            const hideTip = () => { tooltip.style.visibility = "hidden"; tooltip.style.opacity = "0"; };
+            btn.onmouseover = showTip;
+            btn.onmouseout = hideTip;
+            // Mobile: show on touch then auto-hide after 1.5s
+            btn.addEventListener('touchstart', () => {
+                showTip();
+                setTimeout(hideTip, 1500);
+            }, { passive: true });
         }
 
         btn.addEventListener('click', handler);
@@ -409,13 +410,82 @@ function appendActionButtons(container, messageId, { skipSourcesRefresh = false 
             .catch(err => console.error('Failed to copy:', err));
     });
 
+    // Helper: persist feedback to DOM + chatManager message data + backend
+    const _persistFeedback = (type) => {
+        messageElement.dataset.feedback = type;
+        const mgr = window.chatManager;
+        if (!mgr?.activeSessionId) return;
+        const msgKey = messageElement.dataset.messageKey || messageId;
+        try {
+            const sess = mgr.chatHistory?.[mgr.activeSessionId];
+            if (!sess) return;
+            // Find in session.messages or active page messages
+            const pages = sess.pages || [];
+            const msgs = (pages.length > 1)
+                ? (mgr.getActivePage?.(sess)?.messages || [])
+                : (sess.messages || []);
+            const msg = msgs.find(m => m && (m.response_id === msgKey || m.id === msgKey));
+            if (msg) msg.user_feedback = type;
+            mgr.markSessionDirty?.(mgr.activeSessionId);
+            // Flush immediately so it persists before user might refresh
+            mgr.saveSession?.(mgr.activeSessionId, { silent: true })?.catch?.(() => {});
+        } catch(e) {}
+    };
+
+    const _resetBoth = () => {
+        buttonLike.querySelector('i').className = 'fa-regular fa-face-smile';
+        buttonLike.style.color = '';
+        buttonDislike.querySelector('i').className = 'fa-regular fa-face-frown';
+        buttonDislike.style.color = '';
+    };
+
+    const _sendFeedback = (feedback) => {
+        const modelId = messageElement.dataset.modelId || '';
+        const taskType = messageElement.dataset.taskType || 'general_chat';
+        fetch('/chat/feedback', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({model_id: modelId || 'unknown', task_type: taskType, feedback})
+        }).catch(err => console.warn('Feedback failed:', err));
+    };
+
     const buttonLike = createIconButton('fa-regular fa-face-smile', 'Good response', () => {
-        console.log("Like recorded for message ID:", messageId);
+        const current = messageElement.dataset.feedback;
+        _resetBoth();
+        if (current === 'positive') {
+            // Toggle off — clear feedback
+            _persistFeedback('');
+        } else {
+            buttonLike.querySelector('i').className = 'fa-solid fa-face-smile';
+            buttonLike.style.color = 'var(--accent-color, #4CAF50)';
+            _sendFeedback('positive');
+            _persistFeedback('positive');
+        }
     });
 
     const buttonDislike = createIconButton('fa-regular fa-face-frown', 'Bad response', () => {
-        console.log("Dislike recorded for message ID:", messageId);
+        const current = messageElement.dataset.feedback;
+        _resetBoth();
+        if (current === 'negative') {
+            // Toggle off — clear feedback
+            _persistFeedback('');
+        } else {
+            buttonDislike.querySelector('i').className = 'fa-solid fa-face-frown';
+            buttonDislike.style.color = 'var(--error-color, #f44336)';
+            _sendFeedback('negative');
+            _persistFeedback('negative');
+        }
     });
+
+    // Restore feedback state from previous session data
+    const _existingFeedback = messageElement.dataset.feedback;
+    if (_existingFeedback === 'positive') {
+        buttonLike.querySelector('i').className = 'fa-solid fa-face-smile';
+        buttonLike.style.color = 'var(--accent-color, #4CAF50)';
+    } else if (_existingFeedback === 'negative') {
+        buttonDislike.querySelector('i').className = 'fa-solid fa-face-frown';
+        buttonDislike.style.color = 'var(--error-color, #f44336)';
+    }
 
     const buttonShare = createIconButton('fa-regular fa-share-from-square', 'Share', async () => {
         const textContent = getMessageText();

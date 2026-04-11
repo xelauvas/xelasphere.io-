@@ -333,8 +333,14 @@ Edited text:"""
             "Content-Type": "application/json"
         }
 
+        # Pick model via orchestrator (constrained to Groq — direct API call)
+        from app.orchestrator import get_model as _orch_get_model
+        _edit_model, _edit_provider, _ = _orch_get_model("general_chat", {})
+        if _edit_provider != "groq":
+            _edit_model = "llama-3.3-70b-versatile"
+
         payload = {
-            "model": "llama-3.3-70b-versatile",
+            "model": _edit_model,
             "messages": [
                 {"role": "system", "content": "You are a helpful text editor. Edit text exactly as instructed. Return only the edited text without any explanations or additional formatting."},
                 {"role": "user", "content": edit_prompt}

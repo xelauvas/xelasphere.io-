@@ -287,10 +287,17 @@ _GENERATION_SYSTEM_PROMPT = (
     "- Tailor suggestions to the user's memories, recent topics, and time of day."
 )
 
-_GENERATION_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-]
+def _get_generation_models():
+    """Get models for suggestion generation via orchestrator.
+    This function sends directly to Groq (Config.API_URL), so only
+    return Groq-compatible models. Orchestrator picks the best Groq model.
+    """
+    from app.orchestrator import get_model
+    primary, provider, _ = get_model("internal_fast", {})
+    if provider == "groq":
+        return [primary, "llama-3.1-8b-instant"]
+    # Orchestrator picked a non-Groq model (Groq might be down) — use Groq defaults
+    return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
 
 def build_generation_prompt(context: Dict[str, Any]) -> str:
@@ -424,7 +431,7 @@ def generate_pool_from_llm(context: Dict[str, Any]) -> List[Suggestion]:
     """
     Call the Groq LLM API to generate a suggestion pool.
 
-    Tries models in order: llama-3.3-70b-versatile, llama-3.1-8b-instant.
+    Tries models from orchestrator internal_fast chain, with llama-3.1-8b-instant fallback.
     Returns a list of parsed Suggestion objects, or [] on any failure.
     """
     api_key = Config.GROQ_API_KEY
@@ -440,7 +447,8 @@ def generate_pool_from_llm(context: Dict[str, Any]) -> List[Suggestion]:
         "Content-Type": "application/json",
     }
 
-    for model in _GENERATION_MODELS:
+    generation_models = _get_generation_models()
+    for model in generation_models:
         payload = {
             "model": model,
             "messages": [
@@ -554,7 +562,7 @@ def increment_shown_counts(db, user_id: str, shown_titles: List[str]) -> None:
             .document(user_id)
             .collection("smart_suggestions")
             .document("pool")
-            .update({"pool": raw_suggestions})
+            .update({"suggestions": raw_suggestions})
         )
     except Exception as exc:
         logger.warning(

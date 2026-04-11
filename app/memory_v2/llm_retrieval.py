@@ -3,11 +3,10 @@ Memory V2 LLM-based Smart Retrieval
 ===================================
 Intelligent memory retrieval using LLM for semantic relevance.
 
-Uses a small, fast model (Llama 3.1 8B on Groq) to determine
-which memories are actually relevant to the user's query.
-
-Replaces keyword-based matching with true semantic understanding
-that works in any language.
+Fallback chain:
+  1. GPT-4.1 Nano (OpenAI) — fast, cheap, best quality
+  2. Groq llama-3.1-8b — free backup
+  3. Skip — chat works without memory scoring
 """
 
 import json
@@ -21,9 +20,23 @@ from .schema import MemoryItem, MemoryType
 
 logger = logging.getLogger(__name__)
 
-# Same model as extractor - small, fast, free tier on Groq
-RETRIEVAL_MODEL = "llama-3.1-8b-instant"
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+# Provider configs
+PROVIDERS = [
+    {
+        "name": "openai",
+        "model": "gpt-4.1-nano",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "env_key": "OPENAI_API_KEY",
+        "timeout": 8,
+    },
+    {
+        "name": "groq",
+        "model": "llama-3.1-8b-instant",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "env_key": "GROQ_API_KEY",
+        "timeout": 10,
+    },
+]
 
 # System prompt for memory relevance scoring
 RETRIEVAL_SYSTEM_PROMPT = """You are a memory relevance assistant. Given a user query and a list of stored memories, decide which memories are relevant.
@@ -79,13 +92,10 @@ class RelevanceScore:
 
 class LLMMemoryRetriever:
     """
-    Intelligent memory retrieval using LLM.
+    Intelligent memory retrieval using LLM with automatic fallback.
 
-    Replaces keyword-based relevance scoring with semantic understanding.
-    The LLM understands:
-    - "recommend a framework" should fetch tech_stack even without keyword match
-    - Constraints always need consideration
-    - Profile for personalization, projects for coding questions
+    Tries GPT-4.1 Nano first (fast, cheap, smart), falls back to
+    Groq, then silently skips if both fail.
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -93,11 +103,16 @@ class LLMMemoryRetriever:
         Initialize the LLM retriever.
 
         Args:
-            api_key: Groq API key. If None, uses GROQ_API_KEY env var.
+            api_key: Legacy param (ignored — keys loaded from env per provider).
         """
-        self.api_key = api_key or os.environ.get('GROQ_API_KEY')
-        if not self.api_key:
-            logger.warning("No Groq API key configured for smart retrieval")
+        self._provider_keys = {}
+        for p in PROVIDERS:
+            key = os.environ.get(p["env_key"])
+            if key:
+                self._provider_keys[p["name"]] = key
+
+        if not self._provider_keys:
+            logger.warning("No API keys configured for smart retrieval")
 
     def score_relevance(
         self,
@@ -114,8 +129,8 @@ class LLMMemoryRetriever:
         Returns:
             List of RelevanceScore for relevant memories (score >= 4)
         """
-        if not self.api_key:
-            logger.debug("LLM retrieval skipped - no API key")
+        if not self._provider_keys:
+            logger.debug("LLM retrieval skipped - no API keys")
             return []
 
         if not query or not memories:
@@ -138,21 +153,32 @@ class LLMMemoryRetriever:
         if not memories_data:
             return []
 
-        try:
-            response = self._call_llm(query, memories_data)
-            return self._parse_response(response)
-        except Exception as e:
-            logger.error(f"LLM retrieval scoring failed: {e}")
-            return []
+        # Try each provider in order
+        for provider in PROVIDERS:
+            api_key = self._provider_keys.get(provider["name"])
+            if not api_key:
+                continue
 
-    def _call_llm(self, query: str, memories: List[Dict]) -> str:
-        """Call the LLM API for relevance scoring."""
+            try:
+                response = self._call_llm(query, memories_data, provider, api_key)
+                scores = self._parse_response(response)
+                if scores is not None:
+                    return scores
+            except Exception as e:
+                logger.warning("Memory retrieval failed on %s: %s", provider["name"], e)
+                continue
+
+        # All providers failed — skip silently
+        logger.debug("All retrieval providers failed — skipping memory scoring")
+        return []
+
+    def _call_llm(self, query: str, memories: List[Dict], provider: Dict, api_key: str) -> str:
+        """Call an LLM API for relevance scoring."""
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
 
-        # Format the prompt
         memories_json = json.dumps(memories, indent=2)
         user_prompt = f"""Query: "{query}"
 
@@ -162,28 +188,31 @@ Memories:
 Which memories are relevant to this query? Score each 0-10."""
 
         payload = {
-            "model": RETRIEVAL_MODEL,
+            "model": provider["model"],
             "messages": [
                 {"role": "system", "content": RETRIEVAL_SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt}
             ],
-            "temperature": 0.1,  # Low temperature for consistent scoring
+            "temperature": 0.1,
             "max_tokens": 800,
             "response_format": {"type": "json_object"}
         }
 
         response = requests.post(
-            GROQ_API_URL,
+            provider["url"],
             headers=headers,
             json=payload,
-            timeout=10
+            timeout=provider["timeout"]
         )
 
         if response.status_code == 429:
-            logger.warning("Groq rate limited for retrieval scoring")
-            return '{"relevant": []}'
+            logger.warning("%s rate limited for retrieval scoring", provider["name"])
+            raise RuntimeError(f"{provider['name']} rate limited")
 
-        response.raise_for_status()
+        if response.status_code >= 400:
+            body = response.text[:200]
+            logger.warning("%s returned %d: %s", provider["name"], response.status_code, body)
+            raise RuntimeError(f"{provider['name']} returned {response.status_code}")
 
         data = response.json()
         return data["choices"][0]["message"]["content"]
@@ -233,7 +262,7 @@ Which memories are relevant to this query? Score each 0-10."""
 
 def get_llm_retriever() -> Optional[LLMMemoryRetriever]:
     """Get a configured LLM retriever instance."""
-    api_key = os.environ.get('GROQ_API_KEY')
-    if not api_key:
+    retriever = LLMMemoryRetriever()
+    if not retriever._provider_keys:
         return None
-    return LLMMemoryRetriever(api_key)
+    return retriever

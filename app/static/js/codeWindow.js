@@ -2493,15 +2493,15 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
         }
     }
 
-    // Auto model details (store on DOM node; action-buttons renderer will display it in-theme)
-    if (normalizedSender === 'ai' && modelMeta && modelMeta.auto_selected) {
+    // Store model data on DOM for quality signal collection (always, not just auto)
+    if (normalizedSender === 'ai' && modelMeta) {
         try {
-            messageDiv.dataset.autoSelected = 'true';
             if (modelMeta.model_id) messageDiv.dataset.modelId = modelMeta.model_id;
             if (modelMeta.model_label) messageDiv.dataset.modelLabel = modelMeta.model_label;
             if (modelMeta.model_provider) messageDiv.dataset.modelProvider = modelMeta.model_provider;
             if (modelMeta.model_provider_label) messageDiv.dataset.modelProviderLabel = modelMeta.model_provider_label;
             if (modelMeta.task_type) messageDiv.dataset.taskType = modelMeta.task_type;
+            if (modelMeta.auto_selected) messageDiv.dataset.autoSelected = 'true';
         } catch (e) {
             console.warn('Failed to attach model meta to message element:', e);
         }

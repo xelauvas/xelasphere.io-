@@ -38,9 +38,8 @@ except ImportError:
 def extract_text_concurrently(file_path: str) -> Tuple[str, Dict[str, Any]]:
     """Extract text from a file. Returns (text, debug_info)."""
     from app.text_extractor import TextExtractorUtility
-    debug_info = {}
     try:
-        text = TextExtractorUtility.extract_text(file_path, debug_info=debug_info)
+        text, debug_info = TextExtractorUtility.extract_text(file_path)
         return text, debug_info
     except Exception as e:
         logger.error(f"Text extraction failed for {file_path}: {e}")

@@ -262,6 +262,73 @@ def generate_image_with_openrouter(prompt: str, user_id: str, seed: int) -> Opti
     }
 
 
+def generate_image_with_openai(prompt: str, user_id: str, seed: int) -> Optional[Dict[str, Any]]:
+    """Generate image using OpenAI gpt-image-1 API."""
+    api_key = getattr(Config, 'OPENAI_API_KEY', None)
+    if not api_key:
+        logger.warning("OpenAI API key not configured for image generation.")
+        return None
+
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/images/generations",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "gpt-image-1",
+                "prompt": prompt,
+                "n": 1,
+                "size": "1024x1024",
+                "quality": "low",
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        logger.error(f"OpenAI image generation failed: {e}")
+        return None
+
+    items = data.get("data", [])
+    if not items:
+        logger.warning("OpenAI image API returned no data.")
+        return None
+
+    item = items[0]
+    b64_json = item.get("b64_json", "")
+    image_url = item.get("url", "")
+    local_path = None
+
+    if b64_json:
+        try:
+            image_bytes = base64.b64decode(b64_json)
+            local_path = save_image_bytes_to_user_dir(image_bytes, user_id, "openai_img", seed)
+        except Exception as e:
+            logger.warning(f"Failed to decode OpenAI image: {e}")
+    elif image_url:
+        local_path = save_remote_image(image_url, user_id, "openai_img", seed)
+
+    if not local_path and not image_url:
+        return None
+
+    # Build a data URL for frontend display if we have base64
+    display_url = image_url
+    if not display_url and b64_json:
+        display_url = f"data:image/png;base64,{b64_json}"
+
+    return {
+        'image_url': display_url,
+        'local_path': local_path,
+        'seed': seed,
+        'prompt': prompt,
+        'provider': 'openai',
+        'model': 'gpt-image-1',
+        'model_label': 'GPT Image 1',
+    }
+
+
 def generate_pollinations_image(prompt: str, user_id: str, seed: int) -> Optional[Dict[str, Any]]:
     image_url = pollinations_url(prompt, seed)
     local_path = save_pollinations_image(prompt, seed, user_id)
@@ -278,8 +345,13 @@ def generate_pollinations_image(prompt: str, user_id: str, seed: int) -> Optiona
 
 def generate_image_result(user_id: str, prompt: str) -> Optional[Dict[str, Any]]:
     seed = abs(hash(f"{user_id}:{prompt}")) % (2**31)
+    # Chain: OpenRouter → Pollinations (free) → OpenAI gpt-image-1 (paid, last resort)
     result = generate_image_with_openrouter(prompt, user_id, seed)
     if result:
         return result
-    logger.info("Falling back to Pollinations for image generation.")
-    return generate_pollinations_image(prompt, user_id, seed)
+    logger.info("OpenRouter failed, trying Pollinations.")
+    result = generate_pollinations_image(prompt, user_id, seed)
+    if result and result.get('local_path'):
+        return result
+    logger.info("Pollinations failed, falling back to OpenAI gpt-image-1.")
+    return generate_image_with_openai(prompt, user_id, seed) or result

@@ -45,6 +45,8 @@ def _has_provider_key(provider: str) -> bool:
         return bool(getattr(Config, "OPENROUTER_API_KEY", None))
     if provider == "cerebras":
         return bool(getattr(Config, "CEREBRAS_API_KEY", None))
+    if provider == "gemini":
+        return bool(getattr(Config, "GEMINI_API_KEY", None))
     if provider == "openai":
         return bool(getattr(Config, "OPENAI_API_KEY", None))
     # groq is default
@@ -52,21 +54,14 @@ def _has_provider_key(provider: str) -> bool:
 
 
 def _fallback_model_for_task(task_type: str) -> str:
-    """Reasonable fallbacks that keep the UX working."""
-    if task_type == "coding":
-        # Prefer Kimi K2.5 when Moonshot is available (often stronger at complex coding).
-        if _has_provider_key("moonshot"):
-            return "kimi-k2.5"
-        # Otherwise fall back to Groq.
-        return "qwen/qwen3-32b"
-    if task_type == "long_context":
-        # Large context and decent quality.
-        return "llama-3.3-70b-versatile"
-    if task_type == "vision":
-        return "meta-llama/llama-4-maverick-17b-128e-instruct"
-    if task_type == "reasoning":
-        return "qwen/qwen3-32b"
-    return DEFAULT_MODEL
+    """Delegate to orchestrator for fallback — it knows provider health and quota."""
+    try:
+        from app.orchestrator import get_model
+        job = {"chat": "general_chat", "image_gen": "general_chat"}.get(task_type, task_type)
+        model_id, _, _ = get_model(job, {})
+        return model_id
+    except Exception:
+        return DEFAULT_MODEL
 
 
 # ============================================
@@ -209,19 +204,21 @@ def detect_task_type(
             logger.info("🎯 Task detected: image_gen")
             return "image_gen"
 
-    # Priority 5: Coding - check current message
+    # Priority 5: Coding - current message is the primary signal
     coding_score = sum(1 for p in CODING_PATTERNS if re.search(p, message_lower, re.IGNORECASE))
-    if coding_score >= 2:
+
+    # History can only boost, never override: if current message scores 0 for
+    # coding, history alone cannot push it to coding (max +1 contribution).
+    # This prevents one code question from making the entire session "coding".
+    if conversation_history and len(conversation_history) > 0 and coding_score > 0:
+        history_coding_score = _analyze_history_for_code(conversation_history)
+        coding_score += history_coding_score
+        if coding_score >= 2:
+            logger.info(f"🎯 Task detected: coding (current={coding_score - history_coding_score}, history={history_coding_score})")
+            return "coding"
+    elif coding_score >= 2:
         logger.info(f"🎯 Task detected: coding (score: {coding_score})")
         return "coding"
-
-    # Priority 5b: Coding - check conversation history for code context
-    # If recent messages contain code, continue as coding task
-    if conversation_history and len(conversation_history) > 0:
-        history_coding_score = _analyze_history_for_code(conversation_history)
-        if history_coding_score >= 2:
-            logger.info(f"🎯 Task detected: coding (history context, score: {history_coding_score})")
-            return "coding"
 
     # Priority 6: Complex reasoning
     reasoning_score = sum(1 for p in REASONING_PATTERNS if re.search(p, message_lower, re.IGNORECASE))

@@ -34,66 +34,114 @@ _CODE_EXTENSIONS = [
 ]
 
 
+def _detect_with_libmagic(header: bytes) -> str:
+    """Use libmagic for robust content detection. Returns MIME type or empty string."""
+    try:
+        import magic
+        return magic.from_buffer(header, mime=True) or ""
+    except Exception:
+        return ""
+
+
 def get_file_type(filename: str, file) -> str:
     """
-    Determines the MIME type of a file using both extension and content inspection.
-    This helps prevent mime-type spoofing attacks.
+    Determines the MIME type of a file using libmagic + magic bytes + extension.
+    Priority: libmagic > custom signatures > extension-based guess.
     Returns content-based MIME type for security.
     """
-    # First check the extension
     ext_mime_type, _ = mimetypes.guess_type(filename)
+    ext = os.path.splitext(filename)[1].lower() if filename else ''
 
-    # Then check the actual content
-    header = file.read(2048)
+    header = file.read(4096)
     file.seek(0)
 
-    # Map of magic bytes to mime types (ordered by specificity)
-    content_signatures = [
-        # More specific signatures first
-        (b'\x89PNG\r\n\x1a\n', 'image/png'),  # Complete PNG signature
-        (b'\xFF\xD8\xFF\xE0', 'image/jpeg'),  # JPEG with JFIF
-        (b'\xFF\xD8\xFF\xE1', 'image/jpeg'),  # JPEG with EXIF
-        (b'\xFF\xD8\xFF\xDB', 'image/jpeg'),  # JPEG with DQT
-        (b'\xFF\xD8\xFF', 'image/jpeg'),  # Generic JPEG
-        (b'%PDF-', 'application/pdf'),  # PDF with version
-        (b'%PDF', 'application/pdf'),  # PDF fallback
-        (b'GIF87a', 'image/gif'),
-        (b'GIF89a', 'image/gif'),
-        (b'PK\x03\x04', 'application/zip'),  # ZIP files including docx/xlsx
-        (b'RIFF', 'application/octet-stream'),  # RIFF container (could be WebP, AVI, etc.)
-    ]
+    # ── Step 1: libmagic (most reliable) ──
+    content_mime_type = _detect_with_libmagic(header)
 
-    # Determine content-based mime type
-    content_mime_type = None
-    for signature, mime in content_signatures:
-        if header.startswith(signature):
-            content_mime_type = mime
-            break
+    # ── Step 2: Custom signatures for formats libmagic may miss or misclassify ──
+    if not content_mime_type or content_mime_type in ('application/octet-stream',):
+        content_signatures = [
+            (b'\x89PNG\r\n\x1a\n', 'image/png'),
+            (b'\xFF\xD8\xFF', 'image/jpeg'),
+            (b'%PDF', 'application/pdf'),
+            (b'GIF87a', 'image/gif'),
+            (b'GIF89a', 'image/gif'),
+            (b'PK\x03\x04', 'application/zip'),
+            (b'BM', 'image/bmp'),
+            (b'II\x2a\x00', 'image/tiff'),  # Little-endian TIFF
+            (b'MM\x00\x2a', 'image/tiff'),  # Big-endian TIFF
+            (b'ID3', 'audio/mpeg'),          # MP3 with ID3 tag
+            (b'\xff\xfb', 'audio/mpeg'),     # MP3 frame sync
+            (b'\xff\xf3', 'audio/mpeg'),     # MP3 frame sync
+            (b'\xff\xf2', 'audio/mpeg'),     # MP3 frame sync
+            (b'fLaC', 'audio/flac'),
+            (b'OggS', 'audio/ogg'),
+            (b'\x1aE\xdf\xa3', 'audio/webm'),  # WebM/Matroska
+        ]
+        for signature, mime in content_signatures:
+            if header.startswith(signature):
+                content_mime_type = mime
+                break
 
-    # For ZIP-based formats (docx, xlsx, etc.), check internal structure
+    # ── Step 2b: Override libmagic text/plain if binary signature matches ──
+    # libmagic sometimes misclassifies audio/image headers as text/plain
+    if content_mime_type == 'text/plain':
+        binary_overrides = [
+            (b'ID3', 'audio/mpeg'), (b'\xff\xfb', 'audio/mpeg'),
+            (b'\xff\xf3', 'audio/mpeg'), (b'\xff\xf2', 'audio/mpeg'),
+            (b'fLaC', 'audio/flac'), (b'OggS', 'audio/ogg'),
+            (b'\x89PNG', 'image/png'), (b'\xFF\xD8\xFF', 'image/jpeg'),
+            (b'BM', 'image/bmp'),
+        ]
+        for sig, mime in binary_overrides:
+            if header.startswith(sig):
+                content_mime_type = mime
+                break
+
+    # ── Step 3: RIFF container disambiguation (WebP vs WAV vs AVI) ──
+    if (not content_mime_type or content_mime_type == 'application/octet-stream') and header[:4] == b'RIFF':
+        if header[8:12] == b'WEBP':
+            content_mime_type = 'image/webp'
+        elif header[8:12] == b'WAVE':
+            content_mime_type = 'audio/wav'
+        else:
+            content_mime_type = 'application/octet-stream'
+
+    # ── Step 4: HEIC/HEIF detection (ftyp box) ──
+    if not content_mime_type or content_mime_type == 'application/octet-stream':
+        if len(header) >= 12 and header[4:8] == b'ftyp':
+            ftyp_brand = header[8:12]
+            heic_brands = {b'heic', b'heix', b'hevc', b'hevx', b'mif1', b'msf1'}
+            if ftyp_brand in heic_brands:
+                content_mime_type = 'image/heic'
+            elif ftyp_brand in {b'M4A ', b'M4B ', b'mp41', b'mp42', b'isom'}:
+                content_mime_type = 'audio/mp4'
+
+    # ── Step 5: ZIP-based format disambiguation ──
     if content_mime_type == 'application/zip' and ext_mime_type:
-        office_extensions = {
+        zip_extensions = {
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/epub+zip',
+            'application/vnd.oasis.opendocument.text',
+            'application/vnd.oasis.opendocument.spreadsheet',
+            'application/vnd.oasis.opendocument.presentation',
         }
-        if ext_mime_type in office_extensions:
+        if ext_mime_type in zip_extensions:
             content_mime_type = ext_mime_type
 
-    # For text files, require extension match and validate content is safe
-    if not content_mime_type:
-        if ext_mime_type == 'text/plain':
-            # Verify it's actually text by checking for non-printable chars
+    # ── Step 6: Text file safety check ──
+    if not content_mime_type or content_mime_type == 'application/octet-stream':
+        if ext_mime_type and ('text/' in (ext_mime_type or '') or ext in _CODE_EXTENSIONS):
             try:
-                decoded = header.decode('utf-8')
-                # Check for dangerous patterns in "text" files
+                header.decode('utf-8')
                 dangerous_patterns = [b'<script', b'<?php', b'<%', b'#!/']
                 if not any(pattern in header.lower() for pattern in dangerous_patterns):
-                    content_mime_type = 'text/plain'
+                    content_mime_type = ext_mime_type or 'text/plain'
             except UnicodeDecodeError:
                 pass
 
-    # If we still couldn't determine, mark as unknown
     if not content_mime_type:
         content_mime_type = 'application/octet-stream'
 
@@ -101,11 +149,10 @@ def get_file_type(filename: str, file) -> str:
     if ext_mime_type and content_mime_type and ext_mime_type != content_mime_type:
         if content_mime_type != 'application/octet-stream':
             logger.warning(
-                f"File type mismatch detected: extension={ext_mime_type}, content={content_mime_type}, "
+                f"File type mismatch: extension={ext_mime_type}, content={content_mime_type}, "
                 f"filename={filename}"
             )
 
-    # Always trust content-based detection over extension
     return content_mime_type
 
 
@@ -133,6 +180,11 @@ class FileValidator:
         'image/png': ['.png'],
         'image/gif': ['.gif'],
         'image/svg+xml': ['.svg'],
+        'image/webp': ['.webp'],
+        'image/bmp': ['.bmp'],
+        'image/tiff': ['.tiff', '.tif'],
+        'image/heic': ['.heic'],
+        'image/heif': ['.heif'],
         # Word
         'application/msword': ['.doc'],
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
@@ -178,22 +230,54 @@ class FileValidator:
         'text/yaml': ['.yaml', '.yml'],
         'application/toml': ['.toml'],
         'text/x-toml': ['.toml'],
+        # EPUB
+        'application/epub+zip': ['.epub'],
+        # Audio
+        'audio/mpeg': ['.mp3'],
+        'audio/mp4': ['.m4a', '.mp4'],
+        'audio/wav': ['.wav'],
+        'audio/x-wav': ['.wav'],
+        'audio/ogg': ['.ogg'],
+        'audio/flac': ['.flac'],
+        'audio/webm': ['.webm'],
+        # ODF (LibreOffice)
+        'application/vnd.oasis.opendocument.text': ['.odt'],
+        'application/vnd.oasis.opendocument.spreadsheet': ['.ods'],
+        'application/vnd.oasis.opendocument.presentation': ['.odp'],
         # Office Open XML formats are ZIP archives
-        'application/zip': ['.docx', '.xlsx', '.pptx'],
+        'application/zip': ['.docx', '.xlsx', '.pptx', '.epub', '.odt', '.ods', '.odp'],
         # Catch-all for unrecognized but allowed text files
-        'application/octet-stream': _CODE_EXTENSIONS,
+        'application/octet-stream': _CODE_EXTENSIONS + ['.heic', '.heif'],
     }
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
-    # Blocked extensions - only truly dangerous executables
-    # Code files are allowed for analysis (read-only, never executed)
+    # Blocked extensions — executables, installers, macro-enabled Office
+    # Code files (.py, .js etc) are allowed for text analysis, never executed
     BLOCKED_EXTENSIONS = {
-        '.exe', '.dll', '.scr', '.com', '.pif',  # Windows executables
-        '.bat', '.cmd', '.vbs', '.wsf', '.wsh',   # Windows scripts (dangerous)
-        '.msi', '.msp',                            # Windows installers
-        '.hta', '.mht', '.mhtml',                  # HTML applications
-        '.jar',                                     # Java archives (executable)
-        '.asp', '.aspx', '.jsp', '.cgi',           # Server-side scripts
+        # Executables & libraries
+        '.exe', '.dll', '.so', '.dylib', '.scr', '.com', '.pif',
+        # Windows scripts
+        '.bat', '.cmd', '.vbs', '.vbe', '.wsf', '.wsh', '.ps1', '.psm1',
+        # Installers & packages
+        '.msi', '.msp', '.deb', '.rpm', '.dmg', '.app',
+        # HTML applications
+        '.hta', '.mht', '.mhtml',
+        # Java
+        '.jar', '.class',
+        # Server-side scripts
+        '.asp', '.aspx', '.jsp', '.cgi',
+        # Macro-enabled Office (can execute code)
+        '.xlsm', '.docm', '.pptm', '.xltm', '.dotm', '.potm',
+        # Archives (zip bomb risk — allow only via explicit archive handler)
+        '.tar', '.gz', '.bz2', '.7z', '.rar',
+    }
+
+    # MIME types that indicate executable content — reject regardless of extension
+    DANGEROUS_MIMES = {
+        'application/x-executable', 'application/x-mach-binary',
+        'application/x-elf', 'application/x-dosexec',
+        'application/x-sharedlib', 'application/x-pie-executable',
+        'application/x-msdos-program',
     }
 
     @classmethod
@@ -207,6 +291,21 @@ class FileValidator:
         if ext in cls.BLOCKED_EXTENSIONS:
             logger.warning(f"Blocked file extension attempted: {ext}")
             return False, f"File type {ext} is not allowed"
+
+        # Deep content check with libmagic — catches exe renamed to .pdf
+        try:
+            import magic
+            header = file.read(4096)
+            file.seek(0)
+            detected = magic.from_buffer(header, mime=True)
+            if detected in cls.DANGEROUS_MIMES:
+                logger.warning(
+                    f"🛡️ BLOCKED: executable content detected as {detected} "
+                    f"in file claiming to be {ext} ({filename})"
+                )
+                return False, "File contains executable content and cannot be uploaded"
+        except Exception:
+            pass  # libmagic unavailable — fall through to standard checks
 
         # Check file size
         file.seek(0, os.SEEK_END)

@@ -274,7 +274,7 @@ def _get_provider_config(provider: str, resolved_model: str, api_overrides: Dict
     Get API configuration for a provider.
     Returns (url, headers, timeout, provider_label) or raises ValueError if not configured.
     """
-    provider_labels = {"openrouter": "OpenRouter", "deepseek": "DeepSeek", "groq": "Groq", "cerebras": "Cerebras", "moonshot": "Moonshot", "openai": "OpenAI", "ollama": "Ollama"}
+    provider_labels = {"openrouter": "OpenRouter", "deepseek": "DeepSeek", "groq": "Groq", "cerebras": "Cerebras", "moonshot": "Moonshot", "openai": "OpenAI", "ollama": "Ollama", "gemini": "Gemini"}
     provider_label = provider_labels.get(provider, "Groq")
 
     if provider == "ollama":
@@ -317,6 +317,16 @@ def _get_provider_config(provider: str, resolved_model: str, api_overrides: Dict
             "Content-Type": "application/json"
         }
         timeout = 15
+    elif provider == "gemini":
+        effective_key = (api_overrides.get('gemini') if api_overrides else None) or Config.GEMINI_API_KEY
+        if not effective_key:
+            raise ValueError(f'{provider_label} API key is not configured.')
+        url = Config.GEMINI_API_URL
+        headers = {
+            "Authorization": f"Bearer {effective_key}",
+            "Content-Type": "application/json"
+        }
+        timeout = 30
     elif provider == "moonshot":
         effective_key = (api_overrides.get('moonshot') if api_overrides else None) or Config.MOONSHOT_API_KEY
         if not effective_key:
@@ -524,7 +534,7 @@ def stream_deepseek_response(prompt: str, model: str = "deepseek-reasoner", syst
     provider = MODEL_PROVIDERS.get(resolved_model, "groq")
 
     # Streaming supported for OpenAI-compatible providers
-    if provider not in ("deepseek", "moonshot", "openai", "groq", "ollama"):
+    if provider not in ("deepseek", "moonshot", "openai", "groq", "ollama", "cerebras", "gemini"):
         yield {'type': 'error', 'text': 'Streaming not available for this provider'}
         return
 
@@ -602,7 +612,7 @@ def stream_deepseek_response(prompt: str, model: str = "deepseek-reasoner", syst
         yield {'type': 'error', 'text': f'Unexpected error: {str(e)}'}
 
 
-def send_prompt_with_images(prompt: str, images: List[Dict[str, str]], model: str = "meta-llama/llama-4-maverick-17b-128e-instruct"):
+def send_prompt_with_images(prompt: str, images: List[Dict[str, str]], model: str = None):
     """
     Send a multimodal prompt with images to a vision-capable AI model.
 
@@ -618,10 +628,15 @@ def send_prompt_with_images(prompt: str, images: List[Dict[str, str]], model: st
         # No images, fall back to text-only
         return send_prompt(prompt, model)
 
-    # For vision models, use the model as-is (don't resolve to default)
-    resolved_model = model or "meta-llama/llama-4-maverick-17b-128e-instruct"
+    # Pick vision model via orchestrator if none specified
+    if not model:
+        try:
+            from app.orchestrator import get_model as _orch_get
+            model, _, _ = _orch_get("vision", {})
+        except Exception:
+            model = "meta-llama/llama-4-scout-17b-16e-instruct"
+    resolved_model = model
     provider = MODEL_PROVIDERS.get(resolved_model, "groq")
-    provider_label = "OpenRouter" if provider == "openrouter" else "Groq"
 
     api_overrides: Dict[str, str] = {}
     if has_request_context():
@@ -629,32 +644,10 @@ def send_prompt_with_images(prompt: str, images: List[Dict[str, str]], model: st
         if isinstance(overrides, dict):
             api_overrides = overrides
 
-    if provider == "openrouter":
-        effective_key = (api_overrides.get('openrouter') if api_overrides else None) or Config.OPENROUTER_API_KEY
-        if not effective_key:
-            logger.error("OpenRouter API key is not configured.")
-            return _model_error_payload(f'{provider_label} API key is not configured.', 'missing_api_key',
-                                        provider=provider_label), False
-        url = Config.OPENROUTER_API_URL
-        headers = {
-            "Authorization": f"Bearer {effective_key}",
-            "Content-Type": "application/json",
-        }
-        if Config.OPENROUTER_SITE_URL:
-            headers["HTTP-Referer"] = Config.OPENROUTER_SITE_URL
-        if Config.OPENROUTER_APP_NAME:
-            headers["X-Title"] = Config.OPENROUTER_APP_NAME
-    else:
-        effective_key = (api_overrides.get('groq') if api_overrides else None) or Config.GROQ_API_KEY
-        if not effective_key:
-            logger.error("Groq API key is not configured.")
-            return _model_error_payload(f'{provider_label} API key is not configured.', 'missing_api_key',
-                                        provider=provider_label), False
-        url = Config.API_URL
-        headers = {
-            "Authorization": f"Bearer {effective_key}",
-            "Content-Type": "application/json"
-        }
+    try:
+        url, headers, timeout, provider_label = _get_provider_config(provider, resolved_model, api_overrides)
+    except ValueError as e:
+        return _model_error_payload(str(e), 'missing_api_key', provider=provider), False
 
     # Build multimodal content array
     content = [{"type": "text", "text": prompt}]

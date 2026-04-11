@@ -207,6 +207,10 @@ def create_app():
     app.logger.setLevel(logging.INFO)
     app.logger.info('Application startup')
 
+    # Initialize model orchestrator (health checks, quota tracking, smart routing)
+    from app.orchestrator import initialize as init_orchestrator
+    init_orchestrator()
+
     # Error handlers
     @app.errorhandler(404)
     def not_found_error(e):

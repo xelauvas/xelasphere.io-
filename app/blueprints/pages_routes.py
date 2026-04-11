@@ -135,6 +135,7 @@ def index():
                 from app.grog_api import TaskOption as _TaskOption
                 per_slot = 3 if mobile else 1  # 3 per slot = ~7-9 for mobile, 1 per slot = 3 for desktop
                 pool = load_pool(db, user_id)
+                logger.info("Smart suggestions: user=%s pool_size=%d mobile=%s", user_id[:8], len(pool), mobile)
                 if pool:
                     selected = select_display_slots(pool, per_slot=per_slot)
                     if mobile:
@@ -412,7 +413,9 @@ def debug_code():
         )
 
         logger.info("Sending request to AI with prompt.")
-        response, is_code_response = send_prompt(prompt, model="llama-3.3-70b-versatile")
+        from app.orchestrator import get_model as _orch_get_model
+        _debug_model, _, _ = _orch_get_model("coding", {})
+        response, is_code_response = send_prompt(prompt, model=_debug_model)
 
         if isinstance(response, dict) and 'error' in response:
             logger.error(f"Error from AI model: {response['error']}")

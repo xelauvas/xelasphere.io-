@@ -3439,6 +3439,19 @@ async loadChatHistory(pageToken = null, limit = 10) {
             messages.push(messageEntry);
         }
 
+        // Update DOM element with model data for quality signal collection
+        if (modelId && messageData.response_id) {
+            const msgEl = document.querySelector(`[data-message-key="${messageData.response_id}"]`);
+            if (msgEl) {
+                msgEl.dataset.modelId = modelId;
+                if (modelLabel) msgEl.dataset.modelLabel = modelLabel;
+                if (modelProvider) msgEl.dataset.modelProvider = modelProvider;
+                if (modelProviderLabel) msgEl.dataset.modelProviderLabel = modelProviderLabel;
+                if (taskType) msgEl.dataset.taskType = taskType;
+                if (autoSelected) msgEl.dataset.autoSelected = 'true';
+            }
+        }
+
         this.markSessionDirty(this.activeSessionId);
     }
 
@@ -3950,6 +3963,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                     model_provider: message.model_provider || null,
                     model_provider_label: message.model_provider_label || null,
                     task_type: message.task_type || null,
+                    user_feedback: message.user_feedback || null,
                 }
             });
             if (typeof window !== 'undefined' && typeof window.updateSourcesButton === 'function') {
@@ -4208,15 +4222,14 @@ async loadChatHistory(pageToken = null, limit = 10) {
         if (sender === 'ai' && modelMeta) {
             // Store for inline attribution after text renders
             messageDiv._modelMeta = modelMeta;
-        }
-        if (sender === 'ai' && modelMeta && modelMeta.auto_selected) {
-            // Store metadata on DOM; action-buttons renderer will display it in-theme.
-            messageDiv.dataset.autoSelected = 'true';
+            // Always store model data on DOM for quality signal collection
             if (modelMeta.model_id) messageDiv.dataset.modelId = modelMeta.model_id;
             if (modelMeta.model_label) messageDiv.dataset.modelLabel = modelMeta.model_label;
             if (modelMeta.model_provider) messageDiv.dataset.modelProvider = modelMeta.model_provider;
             if (modelMeta.model_provider_label) messageDiv.dataset.modelProviderLabel = modelMeta.model_provider_label;
             if (modelMeta.task_type) messageDiv.dataset.taskType = modelMeta.task_type;
+            if (modelMeta.auto_selected) messageDiv.dataset.autoSelected = 'true';
+            if (modelMeta.user_feedback) messageDiv.dataset.feedback = modelMeta.user_feedback;
         }
 
         if (sender === 'user') {

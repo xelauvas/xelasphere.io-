@@ -92,6 +92,13 @@ from app.services.search_orchestrator import search_orchestrator
 from app.blueprints.email_routes import is_email_request, looks_like_email, parse_email_from_response
 from app.model_catalog import MODEL_LABELS, MODEL_PROVIDERS, DEFAULT_MODEL, AUTO_MODEL, resolve_model_id, get_selectable_models
 from app.smart_router import smart_route, is_refusal_response, get_uncensored_model, check_prompt_injection
+from app.orchestrator import (
+    get_model as orchestrator_get_model,
+    record_usage as orchestrator_record_usage,
+    signal_followup as orchestrator_signal_followup,
+    signal_error as orchestrator_signal_error,
+    signal_short_response as orchestrator_signal_short,
+)
 from app.encryption import encrypt_api_key, decrypt_api_key, is_encrypted
 from app.system_rules import get_system_rules, should_skip_memory, should_skip_reflection, should_skip_memory_write, get_message_mode
 from app.list_registry import process_ai_response_for_lists, resolve_user_pointer
@@ -282,6 +289,33 @@ def pin_chat_session():
         return jsonify({'error': 'Failed to update pin state.'}), 500
 
 
+@chat_bp.route('/chat/feedback', methods=['POST'])
+@csrf_required
+@error_handler
+@guest_allowed
+def chat_feedback():
+    """Record user feedback (happy/sad face) for quality signal collection."""
+    data = request.get_json() or {}
+    model_id = data.get('model_id', '')
+    task_type = data.get('task_type', 'general_chat')
+    feedback = data.get('feedback', '')  # "positive" or "negative"
+
+    if not model_id or feedback not in ('positive', 'negative'):
+        return jsonify({'error': 'Invalid feedback'}), 400
+
+    job = {"chat": "general_chat", "image_gen": "general_chat"}.get(task_type, task_type) or "general_chat"
+
+    from app.orchestrator.quality import on_happy_face, on_sad_face
+    if feedback == 'positive':
+        on_happy_face(model_id, job)
+        logger.info(f"😊 [Quality] Positive feedback for {model_id}/{job}")
+    else:
+        on_sad_face(model_id, job)
+        logger.info(f"😞 [Quality] Negative feedback for {model_id}/{job}")
+
+    return jsonify({'status': 'ok'}), 200
+
+
 def handle_image_request(user_id: str, user_prompt: str, page_id: Optional[str] = None):
     """Handle image generation requests."""
     logger.info(f"Detected image request from user {user_id}: {user_prompt}")
@@ -435,27 +469,28 @@ def chat_stream():
                 if et:
                     extracted_text += et + '\n'
                     continue
-                # Fallback: read file from disk using previewUrl
+                # Fallback: extract text from file on disk using full extraction pipeline
                 preview_url = att.get('previewUrl', '')
                 if preview_url and not att.get('isImage'):
+                    from app.text_extractor import TextExtractorUtility
                     # previewUrl is like /uploads/user_id/filename.txt
                     file_rel = preview_url.lstrip('/')
                     # Try relative to app root first, then Config.UPLOAD_FOLDER
                     app_root = os.path.dirname(os.path.dirname(__file__))
                     file_path = os.path.join(app_root, file_rel)
                     if not os.path.isfile(file_path):
-                        # previewUrl may be /uploads/X, UPLOAD_FOLDER is 'uploads'
                         stripped = preview_url.replace('/uploads/', '', 1)
                         file_path = os.path.join(Config.UPLOAD_FOLDER, stripped)
                     if os.path.isfile(file_path):
                         try:
-                            with open(file_path, 'r', errors='replace') as f:
-                                et = f.read()
+                            et, _debug = TextExtractorUtility.extract_text(file_path)
                             if et:
                                 extracted_text += et + '\n'
-                                logger.info(f"[Stream] Read {len(et)} chars from disk: {file_path}")
+                                logger.info(f"[Stream] Extracted {len(et)} chars from {file_path} (engine={_debug.get('engine', 'text')})")
+                            else:
+                                logger.warning(f"[Stream] No text extracted from {file_path}: {_debug.get('error', 'unknown')}")
                         except Exception as e:
-                            logger.warning(f"[Stream] Failed to read file {file_path}: {e}")
+                            logger.warning(f"[Stream] Failed to extract from {file_path}: {e}")
         except (json.JSONDecodeError, TypeError):
             pass
     # Fallback to session
@@ -493,6 +528,21 @@ def chat_stream():
                 logger.debug(f"[Stream] Loaded {len(previous_messages)} previous messages for context")
         except Exception as e:
             logger.warning(f"Failed to load session for streaming: {e}")
+
+    # Quality signal: user sent a follow-up → previous model did well
+    if previous_messages and len(previous_messages) >= 2:
+        try:
+            _last_ai = next(
+                (m for m in reversed(previous_messages) if m.get('role') == 'assistant'),
+                None,
+            )
+            if _last_ai:
+                _prev_model = _last_ai.get('model') or _last_ai.get('model_id', '')
+                _prev_job = _last_ai.get('task_type', 'general_chat')
+                if _prev_model:
+                    orchestrator_signal_followup(_prev_model, _prev_job)
+        except Exception:
+            pass  # Never let quality tracking break the request
 
     # ============================================================
     # Path A: /image command — explicit, zero-latency
@@ -807,14 +857,20 @@ def chat_stream():
         )
         stream_model = routed_model
         logger.info(f"🔀 [Stream] Smart routing: {task_type} -> {stream_model}")
-        # Stream endpoint only supports DeepSeek/Moonshot/OpenAI — force deepseek-chat if needed
+        # Stream endpoint only supports DeepSeek/Moonshot/OpenAI/Groq/Cerebras
         resolved = resolve_model_id(stream_model)
         provider = MODEL_PROVIDERS.get(resolved, "")
-        if provider not in ("deepseek", "moonshot", "openai", "groq"):
+        if provider not in ("deepseek", "moonshot", "openai", "groq", "cerebras", "gemini"):
             stream_model = "deepseek-chat"
             logger.info(f"🔀 [Stream] Overriding non-streaming model to deepseek-chat")
+        # Orchestrator validates provider health + quota, returns best available
+        _orch_job = {"chat": "general_chat", "image_gen": "general_chat"}.get(task_type, task_type)
+        _orch_model, _orch_provider, _orch_indicator = orchestrator_get_model(_orch_job, {})
+        if _orch_model != stream_model:
+            logger.info(f"🔀 [Stream] Orchestrator override: {stream_model} -> {_orch_model} ({_orch_provider})")
+            stream_model = _orch_model
 
-    # --- Swap Ollama models to Groq for search-likely queries ---
+    # --- Swap Ollama models to cloud for search-likely queries ---
     # Local CPU-only models are too slow and weak for ACTION protocol + search
     _resolved_for_check = resolve_model_id(stream_model)
     _provider_for_check = MODEL_PROVIDERS.get(_resolved_for_check, "")
@@ -825,7 +881,8 @@ def chat_stream():
         _prompt_lower = user_prompt_raw.lower() if user_prompt_raw else ""
         if any(kw in _prompt_lower for kw in _search_keywords):
             _ollama_original = stream_model
-            stream_model = "llama-3.3-70b-versatile"  # Groq — fast + free
+            # Orchestrator picks best cloud model for search bypass
+            stream_model, _, _ = orchestrator_get_model("general_chat", {})
             logger.info(f"🔀 [Stream] Ollama search bypass: {_ollama_original} -> {stream_model} (query likely needs search)")
 
     # --- Build prompt via ContextBuilder (after stream_model is resolved) ---
@@ -1520,7 +1577,7 @@ def chat_stream():
                         'model_label': MODEL_LABELS.get(_resolved_model, stream_model),
                         'model_provider': MODEL_PROVIDERS.get(_resolved_model, ''),
                         'auto_selected': (model == 'auto' or not model),
-                        'task_type': task_type if (model == 'auto' or not model) else None,
+                        'task_type': task_type if (model == 'auto' or not model) else 'general_chat',
                     }
 
                     done_payload = {
@@ -1658,6 +1715,9 @@ def chat_stream():
                                 turn_metadata=stream_turn_metadata,
                                 ai_attachments=_image_done_data.get('attachments') if _image_done_data else None,
                                 message_type=_image_done_data.get('message_type') if _image_done_data else None,
+                                model_id=resolve_model_id(stream_model),
+                                task_type=task_type if (model == 'auto' or not model) else None,
+                                auto_selected=(model == 'auto' or not model),
                             )
                             logger.info(f"Streaming response saved to history for session {session_id}")
 
@@ -1698,10 +1758,31 @@ def chat_stream():
                         except Exception as save_err:
                             logger.warning(f"Failed to save streaming response to history: {save_err}")
 
+                    # Track token usage for orchestrator quota accounting
+                    try:
+                        _input_est = max(1, len(enhanced_prompt) // 4) if enhanced_prompt else 0
+                        _output_est = max(1, len(full_content) // 4) if full_content else 0
+                        orchestrator_record_usage(stream_model, _input_est, _output_est)
+                    except Exception:
+                        pass  # Never let quota tracking break the response
+
+                    # Quality signal: short response = likely unhelpful
+                    try:
+                        if full_content and len(full_content.strip()) < 50:
+                            _q_job = {"chat": "general_chat", "image_gen": "general_chat"}.get(task_type, task_type) if task_type else "general_chat"
+                            orchestrator_signal_short(stream_model, _q_job)
+                    except Exception:
+                        pass
+
                     yield f"data: {json.dumps(done_payload)}\n\n"
 
                 elif chunk_type == 'error':
                     yield f"data: {json.dumps({'type': 'error', 'text': chunk.get('text', 'Unknown error')})}\n\n"
+                    try:
+                        _err_job = {"chat": "general_chat", "image_gen": "general_chat"}.get(task_type, task_type) if task_type else "general_chat"
+                        orchestrator_signal_error(stream_model, _err_job)
+                    except Exception:
+                        pass
 
         except GeneratorExit:
             logger.info('[Stream] GeneratorExit — client disconnected, stopping generation')
@@ -1806,9 +1887,10 @@ def chat():
             if et:
                 extracted_text += et + '\n'
                 continue
-            # Fallback: read file from disk using previewUrl
+            # Fallback: extract text from file on disk using full extraction pipeline
             preview_url = att.get('previewUrl', '')
             if preview_url and not att.get('isImage'):
+                from app.text_extractor import TextExtractorUtility
                 file_rel = preview_url.lstrip('/')
                 app_root = os.path.dirname(os.path.dirname(__file__))
                 file_path = os.path.join(app_root, file_rel)
@@ -1817,12 +1899,12 @@ def chat():
                     file_path = os.path.join(Config.UPLOAD_FOLDER, stripped)
                 if os.path.isfile(file_path):
                     try:
-                        with open(file_path, 'r', errors='replace') as f:
-                            et = f.read()
+                        et, _debug = TextExtractorUtility.extract_text(file_path)
                         if et:
                             extracted_text += et + '\n'
+                            logger.info(f"Extracted {len(et)} chars from {file_path} (engine={_debug.get('engine', 'text')})")
                     except Exception as e:
-                        logger.warning(f"Failed to read file {file_path}: {e}")
+                        logger.warning(f"Failed to extract from {file_path}: {e}")
         # Fallback to session
         if not extracted_text:
             extracted_text = session.pop('extracted_text', '')

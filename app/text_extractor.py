@@ -50,6 +50,41 @@ except ImportError:
     rtf_to_text = None
     RTF_AVAILABLE = False
 
+try:
+    import ebooklib
+    from ebooklib import epub
+    from html.parser import HTMLParser
+    EPUB_AVAILABLE = True
+except ImportError:
+    epub = None
+    EPUB_AVAILABLE = False
+
+try:
+    from odf import text as odf_text, teletype
+    from odf.opendocument import load as odf_load
+    ODF_AVAILABLE = True
+except ImportError:
+    ODF_AVAILABLE = False
+
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+    HEIF_AVAILABLE = True
+except ImportError:
+    HEIF_AVAILABLE = False
+
+# Groq Whisper uses direct HTTP API (no SDK needed — avoids pydantic conflicts)
+GROQ_WHISPER_AVAILABLE = True
+
+# Audio file extensions supported by Groq Whisper
+AUDIO_EXTENSIONS = {'.mp3', '.mp4', '.m4a', '.wav', '.ogg', '.flac', '.webm', '.mpeg'}
+
+# Extended image MIME types (WebP, BMP, TIFF, HEIC)
+IMAGE_MIMETYPES = {
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'image/bmp', 'image/tiff', 'image/heic', 'image/heif',
+}
+
 # ==================== OCR Configuration ====================
 tesseract_cmd = getattr(Config, 'TESSERACT_CMD', None)
 OCR_LANG_RAW = getattr(Config, 'TESSERACT_LANG', 'eng')
@@ -134,8 +169,8 @@ class TextExtractorUtility:
             if mime_type == 'application/pdf':
                 return TextExtractorUtility._extract_from_pdf(file_path, debug_info)
 
-            # Images (OCR)
-            elif mime_type in ['image/jpeg', 'image/png', 'image/gif']:
+            # Images — vision model first, Tesseract fallback
+            elif mime_type in IMAGE_MIMETYPES or ext in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.heic', '.heif'):
                 return TextExtractorUtility._extract_from_image(file_path, debug_info)
 
             # Plain text, markdown
@@ -154,6 +189,18 @@ class TextExtractorUtility:
             elif mime_type in ['application/rtf', 'text/rtf'] or ext == '.rtf':
                 return TextExtractorUtility._extract_from_rtf(file_path, debug_info)
 
+            # Audio files — Groq Whisper transcription
+            elif ext in AUDIO_EXTENSIONS or mime_type.startswith('audio/'):
+                return TextExtractorUtility._extract_from_audio(file_path, debug_info)
+
+            # EPUB
+            elif ext == '.epub' or mime_type == 'application/epub+zip':
+                return TextExtractorUtility._extract_from_epub(file_path, debug_info)
+
+            # ODF formats (LibreOffice)
+            elif ext in ('.odt', '.ods', '.odp'):
+                return TextExtractorUtility._extract_from_odf(file_path, debug_info)
+
             # Office Open XML formats (detected as ZIP or specific MIME)
             elif mime_type == 'application/zip' or mime_type.startswith('application/vnd.openxmlformats'):
                 if ext == '.docx':
@@ -162,6 +209,8 @@ class TextExtractorUtility:
                     return TextExtractorUtility._extract_from_xlsx(file_path, debug_info)
                 elif ext == '.pptx':
                     return TextExtractorUtility._extract_from_pptx(file_path, debug_info)
+                elif ext == '.epub':
+                    return TextExtractorUtility._extract_from_epub(file_path, debug_info)
                 else:
                     debug_info['error'] = f"Unsupported ZIP-based file type: {ext}"
                     return "", debug_info
@@ -257,68 +306,155 @@ class TextExtractorUtility:
             return "", debug_info
 
     @staticmethod
-    def _extract_from_image(file_path: str, debug_info: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    def _extract_with_vision_model(file_path: str, debug_info: Dict[str, Any]) -> str:
+        """Try vision model for image understanding (9/10 quality)."""
+        import base64 as _b64
+
+        # Read image as base64
+        with open(file_path, 'rb') as f:
+            img_bytes = f.read()
+        b64_data = _b64.b64encode(img_bytes).decode()
+
+        # Detect mime type
+        ext = os.path.splitext(file_path)[1].lower()
+        mime_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+                    '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+                    '.tiff': 'image/tiff', '.tif': 'image/tiff', '.heic': 'image/heic'}
+        mime = mime_map.get(ext, 'image/png')
+        data_url = f"data:{mime};base64,{b64_data}"
+
+        prompt = (
+            "Extract ALL text visible in this image. Include headers, labels, "
+            "numbers, captions, watermarks — everything readable. "
+            "Preserve the layout structure. If it's a document, extract the full text. "
+            "If it's a screenshot, describe the UI and extract all visible text. "
+            "If there's no text, describe what you see in detail. "
+            "Return only the extracted content, no commentary."
+        )
+
+        messages = [{"role": "user", "content": [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ]}]
+
+        # Try Gemini first (500 RPD free)
+        gemini_key = getattr(Config, 'GEMINI_API_KEY', None)
+        if gemini_key:
+            try:
+                import requests as _req
+                resp = _req.post(
+                    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                    headers={"Authorization": f"Bearer {gemini_key}", "Content-Type": "application/json"},
+                    json={"model": "gemini-3.1-flash-lite-preview", "messages": messages, "max_tokens": 4096},
+                    timeout=30,
+                )
+                if resp.status_code == 200:
+                    text = resp.json().get('choices', [{}])[0].get('message', {}).get('content', '')
+                    if text and len(text.strip()) > 10:
+                        debug_info['engine'] = 'gemini-vision'
+                        debug_info['processing_steps'].append('Vision model: Gemini 3.1 Flash Lite')
+                        return text.strip()
+            except Exception as e:
+                debug_info['processing_steps'].append(f'Gemini vision failed: {e}')
+
+        # Try Groq Scout (free, unlimited)
+        groq_key = getattr(Config, 'GROQ_API_KEY', None)
+        if groq_key:
+            try:
+                import requests as _req
+                resp = _req.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                    json={"model": "meta-llama/llama-4-scout-17b-16e-instruct", "messages": messages, "max_tokens": 4096},
+                    timeout=30,
+                )
+                if resp.status_code == 200:
+                    text = resp.json().get('choices', [{}])[0].get('message', {}).get('content', '')
+                    if text and len(text.strip()) > 10:
+                        debug_info['engine'] = 'groq-scout-vision'
+                        debug_info['processing_steps'].append('Vision model: Groq Llama 4 Scout')
+                        return text.strip()
+            except Exception as e:
+                debug_info['processing_steps'].append(f'Groq vision failed: {e}')
+
+        return ""
+
+    @staticmethod
+    def _extract_with_tesseract(file_path: str, debug_info: Dict[str, Any]) -> str:
+        """Tesseract OCR fallback (5/10 quality)."""
         if not OCR_AVAILABLE:
-            debug_info['error'] = 'OCR not available on server'
-            return "", debug_info
+            return ""
+
+        image = Image.open(file_path)
+        ocr_config = '--oem 3 --psm 6'
+
+        lang_candidates = []
+        if OCR_LANG:
+            lang_candidates.append(OCR_LANG)
+        if 'eng' not in (OCR_LANG or ''):
+            lang_candidates.append('eng')
+
+        def try_tesseract(img, lang_label):
+            try:
+                txt = pytesseract.image_to_string(img, lang=lang_label, config=ocr_config)
+                return (txt or '').strip()
+            except pytesseract.TesseractError:
+                return ""
+
+        gray = ImageOps.grayscale(image)
+        boosted = ImageOps.autocontrast(gray).filter(ImageFilter.SHARPEN)
+        scale_factor = 1.5
+        upscaled = boosted.resize(
+            (int(boosted.width * scale_factor), int(boosted.height * scale_factor)),
+            Image.LANCZOS
+        )
+        thresholded = upscaled.point(lambda p: 255 if p > 150 else 0)
+
+        for lang_label in lang_candidates:
+            for variant_name, variant_img in [
+                ('native', image),
+                ('preprocessed', boosted),
+                ('upscale+threshold', thresholded),
+            ]:
+                debug_info['processing_steps'].append(f'Tesseract OCR ({variant_name}, lang={lang_label})')
+                text = try_tesseract(variant_img, lang_label)
+                if text:
+                    debug_info['engine'] = 'tesseract'
+                    debug_info['lang_used'] = lang_label
+                    return text
+
+        # EasyOCR fallback
+        reader = get_easyocr_reader()
+        if reader:
+            try:
+                results = reader.readtext(file_path, detail=0, paragraph=True)
+                text = "\n".join(r for r in results if isinstance(r, str)).strip()
+                if text:
+                    debug_info['engine'] = 'easyocr'
+                    return text
+            except Exception:
+                pass
+
+        return ""
+
+    @staticmethod
+    def _extract_from_image(file_path: str, debug_info: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+        """Extract text from image: vision model first, Tesseract fallback."""
         try:
             debug_info['processing_steps'].append('Opening image file')
-            image = Image.open(file_path)
-            ocr_config = '--oem 3 --psm 6'
 
-            # Build language candidates (primary + english fallback)
-            lang_candidates = []
-            if OCR_LANG:
-                lang_candidates.append(OCR_LANG)
-            if 'eng' not in (OCR_LANG or ''):
-                lang_candidates.append('eng')
+            # Try vision model first (9/10 quality)
+            text = TextExtractorUtility._extract_with_vision_model(file_path, debug_info)
+            if text:
+                return text, debug_info
 
-            def try_tesseract(img, lang_label):
-                try:
-                    txt = pytesseract.image_to_string(img, lang=lang_label, config=ocr_config)
-                    return (txt or '').strip()
-                except pytesseract.TesseractError as e:
-                    debug_info['processing_steps'].append(f'Tesseract error ({lang_label}): {e}')
-                    return ""
+            # Fall back to Tesseract (5/10 quality)
+            debug_info['processing_steps'].append('Vision models unavailable, falling back to Tesseract')
+            text = TextExtractorUtility._extract_with_tesseract(file_path, debug_info)
+            if text:
+                return text, debug_info
 
-            # Prepare preprocessed variants once
-            gray = ImageOps.grayscale(image)
-            boosted = ImageOps.autocontrast(gray).filter(ImageFilter.SHARPEN)
-            scale_factor = 1.5
-            upscaled = boosted.resize(
-                (int(boosted.width * scale_factor), int(boosted.height * scale_factor)),
-                Image.LANCZOS
-            )
-            thresholded = upscaled.point(lambda p: 255 if p > 150 else 0)
-
-            for lang_label in lang_candidates:
-                for variant_name, variant_img in [
-                    ('native', image),
-                    ('preprocessed', boosted),
-                    ('upscale+threshold', thresholded),
-                ]:
-                    debug_info['processing_steps'].append(f'Performing OCR ({variant_name}, lang={lang_label})')
-                    text = try_tesseract(variant_img, lang_label)
-                    if text:
-                        debug_info['engine'] = 'tesseract'
-                        debug_info['lang_used'] = lang_label
-                        return text, debug_info
-
-            # EasyOCR fallback
-            reader = get_easyocr_reader()
-            if reader:
-                debug_info['processing_steps'].append('Performing OCR (easyocr fallback)')
-                try:
-                    results = reader.readtext(file_path, detail=0, paragraph=True)
-                    text = "\n".join(r for r in results if isinstance(r, str)).strip()
-                    if text:
-                        debug_info['engine'] = 'easyocr'
-                        debug_info['lang_used'] = "+".join(OCR_LANG_LIST)
-                        return text, debug_info
-                except Exception as e:
-                    debug_info['processing_steps'].append(f'EasyOCR error: {e}')
-
-            debug_info['error'] = 'OCR returned no text'
+            debug_info['error'] = 'No text could be extracted from image'
             return "", debug_info
 
         except Exception as e:
@@ -490,6 +626,106 @@ class TextExtractorUtility:
         except Exception as e:
             debug_info['error'] = str(e)
             logger.error(f"RTF extraction error: {str(e)}")
+            return "", debug_info
+
+
+    @staticmethod
+    def _extract_from_audio(file_path: str, debug_info: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+        """Transcribe audio using Groq Whisper API (free, fast)."""
+        import requests as _req
+
+        groq_key = getattr(Config, 'GROQ_API_KEY', None)
+        if not groq_key:
+            debug_info['error'] = 'GROQ_API_KEY not configured for audio transcription'
+            return "", debug_info
+
+        try:
+            debug_info['processing_steps'].append('Transcribing audio with Groq Whisper')
+            with open(file_path, "rb") as f:
+                resp = _req.post(
+                    "https://api.groq.com/openai/v1/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {groq_key}"},
+                    files={"file": (os.path.basename(file_path), f)},
+                    data={"model": "whisper-large-v3-turbo", "response_format": "text"},
+                    timeout=120,
+                )
+            if resp.status_code != 200:
+                debug_info['error'] = f'Whisper API error: {resp.status_code} {resp.text[:200]}'
+                return "", debug_info
+
+            text = resp.text.strip()
+            if text:
+                debug_info['engine'] = 'groq-whisper'
+                debug_info['processing_steps'].append(f'Transcribed {len(text)} characters')
+                return f"[Audio Transcription]\n{text}", debug_info
+            else:
+                debug_info['error'] = 'Whisper returned empty transcription'
+                return "", debug_info
+        except Exception as e:
+            debug_info['error'] = f'Audio transcription failed: {str(e)}'
+            logger.error(f"Audio transcription error: {str(e)}")
+            return "", debug_info
+
+    @staticmethod
+    def _extract_from_epub(file_path: str, debug_info: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+        """Extract text from EPUB ebooks."""
+        if not EPUB_AVAILABLE:
+            debug_info['error'] = 'ebooklib not installed'
+            return "", debug_info
+
+        try:
+            debug_info['processing_steps'].append('Opening EPUB file')
+
+            class _HTMLStripper(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.text = []
+                def handle_data(self, data):
+                    self.text.append(data)
+                def get_text(self):
+                    return ''.join(self.text)
+
+            book = epub.read_epub(file_path, options={'ignore_ncx': True})
+            chapters = []
+            for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+                content = item.get_content().decode('utf-8', errors='replace')
+                stripper = _HTMLStripper()
+                stripper.feed(content)
+                chapter_text = stripper.get_text().strip()
+                if chapter_text:
+                    chapters.append(chapter_text)
+
+            text = '\n\n'.join(chapters)
+            debug_info['processing_steps'].append(f'Extracted {len(chapters)} chapters')
+            return text.strip(), debug_info
+        except Exception as e:
+            debug_info['error'] = str(e)
+            logger.error(f"EPUB extraction error: {str(e)}")
+            return "", debug_info
+
+    @staticmethod
+    def _extract_from_odf(file_path: str, debug_info: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+        """Extract text from ODF files (ODT, ODS, ODP)."""
+        if not ODF_AVAILABLE:
+            debug_info['error'] = 'odfpy not installed'
+            return "", debug_info
+
+        try:
+            debug_info['processing_steps'].append('Opening ODF file')
+            doc = odf_load(file_path)
+            paragraphs = doc.getElementsByType(odf_text.P)
+            text_parts = []
+            for para in paragraphs:
+                t = teletype.extractText(para)
+                if t and t.strip():
+                    text_parts.append(t.strip())
+
+            text = '\n'.join(text_parts)
+            debug_info['processing_steps'].append(f'Extracted {len(text_parts)} paragraphs from ODF')
+            return text.strip(), debug_info
+        except Exception as e:
+            debug_info['error'] = str(e)
+            logger.error(f"ODF extraction error: {str(e)}")
             return "", debug_info
 
 

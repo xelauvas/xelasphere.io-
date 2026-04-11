@@ -53,14 +53,14 @@ MODEL_CATALOG = {
 
     # Vision models - Groq (internal use)
     "meta-llama/llama-4-maverick-17b-128e-instruct": {
-        "label": "Llama 4 Maverick",
+        "label": "Llama 4 Maverick (Deprecated)",
         "provider": "groq",
         "selectable": False,
         "vision": True,
         "context": 128000,
     },
     "meta-llama/llama-4-scout-17b-16e-instruct": {
-        "label": "Llama 4 Scout",
+        "label": "Llama 4 Scout (Vision)",
         "provider": "groq",
         "selectable": False,
         "vision": True,
@@ -101,13 +101,6 @@ MODEL_CATALOG = {
     # CEREBRAS MODELS (Fallback)
     # ============================================
 
-    "llama-3.3-70b": {
-        "label": "Llama 3.3 70B (Cerebras)",
-        "provider": "cerebras",
-        "selectable": False,  # Fallback only
-        "speed": "fast",  # Cerebras is fast
-        "context": 128000,
-    },
     "llama3.1-8b": {
         "label": "Llama 3.1 8B (Cerebras)",
         "provider": "cerebras",
@@ -115,20 +108,12 @@ MODEL_CATALOG = {
         "speed": "fast",
         "context": 128000,
     },
-    "qwen-3-32b": {
-        "label": "Qwen 3 32B (Cerebras)",
+    "qwen-3-235b-a22b-instruct-2507": {
+        "label": "Qwen 3 235B (Cerebras)",
         "provider": "cerebras",
-        "selectable": False,
+        "selectable": True,
         "speed": "fast",
         "context": 32000,
-        "reasoning": True,
-    },
-    "qwen-3-235b-a22b-instruct-2507": {
-        "label": "Qwen 3 235B (Groq)",
-        "provider": "groq",
-        "selectable": True,  # User can select for complex tasks
-        "speed": "slow",
-        "context": 128000,
         "reasoning": True,
     },
     "gpt-oss-120b": {
@@ -137,6 +122,44 @@ MODEL_CATALOG = {
         "selectable": False,
         "speed": "medium",
         "context": 128000,
+    },
+
+    # ============================================
+    # GEMINI MODELS (Google AI Studio — free tier)
+    # Free tier RPD: 3.1 Flash Lite=500, Gemma 4=1500, Flash 2.5/3=20
+    # ============================================
+
+    "gemini-3.1-flash-lite-preview": {
+        "label": "Gemini 3.1 Flash Lite",
+        "provider": "gemini",
+        "selectable": True,
+        "speed": "fast",
+        "context": 1048576,
+        "long_context": True,
+    },
+    "gemma-4-26b-a4b-it": {
+        "label": "Gemma 4 26B (Gemini)",
+        "provider": "gemini",
+        "selectable": True,
+        "speed": "fast",
+        "context": 128000,
+    },
+    "gemini-2.5-flash": {
+        "label": "Gemini 2.5 Flash (Reasoning)",
+        "provider": "gemini",
+        "selectable": True,
+        "speed": "medium",
+        "context": 1048576,
+        "reasoning": True,
+        "long_context": True,
+    },
+    "gemini-2.0-flash": {
+        "label": "Gemini 2.0 Flash",
+        "provider": "gemini",
+        "selectable": False,  # Low free tier (20 RPD)
+        "speed": "fast",
+        "context": 1048576,
+        "long_context": True,
     },
 
     # ============================================
@@ -237,9 +260,9 @@ MODEL_CATALOG = {
 # ============================================
 
 FALLBACK_MODELS = {
-    "llama-3.3-70b-versatile": "llama-3.3-70b",
+    "llama-3.3-70b-versatile": "qwen-3-235b-a22b-instruct-2507",
     "llama-3.1-8b-instant": "llama3.1-8b",
-    "qwen/qwen3-32b": "qwen-3-32b",
+    "qwen/qwen3-32b": "qwen-3-235b-a22b-instruct-2507",
     "openai/gpt-oss-120b": "gpt-oss-120b",
     "gemma4:e2b": "llama-3.3-70b-versatile",  # Ollama -> Groq fallback
     "dolphin3": "llama-3.3-70b-versatile",  # Ollama -> Groq fallback
@@ -267,7 +290,7 @@ TASK_ROUTES = {
     "prompt_guard": "meta-llama/llama-prompt-guard-2-86m",
 
     # Specialized tasks
-    "vision": "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "vision": "meta-llama/llama-4-scout-17b-16e-instruct",
     "coding": "deepseek-chat",
     "reasoning": "qwen/qwen3-32b",
     "uncensored": "dolphin3",
