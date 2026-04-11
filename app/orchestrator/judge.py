@@ -65,11 +65,6 @@ def _emergency_fallback() -> Model:
     """Last resort — return any healthy model."""
     from app.orchestrator import registry
 
-    # Ollama local first — always available
-    for model in registry.get_by_provider("ollama"):
-        if model.status != "down":
-            return model
-
     # Any healthy model
     for model in registry.all_models():
         if model.is_available():

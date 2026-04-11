@@ -83,7 +83,7 @@ def get_status() -> Dict:
     from app.orchestrator.config import FREE_TIER_LIMITS
 
     status = {}
-    for provider in ("groq", "cerebras", "gemini", "deepseek", "moonshot", "openai", "ollama"):
+    for provider in ("groq", "cerebras", "gemini", "deepseek", "moonshot", "openai"):
         limits = FREE_TIER_LIMITS.get(provider, {})
         token_limit = limits.get("daily_tokens", 0)
         req_limit = limits.get("daily_requests", 0)

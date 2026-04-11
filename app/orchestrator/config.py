@@ -11,7 +11,7 @@ PROVIDER_ENDPOINTS = {
     "openai":   "https://api.openai.com/v1/models",
     "deepseek": "https://api.deepseek.com/models",
     "gemini":   "https://generativelanguage.googleapis.com/v1beta/openai/models",
-    "ollama":   None,   # formatted at runtime from Config.OLLAMA_API_URL
+    # "ollama":   None,   # removed — no local LLM
     "moonshot": None,   # no /models endpoint — use ping
 }
 
@@ -25,7 +25,7 @@ FREE_TIER_LIMITS = {
     #   gemini-2.5-flash/3-flash: only 20 RPD (deep fallback)
     # Using conservative combined limit for the provider bucket
     "gemini":   {"daily_requests": 400, "daily_tokens": 200_000},
-    "ollama":   {"daily_tokens": 0},  # unlimited local
+    # "ollama":   {"daily_tokens": 0},  # removed — no local LLM
     # deepseek/moonshot/openai = paid, no free tier limit to track
 }
 
@@ -40,7 +40,6 @@ FALLBACK_CHAINS = {
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD
         ("gemini",   "gemini-2.5-flash",                       "tier1"),  # 20 RPD reasoning
         ("moonshot", "kimi-k2.5",                              "tier1"),
-        ("ollama",   "gemma4:e2b",                             "tier2"),
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
     "reasoning": [
@@ -59,7 +58,6 @@ FALLBACK_CHAINS = {
         ("gemini",   "gemma-4-26b-a4b-it",                    "tier1"),  # 1500 RPD
         ("deepseek", "deepseek-chat",                          "tier1"),
         ("moonshot", "kimi-latest",                            "tier1"),
-        ("ollama",   "gemma4:e2b",                             "tier2"),
         ("openai",   "gpt-4.1-nano",                           "tier0"),
     ],
     "fast_chat": [
@@ -67,7 +65,6 @@ FALLBACK_CHAINS = {
         ("cerebras", "llama3.1-8b",                            "tier1"),
         ("gemini",   "gemma-4-26b-a4b-it",                    "tier1"),  # 1500 RPD, unlimited TPM
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD
-        ("ollama",   "gemma4:e2b",                             "tier2"),
         ("openai",   "gpt-4.1-nano",                           "tier0"),
     ],
     "long_context": [
@@ -85,13 +82,14 @@ FALLBACK_CHAINS = {
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
     "uncensored": [
-        ("ollama",   "dolphin3",                               "tier1"),
+        ("deepseek", "deepseek-chat",                          "tier1"),
+        ("groq",     "llama-3.3-70b-versatile",                "tier1"),
+        ("openai",   "gpt-4.1",                                "tier0"),
     ],
     "internal_fast": [
         ("groq",     "llama-3.1-8b-instant",                   "tier1"),
         ("cerebras", "llama3.1-8b",                            "tier1"),
         ("gemini",   "gemma-4-26b-a4b-it",                    "tier1"),  # 1500 RPD
-        ("ollama",   "gemma4:e2b",                             "tier2"),
         ("openai",   "gpt-4.1-nano",                           "tier0"),
     ],
     "safety": [
@@ -108,5 +106,5 @@ MODEL_FAMILIES = {
     "gemma":    ["gemma"],
     "gpt":      ["gpt"],
     "gemini":   ["gemini"],
-    "dolphin":  ["dolphin"],
+    # "dolphin":  ["dolphin"],  # removed — no local LLM
 }
