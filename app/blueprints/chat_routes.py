@@ -966,6 +966,18 @@ def chat_stream():
     def generate():
         import json
 
+        # ── Emit voice selection before any content — frontend locks this for all TTS chunks ──
+        from app.blueprints.media_routes import _pick_voice_for_content, _detect_language, KOKORO_VOICES, KOKORO_LANG_MAP
+        tts_voice = _pick_voice_for_content(user_prompt_raw)
+        tts_lang = _detect_language(user_prompt_raw)
+        tts_lang_code = KOKORO_LANG_MAP.get(tts_lang, 'a')
+        # Match phonemizer to voice nationality
+        kokoro_voice_id = KOKORO_VOICES.get(tts_voice, 'af_heart')
+        voice_prefix = kokoro_voice_id.split('_')[0] if '_' in kokoro_voice_id else ''
+        if voice_prefix in ('bf', 'bm'):
+            tts_lang_code = 'b'
+        yield f"data: {json.dumps({'type': 'tts_voice', 'voice': tts_voice, 'lang': tts_lang})}\n\n"
+
         def _client_disconnected():
             """Check if the client has closed the connection."""
             return request.environ.get('werkzeug.request_closed', False)

@@ -380,26 +380,19 @@ const VoiceModeModule = (function() {
         return [null, buffer];
     }
 
-    async function _fetchTTSChunk(text, lang, voiceContext) {
+    async function _fetchTTSChunk(text, lang) {
         const clean = _cleanTextForTTS(text);
         if (!clean || clean.length < 3) return null;
         const csrfMeta = document.querySelector('meta[name="csrf-token"]');
         const headers = { 'Content-Type': 'application/json' };
         if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
-        const body = { text: clean, voice: _preferredVoice, format: 'wav', lang: lang || _detectedLang };
-        if (voiceContext) body.voice_context = voiceContext;
         try {
             const resp = await fetch('/tts/groq', {
                 method: 'POST', headers,
-                body: JSON.stringify(body),
+                body: JSON.stringify({ text: clean, voice: _preferredVoice, format: 'wav', lang: lang || _detectedLang }),
                 credentials: 'same-origin'
             });
             if (!resp.ok) return null;
-            // Lock voice from first successful response
-            if (_preferredVoice === 'auto') {
-                const v = resp.headers.get('x-tts-voice');
-                if (v) { _preferredVoice = v; console.log(`[VoiceMode] voice locked: ${v}`); }
-            }
             return await resp.arrayBuffer();
         } catch (e) {
             console.error('[VoiceMode] TTS chunk error:', e);
@@ -532,37 +525,34 @@ const VoiceModeModule = (function() {
                     if (!line.startsWith('data: ')) continue;
                     try {
                         const parsed = JSON.parse(line.slice(6));
+                        // Voice decided server-side — lock before any TTS fires
+                        if (parsed.type === 'tts_voice') {
+                            _preferredVoice = parsed.voice;
+                            _responseLang = parsed.lang || _detectedLang;
+                            console.log(`[VoiceMode] voice locked from stream: ${_preferredVoice}, lang=${_responseLang}`);
+                            continue;
+                        }
                         if (parsed.type === 'content' && parsed.text) {
                             fullContent += parsed.text;
                             ttsBuffer += parsed.text;
 
-                            // Hold first chunk until we have enough text for language detection
+                            // Hold first chunk until we have enough text
                             if (chunkIndex === 0 && ttsBuffer.length < FIRST_CHUNK_MIN) continue;
 
                             const [sentence, remainder] = _splitAtSentenceBoundary(ttsBuffer);
                             if (sentence) {
                                 ttsBuffer = remainder;
-                                const isFirst = chunkIndex === 0;
-                                if (isFirst) {
-                                    _responseLang = _detectedLang;
+                                if (chunkIndex === 0) {
                                     firstChunkTime = Date.now() - streamStart;
-                                    console.log(`[VoiceMode] first TTS chunk at ${firstChunkTime}ms, lang=${_responseLang}`);
+                                    console.log(`[VoiceMode] first TTS chunk at ${firstChunkTime}ms`);
                                 }
                                 chunkIndex++;
                                 _ttsInflight++;
                                 const lang = _responseLang || _detectedLang;
-                                if (isFirst) {
-                                    // Await first chunk to lock voice before firing subsequent chunks
-                                    // Pass full accumulated content for smart voice picking
-                                    const audio = await _fetchTTSChunk(sentence, lang, fullContent);
+                                _fetchTTSChunk(sentence, lang).then(audio => {
                                     _ttsInflight--;
                                     if (audio) _enqueueAudio(audio);
-                                } else {
-                                    _fetchTTSChunk(sentence, lang).then(audio => {
-                                        _ttsInflight--;
-                                        if (audio) _enqueueAudio(audio);
-                                    });
-                                }
+                                });
                             }
                         }
                         if (parsed.type === 'done' && parsed.content) fullContent = parsed.content;

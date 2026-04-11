@@ -191,20 +191,15 @@ async function requestGroqTts(text, format = DEFAULT_TTS_FORMAT, voice = DEFAULT
             throw error;
         }
 
-        const selectedVoice = response.headers.get('x-tts-voice') || '';
-        const selectedLang = response.headers.get('x-tts-lang') || '';
-
         if (contentType.includes('application/json')) {
             const payload = await response.json();
             if (!payload || !payload.audio_base64) {
                 throw new Error('Audio payload is empty.');
             }
-            const arrayBuffer = base64ToArrayBuffer(payload.audio_base64);
-            return { audio: arrayBuffer, voice: selectedVoice, lang: selectedLang };
+            return base64ToArrayBuffer(payload.audio_base64);
         }
 
-        const arrayBuffer = await response.arrayBuffer();
-        return { audio: arrayBuffer, voice: selectedVoice, lang: selectedLang };
+        return await response.arrayBuffer();
     } finally {
         ttsAbortController = null;
     }
@@ -314,23 +309,16 @@ async function speakText(text, button) {
 
     try {
         const chunks = splitIntoChunks(sanitized, 400);
-        let lockedVoice = null;
-        let lockedLang = null;
 
         for (let i = 0; i < chunks.length; i++) {
             if (_ttsAborted) break;
 
-            const voice = lockedVoice || DEFAULT_TTS_VOICE;
-            const context = (i === 0 && !lockedVoice) ? sanitized : '';
-            const result = await requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, voice, lockedLang || '', context);
+            // Send full text as voice_context so backend picks voice from full message, not chunk
+            const audioBuffer = await requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, DEFAULT_TTS_VOICE, '', sanitized);
             if (_ttsAborted) break;
 
-            // Lock voice + language from first chunk for consistency
-            if (!lockedVoice && result.voice) lockedVoice = result.voice;
-            if (!lockedLang && result.lang) lockedLang = result.lang;
-
             isFetchingAudio = false;
-            await playAudioBuffer(result.audio);
+            await playAudioBuffer(audioBuffer);
             if (_ttsAborted) break;
         }
         isFetchingAudio = false;

@@ -862,14 +862,15 @@ def generate_groq_tts():
 
     voice = (payload.get('voice') or 'autumn').strip() or 'autumn'
     lang_hint = (payload.get('lang') or '').strip()
-    voice_context = (payload.get('voice_context') or '').strip()  # full text for voice picking
+    voice_context = (payload.get('voice_context') or '').strip()  # Read Aloud sends full text for smart picking
 
     # ── Auto-detect language from text if not provided ──
-    lang = lang_hint if lang_hint in ('en', 'fr', 'ja', 'zh', 'es', 'hi', 'it') else _detect_language(voice_context or text, lang_hint)
+    pick_text = voice_context or text
+    lang = lang_hint if lang_hint in ('en', 'fr', 'ja', 'zh', 'es', 'hi', 'it') else _detect_language(pick_text, lang_hint)
 
     # ── Dynamic voice based on content ──
     if voice == 'autumn' or voice == 'auto':
-        voice = _pick_voice_for_content(voice_context or text)
+        voice = _pick_voice_for_content(pick_text)
         logger.info(f"TTS: dynamic voice → {voice}, lang={lang}")
 
     # ── 1. Try Kokoro first (local, free, unlimited) ──
@@ -880,8 +881,6 @@ def generate_groq_tts():
         from flask import Response
         return Response(audio_bytes, mimetype=mime_type, headers={
             'Content-Disposition': 'inline; filename="speech.wav"',
-            'X-TTS-Voice': voice,
-            'X-TTS-Lang': lang,
         })
 
     # ── 2. Try Gemini (cloud, rate-limited) ──
@@ -892,8 +891,6 @@ def generate_groq_tts():
         from flask import Response
         return Response(audio_bytes, mimetype=mime_type, headers={
             'Content-Disposition': 'inline; filename="speech.wav"',
-            'X-TTS-Voice': voice,
-            'X-TTS-Lang': lang,
         })
 
     # ── 3. Fallback: Groq Orpheus (200 char limit) ──
