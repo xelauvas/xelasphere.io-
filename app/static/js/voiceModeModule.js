@@ -620,41 +620,9 @@ const VoiceModeModule = (function() {
                 }
             }
         }
-        const langMap = {
-            'french': 'fr', 'français': 'fr',
-            'japanese': 'ja', '日本語': 'ja',
-            'chinese': 'zh', 'mandarin': 'zh', '中文': 'zh',
-            'spanish': 'es', 'español': 'es',
-            'hindi': 'hi', 'हिंदी': 'hi',
-            'italian': 'it', 'italiano': 'it',
-            'romanian': 'ro', 'română': 'ro',
-            'german': 'de', 'deutsch': 'de',
-            'portuguese': 'pt', 'português': 'pt',
-            'english': 'en',
-        };
-        // Only trigger lang shortcut for SHORT, focused commands —
-        // not any sentence that happens to contain "in italian" etc.
-        const isShortCommand = t.length < 40;
-        if (isShortCommand) {
-            for (const [phrase, lang] of Object.entries(langMap)) {
-                const patterns = [
-                    `switch to ${phrase}`,
-                    `speak ${phrase}`,
-                    `speak in ${phrase}`,
-                    `talk in ${phrase}`,
-                    `respond in ${phrase}`,
-                    `answer in ${phrase}`,
-                    `change to ${phrase}`,
-                    `${phrase} please`,
-                ];
-                const matches = patterns.some(p => t === p || t === p + '.' || t === p + '?' || t === p + '!');
-                if (matches || t === phrase || t === phrase + '.' || t === phrase + '!') {
-                    _detectedLang = lang;
-                    if (window.Toast) window.Toast.success(`Switched to ${phrase}`);
-                    return true;
-                }
-            }
-        }
+        // Language requests go through to the LLM — it responds in the requested
+        // language naturally, and backend TTS detection picks up the language
+        // from the actual response text. No client-side interception needed.
         return false;
     }
 
