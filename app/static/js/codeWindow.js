@@ -5193,7 +5193,8 @@ function renderAiTextImmediate(container, text, messageId, showButtons) {
         delete msgDiv._modelMeta;
     }
 
-    // typing-complete event — preserves searchResults.js:1235 contract
+    // typing-complete event — matches legacy appendTextMessage dispatch
+    // (consumed by citation/search-results post-processing)
     if (msgDiv) {
         msgDiv.dispatchEvent(new CustomEvent('typing-complete', { bubbles: false }));
     }
