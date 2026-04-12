@@ -1,9 +1,3 @@
-# GEVENT: monkey-patch MUST be the first thing executed so that the
-# stdlib (socket, ssl, threading) is cooperatively patched before any
-# other module imports it. thread=False keeps gRPC (Firestore) happy.
-from gevent import monkey
-monkey.patch_all(thread=False)
-
 from dotenv import load_dotenv
 import os
 
