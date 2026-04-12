@@ -136,16 +136,16 @@ List renderer adds the no-anim class on each `<li>` as well:
 
 ```js
 // list.js in update(), when creating new <li>
-const noAnim = block.meta.replayMode ? ' stream-no-anim' : '';
+const noAnim = block.meta.replay ? ' stream-no-anim' : '';
 li.className = `block-list-item${noAnim}`;
 ```
 
-Where `block.meta.replayMode` is set by `list.js create()` from `opts.replay`:
+Where `block.meta.replay` is set by `list.js create()` from `opts.replay`:
 
 ```js
 create(block, messageContainer, opts = {}) {
     // ... existing ...
-    block.meta.replayMode = !!opts.replay;
+    block.meta.replay = !!opts.replay;
     // ...
 }
 ```
