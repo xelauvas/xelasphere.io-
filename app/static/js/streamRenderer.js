@@ -112,7 +112,16 @@ class StreamRenderer {
             }
             case 'BLOCK_APPEND': {
                 this.ast.appendToLive(event.text);
-                // Render is batched via RAF — don't render inline here
+                // Render inline so the live block grows token-by-token.
+                // RAF batching (via _scheduleRender) was leaving updates stuck
+                // at BLOCK_END boundaries; direct update keeps the stream visible.
+                if (!this.replay) {
+                    const live = this.ast.getLive();
+                    if (live) {
+                        const r = rendererFor(live.type);
+                        r.update(live);
+                    }
+                }
                 break;
             }
             case 'BLOCK_END': {
