@@ -2732,6 +2732,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
     // Declare bgRequest before try so it's accessible in catch/finally
     let bgRequest = null;
+    // Hoisted so the outer catch (line ~4435) can clean up on mid-stream errors.
+    let _streamRenderer = null;
+    let _streamMsgId = null;
 
     try {
         // Note: We no longer set global isRequestInProgress - we use per-session tracking
@@ -3061,8 +3064,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let artifactStreamActive = false;
                 let searchMsgId = null; // Track message element for search banner
                 let searchBannerDismissed = false; // Track if search banner was dismissed
-                let _streamRenderer = null; window._activeStreamRenderer = null; // Phase 2: live SSE-to-DOM renderer
-                let _streamMsgId = null;    // Message ID for StreamRenderer container
+                _streamRenderer = null; window._activeStreamRenderer = null; // Phase 2: live SSE-to-DOM renderer (hoisted above try)
+                _streamMsgId = null;    // Message ID for StreamRenderer container (hoisted above try)
                 let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
                 // Use array to avoid O(n²) string concatenation per chunk.
