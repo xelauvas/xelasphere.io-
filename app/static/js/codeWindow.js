@@ -5116,6 +5116,31 @@ function animateCodeCorrection(originalCode, debuggedCode, codeWrapper, options 
 
 
 
+/**
+ * Render a user message: markdown-it inline → DOMPurify → innerHTML.
+ * No streaming, no code-window chrome, no animation.
+ * User code blocks render as <pre><code> via markdown-it's default rules —
+ * intentionally plain, matching the text bubble styling.
+ */
+function renderUserMessage(container, text, messageId) {
+    if (container && container.dataset.emailComposer === 'true') {
+        return;
+    }
+    const div = document.createElement('div');
+    div.classList.add('text-message-container');
+    if (messageId) {
+        div.id = `message-${messageId}`;
+    }
+    container.appendChild(div);
+
+    const p = document.createElement('p');
+    p.classList.add('text-message');
+    div.appendChild(p);
+
+    const html = window.md ? window.md.render(text || '') : (window.marked?.parse(text || '') || '');
+    p.innerHTML = DOMPurify.sanitize(html);
+}
+
 function appendTextMessage(container, text, isUserMessage, messageId, isHistory = false) {
     // Skip if email composer has taken over this container
     if (container && container.dataset.emailComposer === 'true') {
