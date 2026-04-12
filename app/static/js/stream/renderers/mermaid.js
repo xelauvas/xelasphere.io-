@@ -14,11 +14,13 @@ function initializeMermaidOnce() {
 
 export function createMermaidRenderer() {
     return {
-        create(block, messageContainer) {
+        create(block, messageContainer, opts = {}) {
             const el = document.createElement('div');
-            el.className = 'stream-block block-mermaid is-pending';
+            const noAnim = opts.replay ? ' stream-no-anim' : '';
+            const pending = opts.replay ? '' : ' is-pending';
+            el.className = `stream-block block-mermaid${pending}${noAnim}`;
             el.dataset.blockId = block.id;
-            el.innerHTML = '<span class="pulse-dots">…</span>';
+            el.innerHTML = opts.replay ? '' : '<span class="pulse-dots">…</span>';
             messageContainer.appendChild(el);
             block.el = el;
             return el;
