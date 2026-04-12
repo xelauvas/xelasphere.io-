@@ -648,10 +648,15 @@ def _detect_language(text, hint=''):
                              ' sono ', ' essere ', ' della ', ' delle ', ' gli ', ' buon ',
                              ' stai ', ' bene ', ' grazie ', ' cosa ', ' tutto ']):
         return 'it'
-    # Spanish markers
-    if any(w in t for w in ['¿', '¡', 'hola', ' está ', ' tiene ', ' muy ', ' también ',
-                             ' puede ', ' hacer ', ' los ', ' las ', ' pero ', ' como ',
-                             ' por ', ' para ', ' con ', ' que ', ' esto ']):
+    # Spanish markers — diacritics + common words
+    if any(ch in text for ch in 'ñÑ¿¡') or \
+       any(ch in text for ch in 'áéíóúÁÉÍÓÚ') and \
+       any(w in t for w in [' el ', ' la ', ' es ', ' y ', ' de ', ' que ', ' en ', ' un ', ' una ']) or \
+       any(w in t for w in ['hola', 'gracias', 'claro', 'español', 'hablaré', 'buenos días',
+                             ' está ', ' tiene ', ' muy ', ' también ', ' puede ', ' hacer ',
+                             ' los ', ' las ', ' pero ', ' como ', ' por ', ' para ', ' con ',
+                             ' que ', ' esto ', ' soy ', ' estoy ', ' puedo ', ' quiero ',
+                             ' sí ', ' eres ', ' eres', ' ayudarte ', ' ayuda ']):
         return 'es'
     # French markers
     if any(w in t for w in ['bonjour', 'merci', 'comment', 'ça ', " c'est ", " l'", " d'",
