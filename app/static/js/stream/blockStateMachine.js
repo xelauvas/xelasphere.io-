@@ -103,6 +103,7 @@ export function createBlockStateMachine(emit) {
         const ulStart = line.match(UL_ITEM_RE);
         const olStart = line.match(OL_ITEM_RE);
         if (ulStart) {
+            // _itemCount is closure-internal; never leak into emitted event meta (audit any direct reads of `current` from L3 or renderers).
             openBlock('list-ul', {});
             current._itemCount = 1;
             emit({ type: 'LIST_ITEM_START', blockId: current.id, itemIndex: 0 });
