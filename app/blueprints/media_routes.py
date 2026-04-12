@@ -649,8 +649,17 @@ def _detect_language(text, hint=''):
                              ' sono ', ' essere ', ' della ', ' delle ', ' gli ', ' buon ',
                              ' stai ', ' bene ', ' grazie ', ' cosa ', ' tutto ']):
         return 'it'
-    # French — check before Spanish because French also uses é, en, de, etc.
-    if any(ch in text for ch in 'çÇœŒ') or \
+    # Portuguese — check BEFORE French because Portuguese uses ç, ã, õ, ê like French,
+    # and has many unambiguous words
+    if any(ch in text for ch in 'ãõÃÕ') or \
+       any(w in t for w in ['olá', 'obrigado', 'obrigada', 'português', 'português.',
+                             ' você ', ' não ', ' muito ', ' para ', ' com ', ' isso ',
+                             ' porque ', ' eu ', ' estou ', ' sou ', ' posso ', ' sim ',
+                             ' agora ', ' também ', ' mas ', ' então ', ' precisar ',
+                             ' assistência ', ' traduções ']):
+        return 'pt'
+    # French — uses œ uniquely, plus many common words (no ç — shared with Portuguese)
+    if any(ch in text for ch in 'œŒ') or \
        any(w in t for w in [' je ', ' tu ', ' vous ', ' nous ', " c'est ", " l'", " d'", " j'",
                              'bonjour', 'merci', 'français', 'comment ça', ' oui ', ' non ',
                              ' les ', ' des ', ' est ', ' une ', ' sont ', ' dans ', ' avec ',
@@ -677,11 +686,6 @@ def _detect_language(text, hint=''):
        any(w in t for w in [' und ', ' der ', ' die ', ' das ', ' ist ', ' nicht ', ' sie ',
                              ' auch ', ' aber ', ' wenn ', ' sehr ', ' schon ', ' hallo ']):
         return 'de'
-    # Portuguese markers
-    if any(w in t for w in ['olá', 'obrigado', 'obrigada', ' está ', ' você ', ' não ',
-                             ' muito ', ' como ', ' para ', ' com ', ' isso ', ' porque ']):
-        return 'pt'
-
     return 'en'
 
 
