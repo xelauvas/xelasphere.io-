@@ -876,12 +876,18 @@ def _generate_gemini_tts(text, voice='Kore'):
 
 
 @media_bp.route('/tts/groq', methods=['POST'])
-@limiter.limit("30 per minute")
+@limiter.limit("300 per minute")
 @csrf_required
 @error_handler
 @login_required
 def generate_groq_tts():
-    """Generate text-to-speech: Kokoro (local) → Gemini → Groq fallback chain."""
+    """Generate text-to-speech: Kokoro (local) → Gemini → Groq fallback chain.
+
+    Rate limit is 300/min because the primary path is local Kokoro (unlimited,
+    gated by TTS_SLOTS=2 for concurrency). A long Read-Aloud chunks one story
+    into 30+ requests and used to choke at the old 30/min cap before the
+    cloud fallback ever mattered.
+    """
     # Backpressure — TTS is CPU/GPU heavy downstream (Kokoro sidecar semaphore = 2)
     _bp = acquire_or_503(TTS_SLOTS, timeout=3.0)
     acquired = _bp.__enter__()
