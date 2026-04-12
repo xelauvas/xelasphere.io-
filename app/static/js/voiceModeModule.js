@@ -887,6 +887,7 @@ const VoiceModeModule = (function() {
                         if (parsed.type === 'tts_voice') {
                             _preferredVoice = parsed.voice;
                             _responseLang = parsed.lang || _detectedLang;
+                            console.log('[VoiceMode] tts_voice locked:', _preferredVoice, 'lang:', _responseLang);
                             continue;
                         }
                         if (parsed.type === 'content' && parsed.text) {
@@ -894,6 +895,7 @@ const VoiceModeModule = (function() {
                             ttsBuffer += parsed.text;
                             if (chunkIndex === 0 && ttsBuffer.length < FIRST_CHUNK_MIN) continue;
                             const [sentence, remainder] = _splitAtSentenceBoundary(ttsBuffer);
+                            console.log('[VoiceMode] buffer:', ttsBuffer.length, 'split:', sentence ? sentence.length : 'null');
                             if (sentence) {
                                 ttsBuffer = remainder;
                                 if (chunkIndex === 0) {
@@ -908,11 +910,18 @@ const VoiceModeModule = (function() {
                 }
             }
 
-            if (ttsBuffer.trim() && !_interrupted) {
-                console.log('[VoiceMode] final TTS dispatch:', ttsBuffer.length, 'chars, text:', ttsBuffer.slice(0, 50));
-                _dispatchTTS(ttsBuffer);
+            // If streaming didn't populate the buffer (e.g., non-streaming model that
+            // only sent a final 'done' event), use the full content as fallback.
+            let finalText = ttsBuffer.trim();
+            if (!finalText && fullContent.trim() && chunkIndex === 0) {
+                finalText = fullContent.trim();
+                console.log('[VoiceMode] using fullContent fallback:', finalText.length, 'chars');
+            }
+            if (finalText && !_interrupted) {
+                console.log('[VoiceMode] final TTS dispatch:', finalText.length, 'chars, text:', finalText.slice(0, 50));
+                _dispatchTTS(finalText);
             } else {
-                console.log('[VoiceMode] no final dispatch — buffer:', ttsBuffer.length, 'interrupted:', _interrupted);
+                console.log('[VoiceMode] no final dispatch — buffer:', ttsBuffer.length, 'fullContent:', fullContent.length, 'interrupted:', _interrupted);
             }
             _streamDone = true;
 
