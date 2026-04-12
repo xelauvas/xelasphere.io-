@@ -144,15 +144,15 @@
 }
 
 .rename-modal-input:focus {
-    border-color: rgba(120, 160, 255, 0.55);
+    border-color: rgba(255, 255, 255, 0.28);
     background: rgba(255, 255, 255, 0.08);
 }
 
 .rename-modal-input::selection {
-    background: rgba(120, 160, 255, 0.35);
+    background: rgba(255, 255, 255, 0.18);
 }
 
-/* Primary save button — reuses btn-delete footprint but blue */
+/* Primary save button — vintage ivory, dark text. Clean, no color. */
 .btn-save {
     flex: 1;
     border: none;
@@ -168,13 +168,13 @@
     justify-content: center;
     letter-spacing: -0.2px;
     transition: transform 0.1s ease, filter 0.1s ease;
-    background: #2f6fd8;
-    color: #fff;
+    background: #ece3d2;
+    color: #1f1c17;
 }
 
 .btn-save:active {
     transform: scale(0.97);
-    filter: brightness(0.9);
+    filter: brightness(0.94);
 }
 
 .btn-save:disabled,
