@@ -407,6 +407,11 @@
         const label = modelMeta.model_label || modelMeta.model_id;
         if (!label) return;
 
+        // Idempotency guard — multiple code paths may call this (live stream
+        // finalize + history-replay finalize). Skip if an attribution span
+        // already exists inside this message.
+        if (messageDiv.querySelector('.message-model-attribution')) return;
+
         let text = `via ${label}`;
         if (modelMeta.is_fallback) {
             text += ' (fallback)';

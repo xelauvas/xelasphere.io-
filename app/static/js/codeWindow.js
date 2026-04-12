@@ -2939,6 +2939,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             formData.append('page_id', pageId);
         }
 
+        const activeSid = window.chatManager?.activeSessionId;
+        if (activeSid) {
+            formData.append('session_id', activeSid);
+        }
+
         // Check if using a streamable model (DeepSeek, Moonshot/Kimi, or Auto)
         // Auto mode routes to a streaming-capable model server-side.
         // Skip streaming when images are attached — vision needs the regular /chat endpoint.
@@ -3245,6 +3250,27 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                                     if (window.artifactPanel && !panelHasArtifact && !artifactStreamActive) {
                                         // New format: artifact-meta signals start
+                                        // When we detect an artifact fence, StreamRenderer has already
+                                        // appended the chat-summary prose + the meta fence + the start
+                                        // of the code into the chat DOM. Re-seed the chat with just
+                                        // the prose portion before the fence; the code goes to the
+                                        // artifact panel from here on.
+                                        const _reseedChatWithProse = (fenceIndex) => {
+                                            const proseOnly = streamedContent.slice(0, fenceIndex).trim();
+                                            if (_streamRenderer) {
+                                                _streamRenderer.destroy();
+                                                _streamRenderer = null; window._activeStreamRenderer = null;
+                                            }
+                                            if (typeof targetContent !== 'undefined' && targetContent) {
+                                                targetContent.innerHTML = '';
+                                                if (proseOnly && typeof StreamRenderer !== 'undefined') {
+                                                    const proseRenderer = new StreamRenderer(targetContent, { replay: true });
+                                                    proseRenderer.append(proseOnly);
+                                                    proseRenderer.finalize();
+                                                }
+                                            }
+                                        };
+
                                         const metaMatch = streamedContent.match(/```artifact-meta\s*\n/i);
                                         if (metaMatch) {
                                             // Check if meta block is closed and first file block started
@@ -3252,6 +3278,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             if (fileMatch) {
                                                 artifactStreamActive = true;
                                                 artifactFencePosition = metaMatch.index;
+                                                _reseedChatWithProse(metaMatch.index);
                                                 window.artifactPanel.openStreaming();
                                                 // Switch to first file
                                                 const firstPath = fileMatch[1].trim();
@@ -3274,6 +3301,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             if (fenceMatch) {
                                                 artifactStreamActive = true;
                                                 artifactFencePosition = fenceMatch.index;
+                                                _reseedChatWithProse(fenceMatch.index);
                                                 window.artifactPanel.openStreaming();
                                                 const fenceEnd = streamedContent.indexOf('\n', fenceMatch.index);
                                                 if (fenceEnd !== -1) {
@@ -3987,6 +4015,17 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     return null;
                 }
                 console.error('Streaming error:', streamError);
+                // Tear down any partial StreamRenderer before the fallback path
+                // writes into the same container — otherwise the legacy
+                // displayMessage path double-renders on top of stale block DOM.
+                if (_streamRenderer) {
+                    _streamRenderer.destroy();
+                    _streamRenderer = null; window._activeStreamRenderer = null;
+                }
+                if (_streamMsgId) {
+                    const partialEl = document.getElementById(_streamMsgId);
+                    if (partialEl) partialEl.remove();
+                }
                 // Fall back to regular endpoint on streaming error
                 console.log('Falling back to regular /chat endpoint');
             }

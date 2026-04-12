@@ -17,6 +17,13 @@ export function createProseRenderer() {
         },
         update(block) {
             if (!block.el) return;
+            if (typeof window.marked?.parse !== 'function') {
+                // marked hasn't loaded yet (replay can race page init).
+                // Render as preformatted text rather than throwing; the
+                // next update pass will upgrade to real markdown.
+                block.el.textContent = block.text;
+                return;
+            }
             const rawHTML = window.marked.parse(block.text);
             const safeHTML = window.DOMPurify
                 ? window.DOMPurify.sanitize(rawHTML)

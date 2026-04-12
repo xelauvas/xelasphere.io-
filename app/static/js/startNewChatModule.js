@@ -4234,6 +4234,13 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 if (showButtons && typeof appendActionButtons === 'function') {
                     appendActionButtons(messageContent, id);
                 }
+                // Model attribution ("via CODE"/"via THINK"/etc.) — live stream
+                // applies this inline at finalize; history replay used to skip
+                // it entirely because StreamRenderer bypasses appendTextMessage
+                // where applyAttribution lives.
+                if (modelMeta && typeof window.addModelAttribution === 'function') {
+                    window.addModelAttribution(messageDiv, modelMeta);
+                }
             } else {
                 handleComplexMessage(messageContent, safeContent, messageType, id, showButtons, isHistory);
             }

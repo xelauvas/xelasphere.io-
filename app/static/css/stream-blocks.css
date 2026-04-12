@@ -116,6 +116,17 @@
     margin-top: 0.75em;
 }
 
+/* Post-stream injections (crypto chart wrapper, email composer card, image
+   caption, chart-intro-text, etc.) append to .message-content AFTER the
+   stream blocks. They aren't wrapped in .stream-block, so the adjacent-
+   sibling rule above doesn't match them and they land flush against the
+   last paragraph. Restore rhythm for any non-stream-block that directly
+   follows a stream-block. Action buttons are excluded — they have their
+   own spacing. */
+.text-message .stream-block + *:not(.stream-block):not(.action-buttons) {
+    margin-top: 0.75em;
+}
+
 .text-message .stream-block.block-heading + .stream-block {
     margin-top: 1em;
 }
