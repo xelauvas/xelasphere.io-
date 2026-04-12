@@ -327,11 +327,23 @@ def build_generation_prompt(context: Dict[str, Any]) -> str:
 
     lines = []
 
-    # Memories section
+    # Memories section — handles both dict-shaped and MemoryItem-dataclass
+    # entries (store.get_all returns the latter).
     lines.append("## User Memories")
     if memories:
         for m in memories:
-            lines.append(f"- [{m.get('type', '')}] {m.get('key', '')}: {m.get('value', '')}")
+            if isinstance(m, dict):
+                mtype = m.get('type', '')
+                mkey = m.get('key', '')
+                mval = m.get('value', '')
+            else:
+                mtype = getattr(m, 'type', '')
+                mkey = getattr(m, 'key', '')
+                mval = getattr(m, 'value', '')
+            # MemoryType is an Enum — unwrap to its name/value for readable output
+            if hasattr(mtype, 'value'):
+                mtype = mtype.value
+            lines.append(f"- [{mtype}] {mkey}: {mval}")
     else:
         lines.append("(none)")
 
