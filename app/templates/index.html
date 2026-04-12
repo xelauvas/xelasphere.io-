@@ -89,6 +89,15 @@
 
     <!-- morphdom + StreamRenderer -->
     <script src="{{ url_for('static', filename='js/morphdom.min.js') }}"></script>
+    <script>
+        // Promise that resolves when streamRenderer.js ES module has executed
+        // and window.StreamRenderer is available. Used by classic scripts
+        // (codeWindow.js, startNewChatModule.js) to await module readiness
+        // before creating a StreamRenderer or skipping to legacy fallback.
+        window._streamRendererReadyPromise = new Promise((resolve) => {
+            window._streamRendererReadyResolve = resolve;
+        });
+    </script>
     <script type="module" src="{{ url_for('static', filename='js/streamRenderer.js') }}"></script>
 
     <!-- Mermaid Diagrams -->

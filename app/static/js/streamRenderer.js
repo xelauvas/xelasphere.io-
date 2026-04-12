@@ -157,4 +157,8 @@ class StreamRenderer {
 }
 
 window.StreamRenderer = StreamRenderer;
+if (typeof window._streamRendererReadyResolve === 'function') {
+    window._streamRendererReadyResolve();
+    delete window._streamRendererReadyResolve;
+}
 export { StreamRenderer };

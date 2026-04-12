@@ -1307,6 +1307,9 @@ window.isGuestMode = isGuestMode;
 function isTypingAnimationActive() {
     if (typeof window === 'undefined') return false;
 
+    // Check if a live StreamRenderer is rendering this or any session
+    if (window._activeStreamRenderer) return true;
+
     // Check old typewriter animator
     const animator = window.activeAnimator;
     if (animator && animator.state && !animator.state.isStopped) {
@@ -2972,6 +2975,14 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         if (isStreamable) {
             // Use streaming endpoint for DeepSeek and Moonshot/Kimi models
             try {
+                // SL-1: ensure streamRenderer.js ES module is loaded before attempting to
+                // use window.StreamRenderer. Short timeout so slow loads fall back gracefully.
+                if (window._streamRendererReadyPromise && typeof window.StreamRenderer !== 'function') {
+                    await Promise.race([
+                        window._streamRendererReadyPromise,
+                        new Promise(r => setTimeout(r, 500))
+                    ]);
+                }
                 const streamResponse = await fetch('/chat/stream', {
                     method: 'POST',
                     body: formData,
@@ -3512,6 +3523,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 // If session is no longer active, buffer the response and don't update UI
                 if (!isSessionActive()) {
                     console.log('Session switched during streaming, buffering response for:', requestSessionId);
+                    // Clean up live StreamRenderer before abandoning this response
+                    if (_streamRenderer) {
+                        _streamRenderer.destroy();
+                        _streamRenderer = null;
+                        window._activeStreamRenderer = null;
+                    }
                     if (bgRequest) {
                         BackgroundRequestManager.completeRequest(requestSessionId, completionData);
                     }
@@ -4379,8 +4396,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
     } catch (error) {
         // Clean up StreamRenderer if stream failed mid-render
         if (_streamRenderer) {
-            _streamRenderer.finalize();
+            _streamRenderer.destroy();
             _streamRenderer = null; window._activeStreamRenderer = null;
+        }
+        // Clear any partially-rendered StreamRenderer DOM so fallback path starts clean
+        if (_streamMsgId) {
+            const partialEl = document.getElementById(_streamMsgId);
+            if (partialEl) partialEl.remove();
         }
         if (error.name === 'AbortError') {
             console.log('Request was aborted');
@@ -5058,6 +5080,13 @@ function animateCodeCorrection(originalCode, debuggedCode, codeWrapper, options 
 function appendTextMessage(container, text, isUserMessage, messageId, isHistory = false) {
     // Skip if email composer has taken over this container
     if (container && container.dataset.emailComposer === 'true') {
+        return Promise.resolve();
+    }
+
+    // RC-3 guard: if a live StreamRenderer is rendering this container, bail
+    // to avoid double-rendering (ProgressiveTextDisplay would write into a
+    // container StreamRenderer is actively managing).
+    if (!isUserMessage && window._activeStreamRenderer) {
         return Promise.resolve();
     }
 

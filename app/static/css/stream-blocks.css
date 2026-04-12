@@ -23,7 +23,8 @@
     .block-code,
     .block-math,
     .block-mermaid,
-    .block-list-item {
+    .block-list-item,
+    .stream-cursor {
         animation: none;
     }
 }

@@ -1317,6 +1317,12 @@ async loadChatHistory(pageToken = null, limit = 10) {
             this.ensureSessionPages(sessionId);
             if (requestEpoch !== this.switchEpoch) return;
 
+            if (window._streamRendererReadyPromise && typeof window.StreamRenderer !== 'function') {
+                await Promise.race([
+                    window._streamRendererReadyPromise,
+                    new Promise(r => setTimeout(r, 500))
+                ]);
+            }
             this.renderActivePage(sessionId);
             if (requestEpoch !== this.switchEpoch) return;
     
@@ -3726,16 +3732,24 @@ async loadChatHistory(pageToken = null, limit = 10) {
      * @param {string} sessionId - The session ID to delete.
      */
     showDeleteModal(sessionId) {
+        const session = this.chatHistory[sessionId];
+        const rawName = session?.session_name;
+        const chatName = (rawName && !this.isGenericName(rawName)) ? rawName : 'this chat';
+        const safeName = String(chatName).replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+
         // Create modal elements
         const modalOverlay = document.createElement('div');
         modalOverlay.className = 'modal-overlay';
         modalOverlay.innerHTML = `
             <div class="modal-content">
-                <h2>Delete chat</h2>
-                <p>Are you sure you want to delete this chat?</p>
+                <h2>Delete chat?</h2>
+                <p>This will delete <strong>${safeName}.</strong></p>
+                <p>Visit <a href="/settings" target="_blank" rel="noopener">settings</a> to delete any memories saved during this chat.</p>
                 <div class="modal-actions">
-                    <button class="btn-delete">Delete</button>
                     <button class="btn-cancel">Cancel</button>
+                    <button class="btn-delete">Delete</button>
                 </div>
             </div>
         `;
