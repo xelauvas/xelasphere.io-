@@ -319,19 +319,27 @@ const VoiceModeModule = (function() {
             const bFrac = bandF - bLow;
             const bandVal = _bands[bLow] * (1 - bFrac) + _bands[bHigh] * bFrac;
 
-            // Multi-layered wave motion — rich, alive, dancing
-            const wave1 = Math.sin(_waveTime * 4.0 + nx * Math.PI * 6) * 0.5;
-            const wave2 = Math.sin(_waveTime * 2.3 + nx * Math.PI * 3) * 0.4;
-            const wave3 = Math.sin(_waveTime * 1.1 + nx * Math.PI * 1.5) * 0.35;
-            const wave4 = Math.sin(_waveTime * 6.5 + nx * Math.PI * 8) * 0.2;
-            const noise1 = _noise2D(nx * 5, _waveTime * 1.2) * 0.4;
-            const noise2 = _noise2D(nx * 2 + 10, _waveTime * 0.4) * 0.3;
+            // Audio amplitude at this band — driven by actual sound
+            const audioAmp = bandVal * maxAmp;
 
-            // Combined displacement: audio drives amplitude, wave adds organic motion
-            const audioDisp = bandVal * maxAmp;
-            const idleAmp = maxAmp * 0.55; // 55% of max for rich idle motion
-            const idleDisp = (wave1 + wave2 + wave3 + wave4 + noise1 + noise2) * idleAmp;
-            const disp = audioDisp + idleDisp;
+            // Organic motion that ANIMATES the audio shape (so it flows instead of being static)
+            // The motion is modulated by audio intensity, not added on top
+            const flow1 = Math.sin(_waveTime * 3.5 + nx * Math.PI * 5);
+            const flow2 = Math.sin(_waveTime * 2.1 + nx * Math.PI * 3);
+            const flow = (flow1 + flow2 * 0.7) / 1.7; // -1..1
+
+            // When audio is present, wave amplitude = audio band value, modulated by flow
+            // When silent, wave shows a small breathing motion
+            let disp;
+            if (_smoothEnergy > 0.02) {
+                // Active: audio drives amplitude, flow shapes the motion
+                disp = audioAmp * flow;
+            } else {
+                // Silent: gentle breathing at low amplitude
+                const idleWave = Math.sin(_waveTime * 1.5 + nx * Math.PI * 2) * 0.5;
+                const idleNoise = _noise2D(nx * 3, _waveTime * 0.5) * 0.3;
+                disp = (idleWave + idleNoise) * maxAmp * 0.1;
+            }
 
             // Edge taper — fades to zero at both ends
             const taper = Math.sin(nx * Math.PI);
