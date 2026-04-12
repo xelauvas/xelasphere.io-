@@ -288,7 +288,7 @@ const VoiceModeModule = (function() {
         const w = _canvas.width / _dpr;
         const h = _canvas.height / _dpr;
         const cy = h / 2;
-        const maxAmp = h * 0.42; // max displacement from center
+        const maxAmp = h * 0.48; // max displacement — uses almost full height
 
         _ctx.clearRect(0, 0, w, h);
 
@@ -321,8 +321,14 @@ const VoiceModeModule = (function() {
             const bFrac = bandF - bLow;
             const bandVal = _bands[bLow] * (1 - bFrac) + _bands[bHigh] * bFrac;
 
-            // Audio amplitude at this band — driven by actual sound
-            const audioAmp = bandVal * maxAmp * 1.3; // boost
+            // Exponential curve makes loud sounds HUGE while quiet stays small
+            // bandVal^1.5 = dramatic peak scaling
+            const peakScale = Math.pow(bandVal, 1.4);
+            // Neighbor-aware boost: if adjacent bands are also loud, amplify more
+            const bLeft = _bands[Math.max(0, bLow - 1)] || 0;
+            const bRight = _bands[Math.min(NUM_BANDS - 1, bHigh + 1)] || 0;
+            const neighborBoost = (bLeft + bRight) * 0.5; // 0..1
+            const audioAmp = peakScale * maxAmp * (1.0 + neighborBoost * 0.8);
 
             // Flowing motion patterns — multiple sines at different speeds
             const flow1 = Math.sin(_waveTime * 5.0 + nx * Math.PI * 7);
@@ -335,8 +341,8 @@ const VoiceModeModule = (function() {
 
             let disp;
             if (_smoothEnergy > 0.015) {
-                // Active: audio drives amplitude, flow+jitter shape the motion
-                disp = audioAmp * flow + jitter * maxAmp * 0.6;
+                // Active: dramatic peaks from exponential scaling
+                disp = audioAmp * flow + jitter * maxAmp * 0.7;
             } else {
                 // Silent: gentle organic breathing
                 const idleWave = Math.sin(_waveTime * 1.5 + nx * Math.PI * 2) * 0.5;
