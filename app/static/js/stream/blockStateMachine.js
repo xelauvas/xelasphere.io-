@@ -1,3 +1,6 @@
+const UL_ITEM_RE = /^[-+*] (.*)$/;
+const OL_ITEM_RE = /^\d+\. (.*)$/;
+
 export function createBlockStateMachine(emit) {
     let rawBuffer = '';
     let cursor = 0;
@@ -66,8 +69,8 @@ export function createBlockStateMachine(emit) {
 
         // Inside a list: handle item continuation
         if (current && (current.type === 'list-ul' || current.type === 'list-ol')) {
-            const ulItem = line.match(/^[-+*] (.*)$/);
-            const olItem = line.match(/^\d+\. (.*)$/);
+            const ulItem = line.match(UL_ITEM_RE);
+            const olItem = line.match(OL_ITEM_RE);
             if ((current.type === 'list-ul' && ulItem) || (current.type === 'list-ol' && olItem)) {
                 emit({ type: 'LIST_ITEM_END', blockId: current.id, itemIndex: current.meta.itemCount - 1 });
                 current.meta.itemCount++;
@@ -81,8 +84,8 @@ export function createBlockStateMachine(emit) {
         }
 
         // Starting a new list
-        const ulStart = line.match(/^[-+*] (.*)$/);
-        const olStart = line.match(/^\d+\. (.*)$/);
+        const ulStart = line.match(UL_ITEM_RE);
+        const olStart = line.match(OL_ITEM_RE);
         if (ulStart) {
             openBlock('list-ul', { itemCount: 1 });
             emit({ type: 'LIST_ITEM_START', blockId: current.id, itemIndex: 0 });
