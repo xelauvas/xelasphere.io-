@@ -672,18 +672,39 @@ const VoiceModeModule = (function() {
         const minChunk = 40;
         if (buffer.length < minChunk) return [null, buffer];
         let lastSplit = -1;
+        // ASCII + CJK sentence terminators
+        const terminators = '.?!。？！…';
+        // CJK comma / pause punctuation — fallback break points
+        const cjkPauses = '、，';
         for (let i = minChunk; i < buffer.length; i++) {
             const ch = buffer[i];
-            if ((ch === '.' || ch === '?' || ch === '!') &&
-                (i + 1 >= buffer.length || buffer[i + 1] === ' ' || buffer[i + 1] === '\n')) {
-                lastSplit = i + 1;
+            // Sentence terminators — require space/newline AFTER for ASCII, immediate for CJK
+            if (terminators.includes(ch)) {
+                const next = buffer[i + 1];
+                const isCJKTerm = '。？！…'.includes(ch);
+                if (isCJKTerm || i + 1 >= buffer.length || next === ' ' || next === '\n') {
+                    lastSplit = i + 1;
+                }
             }
             if (ch === '\n' && i > minChunk) lastSplit = i + 1;
         }
         if (lastSplit > 0) return [buffer.substring(0, lastSplit).trim(), buffer.substring(lastSplit)];
+        // Fallback 1: CJK commas/pauses when buffer is getting long
+        if (buffer.length > 80) {
+            for (let i = buffer.length - 1; i >= minChunk; i--) {
+                if (cjkPauses.includes(buffer[i])) {
+                    return [buffer.substring(0, i + 1).trim(), buffer.substring(i + 1)];
+                }
+            }
+        }
+        // Fallback 2: break at space for Latin-script long text
         if (buffer.length > 200) {
             const lastSpace = buffer.lastIndexOf(' ', 200);
             if (lastSpace > minChunk) return [buffer.substring(0, lastSpace).trim(), buffer.substring(lastSpace)];
+        }
+        // Fallback 3: hard break for CJK that has no punctuation at all
+        if (buffer.length > 150) {
+            return [buffer.substring(0, 150).trim(), buffer.substring(150)];
         }
         return [null, buffer];
     }
