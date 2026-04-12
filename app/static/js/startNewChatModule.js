@@ -197,6 +197,36 @@ class ChatManager {
         });
 
         this.elements.searchModalInput?.addEventListener('input', (event) => this.handleSearchInput(event.target.value));
+
+        // Keyboard nav: arrow keys move highlight, Enter opens the active row.
+        this.elements.searchModalInput?.addEventListener('keydown', (event) => {
+            const results = this.elements.searchResults;
+            if (!results) return;
+            const rows = results.querySelectorAll('.history-search-result');
+            if (!rows.length) return;
+            let idx = Array.from(rows).findIndex(r => r.classList.contains('is-active'));
+            if (idx < 0) idx = 0;
+
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                const next = Math.min(idx + 1, rows.length - 1);
+                rows[idx]?.classList.remove('is-active');
+                rows[next].classList.add('is-active');
+                rows[next].scrollIntoView({ block: 'nearest' });
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                const prev = Math.max(idx - 1, 0);
+                rows[idx]?.classList.remove('is-active');
+                rows[prev].classList.add('is-active');
+                rows[prev].scrollIntoView({ block: 'nearest' });
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                const active = rows[idx] || rows[0];
+                const sessionId = active?.dataset.sessionId;
+                this.closeHistorySearchModal();
+                if (sessionId) this.switchSession(sessionId);
+            }
+        });
         this.elements.searchCloseTargets?.forEach(target => {
             target.addEventListener('click', () => this.closeHistorySearchModal());
         });
@@ -1713,14 +1743,20 @@ async loadChatHistory(pageToken = null, limit = 10) {
         }
 
         const fragment = document.createDocumentFragment();
-        limited.forEach(session => {
+        // Claude-style row: [chat-icon] [name] [time]
+        const CHAT_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+        limited.forEach((session, idx) => {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'history-search-result';
             button.dataset.sessionId = session.session_id;
+            button.dataset.idx = String(idx);
+            if (idx === 0) button.classList.add('is-active');
 
-            const titleRow = document.createElement('div');
-            titleRow.className = 'history-result-title';
+            const icon = document.createElement('span');
+            icon.className = 'history-result-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.innerHTML = CHAT_ICON_SVG;
 
             const name = document.createElement('span');
             name.className = 'history-result-name';
@@ -1730,15 +1766,9 @@ async loadChatHistory(pageToken = null, limit = 10) {
             timestamp.className = 'history-result-time';
             timestamp.textContent = this.formatSessionTimestamp(session.sessionDate);
 
-            titleRow.appendChild(name);
-            titleRow.appendChild(timestamp);
-
-            const snippet = document.createElement('p');
-            snippet.className = 'history-result-snippet';
-            snippet.textContent = this.getSessionPreview(session);
-
-            button.appendChild(titleRow);
-            button.appendChild(snippet);
+            button.appendChild(icon);
+            button.appendChild(name);
+            button.appendChild(timestamp);
 
             fragment.appendChild(button);
         });

@@ -265,16 +265,23 @@ body.sidebar-collapsed .left-sidebar .sidebar-content {
     background: rgba(255, 255, 255, 0.08);
 }
 
+/* ══ Search palette — Claude-style ═════════════════════════════════════
+   Top-anchored modal, single flat list with icon + label + meta.
+   Dark #1a1a1a shell, no blur, no snippet line. Arrow-key navigation.
+   ════════════════════════════════════════════════════════════════════ */
+
 .history-search-modal {
     position: fixed;
     inset: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    padding: 2rem 1rem 1rem;
     z-index: 1600;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.25s ease;
+    transition: opacity 0.18s ease;
+    font-family: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'SF Pro Display', Arial, sans-serif;
 }
 
 .history-search-modal.open {
@@ -285,161 +292,223 @@ body.sidebar-collapsed .left-sidebar .sidebar-content {
 .history-search-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(8, 8, 8, 0.8);
-    backdrop-filter: blur(0.35rem);
+    background: rgba(0, 0, 0, 0.45);
 }
 
 .history-search-dialog {
     position: relative;
-    width: min(32rem, 92vw);
-    /* Fixed height — do NOT shrink to content. Only the inner results
-       list scrolls; the shell stays put as the user types / selects. */
-    height: min(80vh, 36rem);
-    max-height: 80vh;
-    background: rgba(18, 18, 18, 0.95);
-    border: 0.0625rem solid rgba(255, 255, 255, 0.08);
-    border-radius: 1rem;
-    box-shadow: 0 2rem 3.5rem rgba(0, 0, 0, 0.7);
-    padding: 1rem 1.25rem;
+    width: 100%;
+    max-width: 740px;
+    max-height: calc(100vh - 4rem);
+    background: #1a1a1a;
+    border: 0.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    overflow: hidden;
     z-index: 1;
+    transform: translateY(-6px);
+    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.history-search-modal.open .history-search-dialog {
+    transform: translateY(0);
+}
+
+/* ── Header (search input row) ── */
 .history-search-header {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
 }
 
 .history-search-input {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 0.75rem;
-    padding: 0.75rem 1rem;
-    border: 0.0625rem solid rgba(255, 255, 255, 0.08);
+    gap: 10px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 14px 16px;
 }
 
 .history-search-icon {
-    color: rgba(255, 255, 255, 0.5);
-    width: 1.25rem;
-    height: 1.25rem;
+    color: #666;
+    width: 16px;
+    height: 16px;
     display: inline-flex;
+    flex-shrink: 0;
 }
 
 .history-search-icon svg {
     width: 100%;
     height: 100%;
     stroke: currentColor;
+    stroke-width: 1.8;
 }
 
 .history-search-input input {
     flex: 1;
+    min-width: 0;
     border: none;
     background: transparent;
-    color: #fff;
-    font-size: 0.95rem;
+    color: #e0ddd8;
+    caret-color: #e0ddd8;
+    font-size: 15px;
+    font-weight: 400;
     outline: none;
+    padding: 0;
+}
+
+.history-search-input input::placeholder {
+    color: #666;
 }
 
 .history-search-close {
+    flex-shrink: 0;
+    background: transparent;
     border: none;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.7);
-    border-radius: 0.35rem;
-    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    padding: 4px;
     cursor: pointer;
-    font-size: 0.8rem;
+    color: #666;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+    font-family: inherit;
+    transition: background 0.12s ease, color 0.12s ease;
+    /* replace text "Esc" with icon via CSS (see JS patch note below) */
+    font-size: 0;
+}
+
+.history-search-close::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    background-color: currentColor;
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M18 6 6 18M6 6l12 12'/></svg>") center / contain no-repeat;
+            mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M18 6 6 18M6 6l12 12'/></svg>") center / contain no-repeat;
+    display: inline-block;
 }
 
 .history-search-close:hover {
-    background: rgba(255, 255, 255, 0.16);
-    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
+    color: #e0ddd8;
 }
 
+/* Drop the subtitle line from the old design — not in reference */
 .history-search-hint {
-    font-size: 0.82rem;
-    color: rgba(255, 255, 255, 0.45);
-    margin: 0;
+    display: none;
 }
 
+/* ── Results list ── natural height up to 440px, floor so dialog is
+   stable when filter narrows (no jitter as you type) ── */
 .history-search-results {
-    flex: 1 1 0;          /* fill remaining vertical space in the fixed shell */
-    min-height: 0;         /* allow flex child to scroll its overflow */
+    max-height: 440px;
+    min-height: 280px;
     overflow-y: auto;
     overflow-x: hidden;
-    padding-right: 0.25rem;
+    padding: 6px 0;
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-    /* Smooth scroll feel when arrow-keying through results */
-    scroll-behavior: smooth;
+    gap: 0;
     -webkit-overflow-scrolling: touch;
 }
 
-.history-search-results::-webkit-scrollbar {
-    width: 0.4rem;
-}
-
+.history-search-results::-webkit-scrollbar { width: 6px; }
 .history-search-results::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.12);
-    border-radius: 1rem;
+    border-radius: 999px;
+}
+.history-search-results::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
 }
 
+/* ── Single result row — horizontal: icon · label · meta ── */
 .history-search-result {
-    width: 100%;
-    text-align: left;
-    border: 0.0625rem solid rgba(255, 255, 255, 0.06);
-    border-radius: 0.75rem;
-    background: rgba(255, 255, 255, 0.02);
-    padding: 0.75rem;
-    color: inherit;
-    cursor: pointer;
-    transition: border-color 0.2s ease, background 0.2s ease;
-}
-
-.history-search-result:hover {
-    border-color: rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.04);
-}
-
-.history-result-title {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.75);
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    padding: 10px 16px;
+    color: inherit;
+    cursor: pointer;
+    transition: background 0.1s ease;
+    font-family: inherit;
+}
+
+.history-search-result:hover,
+.history-search-result.is-active {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.history-result-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: #555;
+    transition: color 0.1s ease;
+}
+
+.history-search-result:hover .history-result-icon,
+.history-search-result.is-active .history-result-icon {
+    color: #aaa;
+}
+
+.history-result-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
 }
 
 .history-result-name {
-    font-weight: 500;
-    font-size: 0.83rem;
-    color: #fff;
-    margin-right: 0.5rem;
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 400;
+    color: #b0ada8;
+    letter-spacing: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    transition: color 0.1s ease, font-weight 0.1s ease;
+}
+
+.history-search-result:hover .history-result-name,
+.history-search-result.is-active .history-result-name {
+    color: #e8e5e0;
+    font-weight: 500;
 }
 
 .history-result-time {
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.45);
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 400;
+    color: #555;
+    font-variant-numeric: tabular-nums;
 }
 
-.history-result-snippet {
-    margin: 0.4rem 0 0;
-    font-size: 0.82rem;
-    color: rgba(255, 255, 255, 0.7);
-}
+/* The title-wrapper + snippet from the old design are no longer used,
+   but keep display:contents / display:none so old markup (if any
+   lingers in a cached page) still renders acceptably. */
+.history-result-title { display: contents; }
+.history-result-snippet { display: none; }
 
 .history-search-empty {
-    padding: 2rem 0.5rem;
+    padding: 24px;
     text-align: center;
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 0.9rem;
+    color: #555;
+    font-size: 14px;
 }
 
 body.history-search-open {

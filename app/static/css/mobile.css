@@ -2634,25 +2634,48 @@ body.is-ios .arrow-down {
         padding: 0.85rem 1rem;
     }
 
-    /* === History Search Modal — stable size, inner scroll === */
+    /* === History Search Modal — Claude-style, mobile === */
+    .history-search-modal {
+        padding: 1rem 0.75rem;
+        align-items: flex-start;
+    }
+
     .history-search-dialog {
-        width: calc(100% - 1.5rem);
+        width: 100%;
         max-width: none;
-        height: 85vh;
-        max-height: 85vh;
-        margin: 0.75rem;
+        max-height: calc(100vh - 2rem);
+        border-radius: 14px;
+    }
+
+    .history-search-results {
+        max-height: calc(100vh - 10rem);
+        min-height: 200px;
     }
 
     .history-search-input {
-        padding: 0.65rem 0.85rem;
+        padding: 14px 14px;
+        gap: 10px;
     }
 
     .history-search-input input {
-        font-size: 1rem; /* Prevent zoom on iOS */
+        font-size: 16px; /* Prevent iOS zoom on focus */
     }
 
     .history-search-result {
-        padding: 0.65rem;
+        padding: 10px 10px;
+        min-height: 44px;
+    }
+
+    .history-result-name {
+        font-size: 14px;
+    }
+
+    .history-result-time {
+        font-size: 11px;
+    }
+
+    .history-result-snippet {
+        font-size: 12.5px;
     }
 
     /* === Images Gallery Modal === */
