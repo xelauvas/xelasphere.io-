@@ -93,19 +93,24 @@ MERMAID       ```mermaid … ```  (special-case of CODE_FENCE)
 
 ### Transitions
 
-All transitions fire on line-start characters (position 0 of a line):
+All transitions fire on line-start characters (position 0 of a line). Triggers listed with a "line-start" guard must match at column 0; otherwise the character is treated as content.
 
-| Trigger (line-start) | Action |
+| Trigger (line-start unless noted) | Action |
 |---|---|
-| `` ``` ``  followed by `mermaid` | end current block; start MERMAID |
-| `` ``` ``  optional language tag | end current block; start CODE_FENCE |
+| `` ``` `` followed by `mermaid` | end current block; start MERMAID |
+| `` ``` `` optional language tag | end current block; start CODE_FENCE |
+| `` ``` `` while in CODE_FENCE or MERMAID | emit `BLOCK_END { reason: 'natural' }`, return to PARAGRAPH |
 | `#{1,6} ` | end current block; start HEADING (single-line) |
 | `- `, `+ `, `* ` | if not in LIST_UL: end current, start LIST_UL. Otherwise: emit list-item boundary |
 | `\d+\. ` | same as above for LIST_OL |
 | `> ` | end current block; start BLOCKQUOTE |
-| `$$` | end current block; start MATH_BLOCK |
+| `$$` (line-start only — guards against inline `$$50`) | end current block; start MATH_BLOCK |
+| `$$` while in MATH_BLOCK (line-start only) | emit `BLOCK_END { reason: 'natural' }`, return to PARAGRAPH |
+| non-empty line matching no opener, while in LIST_UL/LIST_OL | append to current list item's text (continuation line — not a new item, not a new paragraph) |
 | other | if no active block: start PARAGRAPH |
 | blank line (`\n\n`) while in PARAGRAPH/LIST_UL/LIST_OL/BLOCKQUOTE | end current block |
+
+Inline `$…$` math is not a block trigger; it stays inside prose blocks and is handled by KaTeX auto-render on `BLOCK_END` of the enclosing prose block.
 
 ### Events emitted
 
@@ -320,6 +325,6 @@ The existing `ProgressiveTextDisplay` path (history replay, background session b
 ## Success criteria
 
 - Side-by-side with ChatGPT and Claude on three canonical prompts (long code block, nested list, mixed prose + math), XelaSphere's streaming visibly feels smoother — demonstrable on a screen recording.
+- **Hard number**: live-block re-render CPU is flat across response length — no more than 2× cost at 2000 words vs 200 words, measured via `performance.mark` / `performance.measure` around the RAF tick.
 - Zero regressions in the existing streaming test set.
-- Live-block per-frame CPU measurably flat across response length.
 - The block AST is usable, next quarter, as the substrate for inline structured content without further pipeline rework.
