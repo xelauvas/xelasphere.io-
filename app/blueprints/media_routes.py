@@ -884,9 +884,19 @@ def generate_groq_tts():
     lang_hint = (payload.get('lang') or '').strip()
     voice_context = (payload.get('voice_context') or '').strip()  # Read Aloud sends full text for smart picking
 
-    # ── Auto-detect language from text if not provided ──
+    # ── Auto-detect language from the actual text ──
+    # Don't blindly trust the hint — it may come from the user prompt, not the AI response.
+    # Always run detection; use the hint only as a fallback signal.
     pick_text = voice_context or text
-    lang = lang_hint if lang_hint in ('en', 'fr', 'ja', 'zh', 'es', 'hi', 'it') else _detect_language(pick_text, lang_hint)
+    detected = _detect_language(pick_text, lang_hint)
+    # If detection finds a non-English language, use it (stronger signal than hint).
+    # Otherwise fall back to the hint if valid, else English.
+    if detected != 'en':
+        lang = detected
+    elif lang_hint in ('en', 'fr', 'ja', 'zh', 'es', 'hi', 'it', 'ro', 'de', 'pt'):
+        lang = lang_hint
+    else:
+        lang = 'en'
 
     # ── Dynamic voice based on content ──
     if voice == 'autumn' or voice == 'auto':
