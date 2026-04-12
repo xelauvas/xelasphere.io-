@@ -1316,12 +1316,6 @@ function isTypingAnimationActive() {
         return true;
     }
 
-    // Check ProgressiveTextDisplay for current session
-    const currentSessionId = window.chatManager?.activeSessionId;
-    if (currentSessionId && ProgressiveTextDisplay?.hasActiveDisplay?.(currentSessionId)) {
-        return true;
-    }
-
     return false;
 }
 
@@ -3200,12 +3194,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             targetContent.innerHTML = '';
                                             _streamRenderer = new StreamRenderer(targetContent);
                                             window._activeStreamRenderer = _streamRenderer;
-                                            // Stop any active ProgressiveTextDisplay for this session
-                                            var sid = window.chatManager?.activeSessionId || 'default';
-                                            if (typeof ProgressiveTextDisplay !== 'undefined') {
-                                                ProgressiveTextDisplay.complete(sid);
-                                                ProgressiveTextDisplay.remove(sid);
-                                            }
                                         } else {
                                             console.warn('[StreamRenderer] No target element — falling back');
                                             _streamRenderer = null; window._activeStreamRenderer = null;
@@ -4558,12 +4546,6 @@ function abortMessage() {
     isRequestInProgress = false;
     isTypingStopped = true;
 
-    // Stop ProgressiveTextDisplay for current session
-    if (currentSessionId && ProgressiveTextDisplay) {
-        ProgressiveTextDisplay.complete(currentSessionId);
-        ProgressiveTextDisplay.remove(currentSessionId);
-    }
-
     // Also stop the old typewriter animator if active
     if (window.activeAnimator) {
         window.activeAnimator.stop();
@@ -4575,7 +4557,7 @@ function abortMessage() {
         window._activeStreamRenderer = null;
     }
 
-    // Remove all cursors from the DOM (both StreamRenderer and ProgressiveTextDisplay)
+    // Remove all cursors from the DOM
     document.querySelectorAll('.streaming-cursor, .stream-cursor').forEach(el => el.remove());
 
     // Hide thinking indicator and pulsing dot

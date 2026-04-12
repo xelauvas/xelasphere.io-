@@ -1490,13 +1490,6 @@ function clearChat(options = {}) {
 
     console.debug('clearChat executing', debugInfo);
 
-    // Clear ProgressiveTextDisplay for the current session to prevent duplicates
-    const currentSessionId = window.chatManager?.activeSessionId;
-    if (currentSessionId && window.ProgressiveTextDisplay) {
-        window.ProgressiveTextDisplay.complete(currentSessionId);
-        window.ProgressiveTextDisplay.remove(currentSessionId);
-    }
-
     const chatDisplay = document.getElementById('chat-display');
     const chatBox = document.getElementById('chatbox');
     if (chatDisplay) {
