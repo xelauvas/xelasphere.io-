@@ -241,16 +241,18 @@ const VoiceModeModule = (function() {
             for (let i = start; i < start + binsPerBand && i < binCount; i++) {
                 sum += dataArray[i];
             }
-            const avg = sum / (binsPerBand * 255); // 0..1
-            // Smooth: fast attack, slower release — snaps to sound, fades gracefully
-            const speed = avg > _bands[b] ? 0.5 : 0.12;
+            let avg = sum / (binsPerBand * 255); // 0..1
+            // Boost low signals so quiet speech still dances
+            avg = Math.min(1, Math.pow(avg, 0.7) * 1.4);
+            // Fast attack for instant reaction, quick release for springiness
+            const speed = avg > _bands[b] ? 0.65 : 0.18;
             _bands[b] += (avg - _bands[b]) * speed;
         }
         // Overall energy
         let total = 0;
         for (let b = 0; b < NUM_BANDS; b++) total += _bands[b];
         const energy = total / NUM_BANDS;
-        _smoothEnergy += (energy - _smoothEnergy) * 0.2;
+        _smoothEnergy += (energy - _smoothEnergy) * 0.3;
     }
 
     function _drawMirrorPath(ctx, points) {
@@ -320,25 +322,26 @@ const VoiceModeModule = (function() {
             const bandVal = _bands[bLow] * (1 - bFrac) + _bands[bHigh] * bFrac;
 
             // Audio amplitude at this band — driven by actual sound
-            const audioAmp = bandVal * maxAmp;
+            const audioAmp = bandVal * maxAmp * 1.3; // boost
 
-            // Organic motion that ANIMATES the audio shape (so it flows instead of being static)
-            // The motion is modulated by audio intensity, not added on top
-            const flow1 = Math.sin(_waveTime * 3.5 + nx * Math.PI * 5);
-            const flow2 = Math.sin(_waveTime * 2.1 + nx * Math.PI * 3);
-            const flow = (flow1 + flow2 * 0.7) / 1.7; // -1..1
+            // Flowing motion patterns — multiple sines at different speeds
+            const flow1 = Math.sin(_waveTime * 5.0 + nx * Math.PI * 7);
+            const flow2 = Math.sin(_waveTime * 3.0 + nx * Math.PI * 4);
+            const flow3 = Math.sin(_waveTime * 1.8 + nx * Math.PI * 2);
+            const flow = (flow1 * 0.5 + flow2 * 0.8 + flow3 * 0.5) / 1.8;
 
-            // When audio is present, wave amplitude = audio band value, modulated by flow
-            // When silent, wave shows a small breathing motion
+            // Per-position jitter modulated by band intensity for extra dance
+            const jitter = _noise2D(nx * 8, _waveTime * 2) * bandVal;
+
             let disp;
-            if (_smoothEnergy > 0.02) {
-                // Active: audio drives amplitude, flow shapes the motion
-                disp = audioAmp * flow;
+            if (_smoothEnergy > 0.015) {
+                // Active: audio drives amplitude, flow+jitter shape the motion
+                disp = audioAmp * flow + jitter * maxAmp * 0.6;
             } else {
-                // Silent: gentle breathing at low amplitude
+                // Silent: gentle organic breathing
                 const idleWave = Math.sin(_waveTime * 1.5 + nx * Math.PI * 2) * 0.5;
                 const idleNoise = _noise2D(nx * 3, _waveTime * 0.5) * 0.3;
-                disp = (idleWave + idleNoise) * maxAmp * 0.1;
+                disp = (idleWave + idleNoise) * maxAmp * 0.15;
             }
 
             // Edge taper — fades to zero at both ends
