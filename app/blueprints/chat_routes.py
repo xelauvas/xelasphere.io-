@@ -314,10 +314,16 @@ def chat_prime():
     try:
         # Touch session history so it's hot in memory for the upcoming /chat/stream
         from app.chat_session import get_session
+        from app.redis_client import get_redis
         sess = get_session(session_id)
         if sess is not None:
-            # Access .messages triggers lazy loads if any
-            _ = getattr(sess, 'messages', None) or getattr(sess, 'history', None) or []
+            messages = getattr(sess, 'messages', None) or getattr(sess, 'history', None) or []
+            # Cache for 10s so follow-up /chat/stream (possibly on a different worker)
+            # can skip the Firestore fetch
+            try:
+                get_redis().setex(f'prime:{session_id}', 10, json.dumps(list(messages), default=str))
+            except Exception as _ce:
+                logger.debug(f"prime cache write failed: {_ce}")
         return jsonify({'status': 'primed'})
     except Exception as e:
         logger.debug(f"prime_chat no-op: {e}")
@@ -573,7 +579,22 @@ def chat_stream():
     # Get or create session for saving history and context detection
     session_id = None
     previous_messages = []
-    if not guest_mode and user_id:
+
+    # Try prime cache first — if VAD speech-start pre-warmed this turn's history
+    # into Redis, skip the Firestore fetch when /chat/stream hits a different worker.
+    _client_sid = (request.form.get('session_id') or '').strip()
+    if _client_sid and not guest_mode:
+        try:
+            from app.redis_client import get_redis
+            _cached = get_redis().get(f'prime:{_client_sid}')
+            if _cached:
+                previous_messages = json.loads(_cached)
+                session_id = _client_sid
+                logger.info(f"[Stream] prime cache HIT — {len(previous_messages)} messages from Redis")
+        except Exception as _e:
+            logger.debug(f"[Stream] prime cache read failed: {_e}")
+
+    if not previous_messages and not guest_mode and user_id:
         try:
             session_id, session_data = load_or_create_session(user_id)
             # Load previous messages for follow-up question context detection
