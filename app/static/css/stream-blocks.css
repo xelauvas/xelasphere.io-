@@ -1,19 +1,19 @@
 /* Block containers — layout + entrance animations */
 
 .stream-block {
-    animation: blockIn 120ms ease-out;
+    animation: streamBlockIn 120ms ease-out;
 }
 
-.block-code        { animation: blockIn  80ms ease-out; }
-.block-math        { animation: blockIn 100ms ease-out; }
-.block-mermaid     { animation: blockIn 100ms ease-out; }
+.block-code        { animation: streamBlockIn  80ms ease-out; }
+.block-math        { animation: streamBlockIn 100ms ease-out; }
+.block-mermaid     { animation: streamBlockIn 100ms ease-out; }
 .block-list-item   {
-    animation: blockIn 60ms ease-out;
+    animation: streamBlockIn 60ms ease-out;
     animation-delay: calc(var(--i, 0) * 30ms);
     animation-fill-mode: both;
 }
 
-@keyframes blockIn {
+@keyframes streamBlockIn {
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
 }
@@ -45,11 +45,11 @@
         transparent 100%
     );
     background-size: 200% 100%;
-    animation: shimmer 1.4s linear infinite;
+    animation: streamShimmer 1.4s linear infinite;
     pointer-events: none;
 }
 
-@keyframes shimmer {
+@keyframes streamShimmer {
     from { background-position: 200% 0; }
     to   { background-position: -200% 0; }
 }
@@ -64,10 +64,10 @@
 
 .pulse-dots {
     display: inline-block;
-    animation: pulse-dots 1.2s ease-in-out infinite;
+    animation: streamPulseDots 1.2s ease-in-out infinite;
 }
 
-@keyframes pulse-dots {
+@keyframes streamPulseDots {
     0%, 100% { opacity: 0.3; }
     50%      { opacity: 1; }
 }
@@ -81,10 +81,10 @@
     background: var(--text-primary, #e2e8f0);
     margin-left: 1px;
     vertical-align: text-bottom;
-    animation: cursor-blink 0.8s steps(2) infinite;
+    animation: streamCursorBlink 0.8s steps(2) infinite;
 }
 
-@keyframes cursor-blink {
+@keyframes streamCursorBlink {
     0%, 100% { opacity: 1; }
     50%      { opacity: 0; }
 }
