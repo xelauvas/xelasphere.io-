@@ -4120,18 +4120,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 BackgroundRequestManager.completeRequest(requestSessionId, completionData);
             }
 
-            // Start background streaming with null container
-            // Blue dot will appear ONLY when streaming completes
-            const htmlContent = marked.parse(displayContent);
-            const sanitizedHtmlContent = DOMPurify.sanitize(htmlContent);
-
-            ProgressiveTextDisplay.start(requestSessionId, sanitizedHtmlContent, null, {
-                isCode: false,
-                completionData: completionData,
-                onComplete: () => {
-                    console.log('Background streaming finished for session:', requestSessionId);
-                }
-            });
+            // Session switched away — no fake-stream delay needed.
+            // BackgroundRequestManager.completeRequest already stored completion data;
+            // flip the blue-dot notification immediately.
+            console.log('Background response captured for session:', requestSessionId);
+            if (typeof BackgroundRequestManager !== 'undefined') {
+                BackgroundRequestManager.updateSessionNotificationDot(requestSessionId, true);
+            }
 
             return null;
         }
