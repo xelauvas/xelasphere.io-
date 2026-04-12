@@ -963,6 +963,7 @@ function renderMathInMessage(element) {
         console.error('Math rendering error:', error);
     }
 }
+window.renderMathInMessage = renderMathInMessage;
 
 // Terminal/shell languages that should render as terminal window
 const TERMINAL_LANGUAGES = new Set([
@@ -4740,6 +4741,12 @@ function renderAiTextImmediate(container, text, messageId, showButtons) {
     const renderer = new StreamRenderer(container, { replay: true });
     renderer.append(text);
     renderer.finalize();
+
+    // KaTeX inline math (\(...\), $$...$$) — live stream path does this at line ~3227
+    // after finalize; replay path needs it explicit here.
+    if (typeof renderMathInMessage === 'function') {
+        renderMathInMessage(container);
+    }
 
     // Model attribution (live stream applies this at finalize; replay needs it explicit)
     const msgDiv = container.closest('.message');

@@ -4208,6 +4208,10 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 const renderer = new window.StreamRenderer(messageContent, { replay: true });
                 renderer.append(safeContent);
                 renderer.finalize();
+                // KaTeX inline math — live stream runs this post-finalize, replay must too
+                if (typeof window.renderMathInMessage === 'function') {
+                    window.renderMathInMessage(messageContent);
+                }
                 if (showButtons && typeof appendActionButtons === 'function') {
                     appendActionButtons(messageContent, id);
                 }
