@@ -26,20 +26,23 @@ function parseItems(block) {
 
 export function createListRenderer() {
     return {
-        create(block, messageContainer) {
+        create(block, messageContainer, opts = {}) {
             const tag = block.type === 'list-ol' ? 'ol' : 'ul';
             const el = document.createElement(tag);
-            el.className = `stream-block block-${block.type}`;
+            const noAnim = opts.replay ? ' stream-no-anim' : '';
+            el.className = `stream-block block-${block.type}${noAnim}`;
             el.dataset.blockId = block.id;
             messageContainer.appendChild(el);
             block.el = el;
             block.meta.renderedItemCount = 0;
+            block.meta.replay = !!opts.replay;
             return el;
         },
         update(block) {
             if (!block.el) return;
             const items = parseItems(block);
             const existing = block.meta.renderedItemCount;
+            const liNoAnim = block.meta.replay ? ' stream-no-anim' : '';
 
             // Update the tail item's text in place (it may still be streaming)
             if (existing > 0 && items.length >= existing) {
@@ -55,7 +58,7 @@ export function createListRenderer() {
             // Append any new items after the previous tail
             for (let i = existing; i < items.length; i++) {
                 const li = document.createElement('li');
-                li.className = 'block-list-item';
+                li.className = `block-list-item${liNoAnim}`;
                 li.style.setProperty('--i', String(i));
                 li.innerHTML = window.DOMPurify.sanitize(window.marked.parse(items[i] || ''));
                 block.el.appendChild(li);
