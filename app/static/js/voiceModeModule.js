@@ -530,14 +530,13 @@ const VoiceModeModule = (function() {
             });
             audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
 
-            // Load AEC worklet (once per context)
-            if (!_aecReady) {
-                try {
-                    await audioContext.audioWorklet.addModule('/static/js/audio/aec-processor.js');
-                    _aecReady = true;
-                } catch (e) {
-                    console.warn('[VoiceMode] AEC worklet load failed, continuing without AEC:', e);
-                }
+            // Load AEC worklet per-context — module registration is per-AudioContext
+            _aecReady = false;
+            try {
+                await audioContext.audioWorklet.addModule('/static/js/audio/aec-processor.js');
+                _aecReady = true;
+            } catch (e) {
+                console.warn('[VoiceMode] AEC worklet load failed, continuing without AEC:', e);
             }
 
             const micSource = audioContext.createMediaStreamSource(stream);
@@ -1397,8 +1396,10 @@ const VoiceModeModule = (function() {
 
     function setState(state, ctx) {
         const prev = currentState;
-        // Allow idle seeding from initial load; validate otherwise
-        if (prev && prev !== state && !FSM.canTransition(prev, state, ctx)) {
+        // No-op if same state
+        if (prev === state) return;
+        // Validate transition
+        if (prev && !FSM.canTransition(prev, state, ctx)) {
             return;
         }
         FSM.log(prev, state, ctx);
