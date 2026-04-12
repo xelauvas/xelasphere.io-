@@ -3599,87 +3599,88 @@ async loadChatHistory(pageToken = null, limit = 10) {
     }
 
     /**
-     * Rename a chat session with inline editing.
+     * Rename a chat session via a modal prompt (Claude-style).
      * @param {string} sessionId - The session ID to rename.
      */
     async renameSession(sessionId) {
-        const tabElement = this.elements.tabList.querySelector(`[data-session-id="${sessionId}"] .tab-name`);
-        const actionsWrapper = this.elements.tabList.querySelector(`[data-session-id="${sessionId}"] .tab-actions`);
-        if (!tabElement) return;
-
         this.closeOpenTabMenu();
-        actionsWrapper?.classList.add('tab-actions-hidden');
+        this.showRenameModal(sessionId);
+    }
 
-        const currentName = this.chatHistory[sessionId].session_name;
-        const input = document.createElement('input');
-        input.type = 'text';
+    /**
+     * Show a modal dialog to rename a chat session.
+     * @param {string} sessionId - The session ID to rename.
+     */
+    showRenameModal(sessionId) {
+        const currentName = this.chatHistory[sessionId]?.session_name || '';
+
+        const modalOverlay = document.createElement('div');
+        modalOverlay.className = 'modal-overlay';
+        modalOverlay.innerHTML = `
+            <div class="modal-content rename-modal">
+                <h2>Rename chat</h2>
+                <input type="text" class="rename-modal-input" value="" placeholder="Chat name" maxlength="120" />
+                <div class="modal-actions">
+                    <button class="btn-cancel" type="button">Cancel</button>
+                    <button class="btn-save" type="button">Save</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modalOverlay);
+
+        const input = modalOverlay.querySelector('.rename-modal-input');
+        const btnSave = modalOverlay.querySelector('.btn-save');
+        const btnCancel = modalOverlay.querySelector('.btn-cancel');
+
         input.value = currentName;
-        input.classList.add('rename-input');
+        // Autofocus + select after the open animation settles
+        requestAnimationFrame(() => {
+            input.focus();
+            input.select();
+        });
 
-        tabElement.replaceWith(input);
-        input.focus();
-        input.select();
+        const close = () => {
+            if (modalOverlay.parentNode) modalOverlay.remove();
+        };
 
-        let renameInProgress = false;
-
-        const finalizeRename = async () => {
-            if (renameInProgress) return;
-            renameInProgress = true;
-
+        const doSave = async () => {
             const newName = input.value.trim();
-            if (!newName || newName === currentName) {
-                input.replaceWith(tabElement);
-                tabElement.textContent = currentName;
-                actionsWrapper?.classList.remove('tab-actions-hidden');
-                renameInProgress = false;
-                return;
-            }
+            if (!newName || newName === currentName) { close(); return; }
+
+            btnSave.disabled = true;
+            btnCancel.disabled = true;
+            input.disabled = true;
 
             try {
-                input.disabled = true;
-
-                // Send rename request to the server
                 const response = await this.fetchApi('/chat/rename', 'POST', {
                     session_id: sessionId,
-                    name: newName
+                    name: newName,
                 });
-
-                // Update local history with the new name and render updated tabs
-                this.chatHistory[sessionId].session_name = response.updated_name || newName;
+                const finalName = response.updated_name || newName;
+                this.chatHistory[sessionId].session_name = finalName;
                 this.chatHistory[sessionId].manuallyRenamed = true;
                 this.chatHistory[sessionId].autoTitleEligible = false;
-                tabElement.textContent = response.updated_name || newName;
-                input.replaceWith(tabElement);
                 this.renderChatTabs();
-                // Update page title if this is the active session
-                if (this.activeSessionId === sessionId) {
-                    this.updatePageTitle(sessionId);
-                }
-                this.showNotification('Chat renamed successfully', 'success');
+                if (this.activeSessionId === sessionId) this.updatePageTitle(sessionId);
+                this.showNotification('Chat renamed', 'success');
             } catch (error) {
+                console.error('rename failed', error);
                 this.showNotification('Failed to rename chat', 'error');
-                console.error(error);
-                input.replaceWith(tabElement);
-                tabElement.textContent = currentName;
             } finally {
-                actionsWrapper?.classList.remove('tab-actions-hidden');
-                renameInProgress = false;
+                close();
             }
         };
 
-        // Keydown events for Enter and Escape keys
-        const handleKeyDown = (e) => {
-            if (e.key === 'Enter') {
-                finalizeRename();
-            } else if (e.key === 'Escape') {
-                input.replaceWith(tabElement);
-                tabElement.textContent = currentName;
-                actionsWrapper?.classList.remove('tab-actions-hidden');
-            }
-        };
-
-        input.addEventListener('blur', finalizeRename);
-        input.addEventListener('keydown', handleKeyDown);
+        btnSave.onclick = doSave;
+        btnCancel.onclick = close;
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) close();
+        });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); doSave(); }
+            else if (e.key === 'Escape') { e.preventDefault(); close(); }
+        });
     }
 
     /**

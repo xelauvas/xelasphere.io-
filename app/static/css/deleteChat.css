@@ -114,3 +114,71 @@
     transform: scale(0.97);
     filter: brightness(0.85);
 }
+
+/* ═══ Rename Modal ═══ */
+.modal-content.rename-modal {
+    width: 360px;
+    text-align: left;
+}
+
+.modal-content.rename-modal h2 {
+    text-align: left;
+    padding: 22px 22px 14px;
+}
+
+.rename-modal-input {
+    display: block;
+    width: calc(100% - 44px);
+    margin: 0 22px 20px;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 0.5px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    color: #fff;
+    font-size: 15px;
+    font-family: inherit;
+    letter-spacing: -0.1px;
+    outline: none;
+    transition: border-color 0.12s ease, background 0.12s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.rename-modal-input:focus {
+    border-color: rgba(120, 160, 255, 0.55);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.rename-modal-input::selection {
+    background: rgba(120, 160, 255, 0.35);
+}
+
+/* Primary save button — reuses btn-delete footprint but blue */
+.btn-save {
+    flex: 1;
+    border: none;
+    border-radius: 12px;
+    height: 46px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: -0.2px;
+    transition: transform 0.1s ease, filter 0.1s ease;
+    background: #2f6fd8;
+    color: #fff;
+}
+
+.btn-save:active {
+    transform: scale(0.97);
+    filter: brightness(0.9);
+}
+
+.btn-save:disabled,
+.btn-cancel:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
