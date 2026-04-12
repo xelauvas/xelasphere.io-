@@ -1299,68 +1299,101 @@ ul {
     outline-offset: 0.125rem;
 }
 
+/* Session actions popup — matches the + button action-sheet design */
 .button-group {
     position: fixed;
     top: -999px;
     left: -999px;
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
-    padding: 0.4rem;
-    border-radius: 0.85rem;
-    border: 0.0625rem solid rgba(255, 255, 255, 0.12);
-    background: rgba(18, 18, 18, 0.98);
-    box-shadow: 0 0.8rem 2rem rgba(0, 0, 0, 0.45);
-    min-width: 9rem;
+    width: 200px;
+    padding: 4px 0;
+    background: #2b2a27;
+    border: 0.5px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
     opacity: 0;
     pointer-events: none;
-    transform: translate(-0.2rem, 0) scale(0.96);
+    transform: translateY(-4px) scale(0.98);
     transform-origin: top left;
-    transition: opacity var(--transition-smooth), transform var(--transition-smooth);
+    transition: opacity 0.15s ease, transform 0.15s ease;
     z-index: 1200;
+    overflow: visible;
 }
 
 .button-group.button-group-visible {
     opacity: 1;
-    transform: translate(0, 0) scale(1);
+    transform: translateY(0) scale(1);
     pointer-events: auto;
 }
 
-/* --- Button Styles --- */
+/* Each row — icon + label, clean 13.5px aesthetic to match the + menu */
 .chat-btn {
-    padding: 0.35rem 0.55rem;
-    border: none;
-    border-radius: 0.55rem;
-    cursor: pointer;
-    background: transparent;
-    color: var(--text-secondary);
-    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    justify-content: flex-start;
-    width: 100%;
-    font-size: 0.82rem;
+    gap: 11px;
+    padding: 9px 12px;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 13.5px;
     font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    text-align: left;
+    width: 100%;
+    transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .chat-btn i {
-    font-size: 0.9rem;
+    flex-shrink: 0;
+    opacity: 0.8;
+    font-size: 14px;
+    width: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chat-btn span {
+    flex: 1;
 }
 
 .chat-btn:hover {
-    transform: translateX(0.1rem);
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.06);
     color: #ffffff;
 }
 
-.share-btn:hover { color: var(--primary-blue); }
-.pin-btn:hover { color: var(--primary-blue); }
+.chat-btn:hover i {
+    opacity: 1;
+}
+
+/* Keep per-action accent colors on hover — subtle, not loud */
+.share-btn:hover { color: #378ADD; }
+.share-btn:hover i { color: #378ADD; }
+.pin-btn:hover { color: #378ADD; }
+.pin-btn:hover i { color: #378ADD; }
 .archive-btn:hover { color: var(--success-green); }
+.archive-btn:hover i { color: var(--success-green); }
 .rename-btn:hover { color: var(--warning-yellow); }
-.delete-btn:hover { 
-    color: var(--danger-red);
-    animation: shake var(--animation-shake-duration) cubic-bezier(0.36, 0.07, 0.19, 0.97);
+.rename-btn:hover i { color: var(--warning-yellow); }
+.delete-btn:hover {
+    color: #ff6b6b;
+}
+.delete-btn:hover i { color: #ff6b6b; }
+
+/* Thin dividers between groups — matches the + menu's 0.5px hairlines */
+.chat-btn + .chat-btn {
+    position: relative;
+}
+.chat-btn + .chat-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 12px;
+    right: 12px;
+    height: 0.5px;
+    background: rgba(255, 255, 255, 0.05);
 }
 
 /* --- Rename Input --- */
