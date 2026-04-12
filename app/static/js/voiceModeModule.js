@@ -711,6 +711,7 @@ const VoiceModeModule = (function() {
 
     async function _fetchTTSChunk(text, lang) {
         const clean = _cleanTextForTTS(text);
+        console.log('[VoiceMode] TTS fetch:', lang, clean.length, 'chars:', clean.slice(0, 40));
         if (!clean || clean.length < 3) return null;
         const csrfMeta = document.querySelector('meta[name="csrf-token"]');
         const headers = { 'Content-Type': 'application/json' };
@@ -833,7 +834,7 @@ const VoiceModeModule = (function() {
         let firstChunkTime = null;
         let _responseLang = null;
         const streamStart = Date.now();
-        const FIRST_CHUNK_MIN = 80;
+        const FIRST_CHUNK_MIN = 30; // lower for CJK (denser text per char)
         const MAX_TTS_INFLIGHT = 2;
         const _pendingSentences = [];
 
@@ -907,7 +908,12 @@ const VoiceModeModule = (function() {
                 }
             }
 
-            if (ttsBuffer.trim() && !_interrupted) _dispatchTTS(ttsBuffer);
+            if (ttsBuffer.trim() && !_interrupted) {
+                console.log('[VoiceMode] final TTS dispatch:', ttsBuffer.length, 'chars, text:', ttsBuffer.slice(0, 50));
+                _dispatchTTS(ttsBuffer);
+            } else {
+                console.log('[VoiceMode] no final dispatch — buffer:', ttsBuffer.length, 'interrupted:', _interrupted);
+            }
             _streamDone = true;
 
             await new Promise((resolve) => {
