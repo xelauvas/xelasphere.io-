@@ -602,12 +602,22 @@ const VoiceModeModule = (function() {
             'soft': 'af_nicole', 'soft voice': 'af_nicole',
             'default': 'auto', 'normal voice': 'auto', 'reset voice': 'auto',
         };
-        for (const [phrase, voice] of Object.entries(voiceMap)) {
-            if (t.includes('switch to ' + phrase) || t.includes('use ' + phrase) || t === phrase) {
-                _preferredVoice = voice;
-                const label = voice === 'auto' ? 'default' : phrase;
-                if (window.Toast) window.Toast.success(`Switched to ${label} voice`);
-                return true;
+        const isShortVoiceCmd = t.length < 40;
+        if (isShortVoiceCmd) {
+            for (const [phrase, voice] of Object.entries(voiceMap)) {
+                const patterns = [
+                    `switch to ${phrase}`,
+                    `use ${phrase}`,
+                    `switch to ${phrase} voice`,
+                    `use ${phrase} voice`,
+                ];
+                const matches = patterns.some(p => t === p || t === p + '.' || t === p + '!');
+                if (matches || t === phrase) {
+                    _preferredVoice = voice;
+                    const label = voice === 'auto' ? 'default' : phrase;
+                    if (window.Toast) window.Toast.success(`Switched to ${label} voice`);
+                    return true;
+                }
             }
         }
         const langMap = {
@@ -617,13 +627,32 @@ const VoiceModeModule = (function() {
             'spanish': 'es', 'español': 'es',
             'hindi': 'hi', 'हिंदी': 'hi',
             'italian': 'it', 'italiano': 'it',
+            'romanian': 'ro', 'română': 'ro',
+            'german': 'de', 'deutsch': 'de',
+            'portuguese': 'pt', 'português': 'pt',
             'english': 'en',
         };
-        for (const [phrase, lang] of Object.entries(langMap)) {
-            if (t.includes('switch to ' + phrase) || t.includes('speak ' + phrase) || t.includes('in ' + phrase)) {
-                _detectedLang = lang;
-                if (window.Toast) window.Toast.success(`Switched to ${phrase}`);
-                return true;
+        // Only trigger lang shortcut for SHORT, focused commands —
+        // not any sentence that happens to contain "in italian" etc.
+        const isShortCommand = t.length < 40;
+        if (isShortCommand) {
+            for (const [phrase, lang] of Object.entries(langMap)) {
+                const patterns = [
+                    `switch to ${phrase}`,
+                    `speak ${phrase}`,
+                    `speak in ${phrase}`,
+                    `talk in ${phrase}`,
+                    `respond in ${phrase}`,
+                    `answer in ${phrase}`,
+                    `change to ${phrase}`,
+                    `${phrase} please`,
+                ];
+                const matches = patterns.some(p => t === p || t === p + '.' || t === p + '?' || t === p + '!');
+                if (matches || t === phrase || t === phrase + '.' || t === phrase + '!') {
+                    _detectedLang = lang;
+                    if (window.Toast) window.Toast.success(`Switched to ${phrase}`);
+                    return true;
+                }
             }
         }
         return false;
