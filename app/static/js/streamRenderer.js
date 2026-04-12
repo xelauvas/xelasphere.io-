@@ -1,323 +1,148 @@
 /**
- * StreamRenderer — Progressive markdown streaming renderer.
+ * StreamRenderer — block-oriented progressive markdown.
  *
- * Renders SSE tokens directly to the DOM as they arrive, using:
- * - Safe boundary scanner to avoid splitting markdown mid-construct
- * - morphdom for minimal DOM patching (preserves event listeners)
- * - CSS-only inline cursor (no JS positioning)
- * - requestAnimationFrame batching for 60fps rendering
+ * SSE tokens → L2 state machine → L3 block AST → per-type renderers → DOM.
+ * Frozen blocks never re-render. Cursor transfers on BLOCK_START.
  *
- * Usage:
- *   const renderer = new StreamRenderer(containerEl);
- *   renderer.append(token);  // called per SSE chunk
- *   renderer.finalize();     // called on done
+ * Public contract (unchanged from 2026-04-10 spec):
+ *   new StreamRenderer(container).append(text).finalize() / .destroy()
  */
-(function () {
-    'use strict';
 
-    // ---------------------------------------------------------------------------
-    // Safe Boundary Scanner
-    // ---------------------------------------------------------------------------
+import { createBlockStateMachine } from './stream/blockStateMachine.js';
+import { createBlockAST } from './stream/blockAST.js';
+import { createProseRenderer } from './stream/renderers/prose.js';
+import { createCodeRenderer } from './stream/renderers/code.js';
+import { createListRenderer } from './stream/renderers/list.js';
+import { createMathRenderer } from './stream/renderers/math.js';
+import { createMermaidRenderer } from './stream/renderers/mermaid.js';
+import { applyLayout } from './stream/preWarm.js';
+import { transferCursor, removeCursor } from './stream/cursor.js';
 
-    /**
-     * Find the last position in `text` where all markdown constructs
-     * are closed/complete. Returns the safe length to render.
-     *
-     * Rules:
-     *  1. Unclosed ** or * → back up to before opener
-     *  2. Unclosed ` → back up to before backtick
-     *  3. Unclosed ``` → render nothing past fence (500-char fallback)
-     *  4. Unclosed [ or ]( → back up to before [
-     *  5. Incomplete line (no trailing \n) → back up to last \n
-     *  6. Everything else → safe at current position
-     *
-     * Malformed fallback: if no safe point found within 200 chars
-     * of the end, fall back to last \n.
-     */
-    function findSafePoint(text) {
-        if (!text) return 0;
+const PREWARM_THRESHOLD = 100; // chars before we fire layout inference
 
-        var len = text.length;
-        var openStrong = 0;   // **
-        var openEm = 0;       // *
-        var openCode = false;  // `
-        var openFence = false; // ```
-        var openLink = 0;      // [...]
-        var lastSafe = 0;
-        var lastNewline = 0;
-        var fenceStart = -1;
+const _renderers = {
+    prose: createProseRenderer(),
+    code: createCodeRenderer(),
+    list: createListRenderer(),
+    math: createMathRenderer(),
+    mermaid: createMermaidRenderer(),
+};
 
-        for (var i = 0; i < len; i++) {
-            var ch = text[i];
-            var next = i + 1 < len ? text[i + 1] : '';
-            var next2 = i + 2 < len ? text[i + 2] : '';
-
-            if (ch === '\n') {
-                lastNewline = i + 1;
-            }
-
-            // Code fence: ``` (typically at start of line)
-            if (ch === '`' && next === '`' && next2 === '`') {
-                if (!openFence) {
-                    openFence = true;
-                    fenceStart = i;
-                    // Skip to end of line (fence may have language tag)
-                    while (i < len && text[i] !== '\n') i++;
-                    continue;
-                } else {
-                    openFence = false;
-                    fenceStart = -1;
-                    i += 2; // skip past ```
-                    // Track safe point after closing fence
-                    if (!openStrong && !openEm && !openCode && !openLink) {
-                        lastSafe = i + 1;
-                    }
-                    continue;
-                }
-            }
-
-            // Inside code fence — don't track other constructs
-            if (openFence) continue;
-
-            // Inline code: `
-            if (ch === '`') {
-                openCode = !openCode;
-                if (!openCode && !openStrong && !openEm && !openFence && !openLink) {
-                    lastSafe = i + 1;
-                }
-                continue;
-            }
-
-            // Inside inline code — don't track emphasis/links
-            if (openCode) continue;
-
-            // Strong: **
-            if (ch === '*' && next === '*') {
-                openStrong = openStrong ? 0 : 1;
-                i++; // skip second *
-                if (!openStrong && !openEm && !openCode && !openFence && !openLink) {
-                    lastSafe = i + 1;
-                }
-                continue;
-            }
-
-            // Emphasis: single * — but NOT if followed by space (list item)
-            if (ch === '*' && next !== '*' && next !== ' ') {
-                openEm = openEm ? 0 : 1;
-                if (!openEm && !openStrong && !openCode && !openFence && !openLink) {
-                    lastSafe = i + 1;
-                }
-                continue;
-            }
-
-            // Link: [
-            if (ch === '[') {
-                openLink++;
-                continue;
-            }
-            if (ch === ']') {
-                if (openLink > 0) {
-                    if (next === '(') continue;
-                    openLink--;
-                }
-                continue;
-            }
-            if (ch === ')' && openLink > 0) {
-                openLink--;
-                if (!openLink && !openStrong && !openEm && !openCode && !openFence) {
-                    lastSafe = i + 1;
-                }
-                continue;
-            }
-
-            // Track safe points — all constructs closed (regular characters)
-            if (!openStrong && !openEm && !openCode && !openFence && !openLink) {
-                lastSafe = i + 1;
-            }
-        }
-
-        // If inside open fence — apply 500-char fallback
-        if (openFence) {
-            var fenceContentLen = len - fenceStart;
-            if (fenceContentLen > 500) {
-                return len;
-            }
-            // Don't render past fence start
-            return fenceStart >= 0 ? fenceStart : 0;
-        }
-
-        // If all constructs closed, safe at end
-        if (!openStrong && !openEm && !openCode && !openLink) {
-            return len;
-        }
-
-        // Malformed fallback: if lastSafe is more than 200 chars behind,
-        // use lastNewline instead
-        if (len - lastSafe > 200 && lastNewline > lastSafe) {
-            return lastNewline;
-        }
-
-        return lastSafe || lastNewline || 0;
+function rendererFor(blockType) {
+    switch (blockType) {
+        case 'code':       return _renderers.code;
+        case 'mermaid':    return _renderers.mermaid;
+        case 'math':       return _renderers.math;
+        case 'list-ul':
+        case 'list-ol':    return _renderers.list;
+        case 'paragraph':
+        case 'heading':
+        case 'blockquote':
+        default:           return _renderers.prose;
     }
+}
 
-    // ---------------------------------------------------------------------------
-    // StreamRenderer
-    // ---------------------------------------------------------------------------
-
-    var CURSOR_HTML = '<span class="stream-cursor"></span>';
-
-    function StreamRenderer(container) {
+class StreamRenderer {
+    constructor(container) {
         this.container = container;
         this.rawBuffer = '';
-        this.renderedSafe = '';    // last safeBuffer that was rendered
-        this.previousHTML = '';     // last HTML applied to DOM
-        this.rafId = null;
+        this.prewarmDone = false;
         this.destroyed = false;
         this.finalized = false;
 
-        // Create the standard message wrapper structure so CSS applies correctly
-        // .message-content > .text-message-container > .text-message (render target)
-        var wrapper = document.createElement('div');
+        // Message wrapper that callers expect
+        const wrapper = document.createElement('div');
         wrapper.className = 'text-message-container';
-        var inner = document.createElement('div');
+        const inner = document.createElement('div');
         inner.className = 'text-message';
         wrapper.appendChild(inner);
         this.container.appendChild(wrapper);
-        this.renderTarget = inner;
+        this.messageEl = inner;
 
-        // Bind the RAF callback
-        this._tick = this._tick.bind(this);
+        this.ast = createBlockAST();
+        this.sm = createBlockStateMachine(event => this._handleEvent(event));
+        this.rafScheduled = false;
     }
 
-    StreamRenderer.prototype.append = function (text) {
+    append(text) {
         if (this.destroyed || this.finalized) return;
         this.rawBuffer += text;
-        // Schedule a render if not already scheduled
-        if (!this.rafId) {
-            this.rafId = requestAnimationFrame(this._tick);
+        if (!this.prewarmDone && this.rawBuffer.length >= PREWARM_THRESHOLD) {
+            applyLayout(this.messageEl, this.rawBuffer.slice(0, PREWARM_THRESHOLD));
+            this.prewarmDone = true;
         }
-    };
+        this.sm.append(text);
+        this._scheduleRender();
+    }
 
-    StreamRenderer.prototype._tick = function () {
-        this.rafId = null;
-        if (this.destroyed || this.finalized) return;
-
-        var safeLen = findSafePoint(this.rawBuffer);
-        var safeBuffer = this.rawBuffer.substring(0, safeLen);
-
-        // Nothing new to render
-        if (safeBuffer === this.renderedSafe) return;
-        this.renderedSafe = safeBuffer;
-
-        this._render(safeBuffer, false);
-    };
-
-    StreamRenderer.prototype._render = function (text, isFinal) {
-        var target = this.renderTarget || this.container;
-        if (!target) return;
-
-        // ACTION protocol lines are stripped on the backend before SSE yield
-
-        // Parse markdown → HTML using the exact same pipeline as appendTextMessage
-        var rawHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
-
-        // Sanitize
-        if (typeof DOMPurify !== 'undefined') {
-            rawHTML = DOMPurify.sanitize(rawHTML);
-        }
-
-        // Add cursor if not final
-        var html = isFinal ? rawHTML : rawHTML + CURSOR_HTML;
-
-        // Skip if nothing changed
-        if (html === this.previousHTML) return;
-        this.previousHTML = html;
-
-        // Use morphdom for minimal DOM patching (preserves event listeners)
-        if (typeof morphdom !== 'undefined') {
-            var wrapper = document.createElement('div');
-            wrapper.innerHTML = html;
-            try {
-                morphdom(target, wrapper, {
-                    childrenOnly: true,
-                    onBeforeElUpdated: function (fromEl, toEl) {
-                        if (fromEl.classList) {
-                            if (fromEl.classList.contains('citation-pill')) return false;
-                            if (fromEl.classList.contains('sources-btn')) return false;
-                        }
-                        return true;
-                    }
-                });
-            } catch (e) {
-                target.innerHTML = html;
-            }
-        } else {
-            target.innerHTML = html;
-        }
-    };
-
-    StreamRenderer.prototype.finalize = function () {
+    finalize() {
         if (this.destroyed || this.finalized) return;
         this.finalized = true;
-
-        // Cancel pending RAF
-        if (this.rafId) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
+        if (!this.prewarmDone) {
+            applyLayout(this.messageEl, this.rawBuffer);
+            this.prewarmDone = true;
         }
+        // sm.finalize() emits BLOCK_END for any still-live block, which runs
+        // r.update() + r.finalize() through _handleEvent. Every block is finalized
+        // exactly once through that path — do NOT re-iterate the block array here.
+        this.sm.finalize();
+        removeCursor(this.messageEl);
+    }
 
-        // Flush remaining rawBuffer — stream already has proper \n\n from backend
-        this._render(this.rawBuffer, true);
-
-        // Remove cursor
-        var cursor = this.renderTarget && this.renderTarget.querySelector('.stream-cursor');
-        if (cursor) cursor.remove();
-    };
-
-    StreamRenderer.prototype.destroy = function () {
+    destroy() {
         this.destroyed = true;
-        if (this.rafId) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
+        removeCursor(this.messageEl);
+    }
+
+    _handleEvent(event) {
+        switch (event.type) {
+            case 'BLOCK_START': {
+                const block = this.ast.startBlock({
+                    id: event.id,
+                    type: event.blockType,
+                    meta: event.meta,
+                });
+                const r = rendererFor(block.type);
+                r.create(block, this.messageEl);
+                transferCursor(this.messageEl, block.el);
+                break;
+            }
+            case 'BLOCK_APPEND': {
+                this.ast.appendToLive(event.text);
+                // Render is batched via RAF — don't render inline here
+                break;
+            }
+            case 'BLOCK_END': {
+                const live = this.ast.getLive();
+                if (live) {
+                    const r = rendererFor(live.type);
+                    r.update(live);
+                    r.finalize?.(live);
+                }
+                this.ast.endBlock();
+                break;
+            }
+            // LIST_ITEM_START / LIST_ITEM_END are advisory — the list renderer
+            // parses items out of block.text directly.
         }
-        // Remove cursor if present
-        var cursor = this.container && this.container.querySelector('.stream-cursor');
-        if (cursor) cursor.remove();
-    };
+    }
 
-    // ---------------------------------------------------------------------------
-    // CSS injection (stream-cursor styles)
-    // ---------------------------------------------------------------------------
+    _scheduleRender() {
+        if (this.rafScheduled) return;
+        this.rafScheduled = true;
+        requestAnimationFrame(() => {
+            this.rafScheduled = false;
+            if (this.destroyed) return;
+            const live = this.ast.getLive();
+            if (!live) return;
+            const r = rendererFor(live.type);
+            performance.mark('stream-render-start');
+            r.update(live);
+            performance.mark('stream-render-end');
+            performance.measure('stream-render', 'stream-render-start', 'stream-render-end');
+        });
+    }
+}
 
-    (function injectCursorCSS() {
-        if (document.getElementById('stream-cursor-css')) return;
-        var style = document.createElement('style');
-        style.id = 'stream-cursor-css';
-        style.textContent =
-            '.stream-cursor {\n' +
-            '    display: inline-block;\n' +
-            '    width: 12px;\n' +
-            '    height: 12px;\n' +
-            '    border-radius: 50%;\n' +
-            '    background: rgba(255, 255, 255, 0.85);\n' +
-            '    margin-left: 4px;\n' +
-            '    vertical-align: middle;\n' +
-            '    animation: stream-pulse 1.5s ease-in-out infinite;\n' +
-            '}\n' +
-            '@keyframes stream-pulse {\n' +
-            '    0%, 100% { transform: scale(1); opacity: 0.4; }\n' +
-            '    50% { transform: scale(1.3); opacity: 1; }\n' +
-            '}\n';
-        document.head.appendChild(style);
-    })();
-
-    // ---------------------------------------------------------------------------
-    // Export
-    // ---------------------------------------------------------------------------
-
-    window.StreamRenderer = StreamRenderer;
-
-    // Expose scanner for testing
-    window.StreamRenderer._findSafePoint = findSafePoint;
-
-})();
+window.StreamRenderer = StreamRenderer;
+export { StreamRenderer };
