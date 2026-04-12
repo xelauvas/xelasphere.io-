@@ -1,0 +1,97 @@
+/* Block containers — layout + entrance animations */
+
+.stream-block {
+    animation: blockIn 120ms ease-out;
+}
+
+.block-code        { animation: blockIn  80ms ease-out; }
+.block-math        { animation: blockIn 100ms ease-out; }
+.block-mermaid     { animation: blockIn 100ms ease-out; }
+.block-list-item   {
+    animation: blockIn 60ms ease-out;
+    animation-delay: calc(var(--i, 0) * 30ms);
+    animation-fill-mode: both;
+}
+
+@keyframes blockIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .stream-block,
+    .block-code,
+    .block-math,
+    .block-mermaid,
+    .block-list-item {
+        animation: none;
+    }
+}
+
+/* Skeleton shimmer while a code block is streaming */
+
+.block-code.is-streaming {
+    position: relative;
+}
+
+.block-code.is-streaming::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.04) 50%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+    pointer-events: none;
+}
+
+@keyframes shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+
+/* Math / mermaid pending placeholder */
+
+.block-math.is-pending,
+.block-mermaid.is-pending {
+    opacity: 0.6;
+    min-height: 1.4em;
+}
+
+.pulse-dots {
+    display: inline-block;
+    animation: pulse-dots 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dots {
+    0%, 100% { opacity: 0.3; }
+    50%      { opacity: 1; }
+}
+
+/* Cursor — CSS-only blinking line (unchanged from existing spec) */
+
+.stream-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1.1em;
+    background: var(--text-primary, #e2e8f0);
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    animation: cursor-blink 0.8s steps(2) infinite;
+}
+
+@keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0; }
+}
+
+/* Pre-warm layout variants */
+
+[data-stream-layout="prose"]      { max-width: 65ch; }
+[data-stream-layout="structured"] { max-width: 75ch; }
+[data-stream-layout="code-heavy"] { max-width: 85ch; }
+[data-stream-layout="enumerated"] { max-width: 70ch; }
