@@ -89,7 +89,7 @@
 
     <!-- morphdom + StreamRenderer -->
     <script src="{{ url_for('static', filename='js/morphdom.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/streamRenderer.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/streamRenderer.js') }}"></script>
 
     <!-- Mermaid Diagrams -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -158,6 +158,8 @@
     <!-- Crypto Charts -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/crypto-chart.css') }}">
 
+    <!-- Stream Blocks -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-blocks.css') }}">
 
     <!-- Lightweight Charts (TradingView) -->
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
