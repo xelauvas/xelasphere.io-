@@ -29,6 +29,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from app.config import Config, db
 from app.limiter import limiter, csrf_required
 from app.backpressure import LLM_SLOTS, acquire_or_503
+from app.voice_sessions import register as voice_register, release as voice_release
 from app.blueprints.shared import (
     login_required, guest_allowed, error_handler, is_guest, chat_session,
     get_client_ip, hash_ip, make_etag_response,
@@ -308,6 +309,8 @@ def chat_prime():
     session_id = (data.get('session_id') or '').strip()
     if not session_id:
         return jsonify({'status': 'noop'})
+    # Register voice session — renews TTL on every prime (heartbeat)
+    voice_register(session_id)
     try:
         # Touch session history so it's hot in memory for the upcoming /chat/stream
         from app.chat_session import get_session
@@ -319,6 +322,19 @@ def chat_prime():
     except Exception as e:
         logger.debug(f"prime_chat no-op: {e}")
         return jsonify({'status': 'noop'})
+
+
+@chat_bp.route('/chat/voice-exit', methods=['POST'])
+@csrf_required
+@error_handler
+@guest_allowed
+def chat_voice_exit():
+    """Called by frontend when voice mode is turned off — releases the session slot."""
+    data = request.get_json(silent=True) or {}
+    session_id = (data.get('session_id') or '').strip()
+    if session_id:
+        voice_release(session_id)
+    return jsonify({'status': 'released'})
 
 
 @chat_bp.route('/chat/feedback', methods=['POST'])

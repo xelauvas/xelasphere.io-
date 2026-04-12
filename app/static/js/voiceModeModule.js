@@ -1555,6 +1555,21 @@ const VoiceModeModule = (function() {
         _playbackAnalyser = null;
         _playbackFreqData = null;
         setState('idle');
+
+        // Tell backend this voice session ended (releases the tracked slot)
+        try {
+            const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            const headers = { 'Content-Type': 'application/json' };
+            if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
+            const sid = window.chatManager?.activeSessionId || '';
+            if (sid) {
+                fetch('/chat/voice-exit', {
+                    method: 'POST', headers,
+                    body: JSON.stringify({ session_id: sid }),
+                    credentials: 'same-origin'
+                }).catch(() => {});
+            }
+        } catch (_) {}
     }
 
     return {
