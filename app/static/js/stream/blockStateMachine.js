@@ -32,6 +32,22 @@ export function createBlockStateMachine(emit) {
     function processLine(line, hasTrailingNewline) {
         const full = line + (hasTrailingNewline ? '\n' : '');
 
+        // Inside a math block: only $$ at line-start closes
+        if (current && current.type === 'math') {
+            if (line === '$$') {
+                closeBlock('natural');
+                return;
+            }
+            appendToBlock(full);
+            return;
+        }
+
+        // Opening math block — must be the entire line
+        if (line === '$$') {
+            openBlock('math');
+            return;
+        }
+
         // Inside a code or mermaid block: only a closing fence can exit
         if (current && (current.type === 'code' || current.type === 'mermaid')) {
             if (line === '```') {

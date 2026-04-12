@@ -157,3 +157,31 @@ test('blank line terminates list', () => {
     assert.equal(starts[0].blockType, 'list-ul');
     assert.equal(starts[1].blockType, 'paragraph');
 });
+
+test('$$ at line-start opens math block', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('$$\nE = mc^2\n$$\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts[0].blockType, 'math');
+});
+
+test('inline $$50 does NOT open math block', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('The seat costs $$50 per month.\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts.length, 1);
+    assert.equal(starts[0].blockType, 'paragraph');
+});
+
+test('unclosed $$ at finalize emits BLOCK_END finalize', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('$$\nE = mc');
+    sm.finalize();
+    const ends = events.filter(e => e.type === 'BLOCK_END');
+    assert.equal(ends.at(-1).reason, 'finalize');
+});
