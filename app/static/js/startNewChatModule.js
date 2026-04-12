@@ -1350,31 +1350,8 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 }
             }
 
-            // Check for active or completed ProgressiveTextDisplay
-            const progressiveDisplay = window.ProgressiveTextDisplay;
-            let handledByProgressiveDisplay = false;
-
-            if (progressiveDisplay?.hasActiveDisplay?.(sessionId) || progressiveDisplay?.hasCompletedDisplay?.(sessionId)) {
-                // Animation in progress or completed in background
-                // Just complete it and clear - history will show the full message
-                console.log('Clearing ProgressiveTextDisplay for session (history will show message):', sessionId);
-                handledByProgressiveDisplay = true;
-
-                // Complete and remove the display
-                progressiveDisplay.complete(sessionId);
-                progressiveDisplay.remove(sessionId);
-
-                // Clear notification dot
-                BackgroundRequestManager?.updateSessionNotificationDot?.(sessionId, false);
-
-                // Clear the background request
-                if (bgManager?.clearRequest) {
-                    bgManager.clearRequest(sessionId);
-                }
-            }
-
-            // Handle background request state for this session (only if not handled by ProgressiveTextDisplay)
-            if (bgManager && !handledByProgressiveDisplay) {
+            // Handle background request state for this session
+            if (bgManager) {
                 const request = bgManager.getRequest?.(sessionId);
                 console.log('Background request check:', {
                     hasRequest: !!request,
