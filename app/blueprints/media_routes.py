@@ -25,7 +25,7 @@ KOKORO_SIDECAR_TIMEOUT = 45  # seconds — fail fast, let Gemini fallback handle
 # Language code mapping: ISO 639-1 → Kokoro lang_code
 KOKORO_LANG_MAP = {
     'en': 'a', 'fr': 'f', 'ja': 'j', 'zh': 'z',
-    'es': 'e', 'hi': 'h', 'it': 'i',
+    'es': 'e', 'hi': 'h', 'it': 'i', 'pt': 'p',
 }
 
 # Default voice per language (used when voice='auto')
@@ -38,6 +38,7 @@ KOKORO_LANG_DEFAULT_VOICE = {
     'e': 'ef_dora',      # Spanish
     'h': 'hf_alpha',     # Hindi
     'i': 'if_sara',      # Italian
+    'p': 'pf_dora',      # Portuguese
 }
 
 
