@@ -2634,10 +2634,11 @@ body.is-ios .arrow-down {
         padding: 0.85rem 1rem;
     }
 
-    /* === History Search Modal === */
+    /* === History Search Modal — stable size, inner scroll === */
     .history-search-dialog {
         width: calc(100% - 1.5rem);
         max-width: none;
+        height: 85vh;
         max-height: 85vh;
         margin: 0.75rem;
     }
@@ -2731,6 +2732,7 @@ body.is-ios .arrow-down {
     }
 
     .history-search-dialog {
+        height: 80vh;
         max-height: 80vh;
     }
 

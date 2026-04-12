@@ -292,7 +292,10 @@ body.sidebar-collapsed .left-sidebar .sidebar-content {
 .history-search-dialog {
     position: relative;
     width: min(32rem, 92vw);
-    max-height: min(80vh, 36rem);
+    /* Fixed height — do NOT shrink to content. Only the inner results
+       list scrolls; the shell stays put as the user types / selects. */
+    height: min(80vh, 36rem);
+    max-height: 80vh;
     background: rgba(18, 18, 18, 0.95);
     border: 0.0625rem solid rgba(255, 255, 255, 0.08);
     border-radius: 1rem;
@@ -364,12 +367,17 @@ body.sidebar-collapsed .left-sidebar .sidebar-content {
 }
 
 .history-search-results {
-    flex: 1;
+    flex: 1 1 0;          /* fill remaining vertical space in the fixed shell */
+    min-height: 0;         /* allow flex child to scroll its overflow */
     overflow-y: auto;
+    overflow-x: hidden;
     padding-right: 0.25rem;
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
+    /* Smooth scroll feel when arrow-keying through results */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
 }
 
 .history-search-results::-webkit-scrollbar {
