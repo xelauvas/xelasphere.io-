@@ -84,11 +84,11 @@
 .btn-delete,
 .btn-save {
     flex: 0 0 auto;
-    min-width: 72px;
-    height: 32px;
-    padding: 0 14px;
+    min-width: 80px;
+    height: 34px;
+    padding: 0 18px;
     border: none;
-    border-radius: 8px;
+    border-radius: 999px;
     font-size: 13px;
     font-weight: 600;
     letter-spacing: -0.1px;
@@ -97,27 +97,29 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.12s ease, transform 0.1s ease, filter 0.1s ease;
+    transition: background 0.12s ease, transform 0.1s ease, filter 0.1s ease, border-color 0.12s ease;
     -webkit-tap-highlight-color: transparent;
 }
 
-/* Cancel — ghost, blends into card */
+/* Cancel — ghost with subtle border */
 .btn-cancel {
     background: transparent;
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(255, 255, 255, 0.7);
+    border: 0.5px solid rgba(255, 255, 255, 0.18);
 }
 .btn-cancel:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.28);
+    color: rgba(255, 255, 255, 0.9);
 }
 
-/* Delete — destructive red, vintage-warm shade (not loud crimson) */
+/* Delete — destructive red */
 .btn-delete {
-    background: #8a3a2c;
-    color: #f4e8d9;
+    background: #d63b3b;
+    color: #fff;
 }
 .btn-delete:hover {
-    background: #9d4333;
+    background: #e04747;
 }
 .btn-delete:active {
     transform: scale(0.97);
