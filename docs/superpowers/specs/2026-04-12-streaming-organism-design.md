@@ -29,19 +29,22 @@ This is not a bug-hunt. Nothing user-visible is broken today. The current Stream
 - **Range-tracking cursor** — Rejected. Current CSS-only inline blinking line is correct. `getBoundingClientRect` per chunk is a mobile CPU risk with no perceptible visual win.
 - **Table streaming** — Deferred. Hardest to stream correctly; rare in XelaSphere's query mix. Revisit in v2 only if real users paste tabular data.
 - **Parser swap (marked → micromark)** — Rejected. See "Parser Decision" below.
-- **Shiki** — Rejected. hljs is already in use / trivially loadable; shiki is async-heavy and overkill for v1.
+- **Shiki** — Rejected. Prism is already loaded on every page; shiki is async-heavy and overkill for v1.
+- **hljs** — Rejected. Prism is already present, so introducing hljs would add a second highlighter for no reason.
 
-## Parser Decision: Keep `marked`
+## Parser Decision: Keep `markdown-it` (via the `window.marked` shim)
+
+The codebase uses `markdown-it` as the actual markdown library. `index.html` defines a shim that exposes it as `window.marked.parse(text)` so call sites read as `marked.parse(…)` while the real parser is `markdown-it`. This spec preserves that shim; every `marked.parse` reference below resolves to `markdown-it` underneath.
 
 The original pitch recommended `micromark` for streaming-friendly event emission. That advice is correct for a greenfield renderer where the parser *is* the stream processor. It does not apply here, because L3 (block AST) solves the performance motivation architecturally:
 
 1. Block-level detection is hand-rolled in L2 regardless of which parser sits underneath. `micromark` doesn't remove that work; it still wants complete constructs to emit clean events.
-2. Under L3, only the **live (tail) block's text** is re-parsed per frame — at most a paragraph or list-item, a few hundred characters. `marked` on 200 chars is sub-millisecond. The O(n²) problem in the current implementation is an architecture problem, solved by L3, not a library problem.
-3. Code, math, and mermaid blocks bypass `marked` entirely — they are routed by L2 to their per-type renderers.
-4. `marked`'s only remaining job is inline formatting (bold/italic/links/inline-code) inside prose, heading, list-item, and blockquote blocks. Small, complete inputs. Exactly its strength.
+2. Under L3, only the **live (tail) block's text** is re-parsed per frame — at most a paragraph or list-item, a few hundred characters. `markdown-it` on 200 chars is sub-millisecond. The O(n²) problem in the current implementation is an architecture problem, solved by L3, not a library problem.
+3. Code, math, and mermaid blocks bypass the markdown parser entirely — they are routed by L2 to their per-type renderers.
+4. `markdown-it`'s only remaining job is inline formatting (bold/italic/links/inline-code) inside prose, heading, list-item, and blockquote blocks. Small, complete inputs. Exactly its strength.
 5. Swap cost (ESM integration, bundler change, DOMPurify rewire, safe-boundary re-derivation, team familiarity) is non-trivial for zero architectural benefit once L3 is in place.
 
-Decision: keep `marked` for inline parsing inside per-block renderers. Hand-roll L2. Lazy-load `hljs` on first code fence.
+Decision: keep `markdown-it` (via the `window.marked` shim) for inline parsing inside per-block renderers. Hand-roll L2. Use **Prism.js** (already loaded on every page with an autoloader and js/css/python components pre-registered) for code-block syntax highlighting — no new dep, no lazy-load step.
 
 ## Architecture Overview
 
@@ -64,14 +67,13 @@ L3: Block AST (ordered array of Block nodes)
    ▼
 L4: Per-Type Renderer (dispatched by block.type)
    │   prose/heading/list-item/blockquote → marked.parse(block.text) → DOMPurify → morphdom patch
-   │   code        → hljs incremental highlight → <pre><code> DOM
+   │   code        → Prism.highlightElement on <code class="language-{lang}"> → <pre><code> DOM
    │   math        → buffer until close → KaTeX render
    │   mermaid     → buffer until close → mermaid.render
    │   list        → per-item stagger animation
    ▼
 Pre-warm (once, after first ~100 chars):
    container class mutation — .stream-layout-{prose|structured|code-heavy|enumerated}
-   speculative hljs load if code fence seen
 ```
 
 ## L2: Block State Machine
@@ -173,10 +175,13 @@ Inside a `LIST_UL`/`LIST_OL` block, items are sub-nodes. Completed items are sub
 ### Code blocks
 
 - Input: raw text (no markdown parsing).
-- Lazy-load `hljs` on first `BLOCK_START { type: 'code' }` seen in the session. Cache.
-- On each `BLOCK_APPEND`: run `hljs.highlight(text, { language: lang, ignoreIllegals: true })` on the full block text. hljs is fast enough for streaming (<1ms for <10KB).
-- DOM: `<pre class="block-code" data-lang="…"><code class="hljs language-…">…</code></pre>`.
-- Skeleton: on `BLOCK_START` with no text yet, render `<pre class="block-code is-streaming"><code></code></pre>`. CSS adds a shimmer on `.is-streaming`. Remove `.is-streaming` class on `BLOCK_END`.
+- Highlighter: **Prism.js**, already loaded on every page. No lazy-load, no new dep.
+- DOM: `<pre class="block-code"><code class="language-{lang}">…</code></pre>`.
+  - `{lang}` comes from the fence tag (e.g. `` ```python `` → `language-python`).
+  - If the fence tag is empty or unrecognized, use `language-plaintext` — Prism handles this natively.
+  - Prism's autoloader picks up the `language-*` class and loads the grammar on first use.
+- On each `BLOCK_APPEND`: update `code.textContent` with the full block text, then call `Prism.highlightElement(codeEl)`. Prism re-highlights in place; it's fast enough for streaming (<1ms for typical block sizes).
+- Skeleton: on `BLOCK_START` with no text yet, render `<pre class="block-code is-streaming"><code class="language-{lang}"></code></pre>`. CSS adds a shimmer on `.is-streaming`. Remove `.is-streaming` class on `BLOCK_END`.
 - Copy button: added on `BLOCK_END`, not before (prevents flicker).
 
 ### Lists
@@ -221,8 +226,6 @@ Adaptation: set `data-stream-layout="{value}"` on the message container. CSS rul
 - `structured` — wider max-width (~75ch), heading-oriented spacing.
 - `code-heavy` — widest (~85ch), monospace-leaning tab-stops.
 - `enumerated` — ordered-list-optimized indent and marker spacing.
-
-**Speculative hljs load**: if inference is `code-heavy`, start loading `hljs` in the background immediately, before the first code fence arrives.
 
 Pre-warm happens once. It does not re-fire on later evidence — premature adaptation is less bad than mid-stream layout jitter.
 
@@ -278,12 +281,12 @@ The existing `ProgressiveTextDisplay` path (history replay, background session b
 |---|---|
 | `static/js/stream/blockStateMachine.js` | L2 — character-level block detector, emits events |
 | `static/js/stream/blockAST.js` | L3 — block array, frozen/live invariants |
-| `static/js/stream/renderers/prose.js` | marked + DOMPurify + morphdom, scoped to one block |
-| `static/js/stream/renderers/code.js` | hljs lazy-load + incremental highlight |
+| `static/js/stream/renderers/prose.js` | markdown-it (via `window.marked` shim) + DOMPurify + morphdom, scoped to one block |
+| `static/js/stream/renderers/code.js` | Prism.highlightElement + skeleton + copy button |
 | `static/js/stream/renderers/list.js` | per-item stagger, sub-frozen items |
 | `static/js/stream/renderers/math.js` | buffered KaTeX render |
 | `static/js/stream/renderers/mermaid.js` | buffered mermaid parse + render |
-| `static/js/stream/preWarm.js` | layout inference + speculative hljs load |
+| `static/js/stream/preWarm.js` | layout inference, container class mutation |
 | `static/css/stream-blocks.css` | block classes, entrance animations, skeleton shimmer, layout variants |
 
 ### Modified
@@ -291,7 +294,7 @@ The existing `ProgressiveTextDisplay` path (history replay, background session b
 | File | Change |
 |---|---|
 | `static/js/streamRenderer.js` | Outer class keeps API. Internals rewritten to delegate to the modules above. |
-| `app/templates/index.html` | Script tags for new modules. hljs remains lazy-loaded (not a static `<script>`). |
+| `app/templates/index.html` | `<script type="module">` tags for new stream modules. Prism, markdown-it, KaTeX, Mermaid, morphdom already loaded — no new CDN additions. |
 
 ### Not modified
 
@@ -304,12 +307,12 @@ The existing `ProgressiveTextDisplay` path (history replay, background session b
 - Live-block re-render per RAF frame: < 1ms at p95 (measure with `performance.mark`).
 - Per-chunk CPU on a 2000-word response: flat, not growing with response length (the L3 isolation guarantee).
 - No dropped frames during stream on a mid-range mobile device (target: iPhone 12 / equivalent Android).
-- hljs lazy-load latency (first code fence → first highlighted frame): < 200ms on fast 4G.
+- Prism autoloader latency (first code fence in an uncached language → first highlighted frame): < 200ms on fast 4G. Pre-registered languages (js, css, python) highlight instantly.
 
 ## Risks
 
 - **Block-boundary edge cases**: markdown with nested constructs (list item containing a code block containing `$math$`) — the L2 state machine must be tested against a corpus. Mitigation: build a test suite of ~30 real LLM-output samples before wiring in.
-- **hljs bundle size**: the full hljs is ~100KB gzipped. Mitigation: use hljs common languages subset (~40KB) and accept that exotic languages fall back to `plaintext`.
+- **Prism autoloader race**: if `BLOCK_APPEND` fires before the autoloader has fetched the grammar, `Prism.highlightElement` runs with no grammar and leaves the text unhighlighted. Mitigation: re-run `Prism.highlightElement` on `BLOCK_END` as a final pass; pre-registered languages (js/css/python) are unaffected.
 - **Animation churn on very fast streams**: if blocks open and close within 50ms, the entrance animation never finishes. Acceptable — `animationend` cleanup handles it.
 - **morphdom + animation interaction**: entering-block animation must not be interrupted by morphdom patches on the same element. Mitigation: animation is on the block's outer element; morphdom operates on `childrenOnly: true`.
 - **Pre-warm false positives**: a prose response that happens to start with a `#` character (not a heading) mis-infers `structured`. Acceptable cost — the layout adaptation is subtle.
