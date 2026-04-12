@@ -17,7 +17,7 @@ export function createBlockStateMachine(emit) {
     function closeBlock(reason) {
         if (!current) return;
         if (current.type === 'list-ul' || current.type === 'list-ol') {
-            emit({ type: 'LIST_ITEM_END', blockId: current.id, itemIndex: current.meta.itemCount - 1 });
+            emit({ type: 'LIST_ITEM_END', blockId: current.id, itemIndex: current._itemCount - 1 });
         }
         emit({ type: 'BLOCK_END', id: current.id, reason });
         current = null;
@@ -70,8 +70,8 @@ export function createBlockStateMachine(emit) {
             return;
         }
 
-        if (line === '' && current) {
-            closeBlock('natural');
+        if (line === '') {
+            if (current) closeBlock('natural');
             return;
         }
 
@@ -88,9 +88,9 @@ export function createBlockStateMachine(emit) {
             const ulItem = line.match(UL_ITEM_RE);
             const olItem = line.match(OL_ITEM_RE);
             if ((current.type === 'list-ul' && ulItem) || (current.type === 'list-ol' && olItem)) {
-                emit({ type: 'LIST_ITEM_END', blockId: current.id, itemIndex: current.meta.itemCount - 1 });
-                current.meta.itemCount++;
-                emit({ type: 'LIST_ITEM_START', blockId: current.id, itemIndex: current.meta.itemCount - 1 });
+                emit({ type: 'LIST_ITEM_END', blockId: current.id, itemIndex: current._itemCount - 1 });
+                current._itemCount++;
+                emit({ type: 'LIST_ITEM_START', blockId: current.id, itemIndex: current._itemCount - 1 });
                 appendToBlock(full);
                 return;
             }
@@ -103,13 +103,15 @@ export function createBlockStateMachine(emit) {
         const ulStart = line.match(UL_ITEM_RE);
         const olStart = line.match(OL_ITEM_RE);
         if (ulStart) {
-            openBlock('list-ul', { itemCount: 1 });
+            openBlock('list-ul', {});
+            current._itemCount = 1;
             emit({ type: 'LIST_ITEM_START', blockId: current.id, itemIndex: 0 });
             appendToBlock(full);
             return;
         }
         if (olStart) {
-            openBlock('list-ol', { itemCount: 1 });
+            openBlock('list-ol', {});
+            current._itemCount = 1;
             emit({ type: 'LIST_ITEM_START', blockId: current.id, itemIndex: 0 });
             appendToBlock(full);
             return;
