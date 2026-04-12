@@ -1039,34 +1039,82 @@
     object-fit: cover;
 }
 
+.sidebar-footer .profile-header-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+    gap: 1px;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
 .sidebar-footer .profile-name {
     font-size: 0.85rem;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.9);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.sidebar-footer .profile-header-plan {
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.45);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-footer .profile-upgrade-btn {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(236, 227, 210, 0.85);
+    border: 0.5px solid rgba(236, 227, 210, 0.22);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.1px;
+    text-decoration: none;
+    font-family: inherit;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sidebar-footer .profile-upgrade-btn:hover {
+    background: rgba(236, 227, 210, 0.08);
+    color: #ece3d2;
+    border-color: rgba(236, 227, 210, 0.35);
+}
+
+.sidebar-footer .profile-upgrade-btn:active {
+    background: rgba(236, 227, 210, 0.12);
+}
+
+body.sidebar-collapsed .sidebar-footer .profile-upgrade-btn {
+    display: none;
+}
+
 /* Adjust dropdown position for sidebar footer */
 .sidebar-footer .profile-header .dropdown-container {
-    position: absolute; /* Position absolute relative to profile-header */
-    bottom: calc(100% + 8px); /* Position above the profile header with breathing room */
-    left: 50%; /* Center horizontally relative to profile-header */
-    transform: translate(-50%, 10px); /* Adjust to truly center and slide */
-    z-index: 99999; /* Ensure it's above other elements */
-    width: max-content; /* Adjust width to content */
-    min-width: 230px; /* larger footprint */
-    max-width: 280px; /* Limit width */
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4); /* Deeper shadow */
-    background: #303030; /* Match input area */
-    border: 1px solid rgba(255, 255, 255, 0.08); /* Soft border */
-    border-radius: 14px;
-    backdrop-filter: blur(16px);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translate(-50%, 8px);
+    z-index: 99999;
+    width: 240px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    background: #1e1e1e;
+    border: 0.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
 }
 
 body.sidebar-collapsed .sidebar-footer .profile-header {
@@ -1112,102 +1160,190 @@ body.sidebar-collapsed .sidebar-footer .profile-header .dropdown-container {
 }
 
 .footer-dropdown {
-    padding: 1.2rem;
+    padding: 6px 0;
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
 }
 
 .footer-profile-block {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.4rem 0.3rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    margin-bottom: 0.35rem;
+    gap: 10px;
+    padding: 10px 14px;
+    border: none;
+    margin: 0 0 4px;
 }
 
 .footer-avatar {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
 }
 
 .footer-profile-info {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    line-height: 1.1;
+    gap: 2px;
+    line-height: 1.2;
 }
 
 .footer-profile-info .profile-name {
-    color: var(--text-primary);
-    font-size: 1rem;
-    font-weight: 600;
+    color: #e8e6e0;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
+.footer-profile-info .profile-plan {
+    color: #888884;
+    font-size: 12px;
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Keep email rule if used elsewhere but hide in new layout */
 .footer-profile-info .profile-email {
-    color: var(--text-secondary);
-    font-size: 0.78rem;
-}
-
-.profile-status-dot {
-    width: 0.55rem;
-    height: 0.55rem;
-    border-radius: 50%;
-    background: var(--accent-color);
-    box-shadow: 0 0 6px rgba(16, 163, 127, 0.7);
+    display: none;
 }
 
 .footer-link-list {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
+    gap: 0;
 }
 
-.footer-link-list a {
+.footer-divider {
+    height: 0.5px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 4px 0;
+}
+
+.footer-dropdown .footer-row,
+.dropdown-menu.footer-dropdown a.footer-row {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.45rem 0.4rem;
-    border-radius: 8px;
-    color: var(--text-secondary);
-    font-size: 0.92rem;
-}
-
-.footer-link-list a i {
-    width: 1.1rem;
-    text-align: center;
-    font-size: 1rem;
-}
-
-.footer-link-list a:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text-primary);
-}
-
-.footer-link-list a.highlight {
-    color: var(--accent-color);
-}
-
-.logout-button.compact {
+    gap: 10px;
     width: 100%;
+    padding: 9px 14px;
+    background: transparent;
     border: none;
-    border-radius: 10px;
-    padding: 0.55rem 0.7rem;
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--text-primary);
+    border-radius: 0;
+    color: #c8c6c0;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0;
+    font-family: inherit;
+    text-align: left;
+    text-decoration: none;
     cursor: pointer;
-    display: flex;
-    gap: 0.4rem;
+    transition: background 0.12s ease;
+}
+
+.footer-dropdown .footer-row:hover,
+.dropdown-menu.footer-dropdown a.footer-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e8e6e0;
+}
+
+.footer-icon {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.8rem;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: #888884;
+    font-size: 13px;
 }
 
-.logout-button.compact:hover {
-    background: rgba(255, 255, 255, 0.1);
+.footer-dropdown .footer-row:hover .footer-icon {
+    color: #c8c6c0;
 }
+
+.footer-label {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.footer-chevron {
+    display: inline-flex;
+    align-items: center;
+    color: #888884;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.footer-row-button {
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    line-height: inherit;
+}
+
+.footer-icon svg {
+    display: block;
+    stroke: currentColor;
+}
+
+/* Footer user row (tinted duplicate) */
+.footer-user-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.footer-user-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+.footer-user-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    line-height: 1.2;
+}
+
+.footer-user-name {
+    color: #e8e6e0;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.footer-user-plan {
+    color: #c8c6c0;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Legacy hooks kept for any lingering references */
+.profile-status-dot { display: none; }
+.logout-button.compact { display: none; }
 
 /* --- Responsive Design --- */
 @media (max-width: 992px) {

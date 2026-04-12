@@ -426,6 +426,70 @@ body:not(.has-messages) .arrow-down {
     display: none;
 }
 
+/* ─── Per-message style badge (lives INSIDE the user bubble) ──────────
+   Tiny header tag at the top of the bubble showing which writing style
+   this specific prompt was sent under.
+   ──────────────────────────────────────────────────────────────────── */
+.message-style-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin: 0 0 6px;
+    padding: 1px 8px 1px 7px;
+    height: 17px;
+    background: rgba(236, 227, 210, 0.09);
+    border: 0.5px solid rgba(236, 227, 210, 0.18);
+    border-radius: 999px;
+    color: rgba(236, 227, 210, 0.78);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+    line-height: 1;
+    user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+    opacity: 0;
+    transform: translateY(-2px) scale(0.96);
+    transform-origin: left center;
+    animation: msgBadgeIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) 0.08s forwards;
+    white-space: nowrap;
+    vertical-align: middle;
+    max-width: max-content;
+}
+
+@keyframes msgBadgeIn {
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.message-style-badge__dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #ece3d2;
+    box-shadow: 0 0 3px rgba(236, 227, 210, 0.4);
+    flex-shrink: 0;
+}
+
+.message-style-badge__label {
+    opacity: 0.95;
+}
+
+@media (max-width: 768px) {
+    .message-style-badge {
+        height: 16px;
+        font-size: 9.5px;
+        padding: 1px 7px;
+    }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+    .message-style-badge {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+}
+
 .input-container {
     position: relative;
     width: 100%;
@@ -3927,6 +3991,7 @@ body.sidebar-collapsed .left-sidebar .sidebar-action-text,
 body.sidebar-collapsed .left-sidebar .sidebar-item span:not(.sidebar-action-icon),
 body.sidebar-collapsed .left-sidebar .profile-name,
 body.sidebar-collapsed .left-sidebar .profile-email,
+body.sidebar-collapsed .left-sidebar .profile-header-plan,
 body.sidebar-collapsed .left-sidebar .profile-tags,
 body.sidebar-collapsed .left-sidebar .dropdown-container,
 body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-email {
@@ -3936,6 +4001,13 @@ body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-email {
     pointer-events: none;
     white-space: nowrap;
     overflow: hidden;
+}
+
+/* Fully hide the text wrapper + upgrade pill when sidebar is collapsed —
+   only the avatar should remain in the footer. */
+body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-header-text,
+body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-upgrade-btn {
+    display: none;
 }
 
 body.sidebar-collapsed .left-sidebar .sidebar-action-btn,

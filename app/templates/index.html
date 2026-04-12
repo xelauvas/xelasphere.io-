@@ -116,7 +116,7 @@
     <!-- Custom CSS -->
     <!-- Responsive Foundation (load first for CSS variables) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-foundation.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=1.2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=1.8">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/code-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tree-view.css') }}?v=1.1">
@@ -127,7 +127,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/options-btn.css') }}?v=18">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/search-results.css') }}?v=6">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=7">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=9">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
@@ -150,7 +150,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/email-edit-toolbar.css') }}">
 
     <!-- Mobile Responsive -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=37">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=40">
 
     <!-- Context Menu (long-press actions) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/context-menu.css') }}">
@@ -398,48 +398,85 @@
             <div class="sidebar-footer">
                 {% if session.get('user') %}
                     <div class="profile-header" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
-                        <img src="{{ session['user'].get('picture') or url_for('static', filename='images/default-profile.png') }}" 
+                        <img src="{{ session['user'].get('picture') or url_for('static', filename='images/default-profile.png') }}"
                              alt="{{ session['user']['name'] }}" class="profile-image"
                              onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/default-profile.png') }}';">
-                        <span class="profile-name">{{ session['user']['name'] }}</span>
+                        <div class="profile-header-text">
+                            <span class="profile-name">{{ session['user']['name'] }}</span>
+                            <span class="profile-header-plan">{{ session['user'].get('plan', 'Free') }} Plan</span>
+                        </div>
+                        <a href="/upgrade" class="profile-upgrade-btn" onclick="event.stopPropagation();">Upgrade</a>
                         <div class="dropdown-container glass-panel compact">
                             <div class="dropdown-menu footer-dropdown">
+                                <!-- Header -->
                                 <div class="footer-profile-block">
-                                    <img src="{{ session['user'].get('picture') or url_for('static', filename='images/default-profile.png') }}" 
+                                    <img src="{{ session['user'].get('picture') or url_for('static', filename='images/default-profile.png') }}"
                                          alt="{{ session['user']['name'] }}" class="footer-avatar"
                                          onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/default-profile.png') }}';">
                                     <div class="footer-profile-info">
                                         <span class="profile-name">{{ session['user']['name'] }}</span>
-                                        <span class="profile-email">{{ session['user']['email'] }}</span>
+                                        <span class="profile-plan">{{ session['user'].get('plan', 'Free') }} Plan</span>
                                     </div>
-                                    {% if session['user'].get('show_status', True) %}
-                                    <span class="profile-status-dot" aria-label="Online"></span>
-                                    {% endif %}
                                 </div>
-                                <nav class="footer-link-list" aria-label="Quick links">
-                                    <a href="/dashboard">
-                                        <i class="fas fa-home"></i>
-                                        <span>Dashboard</span>
-                                    </a>
-                                    <a href="/account/manage">
-                                        <i class="fas fa-sliders-h"></i>
-                                        <span>Settings</span>
-                                    </a>
-                                    <a href="/upgrade" class="highlight">
-                                        <i class="fas fa-star"></i>
-                                        <span>Upgrade</span>
-                                    </a>
-                                    <a href="/help">
-                                        <i class="far fa-question-circle"></i>
-                                        <span>Help</span>
-                                    </a>
-                                </nav>
+
+                                <!-- Add another account -->
+                                <button type="button" class="footer-row footer-row-button">
+                                    <span class="footer-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                    </span>
+                                    <span class="footer-label">Add another account</span>
+                                </button>
+
+                                <div class="footer-divider"></div>
+
+                                <!-- Main menu -->
+                                <a href="/upgrade" class="footer-row">
+                                    <span class="footer-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8l4 4-4 4"/></svg>
+                                    </span>
+                                    <span class="footer-label">Upgrade plan</span>
+                                </a>
+                                <a href="/account/personalization" class="footer-row">
+                                    <span class="footer-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                                    </span>
+                                    <span class="footer-label">Personalization</span>
+                                </a>
+                                <a href="/dashboard" class="footer-row">
+                                    <span class="footer-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>
+                                    </span>
+                                    <span class="footer-label">Profile</span>
+                                </a>
+                                <a href="/account/manage" class="footer-row">
+                                    <span class="footer-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                                    </span>
+                                    <span class="footer-label">Settings</span>
+                                </a>
+
+                                <div class="footer-divider"></div>
+
+                                <a href="/help" class="footer-row">
+                                    <span class="footer-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+                                    </span>
+                                    <span class="footer-label">Help</span>
+                                    <span class="footer-chevron">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                    </span>
+                                </a>
+
                                 <form id="logout-form" action="{{ url_for('auth_routes.logout') }}" method="post" style="display: none;">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 </form>
-                                <button class="logout-button compact" onclick="document.getElementById('logout-form').submit(); return false;">
-                                    <i class="fas fa-sign-out-alt"></i> Log Out
+                                <button type="button" class="footer-row footer-row-button" onclick="document.getElementById('logout-form').submit(); return false;">
+                                    <span class="footer-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                    </span>
+                                    <span class="footer-label">Log out</span>
                                 </button>
+
                             </div>
                         </div>
                     </div>
@@ -470,7 +507,7 @@
             <div class="toggle-button" aria-label="Toggle sidebar">
                 <span class="hamburger-line"></span>
             </div>
-            <div class="container chat-area" aria-label="Chat Interface">
+            <main class="container chat-area" role="main" aria-label="Chat Interface">
                 <div class="chat-stage">
                 <div class="chat-shell" role="region" aria-label="Chat workspace">
                     <header class="chat-shell__header">
@@ -649,7 +686,7 @@
                     </footer>
                 </div>
                 </div>
-            </div>
+            </main>
 
             <!-- Artifact Panel (Right Code Editor Panel) -->
         <aside id="artifact-panel" class="artifact-panel" aria-hidden="true" role="complementary" aria-label="Code artifact viewer">
@@ -908,8 +945,9 @@
     <script src="{{ url_for('static', filename='js/filePreview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/scrollState.js') }}"></script>
     <script src="{{ url_for('static', filename='js/recipeDetector.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=38"></script>
+    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=43"></script>
     <script src="{{ url_for('static', filename='script.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='js/styleManager.js') }}?v=4"></script>
     <script>
     // Patch: intercept FormData append to inject image files for vision API
     (function() {

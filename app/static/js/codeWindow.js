@@ -2752,6 +2752,19 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             window.TextSelectionQuote.clearQuote();
         }
 
+        // ─── Writing Style (from + menu → Use style) ───
+        // Delegates to styleManager.js, which also handles custom styles +
+        // localStorage persistence. Display bubble shows the clean prompt.
+        let _styleDisplayPrompt = null;
+        const activeStyle = window.chatManager?._activeStyle;
+        const styleInstr = (typeof window.__getStyleInstruction === 'function')
+            ? window.__getStyleInstruction(activeStyle)
+            : null;
+        if (prompt && styleInstr) {
+            _styleDisplayPrompt = prompt;
+            prompt = `${styleInstr}\n\n${prompt}`;
+        }
+
         const attachments = (typeof window !== 'undefined' && window.getPendingAttachmentsForSend)
             ? await window.getPendingAttachmentsForSend()
             : [];
@@ -2814,8 +2827,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         let primaryUserMessage = null;
         if (!skipUserMessageRender) {
             if (messageId === null && prompt) {
-                // Use custom displayPrompt if provided, otherwise use actual prompt
-                const messageToDisplay = displayPrompt !== null ? displayPrompt : prompt;
+                // Use custom displayPrompt if provided, otherwise the style-clean
+                // prompt (if a style prefix was applied), otherwise the raw prompt.
+                const messageToDisplay = displayPrompt !== null
+                    ? displayPrompt
+                    : (_styleDisplayPrompt !== null ? _styleDisplayPrompt : prompt);
                 primaryUserMessage = displayMessage(
                     messageToDisplay,
                     'user',
@@ -2825,6 +2841,23 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     null,
                     liveUserAttachmentMeta
                 );
+                // Attach the active style as a tiny badge INSIDE the user message
+                // bubble — the chip "rides" with the prompt instead of floating below.
+                if (primaryUserMessage && activeStyle && activeStyle !== 'Normal' && _styleDisplayPrompt !== null) {
+                    try {
+                        const bubble = primaryUserMessage.querySelector('.message-content') || primaryUserMessage;
+                        const badge = document.createElement('span');
+                        badge.className = 'message-style-badge';
+                        badge.setAttribute('data-style', activeStyle);
+                        badge.innerHTML = `
+                            <span class="message-style-badge__dot" aria-hidden="true"></span>
+                            <span class="message-style-badge__label">${activeStyle.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</span>
+                        `;
+                        // Insert at the top of the bubble so it reads as a header tag
+                        bubble.insertBefore(badge, bubble.firstChild);
+                        primaryUserMessage.classList.add('has-style-badge');
+                    } catch (e) { /* non-fatal */ }
+                }
             }
             // Attachments are now rendered inline via renderLiveAttachments in displayMessage
             // No need to create separate messages for each attachment
