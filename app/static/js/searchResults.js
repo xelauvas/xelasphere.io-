@@ -1232,7 +1232,7 @@
     /* -------------------------------------------------------
        _onTypingComplete — run callback when typing animation
        finishes. Listens for 'typing-complete' custom event
-       dispatched by ProgressiveTextDisplay, with a timeout
+       dispatched by the rendering pipeline, with a timeout
        fallback in case the event never fires.
     ------------------------------------------------------- */
     function _processCitationsWhenReady(messageEl, sources, attempt, lastLen) {

@@ -2741,7 +2741,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                         var targetEl = document.getElementById(_streamMsgId);
                                         if (!targetEl) {
                                             // Create message element directly — don't use displayMessage
-                                            // which would start ProgressiveTextDisplay and show the old cursor
                                             if (window.setHasMessages) window.setHasMessages(true);
                                             else document.body.classList.add('has-messages');
                                             var chatDisplay = document.getElementById('chat-display');
@@ -2759,7 +2758,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                         }
                                         var targetContent = targetEl?.querySelector('.message-content');
                                         if (targetContent) {
-                                            // Kill any existing ProgressiveTextDisplay cursor
+                                            // Kill any existing streaming cursor
                                             var oldCursor = targetContent.querySelector('.streaming-cursor');
                                             if (oldCursor) oldCursor.remove();
                                             targetContent.innerHTML = '';
