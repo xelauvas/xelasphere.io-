@@ -917,6 +917,9 @@ const VoiceModeModule = (function() {
         console.log(`[VoiceMode] gracefulYield — intent: ${intent}`);
         if (_interruptTimer) { clearInterval(_interruptTimer); _interruptTimer = null; }
 
+        // Transition speaking → yielding (allowed) before fade
+        setState('yielding', { intent });
+
         // 1. Fade out current audio source over 180ms instead of hard stop
         if (_currentSource && playbackCtx) {
             try {
@@ -1064,8 +1067,8 @@ const VoiceModeModule = (function() {
             }
             // Lower minimum threshold — 0.05 is easier to beat than 0.15
             const threshold = Math.max(_playbackBaseline * 1.6, 0.05);
-            // Periodic level log (every 1s) so we can see what's happening
-            if (now - lastLogTime > 1000) {
+            // Only log every 3s to reduce spam
+            if (now - lastLogTime > 3000) {
                 console.log(`[Interrupt] level=${level.toFixed(4)} threshold=${threshold.toFixed(4)} count=${interruptCount}`);
                 lastLogTime = now;
             }
@@ -1389,8 +1392,8 @@ const VoiceModeModule = (function() {
             listening: ['thinking', 'idle'],
             thinking:  ['speaking', 'idle', 'listening'],
             speaking:  ['yielding', 'idle', 'listening'],
-            yielding:  ['capturing', 'idle'],
-            capturing: ['thinking', 'idle'],
+            yielding:  ['capturing', 'listening', 'idle'],
+            capturing: ['thinking', 'listening', 'idle'],
         };
         const GUARDS = {
             'speaking→yielding': (ctx) => ctx.intent !== 'backchannel' && ctx.intent !== 'noise',
