@@ -513,6 +513,10 @@ const VoiceModeModule = (function() {
     // Legacy AEC node — no longer used (browser echoCancellation handles it)
     let _aecNode = null;
 
+    // Current streamAndSpeak AbortController — lets gracefulYield kill
+    // the SSE fetch cleanly so buffered chunks don't leak past interrupt.
+    let _streamAbort = null;
+
     // Currently playing TTS text + last completed (for interrupt context)
     let _currentTTSText = null;
     let _lastCompletedTTSText = '';
@@ -896,6 +900,12 @@ const VoiceModeModule = (function() {
         console.log(`[VoiceMode] gracefulYield — intent: ${intent}`);
         if (_interruptTimer) { clearInterval(_interruptTimer); _interruptTimer = null; }
 
+        // Kill the ongoing SSE fetch so buffered chunks stop arriving.
+        if (_streamAbort) {
+            try { _streamAbort.abort(); } catch (_) {}
+            _streamAbort = null;
+        }
+
         // Transition speaking → yielding (allowed) before fade
         setState('yielding', { intent });
 
@@ -1170,9 +1180,13 @@ const VoiceModeModule = (function() {
             }
         }
 
+        // AbortController kills the SSE stream at the network level on interrupt.
+        // Without this, buffered stream chunks keep firing TTS even after yield.
+        _streamAbort = new AbortController();
         try {
             const resp = await fetch('/chat/stream', {
-                method: 'POST', headers: chatHeaders, body: formBody, credentials: 'same-origin'
+                method: 'POST', headers: chatHeaders, body: formBody,
+                credentials: 'same-origin', signal: _streamAbort.signal,
             });
             if (!resp.ok) return null;
 

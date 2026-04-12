@@ -894,6 +894,10 @@ const ThinkingIndicator = (() => {
         // Always use stream mode for consistent indicator
         streamMode = true;
         console.log('ThinkingIndicator.show called, streamMode:', streamMode);
+
+        // Start thinking sounds (subtle typing clicks)
+        if (window.ThinkingSounds) window.ThinkingSounds.start();
+
         const chatDisplay = document.getElementById('chat-display');
         if (!chatDisplay) {
             console.warn('ThinkingIndicator: chatDisplay not found!');
@@ -989,6 +993,9 @@ const ThinkingIndicator = (() => {
     }
 
     function hide() {
+        // Stop thinking sounds
+        if (window.ThinkingSounds) window.ThinkingSounds.stop();
+
         if (elapsedInterval) {
             clearInterval(elapsedInterval);
             elapsedInterval = null;
