@@ -1029,12 +1029,12 @@ const VoiceModeModule = (function() {
         }
         console.log('[Interrupt] mic ready, watching for barge-in');
         let interruptCount = 0;
-        _playbackBaseline = 0;
+        // Use MINIMUM level during calibration — ignores user-voice residue and
+        // spikes, keeps baseline as "quiet moments" of TTS echo only.
+        _playbackBaseline = 1.0;
         let baselineSamples = 0;
         let lastLogTime = 0;
         const detectStart = Date.now();
-        // Longer calibration window — TTS audio needs to start playing before we
-        // sample the echo baseline, and first chunks take ~500ms to reach speakers.
         const CALIBRATE_MS = 800;
         _interruptTimer = setInterval(async () => {
             if (!analyser || _interrupted) return;
@@ -1042,11 +1042,17 @@ const VoiceModeModule = (function() {
             const level = getAudioLevel();
             const now = Date.now();
             const elapsed = now - detectStart;
-            if (elapsed < CALIBRATE_MS) { _playbackBaseline += level; baselineSamples++; return; }
-            if (baselineSamples > 0 && _playbackBaseline > 0) {
-                _playbackBaseline = _playbackBaseline / baselineSamples;
+            if (elapsed < CALIBRATE_MS) {
+                // Track minimum observed level (quiet moments = pure echo or silence)
+                if (level < _playbackBaseline) _playbackBaseline = level;
+                baselineSamples++;
+                return;
+            }
+            if (baselineSamples > 0) {
+                // Finalize: floor the baseline so we don't end up with near-zero
+                _playbackBaseline = Math.max(_playbackBaseline, 0.003);
                 baselineSamples = 0;
-                console.log(`[Interrupt] baseline calibrated: ${_playbackBaseline.toFixed(4)} (TTS echo level)`);
+                console.log(`[Interrupt] baseline calibrated: ${_playbackBaseline.toFixed(4)} (TTS echo floor)`);
             }
             // User voice is typically 3-5x louder than speaker echo in mic.
             // 3.0x baseline catches real barge-in without false-firing on echo spikes.
