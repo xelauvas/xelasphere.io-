@@ -15,6 +15,7 @@ from flask import Blueprint, current_app, g, jsonify, request, session
 from app.config import Config, db
 from app.limiter import limiter, csrf_required
 from app.blueprints.shared import login_required, error_handler
+from app.backpressure import TTS_SLOTS, acquire_or_503
 
 logger = logging.getLogger(__name__)
 
@@ -880,7 +881,20 @@ def _generate_gemini_tts(text, voice='Kore'):
 @error_handler
 @login_required
 def generate_groq_tts():
-    """Generate text-to-speech: Gemini (primary, free, no length limit) → Groq (fallback)."""
+    """Generate text-to-speech: Kokoro (local) → Gemini → Groq fallback chain."""
+    # Backpressure — TTS is CPU/GPU heavy downstream (Kokoro sidecar semaphore = 2)
+    _bp = acquire_or_503(TTS_SLOTS, timeout=3.0)
+    acquired = _bp.__enter__()
+    if not acquired:
+        _bp.__exit__(None, None, None)
+        return jsonify({'error': 'TTS busy, please retry', 'retry_after': 3}), 503
+    try:
+        return _generate_groq_tts_impl()
+    finally:
+        _bp.__exit__(None, None, None)
+
+
+def _generate_groq_tts_impl():
     payload = request.get_json(silent=True) or {}
     text = (payload.get('text') or '').strip()
     if not text:
