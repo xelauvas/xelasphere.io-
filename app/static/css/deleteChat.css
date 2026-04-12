@@ -20,17 +20,17 @@
     to { opacity: 1; }
 }
 
-/* Card */
+/* Card — shared base for delete + rename */
 .modal-content {
     background: #2e2c29;
-    border-radius: 20px;
-    width: 280px;
+    border-radius: 16px;
+    width: 340px;
     max-width: calc(100% - 40px);
     padding: 0;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5),
                 0 0 0 0.5px rgba(255, 255, 255, 0.05);
     overflow: hidden;
-    text-align: center;
+    text-align: left;
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
     transform: scale(0.96);
     opacity: 0;
@@ -46,87 +46,96 @@
 
 .modal-content h2 {
     margin: 0;
-    font-size: 17px;
+    font-size: 15px;
     font-weight: 600;
     color: #fff;
-    letter-spacing: -0.3px;
-    padding: 22px 24px 5px;
+    letter-spacing: -0.2px;
+    padding: 20px 20px 6px;
 }
 
 .modal-content p {
     margin: 0;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.35);
-    line-height: 1.4;
-    padding: 2px 24px 22px;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 1.45;
+    padding: 0 20px 18px;
 }
 
 .modal-content strong {
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.85);
     font-weight: 600;
 }
 
 .modal-content a {
-    color: #7ab6fe;
-    text-decoration: none;
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.25);
 }
 
-/* Side-by-side buttons */
+/* Right-aligned compact buttons — shared */
 .modal-actions {
     display: flex;
-    gap: 10px;
-    padding: 0 16px 16px;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 0 14px 14px;
 }
 
 .btn-cancel,
-.btn-delete {
-    flex: 1;
+.btn-delete,
+.btn-save {
+    flex: 0 0 auto;
+    min-width: 72px;
+    height: 32px;
+    padding: 0 14px;
     border: none;
-    border-radius: 12px;
-    height: 46px;
-    font-size: 15px;
+    border-radius: 8px;
+    font-size: 13px;
     font-weight: 600;
+    letter-spacing: -0.1px;
+    font-family: inherit;
     cursor: pointer;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
-    -webkit-tap-highlight-color: transparent;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    letter-spacing: -0.2px;
-    transition: transform 0.1s ease, filter 0.1s ease;
+    transition: background 0.12s ease, transform 0.1s ease, filter 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
 }
 
+/* Cancel — ghost, blends into card */
 .btn-cancel {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.7);
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+}
+.btn-cancel:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.85);
 }
 
+/* Delete — destructive red, vintage-warm shade (not loud crimson) */
 .btn-delete {
-    background: #c0392b;
-    color: #fff;
+    background: #8a3a2c;
+    color: #f4e8d9;
+}
+.btn-delete:hover {
+    background: #9d4333;
+}
+.btn-delete:active {
+    transform: scale(0.97);
+    filter: brightness(0.95);
 }
 
 .btn-cancel:active {
     transform: scale(0.97);
 }
 
-.btn-delete:active {
-    transform: scale(0.97);
-    filter: brightness(0.85);
+.btn-cancel:disabled,
+.btn-delete:disabled,
+.btn-save:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
-/* ═══ Rename Modal ═══ */
-.modal-content.rename-modal {
-    width: 340px;
-    text-align: left;
-}
-
-.modal-content.rename-modal h2 {
-    text-align: left;
-    padding: 20px 20px 12px;
-    font-size: 15px;
-    font-weight: 600;
-}
+/* ═══ Rename Modal — inherits base, only adds the input + Save accent ═══ */
 
 .rename-modal-input {
     display: block;
@@ -158,58 +167,14 @@
     background: rgba(255, 255, 255, 0.18);
 }
 
-/* Right-aligned compact button row — replaces the stretched 50/50 split */
-.rename-modal .modal-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    padding: 0 14px 14px;
-}
-
-.rename-modal .btn-cancel,
-.rename-modal .btn-save {
-    flex: 0 0 auto;
-    min-width: 72px;
-    height: 32px;
-    padding: 0 14px;
-    border: none;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: -0.1px;
-    font-family: inherit;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.12s ease, transform 0.1s ease;
-    -webkit-tap-highlight-color: transparent;
-}
-
-/* Cancel — ghost, blends into modal */
-.rename-modal .btn-cancel {
-    background: transparent;
-    color: rgba(255, 255, 255, 0.55);
-}
-.rename-modal .btn-cancel:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.85);
-}
-
 /* Save — vintage ivory fill, dark text */
-.rename-modal .btn-save {
+.btn-save {
     background: #ece3d2;
     color: #1f1c17;
 }
-.rename-modal .btn-save:hover {
+.btn-save:hover {
     background: #f5ecdb;
 }
-.rename-modal .btn-save:active {
+.btn-save:active {
     transform: scale(0.97);
-}
-
-.rename-modal .btn-save:disabled,
-.rename-modal .btn-cancel:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
 }
