@@ -291,6 +291,35 @@ def pin_chat_session():
         return jsonify({'error': 'Failed to update pin state.'}), 500
 
 
+@chat_bp.route('/chat/prime', methods=['POST'])
+@csrf_required
+@error_handler
+@guest_allowed
+def chat_prime():
+    """Pre-warm session history / model context when voice VAD detects speech start.
+
+    Fires the moment the user begins speaking so that by the time the transcript
+    is ready, the session context (history lookup, memory retrieval) is already
+    cached in this worker. Fire-and-forget — we just touch the session to warm
+    any lazy-loaded state.
+    """
+    data = request.get_json(silent=True) or {}
+    session_id = (data.get('session_id') or '').strip()
+    if not session_id:
+        return jsonify({'status': 'noop'})
+    try:
+        # Touch session history so it's hot in memory for the upcoming /chat/stream
+        from app.chat_session import get_session
+        sess = get_session(session_id)
+        if sess is not None:
+            # Access .messages triggers lazy loads if any
+            _ = getattr(sess, 'messages', None) or getattr(sess, 'history', None) or []
+        return jsonify({'status': 'primed'})
+    except Exception as e:
+        logger.debug(f"prime_chat no-op: {e}")
+        return jsonify({'status': 'noop'})
+
+
 @chat_bp.route('/chat/feedback', methods=['POST'])
 @csrf_required
 @error_handler
@@ -900,8 +929,14 @@ def chat_stream():
     from app.model_catalog import get_model_context_limit
     model_context = get_model_context_limit(stream_model)
     context_builder = ContextBuilder(token_budget=model_context)
+    # Optional system_addition from client (e.g. voice mode interrupt context)
+    system_addition = request.form.get('system_addition', '').strip()
+    base_system = SYSTEM_INSTRUCTIONS + "\n" + get_developer_instructions(stream_model)
+    if system_addition:
+        base_system = base_system + "\n\n" + system_addition
+        logger.info(f"[Stream] system_addition applied ({len(system_addition)} chars)")
     built_context = context_builder.build(
-        system_prompt=SYSTEM_INSTRUCTIONS + "\n" + get_developer_instructions(stream_model),
+        system_prompt=base_system,
         full_history=previous_messages,
         artifact_state=artifact_tracker if should_inject_artifact else None,
         user_message=prompt,

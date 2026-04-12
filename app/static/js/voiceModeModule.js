@@ -414,18 +414,155 @@ const VoiceModeModule = (function() {
         return Math.sqrt(sumSquares / frequencyData.length);
     }
 
+    // Rolling short buffer of recent mic samples (for intent classification)
+    let _shortBuffer = null;
+    let _shortBufferSize = 12800; // 800ms at 16kHz
+    function _captureShortBuffer() {
+        if (!analyser) return null;
+        if (!_shortBuffer) _shortBuffer = new Float32Array(_shortBufferSize);
+        // Grab current analyser frame as Float32 and shift into ring
+        const frame = new Uint8Array(analyser.fftSize);
+        analyser.getByteTimeDomainData(frame);
+        const fLen = frame.length;
+        // Shift existing left by fLen
+        _shortBuffer.copyWithin(0, fLen);
+        // Write new samples at tail
+        for (let i = 0; i < fLen; i++) {
+            _shortBuffer[_shortBufferSize - fLen + i] = (frame[i] - 128) / 128;
+        }
+        return _shortBuffer;
+    }
+
+    // Predictive pipeline: pre-warm backend context when user starts speaking
+    const PredictivePipeline = (() => {
+        let primerPromise = null;
+        let primerController = null;
+        return {
+            onSpeechDetected() {
+                try {
+                    const sid = window.chatManager?.activeSessionId || '';
+                    if (!sid) return;
+                    primerController = new AbortController();
+                    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.content;
+                    primerPromise = fetch('/chat/prime', {
+                        method: 'POST', headers,
+                        signal: primerController.signal,
+                        body: JSON.stringify({ session_id: sid }),
+                        credentials: 'same-origin'
+                    }).catch(() => null);
+                    console.log('[Predictive] priming session context');
+                } catch (_) {}
+            },
+            async onTranscriptReady() {
+                if (primerPromise) {
+                    try { await primerPromise; } catch (_) {}
+                    primerPromise = null;
+                }
+            },
+            cancel() {
+                if (primerController) { try { primerController.abort(); } catch(_){} }
+                primerPromise = null;
+            }
+        };
+    })();
+
+    // Intent classifier: decides if mic activity is backchannel/noise/question/correction
+    const IntentClassifier = (() => {
+        const BACKCHANNELS = [
+            'yeah','yes','ok','okay','sure','right','mm','hmm','uh huh',
+            'got it','i see','of course','absolutely','exactly','mhm',
+            'da','bine','sigur','în regulă', // Romanian
+            'sí','claro','vale','ajá',       // Spanish
+            'oui','d\'accord','bien sûr',    // French
+            'sim','claro','certo','tá',      // Portuguese
+        ];
+        const CORRECTION_PREFIX = /^(no|wait|actually|stop|hold on|but|sorry|nu|aștept|espera|attend|pera)/i;
+
+        function energy(buf) {
+            let s = 0;
+            for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+            return s / buf.length;
+        }
+        function rising(buf) {
+            const half = Math.floor(buf.length / 2);
+            return energy(buf.subarray(half)) > energy(buf.subarray(0, half)) * 1.3;
+        }
+
+        return {
+            classify(samples, partialTranscript = '') {
+                const lower = (partialTranscript || '').toLowerCase().trim();
+                if (lower) {
+                    if (BACKCHANNELS.some(b => lower === b || lower.startsWith(b + ' '))) return 'backchannel';
+                    if (CORRECTION_PREFIX.test(lower)) return 'correction';
+                }
+                if (!samples) return 'noise';
+                const e = energy(samples);
+                const durApprox = samples.length / 16000; // assume 16kHz
+                const r = rising(samples);
+                if (durApprox < 0.4 && e < 0.002) return 'noise';
+                if (durApprox < 0.6 && e < 0.01) return 'backchannel';
+                if (r && durApprox < 1.0) return 'question';
+                if (e > 0.005 && durApprox > 0.4) return 'correction';
+                return 'noise';
+            }
+        };
+    })();
+
+    // AEC worklet node — subtracts TTS reference from mic
+    let _aecNode = null;
+    let _aecReady = false;
+
+    // Currently playing TTS text + last completed (for interrupt context)
+    let _currentTTSText = null;
+    let _lastCompletedTTSText = '';
+
     async function startListening() {
         try {
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,   // browser-level first pass
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    sampleRate: 16000,
+                }
+            });
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+
+            // Load AEC worklet (once per context)
+            if (!_aecReady) {
+                try {
+                    await audioContext.audioWorklet.addModule('/static/js/audio/aec-processor.js');
+                    _aecReady = true;
+                } catch (e) {
+                    console.warn('[VoiceMode] AEC worklet load failed, continuing without AEC:', e);
+                }
+            }
+
+            const micSource = audioContext.createMediaStreamSource(stream);
             analyser = audioContext.createAnalyser();
-            analyser.fftSize = 512;  // more bins for detailed shape
-            analyser.smoothingTimeConstant = 0.15; // snappy response
+            analyser.fftSize = 512;
+            analyser.smoothingTimeConstant = 0.15;
             analyser.minDecibels = -90;
             analyser.maxDecibels = -10;
             frequencyData = new Uint8Array(analyser.frequencyBinCount);
-            const source = audioContext.createMediaStreamSource(stream);
-            source.connect(analyser);
+
+            // mic -> [AEC worklet] -> analyser
+            if (_aecReady) {
+                try {
+                    _aecNode = new AudioWorkletNode(audioContext, 'aec-processor');
+                    micSource.connect(_aecNode);
+                    _aecNode.connect(analyser);
+                } catch (e) {
+                    console.warn('[VoiceMode] AEC node create failed, fallback to direct mic→analyser:', e);
+                    micSource.connect(analyser);
+                    _aecNode = null;
+                }
+            } else {
+                micSource.connect(analyser);
+            }
+
             setState('listening');
         } catch (e) {
             console.error('[VoiceMode] Microphone error:', e);
@@ -438,10 +575,40 @@ const VoiceModeModule = (function() {
             stream.getTracks().forEach(t => t.stop());
             stream = null;
         }
+        if (_aecNode) {
+            try { _aecNode.disconnect(); } catch (_) {}
+            _aecNode = null;
+        }
         if (audioContext) {
             audioContext.close().catch(() => {});
             audioContext = null;
             analyser = null;
+            _aecReady = false;
+        }
+    }
+
+    // Push TTS audio buffer samples to the AEC reference channel.
+    // Also downsamples to 16kHz if the TTS playback is at a different rate.
+    function _feedAECReference(audioBuffer) {
+        if (!_aecNode) return;
+        try {
+            const srcData = audioBuffer.getChannelData(0);
+            const srcRate = audioBuffer.sampleRate;
+            const dstRate = 16000;
+            let samples;
+            if (srcRate === dstRate) {
+                samples = Array.from(srcData);
+            } else {
+                const ratio = srcRate / dstRate;
+                const dstLen = Math.floor(srcData.length / ratio);
+                samples = new Array(dstLen);
+                for (let i = 0; i < dstLen; i++) {
+                    samples[i] = srcData[Math.floor(i * ratio)];
+                }
+            }
+            _aecNode.port.postMessage({ type: 'reference', samples });
+        } catch (e) {
+            // ignore — AEC ref is best-effort
         }
     }
 
@@ -475,6 +642,8 @@ const VoiceModeModule = (function() {
                     hasSpoken = true;
                     speechStartTime = now;
                     console.log(`[VAD] speech! level=${level.toFixed(4)} threshold=${threshold.toFixed(4)}`);
+                    // Predictive: prime backend context the moment user starts speaking
+                    PredictivePipeline.onSpeechDetected();
                 }
                 lastSpeechTime = now;
             } else if (hasSpoken && lastSpeechTime > 0) {
@@ -738,6 +907,73 @@ const VoiceModeModule = (function() {
         if (_interruptTimer) { clearInterval(_interruptTimer); _interruptTimer = null; }
     }
 
+    // Graceful yield: fade current TTS, finish current sentence, drop the rest
+    async function gracefulYield(intent) {
+        console.log(`[VoiceMode] gracefulYield — intent: ${intent}`);
+        if (_interruptTimer) { clearInterval(_interruptTimer); _interruptTimer = null; }
+
+        // 1. Fade out current audio source over 180ms instead of hard stop
+        if (_currentSource && playbackCtx) {
+            try {
+                const gain = playbackCtx.createGain();
+                // Reroute: source → gain → analyser (or destination)
+                try { _currentSource.disconnect(); } catch (_) {}
+                _currentSource.connect(gain);
+                if (_playbackAnalyser) {
+                    gain.connect(_playbackAnalyser);
+                } else {
+                    gain.connect(playbackCtx.destination);
+                }
+                const t = playbackCtx.currentTime;
+                gain.gain.setValueAtTime(1, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.18);
+                await new Promise(r => setTimeout(r, 200));
+                try { _currentSource.stop(); } catch (_) {}
+            } catch (e) {
+                try { _currentSource.stop(); } catch (_) {}
+            }
+            _currentSource = null;
+        }
+
+        // 2. Drop remaining queued TTS chunks — don't keep speaking
+        _audioQueue = [];
+        _ttsInflight = 0;
+
+        // 3. Save context for next LLM call
+        _interruptContext = {
+            wasAISaying: _currentTTSText || _lastCompletedTTSText || '',
+            intent,
+            timestamp: Date.now(),
+        };
+
+        // 4. Begin capturing the user's interrupt speech
+        setState('capturing', { intent });
+        await _captureInterruptSpeech();
+    }
+
+    // Persistent interrupt context for system_addition on next turn
+    let _interruptContext = null;
+
+    function _buildInterruptSystemAddition() {
+        if (!_interruptContext) return '';
+        const { wasAISaying, intent, timestamp } = _interruptContext;
+        if (Date.now() - timestamp > 30000) return ''; // expire after 30s
+        const phrasing = {
+            correction: 'corrected you or redirected the conversation',
+            question:   'asked a question mid-response',
+            backchannel:'acknowledged what you were saying',
+        }[intent] || 'interrupted you';
+        const excerpt = (wasAISaying || '').slice(0, 120).trim();
+        return [
+            '[CONVERSATION CONTEXT]',
+            `You were just interrupted mid-response. You were saying: "${excerpt}..."`,
+            `The user ${phrasing}.`,
+            'Respond naturally — acknowledge the interruption briefly if appropriate ("Oh, good point", "Sure, let me address that"), then focus entirely on what the user just said.',
+            'Do not continue what you were saying unless the user explicitly asks you to.',
+            '[END CONTEXT]'
+        ].join('\n');
+    }
+
     async function _playNextInQueue() {
         if (_interrupted || !isActive) return;
         if (_audioQueue.length === 0) {
@@ -750,7 +986,8 @@ const VoiceModeModule = (function() {
             playbackCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
         if (playbackCtx.state === 'suspended') await playbackCtx.resume();
-        const buffer = _audioQueue.shift();
+        const item = _audioQueue.shift();
+        const buffer = item.buffer || item; // support both plain buffer and {buffer, text}
         const source = playbackCtx.createBufferSource();
         source.buffer = buffer;
         _ensurePlaybackAnalyser();
@@ -759,23 +996,29 @@ const VoiceModeModule = (function() {
         } else {
             source.connect(playbackCtx.destination);
         }
+        // Feed TTS samples into AEC reference — mic will subtract this echo
+        _feedAECReference(buffer);
         _currentSource = source;
+        _currentTTSText = item.text || null;
         window._voiceTtsAudio = { pause: () => { try { source.stop(); } catch(_){} } };
         source.onended = () => {
+            // Store the just-finished text for potential interrupt context
+            if (_currentTTSText) _lastCompletedTTSText = _currentTTSText;
+            _currentTTSText = null;
             _currentSource = null;
             if (!_interrupted) _playNextInQueue();
         };
         source.start(0);
     }
 
-    async function _enqueueAudio(arrayBuffer) {
+    async function _enqueueAudio(arrayBuffer, text) {
         if (_interrupted || !isActive || !arrayBuffer || arrayBuffer.byteLength < 100) return;
         if (!playbackCtx || playbackCtx.state === 'closed') {
             playbackCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
         try {
             const decoded = await playbackCtx.decodeAudioData(arrayBuffer.slice(0));
-            _audioQueue.push(decoded);
+            _audioQueue.push({ buffer: decoded, text: text || '' });
             if (!_currentSource) _playNextInQueue();
         } catch (e) {
             console.error('[VoiceMode] audio decode error:', e);
@@ -792,8 +1035,10 @@ const VoiceModeModule = (function() {
         _playbackBaseline = 0;
         let baselineSamples = 0;
         const detectStart = Date.now();
-        _interruptTimer = setInterval(() => {
+        _interruptTimer = setInterval(async () => {
             if (!analyser || _interrupted) return;
+            // Continuously capture mic samples into the short buffer
+            _captureShortBuffer();
             const level = getAudioLevel();
             const elapsed = Date.now() - detectStart;
             if (elapsed < 400) { _playbackBaseline += level; baselineSamples++; return; }
@@ -805,33 +1050,42 @@ const VoiceModeModule = (function() {
             if (level > threshold) {
                 interruptCount++;
                 if (interruptCount >= 4) {
-                    console.log('[VoiceMode] INTERRUPT — user spoke over AI');
+                    // Classify intent BEFORE cutting — don't flinch on "mm-hmm"
+                    const samples = _captureShortBuffer();
+                    const intent = IntentClassifier.classify(samples, '');
+                    console.log(`[VoiceMode] interrupt candidate — intent: ${intent}`);
+                    if (intent === 'backchannel' || intent === 'noise') {
+                        // Don't cut — decay counter, let AI keep speaking
+                        interruptCount = 0;
+                        return;
+                    }
+                    console.log('[VoiceMode] INTERRUPT — user spoke over AI with intent:', intent);
                     _interrupted = true;
-                    _flushAudioQueue();
-                    // Immediately start capturing what they're saying
-                    _captureInterruptSpeech();
+                    _lastInterruptIntent = intent;
+                    await gracefulYield(intent);
                 }
             } else {
                 interruptCount = Math.max(0, interruptCount - 1);
             }
         }, 50);
     }
+    let _lastInterruptIntent = null;
 
     // After interrupt, record what the user says and send as next prompt
     async function _captureInterruptSpeech() {
         if (!isActive) return;
         console.log('[VoiceMode] capturing user interrupt speech');
         try {
-            // Mic should already be live — just start recording
             if (!stream) await startListening();
             startRecording();
-            // Use VAD to detect when they stop
+            // From 'capturing' we move to normal listening flow so VAD silence triggers send
+            _interrupted = false; // reset so next stream can run
             setState('listening');
             startSilenceDetection();
         } catch (e) {
             console.error('[VoiceMode] capture interrupt failed:', e);
-            // Fall back to normal listening
             if (isActive) {
+                _interrupted = false;
                 await startListening();
                 startRecording();
                 startSilenceDetection();
@@ -845,6 +1099,8 @@ const VoiceModeModule = (function() {
         _currentSource = null;
         _ttsInflight = 0;
         _streamDone = false;
+        // Wait for the context primer (if any) so the first LLM chunk is faster
+        await PredictivePipeline.onTranscriptReady();
         _preferredVoice = 'auto';
 
         const csrfMeta = document.querySelector('meta[name="csrf-token"]');
@@ -852,9 +1108,17 @@ const VoiceModeModule = (function() {
         if (csrfMeta) chatHeaders['X-CSRFToken'] = csrfMeta.content;
 
         const sessionId = window.chatManager?.activeSessionId || '';
-        const formBody = new URLSearchParams({
+        const formBodyParams = {
             prompt: transcript, model: 'auto', session_id: sessionId,
-        });
+        };
+        // If user interrupted the AI, attach system addition so next response acknowledges it
+        const systemAddition = _buildInterruptSystemAddition();
+        if (systemAddition) {
+            formBodyParams.system_addition = systemAddition;
+            console.log('[VoiceMode] system_addition attached for interrupt continuity');
+        }
+        _interruptContext = null; // consume once
+        const formBody = new URLSearchParams(formBodyParams);
 
         let fullContent = '';
         let ttsBuffer = '';
@@ -871,7 +1135,7 @@ const VoiceModeModule = (function() {
             _ttsInflight++;
             _fetchTTSChunk(text, lang).then(audio => {
                 _ttsInflight--;
-                if (audio) _enqueueAudio(audio);
+                if (audio) _enqueueAudio(audio, text);
                 _drainPending();
             });
         }
@@ -1086,18 +1350,58 @@ const VoiceModeModule = (function() {
     }
 
     // ────────────────────────────────────────
-    // State Management
+    // State Management — FSM with guards
     // ────────────────────────────────────────
 
     const STATE_LABELS = {
         idle: '',
         listening: 'Listening...',
         thinking: 'Thinking...',
-        speaking: 'Speaking...'
+        speaking: 'Speaking...',
+        yielding: 'Listening...',
+        capturing: 'Listening...',
     };
 
-    function setState(state) {
+    // Finite state machine: allowed transitions + guards
+    const FSM = (() => {
+        const TRANSITIONS = {
+            idle:      ['listening'],
+            listening: ['thinking', 'idle'],
+            thinking:  ['speaking', 'idle', 'listening'],
+            speaking:  ['yielding', 'idle', 'listening'],
+            yielding:  ['capturing', 'idle'],
+            capturing: ['thinking', 'idle'],
+        };
+        const GUARDS = {
+            'speaking→yielding': (ctx) => ctx.intent !== 'backchannel' && ctx.intent !== 'noise',
+        };
+        return {
+            canTransition(from, to, ctx) {
+                const allowed = TRANSITIONS[from] || [];
+                if (!allowed.includes(to)) {
+                    console.warn(`[FSM] Invalid transition: ${from} → ${to}`);
+                    return false;
+                }
+                const guardKey = `${from}→${to}`;
+                if (GUARDS[guardKey] && !GUARDS[guardKey](ctx || {})) {
+                    console.log(`[FSM] Guard blocked: ${guardKey}`, ctx);
+                    return false;
+                }
+                return true;
+            },
+            log(from, to, ctx) {
+                console.log(`[FSM] ${from} → ${to}`, ctx || '');
+            }
+        };
+    })();
+
+    function setState(state, ctx) {
         const prev = currentState;
+        // Allow idle seeding from initial load; validate otherwise
+        if (prev && prev !== state && !FSM.canTransition(prev, state, ctx)) {
+            return;
+        }
+        FSM.log(prev, state, ctx);
         currentState = state;
 
         // Update textarea container data attribute for CSS
