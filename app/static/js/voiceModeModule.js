@@ -827,8 +827,23 @@ const VoiceModeModule = (function() {
 
     function _splitAtSentenceBoundary(buffer) {
         const minChunk = 40;
+        const maxChunk = 200;
         if (buffer.length < minChunk) return [null, buffer];
         let lastSplit = -1;
+        // Fast path: return at FIRST boundary past minChunk so bursts of text
+        // are sliced into individual sentence chunks (not one mega-chunk).
+        for (let i = minChunk; i < Math.min(buffer.length, maxChunk); i++) {
+            const ch = buffer[i];
+            if ('.?!。？！…'.includes(ch)) {
+                const next = buffer[i + 1];
+                if ('。？！…'.includes(ch) || i + 1 >= buffer.length || next === ' ' || next === '\n') {
+                    return [buffer.substring(0, i + 1).trim(), buffer.substring(i + 1)];
+                }
+            }
+            if (ch === '\n' && i > minChunk) {
+                return [buffer.substring(0, i + 1).trim(), buffer.substring(i + 1)];
+            }
+        }
         // ASCII + CJK sentence terminators
         const terminators = '.?!。？！…';
         // CJK comma / pause punctuation — fallback break points
