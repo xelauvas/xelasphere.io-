@@ -1361,26 +1361,13 @@ ul {
 
 .chat-btn:hover {
     background: rgba(255, 255, 255, 0.06);
-    color: #ffffff;
 }
 
-.chat-btn:hover i {
-    opacity: 1;
-}
-
-/* Keep per-action accent colors on hover — subtle, not loud */
-.share-btn:hover { color: #378ADD; }
-.share-btn:hover i { color: #378ADD; }
-.pin-btn:hover { color: #378ADD; }
-.pin-btn:hover i { color: #378ADD; }
-.archive-btn:hover { color: var(--success-green); }
-.archive-btn:hover i { color: var(--success-green); }
-.rename-btn:hover { color: var(--warning-yellow); }
-.rename-btn:hover i { color: var(--warning-yellow); }
-.delete-btn:hover {
+/* Delete is the only exception — red on hover to signal destructive action */
+.delete-btn:hover,
+.delete-btn:hover i {
     color: #ff6b6b;
 }
-.delete-btn:hover i { color: #ff6b6b; }
 
 /* Thin dividers between groups — matches the + menu's 0.5px hairlines */
 .chat-btn + .chat-btn {
