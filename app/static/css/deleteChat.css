@@ -117,25 +117,27 @@
 
 /* ═══ Rename Modal ═══ */
 .modal-content.rename-modal {
-    width: 360px;
+    width: 340px;
     text-align: left;
 }
 
 .modal-content.rename-modal h2 {
     text-align: left;
-    padding: 22px 22px 14px;
+    padding: 20px 20px 12px;
+    font-size: 15px;
+    font-weight: 600;
 }
 
 .rename-modal-input {
     display: block;
-    width: calc(100% - 44px);
-    margin: 0 22px 20px;
-    padding: 12px 14px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 0.5px solid rgba(255, 255, 255, 0.12);
-    border-radius: 10px;
+    width: calc(100% - 40px);
+    margin: 0 20px 16px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 0.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
     color: #fff;
-    font-size: 15px;
+    font-size: 14px;
     font-family: inherit;
     letter-spacing: -0.1px;
     outline: none;
@@ -146,8 +148,8 @@
 
 .rename-modal-input:focus,
 .rename-modal-input:focus-visible {
-    border-color: rgba(255, 255, 255, 0.28);
-    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.24);
+    background: rgba(255, 255, 255, 0.07);
     outline: none;
     box-shadow: none;
 }
@@ -156,33 +158,58 @@
     background: rgba(255, 255, 255, 0.18);
 }
 
-/* Primary save button — vintage ivory, dark text. Clean, no color. */
-.btn-save {
-    flex: 1;
-    border: none;
-    border-radius: 12px;
-    height: 46px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
-    -webkit-tap-highlight-color: transparent;
+/* Right-aligned compact button row — replaces the stretched 50/50 split */
+.rename-modal .modal-actions {
     display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 0 14px 14px;
+}
+
+.rename-modal .btn-cancel,
+.rename-modal .btn-save {
+    flex: 0 0 auto;
+    min-width: 72px;
+    height: 32px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.1px;
+    font-family: inherit;
+    cursor: pointer;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    letter-spacing: -0.2px;
-    transition: transform 0.1s ease, filter 0.1s ease;
+    transition: background 0.12s ease, transform 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Cancel — ghost, blends into modal */
+.rename-modal .btn-cancel {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+}
+.rename-modal .btn-cancel:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Save — vintage ivory fill, dark text */
+.rename-modal .btn-save {
     background: #ece3d2;
     color: #1f1c17;
 }
-
-.btn-save:active {
+.rename-modal .btn-save:hover {
+    background: #f5ecdb;
+}
+.rename-modal .btn-save:active {
     transform: scale(0.97);
-    filter: brightness(0.94);
 }
 
-.btn-save:disabled,
-.btn-cancel:disabled {
-    opacity: 0.5;
+.rename-modal .btn-save:disabled,
+.rename-modal .btn-cancel:disabled {
+    opacity: 0.45;
     cursor: not-allowed;
 }
