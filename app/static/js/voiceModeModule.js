@@ -510,9 +510,8 @@ const VoiceModeModule = (function() {
         };
     })();
 
-    // AEC worklet node — subtracts TTS reference from mic
+    // Legacy AEC node — no longer used (browser echoCancellation handles it)
     let _aecNode = null;
-    let _aecReady = false;
 
     // Currently playing TTS text + last completed (for interrupt context)
     let _currentTTSText = null;
@@ -526,22 +525,13 @@ const VoiceModeModule = (function() {
         try {
             stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
-                    echoCancellation: true,   // browser-level first pass
+                    echoCancellation: true,   // browser handles AEC — sufficient and production-grade
                     noiseSuppression: true,
                     autoGainControl: true,
                     sampleRate: 16000,
                 }
             });
             audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-
-            // Load AEC worklet per-context — module registration is per-AudioContext
-            _aecReady = false;
-            try {
-                await audioContext.audioWorklet.addModule('/static/js/audio/aec-processor.js');
-                _aecReady = true;
-            } catch (e) {
-                console.warn('[VoiceMode] AEC worklet load failed, continuing without AEC:', e);
-            }
 
             const micSource = audioContext.createMediaStreamSource(stream);
             analyser = audioContext.createAnalyser();
@@ -551,20 +541,9 @@ const VoiceModeModule = (function() {
             analyser.maxDecibels = -10;
             frequencyData = new Uint8Array(analyser.frequencyBinCount);
 
-            // mic -> [AEC worklet] -> analyser
-            if (_aecReady) {
-                try {
-                    _aecNode = new AudioWorkletNode(audioContext, 'aec-processor');
-                    micSource.connect(_aecNode);
-                    _aecNode.connect(analyser);
-                } catch (e) {
-                    console.warn('[VoiceMode] AEC node create failed, fallback to direct mic→analyser:', e);
-                    micSource.connect(analyser);
-                    _aecNode = null;
-                }
-            } else {
-                micSource.connect(analyser);
-            }
+            // Direct mic → analyser. Browser's echoCancellation is already
+            // suppressing TTS speaker echo; we don't need a second AEC layer.
+            micSource.connect(analyser);
 
             // Only transition state if caller wants it — interrupt detection
             // needs the mic during 'speaking' state without flipping to 'listening'.
@@ -580,21 +559,17 @@ const VoiceModeModule = (function() {
             stream.getTracks().forEach(t => t.stop());
             stream = null;
         }
-        if (_aecNode) {
-            try { _aecNode.disconnect(); } catch (_) {}
-            _aecNode = null;
-        }
         if (audioContext) {
             audioContext.close().catch(() => {});
             audioContext = null;
             analyser = null;
-            _aecReady = false;
         }
     }
 
-    // Push TTS audio buffer samples to the AEC reference channel.
-    // Also downsamples to 16kHz if the TTS playback is at a different rate.
-    function _feedAECReference(audioBuffer) {
+    // Placeholder for legacy AEC reference feed — AEC is now handled
+    // entirely by the browser. No-op kept for call-site compatibility.
+    function _feedAECReference(_audioBuffer) { /* no-op */ }
+    function _feedAECReference_UNUSED(audioBuffer) {
         if (!_aecNode) return;
         try {
             const srcData = audioBuffer.getChannelData(0);
