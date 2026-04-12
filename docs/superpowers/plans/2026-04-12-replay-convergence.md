@@ -675,6 +675,12 @@ git commit -m "test(stream): verify state machine is chunk-boundary agnostic"
 
 - [ ] **Step 1: Replace the AI branch in `renderMessage`**
 
+**Before editing:** Verify `appendActionButtons` is the correct function name and is in scope at this call site. Run:
+```bash
+grep -n "appendActionButtons" app/static/js/startNewChatModule.js app/static/js/codeWindow.js | head -10
+```
+Confirm it's (a) called from within `handleComplexMessage` on the existing path, (b) accessible from `renderMessage` via its existing import/global scope. If the name differs or it's not reachable, STOP and report — silently missing action buttons on replayed messages would be a hidden regression.
+
 Find this block in `app/static/js/startNewChatModule.js` (currently around lines 4211–4222):
 
 ```javascript
