@@ -143,3 +143,74 @@
     margin: 0;
     padding-left: 1.5em;
 }
+
+/* ---------------------------------------------------------------------------
+   Legacy-CSS compatibility shims.
+   Fixes 7 critical + 4 important findings from the post-merge CSS audit.
+   These rules win over legacy .ai-message / mobile breakpoint rules that
+   re-impose margins on elements-that-ARE-the-stream-block (pre, ul, ol).
+   Specificity trumps via the full chain .message.ai-message … and mobile
+   rules use !important because some breakpoint rules themselves use
+   specific compound selectors.
+   --------------------------------------------------------------------------- */
+
+/* Critical #1, #2, #5, #6: pre/ul/ol at the stream-block level.
+   Zero their OWN margins — all spacing is owned by .stream-block + .stream-block
+   above. Higher-specificity variants cover .ai-message and .message.ai-message
+   chains that would otherwise re-impose margins (message-styles.css:637-641,
+   message-styles.css:1131-1142, message-styles.css:715-720). */
+.text-message pre.stream-block,
+.text-message ul.stream-block,
+.text-message ol.stream-block,
+.ai-message .text-message pre.stream-block,
+.ai-message .text-message ul.stream-block,
+.ai-message .text-message ol.stream-block,
+.message.ai-message .text-message pre.stream-block,
+.message.ai-message .text-message ul.stream-block,
+.message.ai-message .text-message ol.stream-block {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* Critical #3, #4, #6, #7: mobile breakpoint rules (mobile.css:2822, 2836,
+   3484, 3513, 3707, 3739) re-impose margins on pre/ul/ol/p at multiple
+   mobile widths. Match their specificity and neutralize. !important is the
+   pragmatic choice: some mobile rules use compound chains specific enough
+   to tie with us and win on source-order in older Safari. */
+@media (max-width: 768px) {
+    .message .text-message pre.stream-block,
+    .message .text-message ul.stream-block,
+    .message .text-message ol.stream-block,
+    .message.ai-message .text-message pre.stream-block,
+    .message.ai-message .text-message ul.stream-block,
+    .message.ai-message .text-message ol.stream-block {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+    /* Paragraphs inside stream-block wrappers — mobile.css:3484 kills
+       margin-bottom via p:last-child (every streamed <p> is last-child of
+       its wrapper). Our existing `stream-block > p { margin: 0 }` handles
+       this at tie-specificity with source-order, but mobile may reorder; be
+       explicit. */
+    .message.ai-message .text-message .stream-block > p {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+}
+
+/* Important #1: .text-message p:last-child { margin-bottom: 0 } in
+   message-styles.css:653 fires on every streamed <p> (each is the only
+   child of its wrapper). Our stream-block > p rule at line 126 zeros both
+   margins, so the legacy rule is already neutralized on desktop — this is
+   documentation only, no extra rule needed. Same for Important #2 (adjacent
+   siblings h2+p etc.) — those selectors simply don't match the new DOM,
+   their effect is dropped silently; spacing is now governed by the
+   .stream-block + .stream-block rule. */
+
+/* Important #3: list own-margin load-order fragility. Already covered by
+   the pre/ul/ol zero-out above for AI content; user-message lists still go
+   through appendTextMessage and keep their legacy margins. */
+
+/* Minor cosmetic: .text-message has a contentFadeIn animation that stacks
+   with per-block streamBlockIn. On replay mode we suppress per-block; the
+   container fade is unchanged. Not overridden. */
