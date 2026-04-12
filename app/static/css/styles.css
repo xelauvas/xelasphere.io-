@@ -431,9 +431,11 @@ body:not(.has-messages) .arrow-down {
    this specific prompt was sent under.
    ──────────────────────────────────────────────────────────────────── */
 .message-style-badge {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 5px;
+    width: max-content;
+    max-width: 100%;
     margin: 0 0 6px;
     padding: 1px 8px 1px 7px;
     height: 17px;
@@ -447,17 +449,8 @@ body:not(.has-messages) .arrow-down {
     line-height: 1;
     user-select: none;
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
-    opacity: 0;
-    transform: translateY(-2px) scale(0.96);
-    transform-origin: left center;
-    animation: msgBadgeIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) 0.08s forwards;
     white-space: nowrap;
-    vertical-align: middle;
-    max-width: max-content;
-}
-
-@keyframes msgBadgeIn {
-    to { opacity: 1; transform: translateY(0) scale(1); }
+    /* No animation — sits quietly at the top of the bubble, no flying. */
 }
 
 .message-style-badge__dot {
@@ -482,13 +475,6 @@ body:not(.has-messages) .arrow-down {
 }
 
 
-@media (prefers-reduced-motion: reduce) {
-    .message-style-badge {
-        animation: none !important;
-        opacity: 1 !important;
-        transform: none !important;
-    }
-}
 
 .input-container {
     position: relative;
