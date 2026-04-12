@@ -525,13 +525,12 @@ const VoiceModeModule = (function() {
         try {
             stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
-                    // echoCancellation OFF: browsers suppress user's voice too
-                    // aggressively during TTS playback. Baseline calibration
-                    // handles the TTS echo bleed in the mic.
-                    echoCancellation: false,
+                    // echoCancellation ON: without it, the AI's speaker output
+                    // leaks into the mic and triggers false interrupts
+                    // constantly. With it on, user voice is somewhat suppressed
+                    // during TTS but still detectable above the low echo floor.
+                    echoCancellation: true,
                     noiseSuppression: true,
-                    // autoGainControl boosts quiet speech — keep ON so the user's
-                    // voice shows up clearly in the analyser.
                     autoGainControl: true,
                     sampleRate: 16000,
                 }
@@ -1049,15 +1048,15 @@ const VoiceModeModule = (function() {
                 return;
             }
             if (baselineSamples > 0) {
-                // Finalize: floor the baseline so we don't end up with near-zero
-                _playbackBaseline = Math.max(_playbackBaseline, 0.003);
+                _playbackBaseline = Math.max(_playbackBaseline, 0.001);
                 baselineSamples = 0;
-                console.log(`[Interrupt] baseline calibrated: ${_playbackBaseline.toFixed(4)} (TTS echo floor)`);
+                console.log(`[Interrupt] baseline calibrated: ${_playbackBaseline.toFixed(4)} (post-AEC floor)`);
             }
-            // User voice is typically 3-5x louder than speaker echo in mic.
-            // 3.0x baseline catches real barge-in without false-firing on echo spikes.
-            // Floor 0.02 so quiet rooms with very low echo still require real speech.
-            const threshold = Math.max(_playbackBaseline * 3.0, 0.02);
+            // With browser AEC ON, baseline is near-zero (0.001-0.003).
+            // User voice during TTS is suppressed but still shows as 0.02-0.06.
+            // Absolute floor 0.015 keeps us above AEC noise floor while catching
+            // real speech. No multiplier needed — baseline is already minimal.
+            const threshold = 0.015;
             // Only log every 3s to reduce spam
             if (now - lastLogTime > 3000) {
                 console.log(`[Interrupt] level=${level.toFixed(4)} threshold=${threshold.toFixed(4)} count=${interruptCount}`);
@@ -1065,7 +1064,9 @@ const VoiceModeModule = (function() {
             }
             if (level > threshold) {
                 interruptCount++;
-                if (interruptCount >= 4) {
+                // 8 ticks × 50ms = 400ms sustained above threshold.
+                // TTS echo spikes are brief; real user speech is much longer.
+                if (interruptCount >= 8) {
                     const samples = _captureShortBuffer();
                     const intent = IntentClassifier.classify(samples, '');
                     console.log(`[Interrupt] candidate — intent: ${intent}, level=${level.toFixed(4)}`);
