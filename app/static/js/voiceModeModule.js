@@ -146,13 +146,22 @@ const VoiceModeModule = (function() {
         _dpr = window.devicePixelRatio || 1;
         const wrap = _canvas.parentElement;
         const rect = wrap.getBoundingClientRect();
-        const w = Math.floor(rect.width);
-        const h = Math.floor(rect.height);
-        if (w < 10 || h < 5) return; // not laid out yet
+        // Fallback to voice bar row width if wrap has no size yet
+        let w = Math.floor(rect.width);
+        let h = Math.floor(rect.height);
+        if (w < 10 && _voiceBarRow) {
+            const rowRect = _voiceBarRow.getBoundingClientRect();
+            w = Math.max(100, Math.floor(rowRect.width) - 140); // minus label + button
+        }
+        if (h < 5) h = 32; // default height
+        if (w < 10) w = 200; // absolute fallback
         _canvas.width = w * _dpr;
         _canvas.height = h * _dpr;
+        _canvas.style.width = w + 'px';
+        _canvas.style.height = h + 'px';
         _ctx = _canvas.getContext('2d');
         _ctx.scale(_dpr, _dpr);
+        console.log('[VoiceMode] canvas sized:', w, 'x', h);
     }
 
     // ────────────────────────────────────────
@@ -310,14 +319,15 @@ const VoiceModeModule = (function() {
             const bFrac = bandF - bLow;
             const bandVal = _bands[bLow] * (1 - bFrac) + _bands[bHigh] * bFrac;
 
-            // Base wave motion — slow sine so the shape breathes
-            const wave = Math.sin(_waveTime * 2.5 + nx * Math.PI * 2) * 0.15;
-            // Noise for organic movement
-            const noise = _noise2D(nx * 4, _waveTime * 0.6) * 0.1;
+            // Base wave motion — always present, makes it obviously animating
+            const wave = Math.sin(_waveTime * 3 + nx * Math.PI * 4) * 0.4;
+            const wave2 = Math.sin(_waveTime * 1.7 + nx * Math.PI * 2.5) * 0.3;
+            const noise = _noise2D(nx * 4, _waveTime * 0.8) * 0.3;
 
             // Combined displacement: audio drives amplitude, wave adds organic motion
             const audioDisp = bandVal * maxAmp;
-            const idleDisp = (wave + noise) * 3; // tiny breathing when silent
+            const idleAmp = maxAmp * 0.3; // 30% of max for idle breathing
+            const idleDisp = (wave + wave2 + noise) * idleAmp;
             const disp = audioDisp + idleDisp;
 
             // Edge taper — fades to zero at both ends
