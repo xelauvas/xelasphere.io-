@@ -1,5 +1,4 @@
 export function createBlockStateMachine(emit) {
-    let buffer = '';
     let inBlock = false;
     let blockId = 0;
 
@@ -19,7 +18,6 @@ export function createBlockStateMachine(emit) {
     return {
         append(text) {
             if (!text) return;
-            buffer += text;
             startBlockIfNeeded('paragraph');
             emit({ type: 'BLOCK_APPEND', id: `b${blockId}`, text });
         },
