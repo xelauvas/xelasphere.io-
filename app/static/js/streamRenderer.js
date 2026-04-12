@@ -43,8 +43,9 @@ function rendererFor(blockType) {
 }
 
 class StreamRenderer {
-    constructor(container) {
+    constructor(container, { replay = false } = {}) {
         this.container = container;
+        this.replay = replay;
         this.rawBuffer = '';
         this.prewarmDone = false;
         this.destroyed = false;
@@ -103,8 +104,10 @@ class StreamRenderer {
                     meta: event.meta,
                 });
                 const r = rendererFor(block.type);
-                r.create(block, this.messageEl);
-                transferCursor(this.messageEl, block.el);
+                r.create(block, this.messageEl, { replay: this.replay });
+                if (!this.replay) {
+                    transferCursor(this.messageEl, block.el);
+                }
                 break;
             }
             case 'BLOCK_APPEND': {

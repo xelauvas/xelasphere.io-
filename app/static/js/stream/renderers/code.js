@@ -8,10 +8,13 @@
 
 export function createCodeRenderer() {
     return {
-        create(block, messageContainer) {
+        create(block, messageContainer, opts = {}) {
             const lang = block.meta.lang || 'plaintext';
             const pre = document.createElement('pre');
-            pre.className = 'stream-block block-code is-streaming';
+            const noAnim = opts.replay ? ' stream-no-anim' : '';
+            // is-streaming only while live; replay has full text already
+            const streamingClass = opts.replay ? '' : ' is-streaming';
+            pre.className = `stream-block block-code${streamingClass}${noAnim}`;
             pre.dataset.blockId = block.id;
             pre.dataset.lang = lang;
 
@@ -35,7 +38,6 @@ export function createCodeRenderer() {
             this.update(block);
             if (block.el) block.el.classList.remove('is-streaming');
             if (window.Prism && block.meta.codeEl) {
-                // Re-highlight after a microtask so autoloader has a chance to resolve
                 queueMicrotask(() => window.Prism.highlightElement(block.meta.codeEl));
             }
             this.attachCopyButton(block);

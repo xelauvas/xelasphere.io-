@@ -6,9 +6,10 @@
 
 export function createProseRenderer() {
     return {
-        create(block, messageContainer) {
+        create(block, messageContainer, opts = {}) {
             const el = document.createElement('div');
-            el.className = `stream-block block-${block.type}`;
+            const noAnim = opts.replay ? ' stream-no-anim' : '';
+            el.className = `stream-block block-${block.type}${noAnim}`;
             el.dataset.blockId = block.id;
             messageContainer.appendChild(el);
             block.el = el;

@@ -95,3 +95,8 @@
 [data-stream-layout="structured"] { max-width: 75ch; }
 [data-stream-layout="code-heavy"] { max-width: 85ch; }
 [data-stream-layout="enumerated"] { max-width: 70ch; }
+
+/* Replay mode — suppress entrance animations across all stream blocks */
+.stream-no-anim {
+    animation: none !important;
+}

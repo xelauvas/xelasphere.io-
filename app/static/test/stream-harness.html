@@ -107,6 +107,20 @@ addCase('cursor transfer: moves from block A tail to block B tail', (target) => 
     ok.textContent = 'PASS';
     target.parentElement.appendChild(ok);
 });
+
+addCase('replay mode: blocks have .stream-no-anim and no cursor', (target) => {
+    const r = createProseRenderer();
+    const block = { id: 'br1', type: 'paragraph', meta: {}, text: 'Hello **replay** world.', frozen: false, el: null };
+    r.create(block, target, { replay: true });
+    r.update(block);
+    r.finalize(block);
+    if (!block.el.classList.contains('stream-no-anim')) throw new Error('expected .stream-no-anim class on replay block');
+    if (target.querySelectorAll('.stream-cursor').length !== 0) throw new Error('no cursor should exist in replay mode');
+    const ok = document.createElement('p');
+    ok.className = 'pass';
+    ok.textContent = 'PASS';
+    target.parentElement.appendChild(ok);
+});
 </script>
 </body>
 </html>

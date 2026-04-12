@@ -4208,6 +4208,18 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 wrapper.classList.add('text-message-container');
                 wrapper.appendChild(card);
                 messageContent.appendChild(wrapper);
+            } else if (sender === 'ai' && isHistory && typeof window.StreamRenderer === 'function') {
+                // Replay convergence: route AI history through StreamRenderer so DOM
+                // matches the live-stream render byte-for-byte.
+                if (typeof safeContent === 'string' && safeContent.includes('<')) {
+                    console.warn('[replay] AI content contains "<" — unexpected, expected raw markdown only');
+                }
+                const renderer = new window.StreamRenderer(messageContent, { replay: true });
+                renderer.append(safeContent);
+                renderer.finalize();
+                if (showButtons && typeof appendActionButtons === 'function') {
+                    appendActionButtons(messageContent, id);
+                }
             } else {
                 handleComplexMessage(messageContent, safeContent, messageType, id, showButtons, isHistory);
             }
