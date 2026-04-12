@@ -319,15 +319,18 @@ const VoiceModeModule = (function() {
             const bFrac = bandF - bLow;
             const bandVal = _bands[bLow] * (1 - bFrac) + _bands[bHigh] * bFrac;
 
-            // Base wave motion — always present, makes it obviously animating
-            const wave = Math.sin(_waveTime * 3 + nx * Math.PI * 4) * 0.4;
-            const wave2 = Math.sin(_waveTime * 1.7 + nx * Math.PI * 2.5) * 0.3;
-            const noise = _noise2D(nx * 4, _waveTime * 0.8) * 0.3;
+            // Multi-layered wave motion — rich, alive, dancing
+            const wave1 = Math.sin(_waveTime * 4.0 + nx * Math.PI * 6) * 0.5;
+            const wave2 = Math.sin(_waveTime * 2.3 + nx * Math.PI * 3) * 0.4;
+            const wave3 = Math.sin(_waveTime * 1.1 + nx * Math.PI * 1.5) * 0.35;
+            const wave4 = Math.sin(_waveTime * 6.5 + nx * Math.PI * 8) * 0.2;
+            const noise1 = _noise2D(nx * 5, _waveTime * 1.2) * 0.4;
+            const noise2 = _noise2D(nx * 2 + 10, _waveTime * 0.4) * 0.3;
 
             // Combined displacement: audio drives amplitude, wave adds organic motion
             const audioDisp = bandVal * maxAmp;
-            const idleAmp = maxAmp * 0.3; // 30% of max for idle breathing
-            const idleDisp = (wave + wave2 + noise) * idleAmp;
+            const idleAmp = maxAmp * 0.55; // 55% of max for rich idle motion
+            const idleDisp = (wave1 + wave2 + wave3 + wave4 + noise1 + noise2) * idleAmp;
             const disp = audioDisp + idleDisp;
 
             // Edge taper — fades to zero at both ends
