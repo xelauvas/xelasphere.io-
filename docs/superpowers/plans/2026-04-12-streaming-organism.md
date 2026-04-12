@@ -856,12 +856,13 @@ test('appendToLive mutates only the live block text', () => {
     assert.equal(ast.blocks()[0].text, 'Hello world.');
 });
 
-test('endBlock freezes the live block; subsequent appendToLive throws', () => {
+test('endBlock freezes the live block; subsequent appendToLive throws; getLive returns null', () => {
     const ast = createBlockAST();
     ast.startBlock({ id: 'b1', type: 'paragraph', meta: {} });
     ast.appendToLive('Done.');
     ast.endBlock();
     assert.equal(ast.blocks()[0].frozen, true);
+    assert.equal(ast.getLive(), null);
     assert.throws(() => ast.appendToLive('more'), /no live block/i);
 });
 
@@ -886,32 +887,32 @@ test('starting a new block after end leaves prior frozen and creates new live', 
 ```javascript
 export function createBlockAST() {
     const blocks = [];
-    let live = null;
+    let liveBlock = null;
 
     return {
         blocks() {
             return blocks;
         },
-        live() {
-            return live;
+        getLive() {
+            return liveBlock;
         },
         startBlock({ id, type, meta }) {
-            if (live) {
-                live.frozen = true;
-                live = null;
+            if (liveBlock) {
+                liveBlock.frozen = true;
+                liveBlock = null;
             }
-            live = { id, type, meta: { ...meta }, text: '', frozen: false, el: null };
-            blocks.push(live);
-            return live;
+            liveBlock = { id, type, meta: { ...meta }, text: '', frozen: false, el: null };
+            blocks.push(liveBlock);
+            return liveBlock;
         },
         appendToLive(text) {
-            if (!live) throw new Error('no live block');
-            live.text += text;
+            if (!liveBlock) throw new Error('no live block');
+            liveBlock.text += text;
         },
         endBlock() {
-            if (!live) return;
-            live.frozen = true;
-            live = null;
+            if (!liveBlock) return;
+            liveBlock.frozen = true;
+            liveBlock = null;
         },
     };
 }
@@ -1685,6 +1686,14 @@ import { transferCursor, removeCursor } from './stream/cursor.js';
 
 const PREWARM_THRESHOLD = 100; // chars before we fire layout inference
 
+const _renderers = {
+    prose: createProseRenderer(),
+    code: createCodeRenderer(),
+    list: createListRenderer(),
+    math: createMathRenderer(),
+    mermaid: createMermaidRenderer(),
+};
+
 function rendererFor(blockType) {
     switch (blockType) {
         case 'code':       return _renderers.code;
@@ -1698,14 +1707,6 @@ function rendererFor(blockType) {
         default:           return _renderers.prose;
     }
 }
-
-const _renderers = {
-    prose: createProseRenderer(),
-    code: createCodeRenderer(),
-    list: createListRenderer(),
-    math: createMathRenderer(),
-    mermaid: createMermaidRenderer(),
-};
 
 class StreamRenderer {
     constructor(container) {
@@ -1747,19 +1748,10 @@ class StreamRenderer {
             applyLayout(this.messageEl, this.rawBuffer);
             this.prewarmDone = true;
         }
+        // sm.finalize() emits BLOCK_END for any still-live block, which runs
+        // r.update() + r.finalize() through _handleEvent. Every block is finalized
+        // exactly once through that path — do NOT re-iterate the block array here.
         this.sm.finalize();
-        const live = this.ast.live();
-        if (live) {
-            const r = rendererFor(live.type);
-            r.finalize?.(live);
-        }
-        // Finalize any frozen blocks that still have pending async work (mermaid)
-        for (const block of this.ast.blocks()) {
-            if (block.frozen) {
-                const r = rendererFor(block.type);
-                if (block.type === 'mermaid') r.finalize?.(block);
-            }
-        }
         removeCursor(this.messageEl);
     }
 
@@ -1787,7 +1779,7 @@ class StreamRenderer {
                 break;
             }
             case 'BLOCK_END': {
-                const live = this.ast.live();
+                const live = this.ast.getLive();
                 if (live) {
                     const r = rendererFor(live.type);
                     r.update(live);
@@ -1807,7 +1799,7 @@ class StreamRenderer {
         requestAnimationFrame(() => {
             this.rafScheduled = false;
             if (this.destroyed) return;
-            const live = this.ast.live();
+            const live = this.ast.getLive();
             if (!live) return;
             const r = rendererFor(live.type);
             performance.mark('stream-render-start');
