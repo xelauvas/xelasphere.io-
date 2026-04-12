@@ -643,27 +643,28 @@ def _detect_language(text, hint=''):
 
     # Common word detection for Latin-script languages
     t = text.lower()
-    # Italian markers (check before Spanish — share some words)
+    # Italian markers (check first — share some words with Spanish)
     if any(w in t for w in ['ciao', ' questo ', ' quella ', ' perché ', ' molto ', ' anche ',
                              ' sono ', ' essere ', ' della ', ' delle ', ' gli ', ' buon ',
                              ' stai ', ' bene ', ' grazie ', ' cosa ', ' tutto ']):
         return 'it'
-    # Spanish markers — diacritics + common words
-    if any(ch in text for ch in 'ñÑ¿¡') or \
-       any(ch in text for ch in 'áéíóúÁÉÍÓÚ') and \
-       any(w in t for w in [' el ', ' la ', ' es ', ' y ', ' de ', ' que ', ' en ', ' un ', ' una ']) or \
-       any(w in t for w in ['hola', 'gracias', 'claro', 'español', 'hablaré', 'buenos días',
-                             ' está ', ' tiene ', ' muy ', ' también ', ' puede ', ' hacer ',
-                             ' los ', ' las ', ' pero ', ' como ', ' por ', ' para ', ' con ',
-                             ' que ', ' esto ', ' soy ', ' estoy ', ' puedo ', ' quiero ',
-                             ' sí ', ' eres ', ' eres', ' ayudarte ', ' ayuda ']):
-        return 'es'
-    # French markers
-    if any(w in t for w in ['bonjour', 'merci', 'comment', 'ça ', " c'est ", " l'", " d'",
-                             ' vous ', ' nous ', ' je ', ' tu ', ' oui ', ' non ',
-                             ' les ', ' des ', ' est ', ' une ', ' sont ', ' dans ',
-                             ' pour ', ' avec ', ' très ', ' être ', ' bien ']):
+    # French — check before Spanish because French also uses é, en, de, etc.
+    if any(ch in text for ch in 'çÇœŒ') or \
+       any(w in t for w in [' je ', ' tu ', ' vous ', ' nous ', " c'est ", " l'", " d'", " j'",
+                             'bonjour', 'merci', 'français', 'comment ça', ' oui ', ' non ',
+                             ' les ', ' des ', ' est ', ' une ', ' sont ', ' dans ', ' avec ',
+                             ' très ', ' être ', ' bien ', ' peux ', ' suis ', ' prêt ',
+                             ' avez ', ' pour ', ' aussi ']):
         return 'fr'
+    # Spanish — require Spanish-specific markers (ñ, ¿, ¡, or unambiguous words)
+    # Don't rely on accented vowels alone since French uses them too.
+    if any(ch in text for ch in 'ñÑ¿¡') or \
+       any(w in t for w in ['hola', 'gracias', 'español', 'hablaré', 'buenos días',
+                             ' está ', ' tiene ', ' también ', ' puede ', ' hacer ',
+                             ' los ', ' las ', ' pero ', ' por ', ' para ', ' con ',
+                             ' esto ', ' soy ', ' estoy ', ' puedo ', ' quiero ',
+                             ' sí ', ' ayudarte ']):
+        return 'es'
     # Romanian markers (diacritics ă â î ș ț or common words)
     if any(ch in text for ch in 'ăâîșțĂÂÎȘȚ') or \
        any(w in t for w in [' sunt ', ' este ', ' pentru ', ' foarte ', ' bună ', ' mulțumesc ',
