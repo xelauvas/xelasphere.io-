@@ -116,3 +116,44 @@ test('objective-c language tag with dash is preserved', () => {
     const starts = events.filter(e => e.type === 'BLOCK_START');
     assert.equal(starts[0].meta.lang, 'objective-c');
 });
+
+test('unordered list emits a single list-ul block with item boundaries', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('- first\n- second\n- third\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts.length, 1);
+    assert.equal(starts[0].blockType, 'list-ul');
+    const itemStarts = events.filter(e => e.type === 'LIST_ITEM_START');
+    assert.equal(itemStarts.length, 3);
+});
+
+test('ordered list detects numeric prefix', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('1. first\n2. second\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts[0].blockType, 'list-ol');
+});
+
+test('list item continuation line appends to current item', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('- first item\n  continuation line\n- second\n');
+    sm.finalize();
+    const itemStarts = events.filter(e => e.type === 'LIST_ITEM_START');
+    assert.equal(itemStarts.length, 2);
+});
+
+test('blank line terminates list', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('- a\n- b\n\nAfter.\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts.length, 2);
+    assert.equal(starts[0].blockType, 'list-ul');
+    assert.equal(starts[1].blockType, 'paragraph');
+});

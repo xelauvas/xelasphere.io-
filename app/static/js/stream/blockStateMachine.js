@@ -13,6 +13,9 @@ export function createBlockStateMachine(emit) {
 
     function closeBlock(reason) {
         if (!current) return;
+        if (current.type === 'list-ul' || current.type === 'list-ol') {
+            emit({ type: 'LIST_ITEM_END', blockId: current.id, itemIndex: current.meta.itemCount - 1 });
+        }
         emit({ type: 'BLOCK_END', id: current.id, reason });
         current = null;
     }
@@ -58,6 +61,38 @@ export function createBlockStateMachine(emit) {
             openBlock('heading', { level: headingMatch[1].length });
             appendToBlock(full);
             closeBlock('natural');
+            return;
+        }
+
+        // Inside a list: handle item continuation
+        if (current && (current.type === 'list-ul' || current.type === 'list-ol')) {
+            const ulItem = line.match(/^[-+*] (.*)$/);
+            const olItem = line.match(/^\d+\. (.*)$/);
+            if ((current.type === 'list-ul' && ulItem) || (current.type === 'list-ol' && olItem)) {
+                emit({ type: 'LIST_ITEM_END', blockId: current.id, itemIndex: current.meta.itemCount - 1 });
+                current.meta.itemCount++;
+                emit({ type: 'LIST_ITEM_START', blockId: current.id, itemIndex: current.meta.itemCount - 1 });
+                appendToBlock(full);
+                return;
+            }
+            // Continuation line — append to current item
+            appendToBlock(full);
+            return;
+        }
+
+        // Starting a new list
+        const ulStart = line.match(/^[-+*] (.*)$/);
+        const olStart = line.match(/^\d+\. (.*)$/);
+        if (ulStart) {
+            openBlock('list-ul', { itemCount: 1 });
+            emit({ type: 'LIST_ITEM_START', blockId: current.id, itemIndex: 0 });
+            appendToBlock(full);
+            return;
+        }
+        if (olStart) {
+            openBlock('list-ol', { itemCount: 1 });
+            emit({ type: 'LIST_ITEM_START', blockId: current.id, itemIndex: 0 });
+            appendToBlock(full);
             return;
         }
 
