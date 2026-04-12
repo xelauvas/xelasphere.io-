@@ -26,6 +26,28 @@ export function createBlockStateMachine(emit) {
     function processLine(line, hasTrailingNewline) {
         const full = line + (hasTrailingNewline ? '\n' : '');
 
+        // Inside a code or mermaid block: only a closing fence can exit
+        if (current && (current.type === 'code' || current.type === 'mermaid')) {
+            if (line === '```') {
+                closeBlock('natural');
+                return;
+            }
+            appendToBlock(full);
+            return;
+        }
+
+        // Opening fence
+        const fenceMatch = line.match(/^```([\w.+-]*)$/);
+        if (fenceMatch) {
+            const lang = fenceMatch[1] || '';
+            if (lang === 'mermaid') {
+                openBlock('mermaid');
+            } else {
+                openBlock('code', { lang });
+            }
+            return;
+        }
+
         if (line === '' && current) {
             closeBlock('natural');
             return;

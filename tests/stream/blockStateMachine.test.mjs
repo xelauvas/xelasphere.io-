@@ -58,3 +58,61 @@ test('# symbol not at line-start stays in paragraph', () => {
     assert.equal(starts.length, 1);
     assert.equal(starts[0].blockType, 'paragraph');
 });
+
+test('code fence opens with language tag', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('```python\nprint("hi")\n```\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts[0].blockType, 'code');
+    assert.equal(starts[0].meta.lang, 'python');
+});
+
+test('code fence content is emitted as append', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('```\nline1\nline2\n```\n');
+    sm.finalize();
+    const appends = events.filter(e => e.type === 'BLOCK_APPEND').map(e => e.text);
+    assert.equal(appends.join(''), 'line1\nline2\n');
+});
+
+test('closing fence emits BLOCK_END natural', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('```\nbody\n```\nafter\n');
+    sm.finalize();
+    const ends = events.filter(e => e.type === 'BLOCK_END');
+    assert.equal(ends[0].reason, 'natural');
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts.length, 2);
+    assert.equal(starts[1].blockType, 'paragraph');
+});
+
+test('mermaid language routes to mermaid block type', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('```mermaid\ngraph TD; A-->B;\n```\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts[0].blockType, 'mermaid');
+});
+
+test('unclosed code fence at finalize emits BLOCK_END finalize', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('```python\ndef foo():\n    pass\n');
+    sm.finalize();
+    const ends = events.filter(e => e.type === 'BLOCK_END');
+    assert.equal(ends.at(-1).reason, 'finalize');
+});
+
+test('objective-c language tag with dash is preserved', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('```objective-c\nNSLog(@"hi");\n```\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts[0].meta.lang, 'objective-c');
+});
