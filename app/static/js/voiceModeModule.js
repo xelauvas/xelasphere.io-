@@ -525,9 +525,13 @@ const VoiceModeModule = (function() {
         try {
             stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
-                    echoCancellation: true,   // browser handles AEC — sufficient and production-grade
+                    // echoCancellation OFF: browsers suppress user's voice too aggressively
+                    // when TTS plays (treats it as echo). We need raw mic so interrupt
+                    // detection can hear the user speaking over the AI. Baseline
+                    // calibration in _startInterruptDetection handles the TTS echo.
+                    echoCancellation: false,
                     noiseSuppression: true,
-                    autoGainControl: true,
+                    autoGainControl: false,  // don't duck the user voice either
                     sampleRate: 16000,
                 }
             });
@@ -1028,20 +1032,24 @@ const VoiceModeModule = (function() {
         let baselineSamples = 0;
         let lastLogTime = 0;
         const detectStart = Date.now();
+        // Longer calibration window — TTS audio needs to start playing before we
+        // sample the echo baseline, and first chunks take ~500ms to reach speakers.
+        const CALIBRATE_MS = 800;
         _interruptTimer = setInterval(async () => {
             if (!analyser || _interrupted) return;
             _captureShortBuffer();
             const level = getAudioLevel();
             const now = Date.now();
             const elapsed = now - detectStart;
-            if (elapsed < 400) { _playbackBaseline += level; baselineSamples++; return; }
+            if (elapsed < CALIBRATE_MS) { _playbackBaseline += level; baselineSamples++; return; }
             if (baselineSamples > 0 && _playbackBaseline > 0) {
                 _playbackBaseline = _playbackBaseline / baselineSamples;
                 baselineSamples = 0;
-                console.log(`[Interrupt] baseline calibrated: ${_playbackBaseline.toFixed(4)}`);
+                console.log(`[Interrupt] baseline calibrated: ${_playbackBaseline.toFixed(4)} (TTS echo level)`);
             }
-            // Lower minimum threshold — 0.05 is easier to beat than 0.15
-            const threshold = Math.max(_playbackBaseline * 1.6, 0.05);
+            // User voice is typically 2-3x louder than speaker echo in mic.
+            // 2.0x baseline = firm but not overcautious. Absolute floor 0.04 for silence periods.
+            const threshold = Math.max(_playbackBaseline * 2.0, 0.04);
             // Only log every 3s to reduce spam
             if (now - lastLogTime > 3000) {
                 console.log(`[Interrupt] level=${level.toFixed(4)} threshold=${threshold.toFixed(4)} count=${interruptCount}`);
