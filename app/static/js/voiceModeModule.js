@@ -518,6 +518,10 @@ const VoiceModeModule = (function() {
     let _currentTTSText = null;
     let _lastCompletedTTSText = '';
 
+    // When true, startListening will NOT transition state to 'listening'.
+    // Used by interrupt detection to open the mic during speaking state.
+    let _startListeningSilent = false;
+
     async function startListening() {
         try {
             stream = await navigator.mediaDevices.getUserMedia({
@@ -562,10 +566,12 @@ const VoiceModeModule = (function() {
                 micSource.connect(analyser);
             }
 
-            setState('listening');
+            // Only transition state if caller wants it — interrupt detection
+            // needs the mic during 'speaking' state without flipping to 'listening'.
+            if (!_startListeningSilent) setState('listening');
         } catch (e) {
             console.error('[VoiceMode] Microphone error:', e);
-            setState('idle');
+            if (!_startListeningSilent) setState('idle');
         }
     }
 
@@ -1025,9 +1031,13 @@ const VoiceModeModule = (function() {
     }
 
     async function _startInterruptDetection() {
-        // Ensure mic is active during speaking so we can hear user interrupting
+        // Ensure mic is active during speaking so we can hear user interrupting.
+        // Open mic silently — do NOT transition state (we want to stay 'speaking').
         if (!analyser) {
-            try { await startListening(); } catch (e) { console.warn('[VoiceMode] cannot start mic for interrupt'); return; }
+            _startListeningSilent = true;
+            try { await startListening(); }
+            catch (e) { console.warn('[VoiceMode] cannot start mic for interrupt'); _startListeningSilent = false; return; }
+            _startListeningSilent = false;
         }
         if (!analyser) return;
         let interruptCount = 0;
