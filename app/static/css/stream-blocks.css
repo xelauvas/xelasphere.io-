@@ -100,3 +100,46 @@
 .stream-no-anim {
     animation: none !important;
 }
+
+/* ---------------------------------------------------------------------------
+   Block-wrapper spacing.
+   Each markdown block (<p>, <h2>, <ul>, etc.) is now wrapped in a .stream-block
+   div. Existing .text-message rules like `p:last-child { margin-bottom: 0 }`
+   and adjacent-sibling rules like `h2 + p` no longer work because every inner
+   element is :last-child of its wrapper and siblings are separated by divs.
+   Move all spacing to the wrapper level; zero out internal margins to avoid
+   double spacing.
+   --------------------------------------------------------------------------- */
+
+.text-message .stream-block + .stream-block {
+    margin-top: 0.75em;
+}
+
+.text-message .stream-block.block-heading + .stream-block {
+    margin-top: 1em;
+}
+
+.text-message .stream-block.block-paragraph + .stream-block.block-heading {
+    margin-top: 1.25em;
+}
+
+.text-message .stream-block > p,
+.text-message .stream-block > h1,
+.text-message .stream-block > h2,
+.text-message .stream-block > h3,
+.text-message .stream-block > h4,
+.text-message .stream-block > h5,
+.text-message .stream-block > h6,
+.text-message .stream-block > ul,
+.text-message .stream-block > ol,
+.text-message .stream-block > blockquote {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* Lists (when the stream-block itself IS the <ul>/<ol>) — keep bullet indent. */
+.text-message ul.stream-block,
+.text-message ol.stream-block {
+    margin: 0;
+    padding-left: 1.5em;
+}
