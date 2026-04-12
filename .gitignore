@@ -23,3 +23,7 @@ uploads/
 nltk_data/
 gcloud init/
 .gstack/
+
+# Local TTS model binaries — fetched separately, too large for git
+kokoro-onnx/
+claude-code
