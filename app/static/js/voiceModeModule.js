@@ -525,13 +525,14 @@ const VoiceModeModule = (function() {
         try {
             stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
-                    // echoCancellation OFF: browsers suppress user's voice too aggressively
-                    // when TTS plays (treats it as echo). We need raw mic so interrupt
-                    // detection can hear the user speaking over the AI. Baseline
-                    // calibration in _startInterruptDetection handles the TTS echo.
+                    // echoCancellation OFF: browsers suppress user's voice too
+                    // aggressively during TTS playback. Baseline calibration
+                    // handles the TTS echo bleed in the mic.
                     echoCancellation: false,
                     noiseSuppression: true,
-                    autoGainControl: false,  // don't duck the user voice either
+                    // autoGainControl boosts quiet speech — keep ON so the user's
+                    // voice shows up clearly in the analyser.
+                    autoGainControl: true,
                     sampleRate: 16000,
                 }
             });
@@ -1047,9 +1048,10 @@ const VoiceModeModule = (function() {
                 baselineSamples = 0;
                 console.log(`[Interrupt] baseline calibrated: ${_playbackBaseline.toFixed(4)} (TTS echo level)`);
             }
-            // User voice is typically 2-3x louder than speaker echo in mic.
-            // 2.0x baseline = firm but not overcautious. Absolute floor 0.04 for silence periods.
-            const threshold = Math.max(_playbackBaseline * 2.0, 0.04);
+            // User voice is typically 3-5x louder than speaker echo in mic.
+            // 3.0x baseline catches real barge-in without false-firing on echo spikes.
+            // Floor 0.02 so quiet rooms with very low echo still require real speech.
+            const threshold = Math.max(_playbackBaseline * 3.0, 0.02);
             // Only log every 3s to reduce spam
             if (now - lastLogTime > 3000) {
                 console.log(`[Interrupt] level=${level.toFixed(4)} threshold=${threshold.toFixed(4)} count=${interruptCount}`);
