@@ -5133,12 +5133,12 @@ function renderUserMessage(container, text, messageId) {
     }
     container.appendChild(div);
 
-    const p = document.createElement('p');
-    p.classList.add('text-message');
-    div.appendChild(p);
+    const messageEl = document.createElement('div');
+    messageEl.classList.add('text-message');
+    div.appendChild(messageEl);
 
-    const html = window.md ? window.md.render(text || '') : (window.marked?.parse(text || '') || '');
-    p.innerHTML = DOMPurify.sanitize(html);
+    const html = window.md.render(text || '');
+    messageEl.innerHTML = DOMPurify.sanitize(html);
 }
 
 function appendTextMessage(container, text, isUserMessage, messageId, isHistory = false) {
