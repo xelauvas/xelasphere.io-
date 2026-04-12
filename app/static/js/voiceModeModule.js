@@ -1103,14 +1103,13 @@ const VoiceModeModule = (function() {
         try {
             if (!stream) await startListening();
             startRecording();
-            // From 'capturing' we move to normal listening flow so VAD silence triggers send
-            _interrupted = false; // reset so next stream can run
+            // Keep _interrupted=true until next streamAndSpeak starts.
+            // This blocks late in-flight TTS fetches from enqueueing after yield.
             setState('listening');
             startSilenceDetection();
         } catch (e) {
             console.error('[VoiceMode] capture interrupt failed:', e);
             if (isActive) {
-                _interrupted = false;
                 await startListening();
                 startRecording();
                 startSilenceDetection();
@@ -1255,10 +1254,15 @@ const VoiceModeModule = (function() {
             });
 
             if (_interruptTimer) { clearInterval(_interruptTimer); _interruptTimer = null; }
+            _streamAbort = null;
             return fullContent || null;
         } catch (e) {
-            console.error('[VoiceMode] streamAndSpeak error:', e);
+            // AbortError is expected when gracefulYield kills the stream — don't noise-log it
+            if (e && e.name !== 'AbortError') {
+                console.error('[VoiceMode] streamAndSpeak error:', e);
+            }
             _flushAudioQueue();
+            _streamAbort = null;
             return fullContent || null;
         }
     }
