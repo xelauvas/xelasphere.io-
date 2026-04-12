@@ -2366,7 +2366,7 @@ function appendUserMessage(messageDiv, message, messageId) {
         wrapper.appendChild(card);
         container.appendChild(wrapper);
     } else {
-        appendTextMessage(container, message, true);
+        renderUserMessage(container, message, messageId);
     }
 
     let footer = messageDiv.querySelector('.message-bubble-footer');
