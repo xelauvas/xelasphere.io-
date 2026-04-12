@@ -63,7 +63,13 @@ class FirestoreSessionInterface(SessionInterface):
                         # Session expired, delete it
                         self._get_session_doc(sid).delete()
             except Exception as e:
+                # Transient Firestore failures must not masquerade as "no
+                # session." Reuse the incoming sid so save_session's empty
+                # branch won't think this is a brand-new session and skip
+                # the cookie wipe — we keep the user's cookie in place and
+                # let the next request retry the Firestore read.
                 app.logger.warning(f"Error loading session {sid}: {e}")
+                return FirestoreSession(sid=sid, new=True)
 
         # Create new session
         sid = str(uuid4())
@@ -75,14 +81,18 @@ class FirestoreSessionInterface(SessionInterface):
         path = self.get_cookie_path(app)
         cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
 
-        # If session is empty, delete it
+        # Empty session: only destroy state if the caller explicitly cleared a
+        # previously-loaded session (e.g., logout). A brand-new empty session
+        # (e.g., open_session fell through due to transient Firestore read
+        # failure) must NOT wipe the browser's existing cookie — that
+        # cascades into permanent session loss for the user.
         if not session:
-            if session.sid:
+            if session.sid and not session.new:
                 try:
                     self._get_session_doc(session.sid).delete()
                 except Exception:
                     pass
-            response.delete_cookie(cookie_name, domain=domain, path=path)
+                response.delete_cookie(cookie_name, domain=domain, path=path)
             return
 
         # Calculate expiration
@@ -91,18 +101,20 @@ class FirestoreSessionInterface(SessionInterface):
         samesite = self.get_cookie_samesite(app)
         expires = datetime.now(timezone.utc) + timedelta(seconds=self.expire_seconds)
 
-        # Only save if modified or new
-        if session.modified or session.new:
-            try:
-                session_data = {
-                    'data': pickle.dumps(dict(session)),
-                    'expires_at': expires,
-                    'updated_at': datetime.now(timezone.utc)
-                }
-                self._get_session_doc(session.sid).set(session_data)
-            except Exception as e:
-                app.logger.error(f"Error saving session {session.sid}: {e}")
-                return
+        # Sliding expiration: refresh expires_at on every request that carries
+        # a populated session, not just on mutation. Otherwise an active user
+        # whose session state never changes (pure reads) can have their
+        # session expire mid-conversation at the TTL boundary.
+        try:
+            session_data = {
+                'data': pickle.dumps(dict(session)),
+                'expires_at': expires,
+                'updated_at': datetime.now(timezone.utc)
+            }
+            self._get_session_doc(session.sid).set(session_data)
+        except Exception as e:
+            app.logger.error(f"Error saving session {session.sid}: {e}")
+            return
 
         # Set cookie
         response.set_cookie(

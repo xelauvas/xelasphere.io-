@@ -566,8 +566,22 @@ def chat_stream():
     # Get or create session for saving history and context detection
     session_id = None
     previous_messages = []
-    # NOTE: prime cache read disabled — session_id mismatch risk between
-    # client-sent and server-resolved session_id can corrupt history.
+    # Client-authoritative session reconciliation. If the frontend's active
+    # session id diverged from the cookie (cookie wipe, multi-tab drift), the
+    # client's session_id is the source of truth — verify it belongs to this
+    # user, then sync the cookie before loading history.
+    client_session_id = (request.form.get('session_id') or '').strip()
+    if client_session_id and not guest_mode and user_id:
+        try:
+            client_doc = db.collection('users').document(user_id).collection('chat_sessions').document(client_session_id).get()
+            if client_doc.exists:
+                if session.get('current_session_id') != client_session_id:
+                    logger.info(f"[Stream] Reconciling cookie: {session.get('current_session_id')} -> {client_session_id}")
+                session['current_session_id'] = client_session_id
+            else:
+                logger.warning(f"[Stream] Client sent session_id {client_session_id} that doesn't exist; falling back to cookie")
+        except Exception as e:
+            logger.warning(f"[Stream] Client session reconciliation failed: {e}")
     if not guest_mode and user_id:
         try:
             session_id, session_data = load_or_create_session(user_id)
@@ -905,6 +919,10 @@ def chat_stream():
 
     # Smart-route 'auto' model, but force a streaming-capable model
     stream_model = model
+    # task_type is consumed by the semantic-cache lookup inside generate().
+    # When the user picks an explicit model (CODE/THINK/etc.), smart_route()
+    # below is skipped, so initialize a default here to avoid NameError.
+    task_type = None
     if model == 'auto' or not model:
         routed_model, task_type = smart_route(
             message=user_prompt_raw,
@@ -1158,50 +1176,61 @@ def chat_stream():
                     text = chunk.get('text', '')
                     content_buffer.append(text)
 
-                    # Feed through normalizer → action buffer
+                    # Feed raw chunks directly to action_buffer. The normalizer
+                    # only forwarded complete lines, which made plain-chat
+                    # responses sit on the server until the first \n. Raw
+                    # feeding lets action_buffer early-resolve within 2 tokens
+                    # when the response clearly isn't an ACTION line.
+                    just_resolved = False
                     if not action_resolved:
-                        for normalized_chunk in normalizer.feed(text):
-                            result = action_buffer.feed(normalized_chunk)
-                            if result is not None:
-                                action_resolved = True
+                        result = action_buffer.feed(text)
+                        if result is not None:
+                            action_resolved = True
+                            just_resolved = True
 
-                                # generate_image: send SSE event immediately
-                                if result == "generate_image" and action_buffer.header_fields.get("description"):
-                                    img_description = action_buffer.header_fields["description"]
-                                    img_source = action_buffer.header_fields.get("source", "explicit").lower()
-                                    if img_source not in ("explicit", "inferred"):
-                                        img_source = "explicit"
+                            # generate_image: send SSE event immediately
+                            if result == "generate_image" and action_buffer.header_fields.get("description"):
+                                img_description = action_buffer.header_fields["description"]
+                                img_source = action_buffer.header_fields.get("source", "explicit").lower()
+                                if img_source not in ("explicit", "inferred"):
+                                    img_source = "explicit"
 
-                                    if img_source == "inferred":
-                                        yield f"data: {json.dumps({'type': 'image_confirm', 'description': img_description})}\n\n"
-                                        session['pending_image_confirmation'] = {
-                                            'type': 'generate_image',
-                                            'description': img_description,
-                                            'timestamp': time.time()
-                                        }
-                                    else:
-                                        yield f"data: {json.dumps({'type': 'image_generating', 'description': img_description})}\n\n"
+                                if img_source == "inferred":
+                                    yield f"data: {json.dumps({'type': 'image_confirm', 'description': img_description})}\n\n"
+                                    session['pending_image_confirmation'] = {
+                                        'type': 'generate_image',
+                                        'description': img_description,
+                                        'timestamp': time.time()
+                                    }
+                                else:
+                                    yield f"data: {json.dumps({'type': 'image_generating', 'description': img_description})}\n\n"
 
-                                # web_search: fire progressive search
-                                if result == "web_search" and action_buffer.header_fields.get("query"):
-                                    ws_query = action_buffer.header_fields["query"]
-                                    ws_type = action_buffer.header_fields.get("search_type", "general")
-                                    ws_reason = action_buffer.header_fields.get("reason", "")
-                                    logger.info(f"[Stream] web_search: query='{ws_query}', type={ws_type}, reason='{ws_reason}'")
+                            # web_search: fire progressive search
+                            if result == "web_search" and action_buffer.header_fields.get("query"):
+                                ws_query = action_buffer.header_fields["query"]
+                                ws_type = action_buffer.header_fields.get("search_type", "general")
+                                ws_reason = action_buffer.header_fields.get("reason", "")
+                                logger.info(f"[Stream] web_search: query='{ws_query}', type={ws_type}, reason='{ws_reason}'")
 
-                                    yield f"data: {json.dumps({'type': 'search_started', 'query': ws_query, 'search_type': ws_type})}\n\n"
+                                yield f"data: {json.dumps({'type': 'search_started', 'query': ws_query, 'search_type': ws_type})}\n\n"
 
-                                    yield from _run_search_and_synthesize(ws_query, ws_type)
-                                    _search_second_pass_done = True
+                                yield from _run_search_and_synthesize(ws_query, ws_type)
+                                _search_second_pass_done = True
 
-                                # Forward remainder after the ACTION line (skip if search did 2nd pass)
-                                if not _search_second_pass_done and action_buffer.remainder:
-                                    yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(action_buffer.remainder)})}\n\n"
-                                break  # Action resolved, stop feeding normalizer output
-                        continue  # Buffer until action resolved
+                            # Forward remainder after the ACTION line (skip if search did 2nd pass)
+                            if not _search_second_pass_done and action_buffer.remainder:
+                                yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(action_buffer.remainder)})}\n\n"
+                        # If not resolved yet, keep buffering (no yield)
+                        if not action_resolved:
+                            continue
 
                     # Don't forward first-LLM filler text after search synthesis completed
                     if _search_second_pass_done:
+                        continue
+
+                    # Skip per-chunk yield on the chunk that just resolved —
+                    # its content was already flushed via action_buffer.remainder.
+                    if just_resolved:
                         continue
 
                     yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(text)})}\n\n"
@@ -2110,6 +2139,22 @@ def chat():
                 logger.error(f"URL reader error: {e}")
 
         offline_reason = None
+
+        # Client-authoritative session reconciliation (same rationale as
+        # /chat/stream). Frontend knows which chat the user is looking at;
+        # the cookie can drift. Verify ownership and sync cookie before load.
+        client_session_id = (request.form.get('session_id') or '').strip()
+        if client_session_id and not guest_mode and user_id and firestore_available:
+            try:
+                client_doc = db.collection('users').document(user_id).collection('chat_sessions').document(client_session_id).get()
+                if client_doc.exists:
+                    if session.get('current_session_id') != client_session_id:
+                        logger.info(f"[Chat] Reconciling cookie: {session.get('current_session_id')} -> {client_session_id}")
+                    session['current_session_id'] = client_session_id
+                else:
+                    logger.warning(f"[Chat] Client sent session_id {client_session_id} that doesn't exist; falling back to cookie")
+            except Exception as e:
+                logger.warning(f"[Chat] Client session reconciliation failed: {e}")
 
         # Guests use ephemeral in-memory session only
         if guest_mode:

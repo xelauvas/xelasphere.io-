@@ -320,6 +320,20 @@ class StreamingActionBuffer:
         # Standard single-line ACTION parsing
         newline_idx = self.buffer.find("\n")
         if newline_idx == -1:
+            # Early-resolve optimization: without this, a plain-chat response
+            # with no ACTION header holds every token server-side until the
+            # model emits its first \n (often a paragraph later). That's what
+            # makes live streaming feel like a single blob drop.
+            # As soon as we have >= 7 non-strippable chars and they don't spell
+            # "action:" (case-insensitive), we know this can't be an ACTION
+            # line — resolve as chat and release the buffer immediately.
+            stripped = self.buffer.lstrip(" \t-*")
+            if len(stripped) >= 7 and stripped[:7].lower() != "action:":
+                self.action = "chat"
+                self.remainder = self.buffer
+                self._resolved = True
+                self.buffer = ""
+                return self.action
             return None
 
         first_line = self.buffer[:newline_idx].strip()
