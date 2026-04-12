@@ -28,6 +28,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.config import Config, db
 from app.limiter import limiter, csrf_required
+from app.backpressure import LLM_SLOTS, acquire_or_503
 from app.blueprints.shared import (
     login_required, guest_allowed, error_handler, is_guest, chat_session,
     get_client_ip, hash_ip, make_etag_response,
@@ -478,6 +479,13 @@ def chat_stream():
     Returns Server-Sent Events (SSE) with reasoning and content chunks.
     At completion, processes content for artifacts and saves to history.
     """
+    # Backpressure — fail fast rather than piling up during LLM surge
+    _bp = acquire_or_503(LLM_SLOTS, timeout=5.0)
+    _bp_ok = _bp.__enter__()
+    if not _bp_ok:
+        _bp.__exit__(None, None, None)
+        return jsonify({'error': 'Server busy, please retry', 'retry_after': 5}), 503
+
     from app.utilities import stream_deepseek_response
 
     user_id = None
@@ -1869,7 +1877,7 @@ def chat_stream():
             logger.error(f"Streaming error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'text': str(e)})}\n\n"
 
-    return Response(
+    resp = Response(
         stream_with_context(generate()),
         mimetype='text/event-stream',
         headers={
@@ -1878,6 +1886,16 @@ def chat_stream():
             'X-Accel-Buffering': 'no'
         }
     )
+
+    # Release LLM slot when response stream closes (success or client disconnect)
+    @resp.call_on_close
+    def _release_llm_slot():
+        try:
+            _bp.__exit__(None, None, None)
+        except Exception:
+            pass
+
+    return resp
 
 
 @chat_bp.route('/chat', methods=['POST'])
