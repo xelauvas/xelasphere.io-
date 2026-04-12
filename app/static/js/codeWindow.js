@@ -5140,8 +5140,13 @@ function renderUserMessage(container, text, messageId) {
     messageEl.classList.add('text-message');
     div.appendChild(messageEl);
 
-    const html = window.md.render(text || '');
-    messageEl.innerHTML = DOMPurify.sanitize(html);
+    if (window.md) {
+        messageEl.innerHTML = DOMPurify.sanitize(window.md.render(text || ''));
+    } else {
+        // markdown-it CDN failed to load (e.g. offline). Render as plain text
+        // rather than throwing — preserves send flow over flaky networks.
+        messageEl.textContent = text || '';
+    }
 }
 
 /**
