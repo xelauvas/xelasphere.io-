@@ -3701,8 +3701,8 @@ async loadChatHistory(pageToken = null, limit = 10) {
         modalOverlay.className = 'modal-overlay';
         modalOverlay.innerHTML = `
             <div class="modal-content">
-                <h2>Delete chat?</h2>
-                <p>This can\u2019t be undone.</p>
+                <h2>Delete chat</h2>
+                <p>Are you sure you want to delete this chat?</p>
                 <div class="modal-actions">
                     <button class="btn-delete">Delete</button>
                     <button class="btn-cancel">Cancel</button>
