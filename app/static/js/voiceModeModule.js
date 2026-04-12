@@ -1031,44 +1031,55 @@ const VoiceModeModule = (function() {
     }
 
     async function _startInterruptDetection() {
+        console.log('[Interrupt] starting detection…');
         // Ensure mic is active during speaking so we can hear user interrupting.
         // Open mic silently — do NOT transition state (we want to stay 'speaking').
         if (!analyser) {
             _startListeningSilent = true;
             try { await startListening(); }
-            catch (e) { console.warn('[VoiceMode] cannot start mic for interrupt'); _startListeningSilent = false; return; }
+            catch (e) { console.warn('[Interrupt] cannot start mic:', e); _startListeningSilent = false; return; }
             _startListeningSilent = false;
         }
-        if (!analyser) return;
+        if (!analyser) {
+            console.warn('[Interrupt] still no analyser after startListening');
+            return;
+        }
+        console.log('[Interrupt] mic ready, watching for barge-in');
         let interruptCount = 0;
         _playbackBaseline = 0;
         let baselineSamples = 0;
+        let lastLogTime = 0;
         const detectStart = Date.now();
         _interruptTimer = setInterval(async () => {
             if (!analyser || _interrupted) return;
-            // Continuously capture mic samples into the short buffer
             _captureShortBuffer();
             const level = getAudioLevel();
-            const elapsed = Date.now() - detectStart;
+            const now = Date.now();
+            const elapsed = now - detectStart;
             if (elapsed < 400) { _playbackBaseline += level; baselineSamples++; return; }
             if (baselineSamples > 0 && _playbackBaseline > 0) {
                 _playbackBaseline = _playbackBaseline / baselineSamples;
                 baselineSamples = 0;
+                console.log(`[Interrupt] baseline calibrated: ${_playbackBaseline.toFixed(4)}`);
             }
-            const threshold = Math.max(_playbackBaseline * 1.5, 0.15);
+            // Lower minimum threshold — 0.05 is easier to beat than 0.15
+            const threshold = Math.max(_playbackBaseline * 1.6, 0.05);
+            // Periodic level log (every 1s) so we can see what's happening
+            if (now - lastLogTime > 1000) {
+                console.log(`[Interrupt] level=${level.toFixed(4)} threshold=${threshold.toFixed(4)} count=${interruptCount}`);
+                lastLogTime = now;
+            }
             if (level > threshold) {
                 interruptCount++;
                 if (interruptCount >= 4) {
-                    // Classify intent BEFORE cutting — don't flinch on "mm-hmm"
                     const samples = _captureShortBuffer();
                     const intent = IntentClassifier.classify(samples, '');
-                    console.log(`[VoiceMode] interrupt candidate — intent: ${intent}`);
+                    console.log(`[Interrupt] candidate — intent: ${intent}, level=${level.toFixed(4)}`);
                     if (intent === 'backchannel' || intent === 'noise') {
-                        // Don't cut — decay counter, let AI keep speaking
                         interruptCount = 0;
                         return;
                     }
-                    console.log('[VoiceMode] INTERRUPT — user spoke over AI with intent:', intent);
+                    console.log('[Interrupt] FIRING — intent:', intent);
                     _interrupted = true;
                     _lastInterruptIntent = intent;
                     await gracefulYield(intent);
