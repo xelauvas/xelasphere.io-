@@ -19,3 +19,42 @@ test('simple prose emits one paragraph block', () => {
     assert.deepEqual(types, ['BLOCK_START', 'BLOCK_APPEND', 'BLOCK_END']);
     assert.equal(events[0].blockType, 'paragraph');
 });
+
+test('heading detected at line-start', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('## Title\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts.length, 1);
+    assert.equal(starts[0].blockType, 'heading');
+    assert.equal(starts[0].meta.level, 2);
+});
+
+test('blockquote detected at line-start', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('> quoted line\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts[0].blockType, 'blockquote');
+});
+
+test('blank line terminates paragraph', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('First para.\n\nSecond para.\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts.length, 2);
+});
+
+test('# symbol not at line-start stays in paragraph', () => {
+    const events = [];
+    const sm = createBlockStateMachine(e => events.push(e));
+    sm.append('See issue #42 please.\n');
+    sm.finalize();
+    const starts = events.filter(e => e.type === 'BLOCK_START');
+    assert.equal(starts.length, 1);
+    assert.equal(starts[0].blockType, 'paragraph');
+});
