@@ -2499,7 +2499,7 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
                 appendFileMessage(messageContent, safeMessage);
                 break;
             default:
-                handleComplexMessage(messageContent, safeMessage, messageType, messageId, showButtons);
+                renderAiTextImmediate(messageContent, safeMessage, messageId, showButtons);
         }
     }
 
