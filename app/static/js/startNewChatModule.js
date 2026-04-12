@@ -4241,8 +4241,15 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 if (modelMeta && typeof window.addModelAttribution === 'function') {
                     window.addModelAttribution(messageDiv, modelMeta);
                 }
+            } else if (sender === 'ai') {
+                // Non-history AI or AI path that missed the streaming branch
+                renderAiTextImmediate(messageContent, safeContent, id, showButtons);
             } else {
-                handleComplexMessage(messageContent, safeContent, messageType, id, showButtons, isHistory);
+                // User message (history or live re-render)
+                renderUserMessage(messageContent, safeContent, id);
+                if (showButtons && typeof appendActionButtons === 'function') {
+                    appendActionButtons(messageContent, id);
+                }
             }
         }
         // Render attachments - CSS order property ensures they appear after text
