@@ -575,8 +575,8 @@ const VoiceModeModule = (function() {
                 });
             }
 
-            // 6. Loop back to listening
-            if (isActive) {
+            // 6. Loop back to listening — unless interrupt already captured next turn
+            if (isActive && !_interrupted) {
                 await startListening();
                 startRecording();
                 startSilenceDetection();
@@ -782,7 +782,11 @@ const VoiceModeModule = (function() {
         }
     }
 
-    function _startInterruptDetection() {
+    async function _startInterruptDetection() {
+        // Ensure mic is active during speaking so we can hear user interrupting
+        if (!analyser) {
+            try { await startListening(); } catch (e) { console.warn('[VoiceMode] cannot start mic for interrupt'); return; }
+        }
         if (!analyser) return;
         let interruptCount = 0;
         _playbackBaseline = 0;
@@ -801,14 +805,38 @@ const VoiceModeModule = (function() {
             if (level > threshold) {
                 interruptCount++;
                 if (interruptCount >= 4) {
-                    console.log(`[VoiceMode] INTERRUPT`);
+                    console.log('[VoiceMode] INTERRUPT — user spoke over AI');
                     _interrupted = true;
                     _flushAudioQueue();
+                    // Immediately start capturing what they're saying
+                    _captureInterruptSpeech();
                 }
             } else {
                 interruptCount = Math.max(0, interruptCount - 1);
             }
         }, 50);
+    }
+
+    // After interrupt, record what the user says and send as next prompt
+    async function _captureInterruptSpeech() {
+        if (!isActive) return;
+        console.log('[VoiceMode] capturing user interrupt speech');
+        try {
+            // Mic should already be live — just start recording
+            if (!stream) await startListening();
+            startRecording();
+            // Use VAD to detect when they stop
+            setState('listening');
+            startSilenceDetection();
+        } catch (e) {
+            console.error('[VoiceMode] capture interrupt failed:', e);
+            // Fall back to normal listening
+            if (isActive) {
+                await startListening();
+                startRecording();
+                startSilenceDetection();
+            }
+        }
     }
 
     async function streamAndSpeak(transcript) {
@@ -1082,7 +1110,9 @@ const VoiceModeModule = (function() {
             _voiceBarLabel.textContent = STATE_LABELS[state] || '';
         }
 
-        if (state !== 'listening') stopListening();
+        // Keep mic alive during 'speaking' state so we can detect interrupts.
+        // Only fully stop on idle/thinking.
+        if (state === 'idle' || state === 'thinking') stopListening();
     }
 
     // ────────────────────────────────────────
