@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Stream Perf</title>
+<link rel="stylesheet" href="/static/css/stream-blocks.css">
+<script src="https://cdn.jsdelivr.net/npm/markdown-it@14.0.0/dist/markdown-it.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+<script src="/static/js/morphdom.min.js"></script>
+<script>
+    const md = window.markdownit({ html: false, linkify: true });
+    window.marked = { parse: (t) => md.render(t || '') };
+</script>
+</head>
+<body>
+<h1>Stream perf</h1>
+<pre id="report"></pre>
+<div id="stage"></div>
+<script type="module">
+import { StreamRenderer } from '/static/js/streamRenderer.js';
+
+function wordsOf(n) {
+    return Array.from({ length: n }, (_, i) =>
+        i % 50 === 49 ? 'word.\n\n' : 'word'
+    ).join(' ');
+}
+
+async function streamAtSize(wordCount) {
+    const stage = document.getElementById('stage');
+    stage.innerHTML = '';
+    const renderer = new StreamRenderer(stage);
+    const text = wordsOf(wordCount);
+    const chunks = text.match(/.{1,24}/gs) || [];
+
+    performance.clearMeasures('stream-render');
+    for (const chunk of chunks) {
+        renderer.append(chunk);
+        await new Promise(r => requestAnimationFrame(r));
+    }
+    renderer.finalize();
+
+    const measures = performance.getEntriesByName('stream-render');
+    const total = measures.reduce((a, m) => a + m.duration, 0);
+    const avg = total / measures.length;
+    return { total, avg, count: measures.length };
+}
+
+(async () => {
+    const small = await streamAtSize(200);
+    const large = await streamAtSize(2000);
+    const ratio = large.avg / small.avg;
+    document.getElementById('report').textContent = JSON.stringify({
+        small_avg_ms: small.avg.toFixed(3),
+        large_avg_ms: large.avg.toFixed(3),
+        ratio: ratio.toFixed(2),
+        pass: ratio <= 2 ? 'PASS' : 'FAIL',
+    }, null, 2);
+})();
+</script>
+</body>
+</html>
