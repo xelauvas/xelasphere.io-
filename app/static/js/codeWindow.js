@@ -5141,6 +5141,68 @@ function renderUserMessage(container, text, messageId) {
     messageEl.innerHTML = DOMPurify.sanitize(html);
 }
 
+/**
+ * Render an AI text message that did NOT come from the live SSE stream.
+ * Routes through StreamRenderer (replay mode) so history, fallbacks,
+ * and non-streamed responses produce identical DOM to the live stream.
+ * Preserves tree-view and recipe special cases.
+ *
+ * `container` is the .message-content element; this function appends to it.
+ */
+function renderAiTextImmediate(container, text, messageId, showButtons) {
+    if (container && container.dataset.emailComposer === 'true') {
+        return;
+    }
+    if (!text || typeof text !== 'string') {
+        return;
+    }
+
+    // Special widget: tree view
+    if (typeof isTreeStructure === 'function' && isTreeStructure(text, null)) {
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('text-message-container');
+        wrapper.appendChild(createTreeView(text));
+        container.appendChild(wrapper);
+        if (showButtons && typeof appendActionButtons === 'function') {
+            appendActionButtons(container, messageId);
+        }
+        return;
+    }
+
+    // Special widget: recipe card
+    if (window.RecipeDetector && window.RecipeDetector.isRecipe(text, null)) {
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('text-message-container');
+        wrapper.appendChild(window.RecipeDetector.createRecipeCard(text));
+        container.appendChild(wrapper);
+        if (showButtons && typeof appendActionButtons === 'function') {
+            appendActionButtons(container, messageId);
+        }
+        return;
+    }
+
+    // Default: StreamRenderer in replay mode (no typing animation, DOM matches live)
+    const renderer = new StreamRenderer(container, { replay: true });
+    renderer.append(text);
+    renderer.finalize();
+
+    // Model attribution (live stream applies this at finalize; replay needs it explicit)
+    const msgDiv = container.closest('.message');
+    if (msgDiv && msgDiv._modelMeta && typeof window.addModelAttribution === 'function') {
+        window.addModelAttribution(msgDiv, msgDiv._modelMeta);
+        delete msgDiv._modelMeta;
+    }
+
+    // typing-complete event — preserves searchResults.js:1235 contract
+    if (msgDiv) {
+        msgDiv.dispatchEvent(new CustomEvent('typing-complete', { bubbles: false }));
+    }
+
+    if (showButtons && typeof appendActionButtons === 'function') {
+        appendActionButtons(container, messageId);
+    }
+}
+
 function appendTextMessage(container, text, isUserMessage, messageId, isHistory = false) {
     // Skip if email composer has taken over this container
     if (container && container.dataset.emailComposer === 'true') {
