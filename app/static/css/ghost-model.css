@@ -115,6 +115,37 @@
     text-shadow: 0 0 14px rgba(220, 170, 80, 0.12);
 }
 
+/* ── Light theme: replace pale/cream/gold with readable dark tones ── */
+[data-theme="light"] .ghost-pill__label {
+    color: var(--text-tertiary, #8890a8);
+}
+
+[data-theme="light"] .ghost-pill:hover .ghost-pill__label {
+    color: var(--text-secondary, #4a5068);
+}
+
+[data-theme="light"] .ghost-pill[data-model="auto"].active .ghost-pill__label,
+[data-theme="light"] .ghost-pill[data-model="auto"].locked .ghost-pill__label {
+    color: #7c5c30;
+    text-shadow: none;
+}
+
+[data-theme="light"] .ghost-pill[data-model="deepseek-chat"].active .ghost-pill__label,
+[data-theme="light"] .ghost-pill[data-model="deepseek-chat"].locked .ghost-pill__label {
+    color: #1a4fb0;
+    text-shadow: none;
+}
+
+[data-theme="light"] .ghost-pill[data-model="deepseek-reasoner"].active .ghost-pill__label,
+[data-theme="light"] .ghost-pill[data-model="deepseek-reasoner"].locked .ghost-pill__label {
+    color: #8a5e00;
+    text-shadow: none;
+}
+
+[data-theme="light"] .ghost-pill + .ghost-pill::before {
+    background: var(--border-primary, rgba(0, 0, 0, 0.08));
+}
+
 /* ── Attribution ── */
 
 .message-model-attribution {

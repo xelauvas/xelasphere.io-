@@ -126,6 +126,26 @@
     --active-right-sidebar-width: 0px;
 }
 
+/* ── Light theme: override dark-only CSS custom properties ── */
+[data-theme="light"] {
+    --chatbox-border-color: rgba(0, 0, 0, 0.15);
+    --button-bg-base: rgba(0, 0, 0, 0.05);
+    --button-bg-hover: rgba(0, 0, 0, 0.08);
+    --tooltip-bg-color: rgba(30, 30, 40, 0.92);
+    --tooltip-text-color: #ffffff;
+    --edit-textarea-bg: rgba(0, 0, 0, 0.03);
+    --edit-textarea-border: rgba(0, 0, 0, 0.12);
+    --edit-textarea-focus-bg: rgba(0, 0, 0, 0.05);
+    --edit-textarea-focus-border: rgba(91, 70, 214, 0.5);
+    --composer-selection-bg: rgba(91, 70, 214, 0.2);
+    --composer-surface: rgba(255, 255, 255, 0.97);
+    --composer-border-color: rgba(0, 0, 0, 0.1);
+    --sidebar-bg: #eef2f6;
+    --conversation-panel-bg: rgba(247, 249, 252, 0.92);
+    --conversation-panel-border: rgba(0, 0, 0, 0.06);
+    --conversation-panel-shadow: 0 8px 24px rgba(20, 30, 60, 0.08);
+}
+
 body.sidebar-collapsed {
     --sidebar-width: var(--sidebar-collapsed-width);
     --left-sidebar-width: var(--sidebar-collapsed-width);

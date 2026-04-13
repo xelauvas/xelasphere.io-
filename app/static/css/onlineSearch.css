@@ -286,7 +286,7 @@
     gap: 0.4rem;
     padding: 0.35rem 0.6rem;
     border-radius: 999px;
-    background: rgba(40, 44, 52, 0.95);
+    background: var(--bg-elevated, rgba(40, 44, 52, 0.95));
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     transition: all 0.3s ease;
 }
@@ -338,7 +338,7 @@
     top: 50%; /* Added to center vertically */
     transform: translateY(-50%); /* Changed from translateX(-50%) */
     margin-left: 10px; /* Added spacing between icon and tooltip */
-    background: rgb(0, 0, 0);
+    background: var(--bg-elevated, rgb(0, 0, 0));
     color: var(--text-primary, #e8e8f0);
     padding: 6px 10px;
     border-radius: 4px;
@@ -359,7 +359,7 @@
     transform: translateY(-50%);
     border-width: 6px;
     border-style: solid;
-    border-color: transparent rgb(0, 0, 0) transparent transparent;
+    border-color: transparent var(--bg-elevated, rgb(0, 0, 0)) transparent transparent;
 }
 
 /* Show tooltip on hover only when search is NOT active */
@@ -635,6 +635,6 @@
 @supports (backdrop-filter: blur(12px)) {
     .search-result {
         backdrop-filter: blur(12px);
-        background: rgba(20, 20, 20, 0.85);
+        background: var(--bg-elevated, rgba(20, 20, 20, 0.85));
     }
 }

@@ -915,4 +915,91 @@
     to { transform: rotate(360deg); }
 }
 
+/* ===============================================
+   LIGHT THEME OVERRIDES — search results UI
+   =============================================== */
+[data-theme="light"] .search-banner {
+    background: var(--bg-elevated, #ffffff);
+    border-color: var(--border-primary, rgba(0, 0, 0, 0.08));
+}
+
+[data-theme="light"] .search-banner__dots > span {
+    background: var(--text-tertiary, #8890a8);
+}
+
+[data-theme="light"] .search-banner__progress {
+    color: var(--text-secondary, #4a5068);
+}
+
+[data-theme="light"] .search-banner__favicon {
+    background: var(--bg-tertiary, #e4eaf1);
+    border-color: var(--bg-primary, #f7f9fc);
+}
+
+[data-theme="light"] .search-banner.search-banner--collapsed {
+    background: var(--bg-tertiary, #e4eaf1);
+    border-color: var(--border-primary, rgba(0, 0, 0, 0.08));
+}
+
+[data-theme="light"] .search-banner.search-banner--collapsed:hover {
+    background: var(--bg-secondary, #eef2f6);
+    border-color: var(--border-primary, rgba(0, 0, 0, 0.12));
+}
+
+[data-theme="light"] .search-banner.search-banner--collapsed .search-banner__label {
+    color: var(--text-secondary, #4a5068);
+}
+
+[data-theme="light"] .search-news-card {
+    background: var(--bg-elevated, #ffffff);
+    border-color: var(--border-primary, rgba(0, 0, 0, 0.08));
+}
+
+[data-theme="light"] .search-news-card:hover {
+    border-color: var(--border-focus, #5b46d6);
+}
+
+[data-theme="light"] .search-news-card__image {
+    background: var(--bg-tertiary, #e4eaf1);
+}
+
+[data-theme="light"] .search-news-card__image--placeholder {
+    color: var(--text-tertiary, #8890a8);
+}
+
+[data-theme="light"] .search-news-card__publisher-name {
+    color: var(--text-tertiary, #8890a8);
+}
+
+[data-theme="light"] .search-news-card__title {
+    color: var(--text-primary, #1a1d2e);
+}
+
+[data-theme="light"] .search-news-card__date {
+    color: var(--text-tertiary, #8890a8);
+}
+
+[data-theme="light"] .search-carousel-arrow {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: var(--border-primary, rgba(0, 0, 0, 0.08));
+    color: var(--text-primary, #1a1d2e);
+}
+
+[data-theme="light"] .search-carousel-arrow:hover {
+    background: var(--bg-elevated, #ffffff);
+}
+
+[data-theme="light"] .search-images__item {
+    background: var(--bg-tertiary, #e4eaf1);
+    border-color: var(--border-primary, rgba(0, 0, 0, 0.08));
+}
+
+[data-theme="light"] .search-video-embed {
+    border-color: var(--border-primary, rgba(0, 0, 0, 0.08));
+}
+
+[data-theme="light"] .reader-body hr {
+    border-top-color: var(--border-primary, rgba(0, 0, 0, 0.08));
+}
+
 /* Mobile overrides are in mobile.css */

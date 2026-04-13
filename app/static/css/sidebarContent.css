@@ -109,6 +109,12 @@ body.sidebar-collapsed .left-sidebar .sidebar-content {
     object-fit: cover;
 }
 
+/* Logo is white-on-transparent PNG — invert for light backgrounds */
+[data-theme="light"] .sidebar-header img,
+[data-theme="light"] .sidebar-logo {
+    filter: invert(1) hue-rotate(180deg);
+}
+
 .sidebar-header h1 {
     font-size: 0.875rem; /* 14px */
     color: var(--primary-blue);
