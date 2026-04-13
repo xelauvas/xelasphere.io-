@@ -213,7 +213,7 @@ textarea:focus {
     width: 2.5rem;
     height: 1.3rem;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--border-primary, rgba(255, 255, 255, 0.15));
     position: relative;
     transition: background 0.2s ease;
 }

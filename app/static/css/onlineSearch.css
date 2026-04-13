@@ -490,7 +490,7 @@
 }
 
 .result-title:focus {
-    outline: 2px solid #3b82f6;
+    outline: 2px solid var(--border-focus, #3b82f6);
     outline-offset: 2px;
     border-radius: 2px;
 }

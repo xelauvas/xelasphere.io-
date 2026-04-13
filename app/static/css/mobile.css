@@ -1317,7 +1317,7 @@ body.is-ios .arrow-down {
         position: absolute;
         width: 18px;
         height: 2px;
-        background-color: var(--line-color, rgb(110, 110, 110));
+        background-color: var(--line-color, var(--text-secondary, rgb(110, 110, 110)));
         border-radius: 2px;
         top: 50%;
         left: 50%;
@@ -1328,7 +1328,7 @@ body.is-ios .arrow-down {
     .toggle-button:hover .hamburger-line,
     .toggle-button:hover::before,
     .toggle-button:hover::after {
-        background-color: var(--line-color-hover, #fff);
+        background-color: var(--line-color-hover, var(--text-primary, rgb(110, 110, 110)));
     }
 
     /* --- Sidebar Toggle Button on Mobile --- */

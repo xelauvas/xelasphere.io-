@@ -1003,6 +1003,7 @@ body.sidebar-collapsed .left-sidebar .sidebar-action-btn::before {
     transition: background-color 0.15s ease;
     flex-shrink: 0;
     position: relative;
+    color: var(--text-secondary);
 }
 
 .sidebar-toggle-button,
