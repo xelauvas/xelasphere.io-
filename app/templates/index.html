@@ -330,7 +330,7 @@
         <div id="sidebar" class="left-sidebar closed{% if is_guest %} guest-sidebar{% endif %}">
             <div class="sidebar-header">
                 <a href="/" class="sidebar-logo-link" title="Go to Home">
-                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="XelaSphere logo" class="sidebar-logo">
+                    <span class="sidebar-brand-text">XelaSphere</span>
                 </a>
                 <button type="button" class="sidebar-header-ghost" aria-label="Start incognito chat" data-tooltip="Go Incognito" onclick="window.chatManager?.createNewChat(null, { temporary: true, notifySuccess: false })">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="34" height="34" aria-hidden="true">
