@@ -1522,7 +1522,7 @@ img.composer-attachment-thumb--empty {
     transition: background 0.12s ease;
 }
 .asi:hover {
-    background: var(--bg-hover, rgba(255,255,255,0.05)) !important;
+    background: var(--overlay-pressed, rgba(255,255,255,0.08)) !important;
 }
 .asi:hover svg {
     opacity: 1 !important;
@@ -1530,6 +1530,23 @@ img.composer-attachment-thumb--empty {
 /* Active style option (Normal selected etc.) */
 .action-style-opt[data-style] {
     transition: background 0.12s ease;
+}
+/* Web search row: subtle blue tint + spacing when active (toggle on) */
+#action-web-search[data-web-on="true"] {
+    background: var(--web-accent-bg, rgba(92, 177, 255, 0.12)) !important;
+    border-radius: 8px;
+    margin: 2px 4px;
+}
+#action-web-search[data-web-on="true"] .asi-web-check {
+    display: flex !important;
+}
+#action-web-search:not([data-web-on="true"]) .asi-web-check {
+    display: none !important;
+}
+/* When OFF, web row uses neutral text instead of blue */
+#action-web-search:not([data-web-on="true"]) .asi-web-icon,
+#action-web-search:not([data-web-on="true"]) .asi-web-label {
+    color: var(--text-primary) !important;
 }
 /* ═══ End Action Sheet ═══ */
 

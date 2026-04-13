@@ -107,6 +107,10 @@
   --strength-good: #ffcc4d;
   --strength-strong: #66cc66;
 
+  /* --- Web search active accent (theme-aware) --- */
+  --web-accent: #5cb1ff;
+  --web-accent-bg: rgba(92, 177, 255, 0.12);
+
   /* ==================== */
   /* TYPOGRAPHY */
   /* ==================== */
@@ -337,6 +341,10 @@
   --strength-fair: #ea580c;
   --strength-good: #d97706;
   --strength-strong: #16a34a;
+
+  /* --- Web search active accent (deeper blue for light bg) --- */
+  --web-accent: #1e6fd9;
+  --web-accent-bg: rgba(30, 111, 217, 0.10);
 
   /* --- Code editor (inherit from existing design-tokens if present, or leave as is) --- */
   --code-bg: #eef2f6;
