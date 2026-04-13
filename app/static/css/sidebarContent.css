@@ -77,7 +77,7 @@ body.sidebar-collapsed .left-sidebar .sidebar-content {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1.1rem 0.75rem 0;
+    padding: 1rem 0.75rem 0.875rem;
     background-color: inherit;
     width: 100%;
     box-shadow: none;
@@ -188,13 +188,14 @@ body.sidebar-collapsed .sidebar-brand-text {
 }
 
 .sidebar-quick-actions {
+    /* Sticky just under the header so it stays attached on scroll */
     position: sticky;
-    top: 0;
+    top: var(--sidebar-header-h, 3.5rem);
     z-index: 5;
-    padding: 0 0 0.5rem;
-    margin-bottom: 0.25rem;
+    padding: 0 0 0.625rem;
+    margin-bottom: 0.5rem;
     background: var(--bg-secondary, #262624);
-    /* Soft fade-out at the bottom so chats scroll under cleanly */
+    /* Soft shadow fade so scrolling sessions meet the buttons cleanly */
     box-shadow: 0 6px 6px -6px var(--bg-secondary, #262624);
 }
 
