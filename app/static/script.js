@@ -1797,7 +1797,7 @@ document.addEventListener('DOMContentLoaded', () => {
             _closeAllSubmenus();
             if (!wasOpen) {
                 sub.style.display = 'block';
-                btn.style.background = 'var(--accent-muted, #353331)';
+                btn.style.background = 'var(--bg-hover, #353331)';
                 btn.style.borderRadius = '8px';
                 btn.style.margin = '2px 4px';
             }

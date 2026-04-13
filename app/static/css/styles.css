@@ -1522,11 +1522,7 @@ img.composer-attachment-thumb--empty {
     transition: background 0.12s ease;
 }
 .asi:hover {
-    background: var(--accent-muted, rgba(124, 106, 239, 0.15)) !important;
-    color: var(--text-primary) !important;
-}
-.asi:hover * {
-    color: var(--text-primary) !important;
+    background: var(--bg-hover, rgba(255,255,255,0.05)) !important;
 }
 .asi:hover svg {
     opacity: 1 !important;
