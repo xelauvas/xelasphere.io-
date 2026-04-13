@@ -1137,8 +1137,11 @@ body.sidebar-collapsed .left-sidebar .sidebar-toggle-button {
     color: var(--text-secondary, #9898b0);
 }
 
+/* Keep the incognito ghost visible when the sidebar is collapsed.
+   It acts as a quick incognito-launcher even in the rail. */
 body.sidebar-collapsed .left-sidebar .sidebar-header-ghost {
-    display: none;
+    display: inline-flex;
+    margin: 0 auto;
 }
 
 .ghost-mascot svg {
