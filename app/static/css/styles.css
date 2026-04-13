@@ -1416,7 +1416,7 @@ img.composer-attachment-thumb--empty {
     background: var(--bg-elevated, rgba(32, 32, 36, 0.95));
     border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
     border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--shadow-lg, 0 4px 20px rgba(0, 0, 0, 0.35));
     z-index: 20;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -1533,7 +1533,7 @@ img.composer-attachment-thumb--empty {
     width: var(--send-button-size);
     min-width: var(--send-button-size);
     min-height: var(--send-button-size);
-    background-color: transparent;
+    background-color: var(--bg-hover, rgba(255, 255, 255, 0.06));
     border: none;
     border-radius: var(--send-button-radius);
     cursor: pointer;
@@ -1542,18 +1542,19 @@ img.composer-attachment-thumb--empty {
     justify-content: center;
     overflow: visible;
     z-index: 2;
-    color: var(--text-tertiary, rgba(255, 255, 255, 0.5));
+    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
     font-size: 1rem;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-/* Tooltip for microphone button */
+/* Tooltip for microphone button — matches standard [data-tooltip] tooltips */
 .microphone-button::before {
     content: attr(data-tooltip);
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;
     transform: translateX(-50%);
-    background-color: var(--bg-primary, #0f0f12);
+    background-color: var(--bg-elevated, #2a2a38);
     color: var(--text-primary, #e8e8f0);
     padding: 6px 10px;
     border-radius: 6px;
@@ -1562,6 +1563,8 @@ img.composer-attachment-thumb--empty {
     white-space: nowrap;
     opacity: 0;
     visibility: hidden;
+    box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.45));
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
     transition: opacity 0.15s ease, visibility 0.15s ease;
     pointer-events: none;
     z-index: 100;
@@ -1574,7 +1577,7 @@ img.composer-attachment-thumb--empty {
     left: 50%;
     transform: translateX(-50%);
     border: 5px solid transparent;
-    border-top-color: var(--bg-primary, #0f0f12);
+    border-top-color: var(--bg-elevated, #2a2a38);
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.15s ease, visibility 0.15s ease;
