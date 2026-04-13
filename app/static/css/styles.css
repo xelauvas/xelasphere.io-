@@ -1065,7 +1065,7 @@ body.temporary-chat-centered .input-row {
     padding-right: 1.4rem;
     border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
     border-radius: 0.6rem;
-    background: linear-gradient(135deg, #1c1c1c, #121212);
+    background: var(--bg-elevated, linear-gradient(135deg, #1c1c1c, #121212));
     color: var(--primary-text-color);
     min-height: 3.4rem;
     min-width: 8.5rem;
