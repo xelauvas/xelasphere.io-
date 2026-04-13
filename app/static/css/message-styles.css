@@ -462,7 +462,7 @@ h1 {
     display: none;
 }
 .user-message .text-message {
-    background: var(--accent-muted, #303030);
+    background: var(--bg-code, #1c1b19);
     color: var(--text-primary, #f7f7f7);
     border-radius: 0.95rem 0.95rem 0.35rem 0.95rem;
     width: auto;
