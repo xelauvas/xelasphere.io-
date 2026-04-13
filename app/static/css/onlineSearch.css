@@ -323,11 +323,11 @@
         background: #0056b3;
     }
     .toggle-tooltip {
-        background: rgba(0, 0, 0, 0.9);
+        background: var(--bg-elevated, #2a2a38);
         color: var(--text-primary, #e8e8f0);
     }
     .toggle-tooltip::after {
-        border-color: rgba(0, 0, 0, 0.9) transparent transparent transparent;
+        border-color: var(--bg-elevated, #2a2a38) transparent transparent transparent;
     }
 }
 
@@ -338,7 +338,7 @@
     top: 50%; /* Added to center vertically */
     transform: translateY(-50%); /* Changed from translateX(-50%) */
     margin-left: 10px; /* Added spacing between icon and tooltip */
-    background: var(--bg-elevated, rgb(0, 0, 0));
+    background: var(--bg-elevated, #2a2a38);
     color: var(--text-primary, #e8e8f0);
     padding: 6px 10px;
     border-radius: 4px;
@@ -359,7 +359,7 @@
     transform: translateY(-50%);
     border-width: 6px;
     border-style: solid;
-    border-color: transparent var(--bg-elevated, rgb(0, 0, 0)) transparent transparent;
+    border-color: transparent var(--bg-elevated, #2a2a38) transparent transparent;
 }
 
 /* Show tooltip on hover only when search is NOT active */
