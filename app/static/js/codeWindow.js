@@ -4223,7 +4223,7 @@ function makeResizable(el) {
     resizer.style.boxShadow = '0px 0px 5px rgba(0, 0, 0, 0.5)';
     resizer.textContent = '↘'; // Add a Unicode arrow symbol for resize
 
-    resizer.style.color = '#ffffff'; // Make sure the symbol stands out
+    resizer.style.color = 'var(--text-primary, #e8e8f0)'; // Make sure the symbol stands out
 
     // Ensure the element has relative or absolute positioning for resizing to work correctly
     const computedStyle = window.getComputedStyle(el);

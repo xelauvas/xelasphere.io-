@@ -537,7 +537,7 @@
                 card.style.scrollSnapAlign = 'start';
                 card.style.overflow = 'hidden';
                 card.style.border = '1px solid rgba(255,255,255,0.08)';
-                card.style.background = 'rgba(255,255,255,0.03)';
+                card.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))';
                 card.style.textDecoration = 'none';
                 card.style.color = 'inherit';
                 card.style.display = 'flex';
@@ -614,7 +614,8 @@
             wrap.appendChild(track);
 
             Array.from(track.children).forEach(function (item) {
-                item.style.cssText = 'flex: 0 0 120px; height: 85px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); position: relative; background: rgba(255,255,255,0.03);';
+                item.style.cssText = 'flex: 0 0 120px; height: 85px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); position: relative;';
+                item.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))';
             });
 
             // Touch swipe — calculate maxOffset lazily (element not in DOM yet)
@@ -723,7 +724,7 @@
                 img.alt = v.title || '';
                 img.loading = 'lazy';
                 img.onerror = function () {
-                    thumbWrap.style.background = 'rgba(0,0,0,0.4)';
+                    thumbWrap.style.background = 'var(--bg-overlay, rgba(10,10,18,0.85))';
                     this.style.display = 'none';
                 };
                 thumbWrap.appendChild(img);

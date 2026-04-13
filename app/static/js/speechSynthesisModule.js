@@ -816,8 +816,8 @@ function createTooltip(text) {
     tooltip.style.top = '100%'; // Position below the button
     tooltip.style.left = '50%';
     tooltip.style.transform = 'translateX(-50%)';
-    tooltip.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-    tooltip.style.color = 'white';
+    tooltip.style.backgroundColor = 'var(--bg-elevated, #2a2a38)';
+    tooltip.style.color = 'var(--text-primary, #e8e8f0)';
     tooltip.style.padding = '6px 10px'; // Increased padding for better visibility
     tooltip.style.borderRadius = '4px'; // Slightly larger border radius for modern look
     tooltip.style.whiteSpace = 'nowrap';
@@ -850,7 +850,7 @@ function createTooltip(text) {
         secondarySpan.textContent = secondary.trim();
         secondarySpan.style.display = 'block';
         secondarySpan.style.fontSize = '12px';
-        secondarySpan.style.color = '#cccccc';
+        secondarySpan.style.color = 'var(--text-secondary, #9898b0)';
         tooltip.append(primarySpan, secondarySpan);
     } else {
         const textSpan = document.createElement('span');
