@@ -350,18 +350,10 @@
                     </svg>
                 </button>
             </div>
-                <div class="sidebar-content">
-                {% if is_guest %}
-                <!-- Guest Sidebar Content - Clean minimal style -->
-                <div class="guest-sidebar-content">
-                    <div class="guest-sidebar-empty">
-                        <p>Sign up or log in to save your chat history</p>
-                    </div>
-                </div>
-                {% else %}
-                <!-- Regular User Sidebar Content -->
-                <div class="sidebar-quick-actions">
-                    <div class="sidebar-quick-actions-inner">
+            {% if not is_guest %}
+            <!-- Action buttons live OUTSIDE .sidebar-content as part of the header block -->
+            <div class="sidebar-quick-actions">
+                <div class="sidebar-quick-actions-inner">
                     <button class="sidebar-action-btn has-shortcut" id="action-new-chat" aria-label="New Chat" data-shortcut-win="Ctrl+Shift+O" data-shortcut-mac="⌘+Shift+O">
                         <span class="sidebar-action-icon" aria-hidden="true">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -417,8 +409,18 @@
                         <span class="sidebar-action-text">Images</span>
                         <span class="shortcut-hint"></span>
                     </button>
+                </div>
+            </div>
+            {% endif %}
+            <div class="sidebar-content">
+                {% if is_guest %}
+                <!-- Guest Sidebar Content - Clean minimal style -->
+                <div class="guest-sidebar-content">
+                    <div class="guest-sidebar-empty">
+                        <p>Sign up or log in to save your chat history</p>
                     </div>
                 </div>
+                {% else %}
                 <ul id="tab-list">
                     <!-- Chat session items will be dynamically added here -->
                 </ul>
