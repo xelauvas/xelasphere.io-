@@ -69,21 +69,21 @@
     width: 2.5px;
     height: 2.5px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--border-secondary, rgba(255, 255, 255, 0.04));
 }
 
 .ghost-pill__label {
     font-size: 13px;
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
     font-weight: 420;
-    color: rgba(255, 255, 255, 0.22);
+    color: var(--text-tertiary, #5a5a70);
     letter-spacing: 0.05em;
     text-transform: none;
     transition: color 0.3s ease, text-shadow 0.3s ease;
 }
 
 .ghost-pill:hover .ghost-pill__label {
-    color: rgba(255, 255, 255, 0.42);
+    color: var(--text-secondary, #9898b0);
 }
 
 /* ── Active: text lights up with mode identity ── */
@@ -120,7 +120,7 @@
 .message-model-attribution {
     display: inline;
     font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.25);
+    color: var(--text-tertiary, #5a5a70);
     margin-left: 0.4em;
     user-select: none;
     white-space: nowrap;
