@@ -77,7 +77,7 @@ body.sidebar-collapsed .left-sidebar .sidebar-content {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1.2rem 0.75rem 0.5rem;
+    padding: 1.1rem 0.75rem 0;
     background-color: inherit;
     width: 100%;
     box-shadow: none;
@@ -182,7 +182,7 @@ body.sidebar-collapsed .sidebar-brand-text {
     flex-grow: 1;
     overflow-y: auto;
     overflow-x: visible;
-    padding: 0.375rem 0.375rem 1rem 0.375rem;
+    padding: 0 0.375rem 1rem 0.375rem;
     scrollbar-width: thin;
     scrollbar-color: var(--border-primary, rgba(255, 255, 255, 0.08)) transparent;
 }
@@ -191,7 +191,7 @@ body.sidebar-collapsed .sidebar-brand-text {
     position: sticky;
     top: 0;
     z-index: 5;
-    padding: 0.25rem 0 0.5rem;
+    padding: 0 0 0.5rem;
     margin-bottom: 0.25rem;
     background: var(--bg-secondary, #262624);
     /* Soft fade-out at the bottom so chats scroll under cleanly */
