@@ -74,7 +74,7 @@
     right: 0;
     height: 100vh;
     z-index: 1000;
-    background-color: var(--background-dark);
+    background-color: var(--bg-secondary, #1a1a22);
     transition: transform var(--transition-default);
     box-shadow: -2px 0 8px var(--shadow-default);
     display: flex;

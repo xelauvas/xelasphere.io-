@@ -7,8 +7,8 @@ body.api-keys-page {
     min-height: 100vh;
     margin: 0;
     font-family: 'Manrope', 'Inter', sans-serif;
-    background: #0c0c14;
-    color: #f5f6fb;
+    background: var(--bg-primary, #0c0c14);
+    color: var(--text-primary, #f5f6fb);
     display: flex;
     align-items: center;
     justify-content: center;

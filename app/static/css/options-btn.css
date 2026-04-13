@@ -177,7 +177,7 @@
     font-size: 0.78rem;
     border-radius: 0.75rem;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    background: var(--background-dark, #212121);
+    background: var(--bg-primary, #0f0f12);
     color: var(--text-primary, #e8e8f0);
     cursor: pointer;
     position: relative;

@@ -322,7 +322,7 @@ body.is-ios .mobile-header-bar {
     height: var(--mobile-header-height);
     padding: 0 4px;
     padding-top: env(safe-area-inset-top, 0px);
-    background: #2b2a27 !important;
+    background: var(--bg-secondary, #1a1a22) !important;
     border-bottom: none;
     z-index: 9999 !important;
     box-sizing: content-box;
@@ -679,7 +679,7 @@ body.device-phone .left-sidebar {
     transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
                 visibility 0s linear 0.5s,
                 box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1);
-    background: #2b2a27;
+    background: var(--bg-secondary, #1a1a22);
     will-change: transform;
 }
 
@@ -1128,7 +1128,7 @@ body.is-ios .arrow-down {
     left: 0;
     right: 0;
     height: var(--header-height);
-    background: var(--background-dark, #2b2a27);
+    background: var(--bg-secondary, #1a1a22);
     z-index: var(--z-header-bar, 200);
     pointer-events: none;
 }
@@ -1216,7 +1216,7 @@ body.is-ios .arrow-down {
         box-shadow: none;
         min-height: 0;
         visibility: hidden;
-        background: #2b2a27;
+        background: var(--bg-secondary, #1a1a22);
     }
 
     /* Enable transitions only after page is ready */
@@ -1685,20 +1685,9 @@ body.is-ios .arrow-down {
    ============================================ */
 
 @media (max-width: 1024px) {
-    /* Override CSS variables for dark theme on mobile */
-    :root,
-    body {
-        --background-dark: #2b2a27;
-        --background-darker: #211f1d;
-        --card-bg: rgba(43, 42, 39, 0.9);
-        --card-bg-hover: rgba(52, 50, 47, 0.95);
-        --input-row-bg: #353330;
-        --input-row-bg-focus: #3d3b37;
-    }
-
     body, html {
-        background: #2b2a27;
-        background-color: #2b2a27;
+        background: var(--bg-primary, #0f0f12);
+        background-color: var(--bg-primary, #0f0f12);
     }
 
     /* Header area */
@@ -1716,8 +1705,8 @@ body.is-ios .arrow-down {
     .message-input-container,
     .composer-container,
     .chat-shell__composer {
-        background: #2b2a27;
-        background-color: #2b2a27;
+        background: var(--bg-primary, #0f0f12);
+        background-color: var(--bg-primary, #0f0f12);
         border: none;
     }
 
@@ -1732,8 +1721,8 @@ body.is-ios .arrow-down {
     .input-container,
     .chat-shell__composer,
     .options {
-        background: #2b2a27;
-        background-color: #2b2a27;
+        background: var(--bg-primary, #0f0f12);
+        background-color: var(--bg-primary, #0f0f12);
         border: none;
         border-top: none;
         border-bottom: none;
@@ -3004,7 +2993,7 @@ body.is-ios .arrow-down {
         margin: 0;
         padding: 10px 14px;
         padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-        background: linear-gradient(to top, #2b2a27 80%, transparent);
+        background: linear-gradient(to top, var(--bg-primary, #0f0f12) 80%, transparent);
         z-index: 100;
         box-sizing: border-box;
         pointer-events: none; /* Let taps pass through the gradient area */
@@ -4590,7 +4579,7 @@ body.viewport-mobile .left-sidebar {
     transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
                 visibility 0s linear 0.5s,
                 box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1) !important;
-    background: #2b2a27 !important;
+    background: var(--bg-secondary, #1a1a22) !important;
     will-change: transform;
     box-shadow: none !important;
 }
@@ -4650,7 +4639,7 @@ body.viewport-mobile .mobile-header-bar {
     right: 0 !important;
     height: var(--mobile-header-height) !important;
     padding: 0 4px !important;
-    background: #2b2a27 !important;
+    background: var(--bg-secondary, #1a1a22) !important;
     border-bottom: none !important;
     z-index: 9999 !important;
     box-sizing: content-box !important;
@@ -5140,7 +5129,7 @@ body.device-phone .left-sidebar,
 body.device-tablet .left-sidebar {
     width: 280px !important;
     transform: translateX(-100%) !important;
-    background: #2b2a27 !important;
+    background: var(--bg-secondary, #1a1a22) !important;
     transition: transform 0.5s ease !important;
     box-shadow: none !important;
 }
