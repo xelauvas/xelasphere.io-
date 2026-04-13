@@ -1088,6 +1088,24 @@ def chat_stream():
         # intent (e.g. the Web Search toggle) always wins.
         _mode_forced = request_mode in {'search', 'research', 'chat', 'artifact'}
 
+        # ─── Context-aware search-type classifier ──────────────────────
+        # When the UI forces "search", we still want the right flavour
+        # (videos, images, news, general). Heuristic first — fast and
+        # deterministic. Keyed on word-boundary matches in the user
+        # prompt; returns the highest-priority match.
+        def _classify_search_type(text: str) -> str:
+            t = (text or '').lower()
+            rules = (
+                # (priority_order, search_type, regex)
+                ('video',  re.compile(r'\b(video|videos|tutorial|watch|youtube|demo|trailer|clip|footage|stream)\b')),
+                ('images', re.compile(r'\b(image|images|picture|pictures|photo|photos|photography|wallpaper|screenshot|screenshots|logo|logos|poster|posters)\b')),
+                ('news',   re.compile(r'\b(news|latest|breaking|headline|headlines|today|tonight|current|currently|recent|war|election|crash|outage|announce[ds]?|launch(?:ed|es|ing)?)\b')),
+            )
+            for stype, pat in rules:
+                if pat.search(t):
+                    return stype
+            return 'general'
+
         def _run_search_and_synthesize(ws_query, ws_type):
             """Run search, emit events, start synthesis immediately after
             search_complete. Content fetch runs in a background thread
@@ -1134,16 +1152,59 @@ def chat_stream():
                 logger.warning("[Stream] No search context for synthesis")
                 return
 
+            # Count available sources so we can hard-cap citation numbers.
+            # Without this, the model invents indices past N and the client's
+            # processCitations() can't match them → user sees "[11], [12]" raw.
+            try:
+                _q_key = (ws_query or '').lower().strip()
+                _srcs = search_orchestrator._last_results.get(_q_key, []) or []
+                _source_count = len(_srcs)
+            except Exception:
+                _source_count = 0
+            _max_idx = max(_source_count, 1)
+            _range_hint = (
+                "[1]" if _max_idx == 1
+                else f"[1]…[{_max_idx}]"
+            )
+
             synthesis_prompt = (
                 f"{search_context}\n\n"
                 f"---\n"
                 f"The user asked: {user_prompt_raw}\n\n"
-                f"Summarize the search results above into a clear, direct answer. "
-                f"Use inline citations [1], [2], [3] matching the source numbers. "
-                f"Every factual claim must have a citation. Be concise."
+                f"Summarize the search results above into a clear, direct answer.\n"
+                f"CITATION RULES (strict):\n"
+                f"- There are exactly {_max_idx} source(s). Valid citation numbers: {_range_hint}.\n"
+                f"- Use SEPARATE brackets for each citation: [1][2][3]. "
+                f"NEVER combine them inside one bracket like [1, 2, 3] or [1-3].\n"
+                f"- Do NOT invent citation numbers above {_max_idx}. If no source supports "
+                f"a claim, omit the citation — do not guess.\n"
+                f"- Every factual claim must carry at least one valid citation.\n"
+                f"Be concise and direct."
             )
 
             logger.info(f"[Stream] Starting search synthesis (2nd LLM call) with {stream_model}")
+
+            # Belt-and-braces: strip any citation numbers the model still
+            # hallucinates above the valid range. Keeps the rendered text
+            # clean if the prompt cap fails (which LLMs sometimes do).
+            # Handles three shapes the model uses:
+            #   [11]               — single
+            #   [11][12][13]       — adjacent (already per-bracket)
+            #   [11, 12, 13]       — comma-separated inside one pair
+            # For the comma form we filter to valid indices and rewrite to
+            # the adjacent form [1][2][3] so processCitations can pill them.
+            _cite_any_re = re.compile(r'\[(\d+(?:\s*,\s*\d+)*)\]')
+            def _strip_invalid_citations(s: str) -> str:
+                if _max_idx <= 0:
+                    return _cite_any_re.sub('', s)
+                def _repl(m):
+                    nums = [int(n.strip()) for n in m.group(1).split(',') if n.strip().isdigit()]
+                    valid = [n for n in nums if 1 <= n <= _max_idx]
+                    if not valid:
+                        return ''
+                    return ''.join(f'[{n}]' for n in valid)
+                return _cite_any_re.sub(_repl, s)
+
             try:
                 for chunk in stream_deepseek_response(synthesis_prompt, stream_model, system_prompt_override=_sys_prompt):
                     if _client_disconnected():
@@ -1153,7 +1214,9 @@ def chat_stream():
                     if ct == 'content':
                         text = chunk.get('text', '')
                         _search_synthesis_content.append(text)
-                        yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(normalize_paragraph_breaks(text))})}\n\n"
+                        _cleaned = _sanitize_content(normalize_paragraph_breaks(text))
+                        _cleaned = _strip_invalid_citations(_cleaned)
+                        yield f"data: {json.dumps({'type': 'content', 'text': _cleaned})}\n\n"
                     elif ct == 'reasoning':
                         text = chunk.get('text', '')
                         reasoning_buffer.append(text)
@@ -1182,7 +1245,8 @@ def chat_stream():
         # Explicit mode override — short-circuit BEFORE cache + first-LLM.
         # The UI toggle is authoritative: user asked for this pipeline.
         if request_mode == 'search':
-            logger.info(f"[Stream] MODE=search forced by UI. query={user_prompt_raw[:80]!r}")
+            _forced_search_type = _classify_search_type(user_prompt_raw)
+            logger.info(f"[Stream] MODE=search forced by UI. type={_forced_search_type} query={user_prompt_raw[:80]!r}")
             # Extract system prompt up-front — the synthesis generator
             # closes over `_sys_prompt`, so it must be bound before we
             # call it. In the auto path this happens inside the try-block
@@ -1194,8 +1258,8 @@ def chat_stream():
             except Exception:
                 _sys_prompt = None
 
-            yield f"data: {json.dumps({'type': 'search_started', 'query': user_prompt_raw, 'search_type': 'general'})}\n\n"
-            yield from _run_search_and_synthesize(user_prompt_raw, 'general')
+            yield f"data: {json.dumps({'type': 'search_started', 'query': user_prompt_raw, 'search_type': _forced_search_type})}\n\n"
+            yield from _run_search_and_synthesize(user_prompt_raw, _forced_search_type)
 
             # Assemble + emit the done payload ourselves — the synthesis
             # generator only emits content/reasoning; the outer auto path
@@ -1236,7 +1300,12 @@ def chat_stream():
                 'session_name': None,
                 'search_results': _search_results,
                 'fetched_urls': _fetched_urls,
-                'render_hint': 'text_only',
+                # Pick the right downstream renderer based on classified type.
+                'render_hint': {
+                    'news':   'news_cards',
+                    'images': 'image_grid',
+                    'video':  'video_embeds',
+                }.get(_forced_search_type, 'text_only'),
                 'model_meta': {
                     'model_id': stream_model,
                     'model_label': 'Web search',
