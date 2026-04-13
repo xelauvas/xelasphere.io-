@@ -61,7 +61,7 @@
      Cards:              lifted by ~10% lightness
      Modals/elevated:    lightest dark surface */
   --bg-primary: #262624;          /* main canvas, body, chat container, header */
-  --bg-secondary: #1f1e1c;        /* sidebar, panels — darker than body */
+  --bg-secondary: #262624;        /* sidebar, panels — same as body (Claude pattern) */
   --bg-tertiary: #30302e;         /* cards, suggestion items, nested surfaces */
   --bg-elevated: #3a3937;         /* modals, dropdowns, popovers */
   --bg-overlay: rgba(20, 19, 17, 0.85);
