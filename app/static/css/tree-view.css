@@ -5,7 +5,7 @@
 
 /* === Tree View Container === */
 .tree-view-window {
-    background: #0d1117 !important;
+    background: var(--bg-code, #13131a) !important;
     border-radius: 10px !important;
     overflow: hidden !important;
     width: 100% !important;
@@ -13,20 +13,20 @@
     margin: 1rem auto !important;
     font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', 'Monaco', monospace !important;
     font-size: 13px !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08)) !important;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.5) !important;
     display: block !important;
 }
 
 /* === Tree View Header === */
 .tree-view-window .tree-view-header {
-    background: linear-gradient(180deg, #1c2128 0%, #161b22 100%) !important;
+    background: var(--bg-tertiary, #22222e) !important;
     padding: 0 14px !important;
     height: 38px !important;
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-bottom: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.04)) !important;
     user-select: none !important;
 }
 
@@ -64,7 +64,7 @@
     display: flex !important;
     align-items: center !important;
     gap: 8px !important;
-    color: #8b949e !important;
+    color: var(--text-secondary, #9898b0) !important;
     font-size: 12px !important;
     font-weight: 500 !important;
     letter-spacing: 0.02em !important;
@@ -87,10 +87,10 @@
     justify-content: center !important;
     width: 28px !important;
     height: 28px !important;
-    background: rgba(255, 255, 255, 0.05) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05)) !important;
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08)) !important;
     border-radius: 6px !important;
-    color: #8b949e !important;
+    color: var(--text-secondary, #9898b0) !important;
     font-size: 11px !important;
     cursor: pointer !important;
     transition: all 0.15s ease !important;
@@ -100,8 +100,8 @@
 
 .tree-view-window .tree-view-actions button:hover {
     background: rgba(255, 255, 255, 0.1) !important;
-    color: #c9d1d9 !important;
-    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: var(--text-primary, #e8e8f0) !important;
+    border-color: var(--border-primary, rgba(255, 255, 255, 0.08)) !important;
 }
 
 /* === Tree View Body === */
@@ -110,7 +110,7 @@
     max-height: 400px !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
-    background: #0d1117 !important;
+    background: var(--bg-code, #13131a) !important;
 }
 
 /* === Tree List === */
@@ -123,7 +123,7 @@
 .tree-view-window .tree-list .tree-list {
     padding-left: 24px !important;
     margin: 0 !important;
-    border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-left: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.04)) !important;
     margin-left: 8px !important;
 }
 
@@ -146,7 +146,7 @@
 }
 
 .tree-view-window .tree-item-content:hover {
-    background: rgba(255, 255, 255, 0.05) !important;
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05)) !important;
 }
 
 .tree-view-window .tree-folder.has-children > .tree-item-content {
@@ -154,7 +154,7 @@
 }
 
 .tree-view-window .tree-folder.has-children > .tree-item-content:hover {
-    background: rgba(16, 163, 127, 0.1) !important;
+    background: var(--accent-muted, rgba(124, 106, 239, 0.15)) !important;
 }
 
 /* Toggle icon */
@@ -164,7 +164,7 @@
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    color: #6e7681 !important;
+    color: var(--text-tertiary, #5a5a70) !important;
     font-size: 10px !important;
     flex-shrink: 0 !important;
     transition: transform 0.2s ease !important;
@@ -187,7 +187,7 @@
     flex-shrink: 0 !important;
 }
 
-/* Folder icons */
+/* Folder icons — keep file-type colors (yellow = folder) */
 .tree-view-window .tree-folder .folder-icon {
     color: #e8ab4c !important;
     display: inline-block !important;
@@ -206,9 +206,9 @@
     display: inline-block !important;
 }
 
-/* File icons */
+/* File icons — generic default; specific type icons keep their colors in JS */
 .tree-view-window .tree-file .tree-icon {
-    color: #8b949e !important;
+    color: var(--text-secondary, #9898b0) !important;
 }
 
 .tree-view-window .tree-file .tree-icon i {
@@ -217,7 +217,7 @@
 
 /* Item name */
 .tree-view-window .tree-name {
-    color: #c9d1d9 !important;
+    color: var(--text-primary, #e8e8f0) !important;
     font-size: 13px !important;
     white-space: nowrap !important;
     overflow: hidden !important;
@@ -227,7 +227,7 @@
 
 .tree-view-window .tree-folder > .tree-item-content .tree-name {
     font-weight: 600 !important;
-    color: #e6edf3 !important;
+    color: var(--text-primary, #e8e8f0) !important;
 }
 
 /* === Collapsed state === */
@@ -250,7 +250,7 @@
 }
 
 .tree-view-window .tree-view-body::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15) !important;
+    background: var(--border-primary, rgba(255, 255, 255, 0.08)) !important;
     border-radius: 3px !important;
 }
 
