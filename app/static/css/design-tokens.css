@@ -55,38 +55,57 @@
   /* CONTEXTUAL COLORS - DARK THEME */
   /* ==================== */
 
-  /* Background */
-  --bg-primary: #0f0f0f;
-  --bg-secondary: #1a1a1a;
-  --bg-tertiary: #262626;
-  --bg-elevated: #2a2a2a;
-  --bg-overlay: rgba(0, 0, 0, 0.8);
+  /* --- Theme surfaces --- */
+  --bg-primary: #0f0f12;
+  --bg-secondary: #1a1a22;
+  --bg-tertiary: #22222e;
+  --bg-elevated: #2a2a38;
+  --bg-overlay: rgba(10, 10, 18, 0.85);
   --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-input: #1e1e2a;
+  --bg-code: #13131a;
   --bg-active: rgba(255, 255, 255, 0.1);
-  --bg-disabled: #1a1a1a;
+  --bg-disabled: #1a1a22;
 
-  /* Text */
-  --text-primary: #f5f5f5;
-  --text-secondary: #a3a3a3;
-  --text-tertiary: #737373;
+  /* --- Theme text --- */
+  --text-primary: #e8e8f0;
+  --text-secondary: #9898b0;
+  --text-tertiary: #5a5a70;
   --text-disabled: #525252;
-  --text-inverse: #0a0a0a;
+  --text-inverse: #1a1d2e;
+  --text-muted: #6a6a80;
   --text-link: #38bdf8;
   --text-link-hover: #7dd3fc;
 
-  /* Borders */
-  --border-primary: #404040;
-  --border-secondary: #262626;
-  --border-focus: #0ea5e9;
+  /* --- Theme borders --- */
+  --border-primary: rgba(255, 255, 255, 0.08);
+  --border-secondary: rgba(255, 255, 255, 0.04);
+  --border-focus: #7c6aef;
   --border-error: #ef4444;
   --border-success: #22c55e;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  /* --- Theme accents --- */
+  --accent: #7c6aef;
+  --accent-hover: #9580f5;
+  --accent-muted: rgba(124, 106, 239, 0.15);
+  --accent-translucent: rgba(124, 106, 239, 0.3);
+
+  /* --- Theme-aware overlays --- */
+  --overlay-hover: rgba(255, 255, 255, 0.05);
+  --overlay-pressed: rgba(255, 255, 255, 0.08);
+
+  /* --- Theme shadows --- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.45);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+
+  /* --- Password strength scale (semantic) --- */
+  --strength-weak: #ff4d4d;
+  --strength-fair: #ff944d;
+  --strength-good: #ffcc4d;
+  --strength-strong: #66cc66;
 
   /* ==================== */
   /* TYPOGRAPHY */
@@ -267,49 +286,68 @@
 /* ==================== */
 
 [data-theme="light"] {
-  /* Background */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f5;
-  --bg-tertiary: #e5e5e5;
+  /* --- Theme surfaces --- */
+  --bg-primary: #f7f9fc;
+  --bg-secondary: #eef2f6;
+  --bg-tertiary: #e4eaf1;
   --bg-elevated: #ffffff;
-  --bg-overlay: rgba(255, 255, 255, 0.95);
-  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-overlay: rgba(247, 249, 252, 0.85);
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-input: #ffffff;
+  --bg-code: #eef2f6;
   --bg-active: rgba(0, 0, 0, 0.1);
-  --bg-disabled: #f5f5f5;
+  --bg-disabled: #eef2f6;
 
-  /* Text */
-  --text-primary: #0a0a0a;
-  --text-secondary: #525252;
-  --text-tertiary: #737373;
+  /* --- Theme text --- */
+  --text-primary: #1a1d2e;
+  --text-secondary: #4a5068;
+  --text-tertiary: #8890a8;
   --text-disabled: #a3a3a3;
-  --text-inverse: #f5f5f5;
+  --text-inverse: #ffffff;
+  --text-muted: #6c7488;
   --text-link: #0284c7;
   --text-link-hover: #0369a1;
 
-  /* Borders */
-  --border-primary: #e5e5e5;
-  --border-secondary: #f5f5f5;
-  --border-focus: #0ea5e9;
+  /* --- Theme borders --- */
+  --border-primary: rgba(0, 0, 0, 0.08);
+  --border-secondary: rgba(0, 0, 0, 0.04);
+  --border-focus: #5b46d6;
   --border-error: #ef4444;
   --border-success: #22c55e;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  /* --- Theme accents --- */
+  --accent: #5b46d6;
+  --accent-hover: #4a38c2;
+  --accent-muted: rgba(91, 70, 214, 0.12);
+  --accent-translucent: rgba(91, 70, 214, 0.22);
+
+  /* --- Theme-aware overlays --- */
+  --overlay-hover: rgba(0, 0, 0, 0.04);
+  --overlay-pressed: rgba(0, 0, 0, 0.08);
+
+  /* --- Theme shadows (lower opacity, cooler) --- */
+  --shadow-sm: 0 1px 2px rgba(20, 30, 60, 0.06);
+  --shadow-md: 0 4px 12px rgba(20, 30, 60, 0.08);
+  --shadow-lg: 0 10px 30px rgba(20, 30, 60, 0.12);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 
-  /* Code Editor */
-  --code-bg: #f5f5f5;
-  --code-line-number: #737373;
-  --code-selection: rgba(14, 165, 233, 0.2);
+  /* --- Password strength (same semantic meaning, adjusted for light bg) --- */
+  --strength-weak: #dc2626;
+  --strength-fair: #ea580c;
+  --strength-good: #d97706;
+  --strength-strong: #16a34a;
+
+  /* --- Code editor (inherit from existing design-tokens if present, or leave as is) --- */
+  --code-bg: #eef2f6;
+  --code-line-number: #8890a8;
+  --code-selection: rgba(91, 70, 214, 0.18);
   --code-current-line: rgba(0, 0, 0, 0.04);
 
-  /* Diff Colors */
-  --diff-added-bg: rgba(34, 197, 94, 0.1);
-  --diff-removed-bg: rgba(239, 68, 68, 0.1);
-  --diff-modified-bg: rgba(251, 191, 36, 0.1);
+  /* --- Diff colors (light-theme friendly) --- */
+  --diff-added-bg: rgba(34, 197, 94, 0.12);
+  --diff-removed-bg: rgba(239, 68, 68, 0.12);
+  --diff-modified-bg: rgba(251, 191, 36, 0.12);
 }
 
 /* ==================== */
@@ -355,3 +393,25 @@
 .transition { transition: all var(--duration-normal) var(--ease-in-out); }
 .transition-fast { transition: all var(--duration-fast) var(--ease-in-out); }
 .transition-colors { transition: color var(--duration-normal) var(--ease-in-out), background-color var(--duration-normal) var(--ease-in-out), border-color var(--duration-normal) var(--ease-in-out); }
+
+/* ============================================================
+   Global theme transition — 150ms fade on color properties only.
+   Applied after all tokens so it picks up theme changes smoothly.
+   Excluded: .terminal (hybrid dark-only rule) and any element
+   with the data-no-transition attribute.
+   ============================================================ */
+*,
+*::before,
+*::after {
+  transition: background-color 150ms ease,
+              color 150ms ease,
+              border-color 150ms ease,
+              fill 150ms ease,
+              stroke 150ms ease,
+              box-shadow 150ms ease;
+}
+
+.terminal, .terminal *,
+[data-no-transition], [data-no-transition] * {
+  transition: none;
+}
