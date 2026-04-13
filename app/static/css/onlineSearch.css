@@ -323,11 +323,11 @@
         background: #0056b3;
     }
     .toggle-tooltip {
-        background: var(--bg-elevated, #2a2a38);
-        color: var(--text-primary, #e8e8f0);
+        background: var(--tooltip-bg-color, #0a0908);
+        color: var(--tooltip-text-color, #e8e8f0);
     }
     .toggle-tooltip::after {
-        border-color: var(--bg-elevated, #2a2a38) transparent transparent transparent;
+        border-color: var(--tooltip-bg-color, #0a0908) transparent transparent transparent;
     }
 }
 
@@ -338,8 +338,8 @@
     top: 50%; /* Added to center vertically */
     transform: translateY(-50%); /* Changed from translateX(-50%) */
     margin-left: 10px; /* Added spacing between icon and tooltip */
-    background: var(--bg-elevated, #2a2a38);
-    color: var(--text-primary, #e8e8f0);
+    background: var(--tooltip-bg-color, #0a0908);
+    color: var(--tooltip-text-color, #e8e8f0);
     padding: 6px 10px;
     border-radius: 4px;
     font-size: 12px;
@@ -359,7 +359,7 @@
     transform: translateY(-50%);
     border-width: 6px;
     border-style: solid;
-    border-color: transparent var(--bg-elevated, #2a2a38) transparent transparent;
+    border-color: transparent var(--tooltip-bg-color, #0a0908) transparent transparent;
 }
 
 /* Show tooltip on hover only when search is NOT active */

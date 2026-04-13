@@ -42,8 +42,8 @@
     --button-bg-base: rgba(255, 255, 255, 0.09);
     --button-bg-hover: rgba(142, 142, 142, 0.43);
 
-    /* Tooltip Colors — mapped to design tokens */
-    --tooltip-bg-color: var(--bg-elevated, #2a2a38);
+    /* Tooltip Colors — pure dark black on dark, elevated on light */
+    --tooltip-bg-color: #0a0908;
     --tooltip-text-color: var(--text-primary, #e8e8f0);
 
     /* Edit Textarea Colors */
@@ -131,8 +131,8 @@
     --chatbox-border-color: rgba(0, 0, 0, 0.15);
     --button-bg-base: rgba(0, 0, 0, 0.05);
     --button-bg-hover: rgba(0, 0, 0, 0.08);
-    --tooltip-bg-color: var(--bg-elevated, #2a2a38);
-    --tooltip-text-color: var(--text-primary, #e8e8f0);
+    --tooltip-bg-color: var(--bg-elevated, #ffffff);
+    --tooltip-text-color: var(--text-primary, #1a1d2e);
     --edit-textarea-bg: rgba(0, 0, 0, 0.03);
     --edit-textarea-border: rgba(0, 0, 0, 0.12);
     --edit-textarea-focus-bg: rgba(0, 0, 0, 0.05);
@@ -1468,8 +1468,8 @@ img.composer-attachment-thumb--empty {
     left: 50%;
     transform: translateX(-50%) translateY(-4px);
     padding: 4px 8px;
-    background: var(--bg-elevated, #2a2a38);
-    color: var(--text-primary, #e8e8f0);
+    background: var(--tooltip-bg-color, #0a0908);
+    color: var(--tooltip-text-color, #e8e8f0);
     font-size: 11px;
     font-weight: 500;
     border-radius: 6px;
@@ -1581,8 +1581,8 @@ img.composer-attachment-thumb--empty {
     bottom: calc(100% + 8px);
     left: 50%;
     transform: translateX(-50%);
-    background-color: var(--bg-elevated, #2a2a38);
-    color: var(--text-primary, #e8e8f0);
+    background-color: var(--tooltip-bg-color, #0a0908);
+    color: var(--tooltip-text-color, #e8e8f0);
     padding: 6px 10px;
     border-radius: 6px;
     font-size: 12px;
@@ -1604,7 +1604,7 @@ img.composer-attachment-thumb--empty {
     left: 50%;
     transform: translateX(-50%);
     border: 5px solid transparent;
-    border-top-color: var(--bg-elevated, #2a2a38);
+    border-top-color: var(--tooltip-bg-color, #0a0908);
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.15s ease, visibility 0.15s ease;
@@ -2391,8 +2391,8 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     top: calc(100% + 8px);
     left: 50%;
     transform: translateX(-50%) scale(0.8);
-    background: var(--bg-elevated, #2a2a38);
-    color: var(--text-primary, #e8e8f0);
+    background: var(--tooltip-bg-color, #0a0908);
+    color: var(--tooltip-text-color, #e8e8f0);
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 11px;
@@ -2425,7 +2425,7 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
 .edit-button[data-tooltip]::before,
 .copy-message-button[data-tooltip]::before {
     top: calc(100% + 3px);
-    border-bottom-color: var(--bg-elevated, #2a2a38);
+    border-bottom-color: var(--tooltip-bg-color, #0a0908);
 }
 
 /* Actions-toggle: bubble ABOVE (popover opens below) */
@@ -2437,7 +2437,7 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
 /* Actions-toggle arrow: points DOWN from bottom of bubble */
 .actions-toggle[data-tooltip]::before {
     bottom: calc(100% + 3px);
-    border-top-color: var(--bg-elevated, #2a2a38);
+    border-top-color: var(--tooltip-bg-color, #0a0908);
 }
 
 /* Show on hover */
@@ -4013,8 +4013,8 @@ body.right-sidebar-open .temp-chat-launcher {
     transform: translateY(6px);
     padding: 0.35rem 0.7rem;
     border-radius: 999px;
-    background: var(--bg-elevated, #2a2a38);
-    color: var(--text-primary, #e8e8f0);
+    background: var(--tooltip-bg-color, #0a0908);
+    color: var(--tooltip-text-color, #e8e8f0);
     font-size: 0.75rem;
     white-space: nowrap;
     box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.45));
