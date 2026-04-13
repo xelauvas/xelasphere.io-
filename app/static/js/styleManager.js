@@ -107,7 +107,7 @@
     function syncSubmenuHighlight(style) {
         document.querySelectorAll('.action-style-opt').forEach(opt => {
             const isActive = opt.dataset.style === style;
-            opt.style.background = isActive ? '#353331' : '';
+            opt.style.background = isActive ? 'var(--bg-hover, #353331)' : '';
             opt.style.borderRadius = isActive ? '8px' : '';
             opt.style.margin = isActive ? '2px 4px' : '';
             const chk = opt.querySelector('.style-check');
@@ -139,7 +139,7 @@
         if (customs.length) {
             const div = document.createElement('div');
             div.setAttribute('data-custom', 'true');
-            div.style.cssText = 'height:0.5px;background:rgba(255,255,255,0.07);margin:3px 0';
+            div.style.cssText = 'height:0.5px;background:var(--border-secondary, rgba(255,255,255,0.07));margin:3px 0';
             createBtn.parentNode.insertBefore(div, createBtn);
         }
 
@@ -148,7 +148,7 @@
             row.className = 'asi action-style-opt';
             row.dataset.style = c.name;
             row.setAttribute('data-custom', 'true');
-            row.style.cssText = 'display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px;user-select:none';
+            row.style.cssText = 'display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px;user-select:none';
             row.innerHTML = `
                 <span style="opacity:0.75;display:flex">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>

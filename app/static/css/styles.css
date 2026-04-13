@@ -1518,8 +1518,18 @@ img.composer-attachment-thumb--empty {
 }
 
 /* ═══ Action Sheet Modal ═══ */
+.asi {
+    transition: background 0.12s ease;
+}
 .asi:hover {
     background: var(--bg-hover, rgba(255,255,255,0.05)) !important;
+}
+.asi:hover svg {
+    opacity: 1 !important;
+}
+/* Active style option (Normal selected etc.) */
+.action-style-opt[data-style] {
+    transition: background 0.12s ease;
 }
 /* ═══ End Action Sheet ═══ */
 
