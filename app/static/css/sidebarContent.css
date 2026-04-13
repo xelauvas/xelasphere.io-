@@ -1104,6 +1104,7 @@ body.sidebar-collapsed .left-sidebar .sidebar-toggle-button {
 
 .sidebar-header-ghost svg {
     overflow: visible;
+    color: var(--text-secondary, #9898b0);
 }
 
 body.sidebar-collapsed .left-sidebar .sidebar-header-ghost {

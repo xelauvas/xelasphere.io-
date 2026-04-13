@@ -996,7 +996,7 @@ body.temporary-chat-centered .input-row {
 
 
 .chat-input::placeholder {
-    color: rgba(255, 255, 255, var(--placeholder-opacity));
+    color: var(--text-tertiary, #5a5a70);
     font-weight: var(--placeholder-font-weight);
     font-size: var(--composer-font-size);
     line-height: var(--composer-single-line-height);

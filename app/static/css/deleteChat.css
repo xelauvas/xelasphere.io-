@@ -48,7 +48,7 @@
     margin: 0;
     font-size: 15px;
     font-weight: 600;
-    color: #fff;
+    color: var(--text-primary, #e8e8f0);
     letter-spacing: -0.2px;
     padding: 20px 20px 6px;
 }
@@ -56,20 +56,20 @@
 .modal-content p {
     margin: 0;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-secondary, #9898b0);
     line-height: 1.45;
     padding: 0 20px 18px;
 }
 
 .modal-content strong {
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-primary, #e8e8f0);
     font-weight: 600;
 }
 
 .modal-content a {
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary, #9898b0);
     text-decoration: underline;
-    text-decoration-color: rgba(255, 255, 255, 0.25);
+    text-decoration-color: var(--border-primary, rgba(255,255,255,0.08));
 }
 
 /* Right-aligned compact buttons — shared */
@@ -104,13 +104,13 @@
 /* Cancel — ghost with subtle border */
 .btn-cancel {
     background: transparent;
-    color: rgba(255, 255, 255, 0.7);
-    border: 0.5px solid rgba(255, 255, 255, 0.18);
+    color: var(--text-secondary, #9898b0);
+    border: 0.5px solid var(--border-primary, rgba(255, 255, 255, 0.18));
 }
 .btn-cancel:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.28);
-    color: rgba(255, 255, 255, 0.9);
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+    border-color: var(--border-primary, rgba(255, 255, 255, 0.28));
+    color: var(--text-primary, #e8e8f0);
 }
 
 /* Delete — destructive red */
@@ -144,10 +144,10 @@
     width: calc(100% - 40px);
     margin: 0 20px 16px;
     padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 0.5px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-input, rgba(255, 255, 255, 0.04));
+    border: 0.5px solid var(--border-primary, rgba(255, 255, 255, 0.1));
     border-radius: 8px;
-    color: #fff;
+    color: var(--text-primary, #e8e8f0);
     font-size: 14px;
     font-family: inherit;
     letter-spacing: -0.1px;
@@ -159,23 +159,23 @@
 
 .rename-modal-input:focus,
 .rename-modal-input:focus-visible {
-    border-color: rgba(255, 255, 255, 0.24);
-    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--border-focus, rgba(255, 255, 255, 0.24));
+    background: var(--bg-input, rgba(255, 255, 255, 0.07));
     outline: none;
     box-shadow: none;
 }
 
 .rename-modal-input::selection {
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--code-selection, rgba(255, 255, 255, 0.18));
 }
 
-/* Save — vintage ivory fill, dark text */
+/* Save — accent fill */
 .btn-save {
-    background: #ece3d2;
-    color: #1f1c17;
+    background: var(--accent, #7c6aef);
+    color: var(--text-inverse, #ffffff);
 }
 .btn-save:hover {
-    background: #f5ecdb;
+    background: var(--accent-hover, #6a58dc);
 }
 .btn-save:active {
     transform: scale(0.97);
