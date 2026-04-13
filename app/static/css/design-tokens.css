@@ -319,9 +319,9 @@
   --text-link: #c96442;           /* warm coral link (Claude orange) */
   --text-link-hover: #b14e2f;
 
-  /* --- Theme borders — warm dark tints, slightly stronger for cream bg visibility --- */
-  --border-primary: rgba(40, 30, 15, 0.14);
-  --border-secondary: rgba(40, 30, 15, 0.07);
+  /* --- Theme borders — warm dark tints --- */
+  --border-primary: rgba(40, 30, 15, 0.08);
+  --border-secondary: rgba(40, 30, 15, 0.05);
   --border-focus: #5b46d6;
   --border-error: #ef4444;
   --border-success: #22c55e;
