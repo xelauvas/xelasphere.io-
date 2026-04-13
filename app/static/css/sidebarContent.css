@@ -1218,10 +1218,10 @@ body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-image {
 /* --- Chat Tab Components --- */
 .chat-tab {
     position: relative;
-    padding: 0.5rem 2.5rem 0.5rem 0.5rem;
+    padding: 0.4rem 2.25rem 0.4rem 0.625rem;
     border: none;
     border-radius: 0.5rem;
-    margin-bottom: 0;
+    margin-bottom: 0.0625rem;
     cursor: pointer;
     background: transparent;
     transition: none;
@@ -1306,10 +1306,11 @@ body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-image {
 }
 
 .tab-name {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', 'Söhne', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     font-weight: 400;
-    font-size: 0.875rem;
-    line-height: 1.4;
+    font-size: 0.84375rem;        /* ~13.5px — Claude Desktop sidebar size */
+    line-height: 1.35;
+    letter-spacing: -0.005em;     /* Claude's tight letter-spacing */
     color: var(--text-secondary, #9898b0);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1321,8 +1322,14 @@ body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-image {
     text-align: left;
 }
 
+.chat-tab:hover .tab-name {
+    color: var(--text-primary, #f3eee5);
+}
+
 .chat-tab.active-tab .tab-name {
     position: relative;
+    color: var(--text-primary, #f3eee5);
+    font-weight: 500;             /* slightly heavier when active */
     animation: typeTitle 0.8s ease-out 1;
 }
 
