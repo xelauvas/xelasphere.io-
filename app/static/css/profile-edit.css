@@ -1,23 +1,11 @@
-:root {
-    --bg: #050505;
-    --card: rgba(255, 255, 255, 0.04);
-    --border: rgba(255, 255, 255, 0.08);
-    --text: #f7f7f7;
-    --text-muted: rgba(247, 247, 247, 0.65);
-    --accent: #60a5fa;
-    --accent-soft: rgba(96, 165, 250, 0.15);
-    --danger: #ef4444;
-    --success: #22c55e;
-}
-
 * {
     box-sizing: border-box;
 }
 
 body.profile-edit-page {
     font-family: 'Manrope', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    background: var(--bg);
-    color: var(--text);
+    background: var(--bg-secondary, #1a1a22);
+    color: var(--text-primary, #e8e8f0);
     margin: 0;
     min-height: 100vh;
     display: flex;
@@ -45,12 +33,12 @@ body.profile-edit-page {
 }
 
 .profile-edit-header p {
-    color: var(--text-muted);
+    color: var(--text-secondary, #9898b0);
     margin: 0;
 }
 
 .back-link {
-    color: var(--accent);
+    color: var(--accent, #7c6aef);
     text-decoration: none;
     font-size: 0.95rem;
 }
@@ -60,7 +48,7 @@ body.profile-edit-page {
     height: 56px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid var(--border);
+    border: 2px solid var(--border-primary, rgba(255,255,255,0.08));
 }
 
 .flash-stack {
@@ -75,8 +63,8 @@ body.profile-edit-page {
     display: flex;
     gap: 0.5rem;
     align-items: center;
-    background: var(--accent-soft);
-    color: var(--text);
+    background: var(--accent-muted, rgba(124,106,239,0.15));
+    color: var(--text-primary, #e8e8f0);
 }
 
 .flash-danger {
@@ -94,8 +82,8 @@ body.profile-edit-page {
 }
 
 .profile-card {
-    background: var(--card);
-    border: 1px solid var(--border);
+    background: var(--bg-tertiary, #22222e);
+    border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
     border-radius: 1.25rem;
     padding: 1.5rem;
 }
@@ -111,7 +99,7 @@ body.profile-edit-page {
 
 .card-header p {
     margin: 0.25rem 0 0;
-    color: var(--text-muted);
+    color: var(--text-secondary, #9898b0);
 }
 
 .two-column-grid {
@@ -123,7 +111,7 @@ body.profile-edit-page {
 
 label span {
     font-size: 0.85rem;
-    color: var(--text-muted);
+    color: var(--text-secondary, #9898b0);
     display: block;
     margin-bottom: 0.35rem;
 }
@@ -135,9 +123,9 @@ textarea {
     width: 100%;
     padding: 0.65rem 0.75rem;
     border-radius: 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
     background: rgba(255, 255, 255, 0.02);
-    color: var(--text);
+    color: var(--text-primary, #e8e8f0);
     font-size: 0.95rem;
 }
 
@@ -145,7 +133,7 @@ input:focus,
 select:focus,
 textarea:focus {
     outline: none;
-    border-color: var(--accent);
+    border-color: var(--accent, #7c6aef);
     background: rgba(255, 255, 255, 0.04);
 }
 
@@ -169,7 +157,7 @@ textarea:focus {
     height: 124px;
     border-radius: 1rem;
     overflow: hidden;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
 }
 
 .photo-preview img {
@@ -179,13 +167,13 @@ textarea:focus {
 }
 
 .upload-btn {
-    border: 1px dashed var(--border);
+    border: 1px dashed var(--border-primary, rgba(255,255,255,0.08));
     border-radius: 0.85rem;
     padding: 0.85rem;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    color: var(--text);
+    color: var(--text-primary, #e8e8f0);
     cursor: pointer;
 }
 
@@ -194,7 +182,7 @@ textarea:focus {
 }
 
 .muted {
-    color: var(--text-muted);
+    color: var(--text-secondary, #9898b0);
     margin-top: 0.5rem;
     font-size: 0.85rem;
 }
@@ -212,7 +200,7 @@ textarea:focus {
     gap: 0.75rem;
     align-items: center;
     padding: 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
     border-radius: 1rem;
     background: rgba(255, 255, 255, 0.02);
 }
@@ -243,7 +231,7 @@ textarea:focus {
 }
 
 .toggle input:checked + .indicator {
-    background: var(--accent);
+    background: var(--accent, #7c6aef);
 }
 
 .toggle input:checked + .indicator::after {
@@ -256,7 +244,7 @@ textarea:focus {
 
 .toggle p {
     margin: 0.2rem 0 0;
-    color: var(--text-muted);
+    color: var(--text-secondary, #9898b0);
 }
 
 .shortcut-grid {
@@ -271,20 +259,20 @@ textarea:focus {
     gap: 0.75rem;
     padding: 0.9rem;
     border-radius: 1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
     text-decoration: none;
-    color: var(--text);
+    color: var(--text-primary, #e8e8f0);
     background: rgba(255, 255, 255, 0.02);
 }
 
 .shortcut i {
     font-size: 1.2rem;
-    color: var(--accent);
+    color: var(--accent, #7c6aef);
 }
 
 .shortcut p {
     margin: 0.2rem 0 0;
-    color: var(--text-muted);
+    color: var(--text-secondary, #9898b0);
 }
 
 .form-actions {
@@ -305,14 +293,14 @@ textarea:focus {
 }
 
 .hero-btn.primary {
-    background: var(--accent);
+    background: var(--accent, #7c6aef);
     color: #020617;
 }
 
 .hero-btn.ghost {
     background: transparent;
-    color: var(--text);
-    border: 1px solid var(--border);
+    color: var(--text-primary, #e8e8f0);
+    border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
 }
 
 @media (max-width: 640px) {

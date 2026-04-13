@@ -22,7 +22,7 @@
 
 /* Card — shared base for delete + rename */
 .modal-content {
-    background: #2e2c29;
+    background: var(--bg-elevated, #2a2a38);
     border-radius: 16px;
     width: 340px;
     max-width: calc(100% - 40px);
