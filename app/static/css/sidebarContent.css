@@ -1575,7 +1575,8 @@ ul {
     user-select: none;
     text-align: left;
     width: 100%;
-    transition: background-color 0.12s ease, color 0.12s ease;
+    /* No transition on hover — instant feedback */
+    transition: none;
 }
 
 .chat-btn i {
@@ -1602,19 +1603,7 @@ ul {
     color: #ff6b6b;
 }
 
-/* Thin dividers between groups — matches the + menu's 0.5px hairlines */
-.chat-btn + .chat-btn {
-    position: relative;
-}
-.chat-btn + .chat-btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 12px;
-    right: 12px;
-    height: 0.5px;
-    background: var(--border-secondary, rgba(255, 255, 255, 0.04));
-}
+/* No dividers between items — clean unified menu */
 
 /* --- Rename Input --- */
 .rename-input {
