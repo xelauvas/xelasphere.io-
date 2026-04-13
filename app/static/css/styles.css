@@ -3,23 +3,23 @@
     --background-dark: var(--bg-primary);  /* legacy alias */
     --background-darker: var(--bg-primary);  /* legacy alias */
     --text-color-light: var(--text-primary);  /* legacy alias */
-    --text-color-secondary: #dcdcdc;
-    --primary-text-color: white;
-    --link-color: #7ab6fe;
+    --text-color-secondary: var(--text-secondary);  /* legacy alias */
+    --primary-text-color: var(--text-primary);  /* legacy alias */
+    --link-color: var(--accent);  /* legacy alias */
     --link-text-decoration: underline;
-    --icon-color: #ffffff;
-    --table-border-color: #ccc;
+    --icon-color: var(--text-primary);  /* legacy alias */
+    --table-border-color: var(--border-primary);  /* legacy alias */
 
     /* Header Colors */
-    --header-bg-color: #232323;
-    --header-border-color: #2a2a2a;
+    --header-bg-color: var(--bg-secondary);  /* legacy alias */
+    --header-border-color: var(--border-primary);  /* legacy alias */
 
     /* Content Colors */
-    --content-bg-color: #141414;
+    --content-bg-color: var(--bg-primary);  /* legacy alias */
 
     /* Scrollbar Colors */
-    --scrollbar-track-color: rgba(46, 46, 46, 0);
-    --scrollbar-thumb-color: #494949;
+    --scrollbar-track-color: transparent;
+    --scrollbar-thumb-color: var(--border-primary);  /* legacy alias */
 
     /* Border and Radius */
     --border-radius-standard: 4px;
