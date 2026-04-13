@@ -1540,7 +1540,7 @@ ul {
     display: flex;
     flex-direction: column;
     width: 200px;
-    padding: 4px 0;
+    padding: 0;
     background: var(--bg-elevated, #2a2a38);
     border: 0.5px solid var(--border-primary, rgba(255, 255, 255, 0.08));
     border-radius: 12px;
@@ -1551,7 +1551,7 @@ ul {
     transform-origin: top left;
     transition: opacity 0.15s ease, transform 0.15s ease;
     z-index: 1200;
-    overflow: visible;
+    overflow: hidden;
 }
 
 .button-group.button-group-visible {
@@ -1565,8 +1565,10 @@ ul {
     display: flex;
     align-items: center;
     gap: 11px;
-    padding: 9px 12px;
+    padding: 8px 12px;
+    margin: 0;
     border: none;
+    border-radius: 0;
     background: transparent;
     color: var(--text-primary, #e8e8f0);
     font-size: 13.5px;
