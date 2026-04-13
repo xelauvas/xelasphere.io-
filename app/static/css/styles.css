@@ -2355,12 +2355,13 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     position: relative;
 }
 
+/* Tooltip bubble */
 .edit-button[data-tooltip]::after,
 .copy-message-button[data-tooltip]::after,
 .actions-toggle[data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
-    top: calc(100% + 6px);
+    top: calc(100% + 8px);
     left: 50%;
     transform: translateX(-50%) scale(0.8);
     background: var(--bg-elevated, #2a2a38);
@@ -2378,12 +2379,41 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     z-index: 1000;
 }
 
-/* Actions-toggle tooltip appears ABOVE since popover opens below */
-.actions-toggle[data-tooltip]::after {
-    top: auto;
-    bottom: calc(100% + 6px);
+/* Tooltip arrow (little triangle pointing at the button) */
+.edit-button[data-tooltip]::before,
+.copy-message-button[data-tooltip]::before,
+.actions-toggle[data-tooltip]::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    z-index: 1001;
 }
 
+/* edit/copy: bubble below — arrow points UP from top of bubble */
+.edit-button[data-tooltip]::before,
+.copy-message-button[data-tooltip]::before {
+    top: calc(100% + 3px);
+    border-bottom-color: var(--bg-elevated, #2a2a38);
+}
+
+/* Actions-toggle: bubble ABOVE (popover opens below) */
+.actions-toggle[data-tooltip]::after {
+    top: auto;
+    bottom: calc(100% + 8px);
+}
+
+/* Actions-toggle arrow: points DOWN from bottom of bubble */
+.actions-toggle[data-tooltip]::before {
+    bottom: calc(100% + 3px);
+    border-top-color: var(--bg-elevated, #2a2a38);
+}
+
+/* Show on hover */
 .edit-button[data-tooltip]:hover::after,
 .copy-message-button[data-tooltip]:hover::after,
 .actions-toggle[data-tooltip]:hover::after {
@@ -2391,8 +2421,15 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     transform: translateX(-50%) scale(1);
 }
 
-/* Hide actions-toggle tooltip when popover is open (avoid overlap) */
-.actions-menu.open .actions-toggle[data-tooltip]::after {
+.edit-button[data-tooltip]:hover::before,
+.copy-message-button[data-tooltip]:hover::before,
+.actions-toggle[data-tooltip]:hover::before {
+    opacity: 1;
+}
+
+/* Hide actions-toggle tooltip + arrow when popover is open (avoid overlap) */
+.actions-menu.open .actions-toggle[data-tooltip]::after,
+.actions-menu.open .actions-toggle[data-tooltip]::before {
     opacity: 0 !important;
 }
 
