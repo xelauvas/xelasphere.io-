@@ -1,34 +1,113 @@
 /**
- * Code block renderer using Prism.js (already loaded on every page).
- * - Sets language-{lang} class so Prism autoloader picks up the grammar.
- * - Falls back to language-plaintext for empty or unrecognized languages.
- * - Calls Prism.highlightElement on every update; re-runs on finalize for
- *   the autoloader race (grammar may have arrived after last highlight).
+ * Code block renderer — macOS-chrome code window (traffic-light dots,
+ * language badge, copy button). Uses Prism.js for highlighting.
+ *
+ *   <div class="code-window">
+ *     <div class="code-header">
+ *       <!-- ::before paints traffic-light dots -->
+ *       <span class="language-indicator">python</span>
+ *       <button class="copy-button"><svg/><span>Copy code</span></button>
+ *     </div>
+ *     <pre><code class="language-python">…</code></pre>
+ *   </div>
+ *
+ * - Falls back to language-plaintext for empty/unrecognized languages.
+ * - Skips Prism for diff/patch and emits per-line spans instead.
+ * - Blinking pulse cursor inside <pre> while streaming.
  */
+
+function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderDiff(text) {
+    return text.split('\n').map(line => {
+        let cls;
+        if (line.startsWith('+++') || line.startsWith('---')) cls = 'diff-meta';
+        else if (line.startsWith('@@'))                       cls = 'diff-hunk';
+        else if (line.startsWith('+'))                        cls = 'diff-added';
+        else if (line.startsWith('-'))                        cls = 'diff-removed';
+        else                                                  cls = 'diff-ctx';
+        const body = escapeHtml(line) || ' ';
+        return `<span class="diff-line ${cls}">${body}</span>`;
+    }).join('\n');
+}
+
+const COPY_SVG = `
+<svg class="copy-icon" viewBox="0 0 24 24" width="13" height="13" fill="none"
+     stroke="currentColor" stroke-width="2"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="9" y="9" width="13" height="13" rx="2"/>
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+</svg>`;
+
+const CHECK_SVG = `
+<svg class="copy-icon" viewBox="0 0 24 24" width="13" height="13" fill="none"
+     stroke="currentColor" stroke-width="2.4"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <polyline points="20 6 9 17 4 12"/>
+</svg>`;
 
 export function createCodeRenderer() {
     return {
         create(block, messageContainer, opts = {}) {
             const lang = block.meta.lang || 'plaintext';
-            const pre = document.createElement('pre');
             const noAnim = opts.replay ? ' stream-no-anim' : '';
-            // is-streaming only while live; replay has full text already
             const streamingClass = opts.replay ? '' : ' is-streaming';
-            pre.className = `stream-block block-code${streamingClass}${noAnim}`;
-            pre.dataset.blockId = block.id;
-            pre.dataset.lang = lang;
 
+            const wrapper = document.createElement('div');
+            wrapper.className = `stream-block block-code code-window${streamingClass}${noAnim}`;
+            wrapper.dataset.blockId = block.id;
+            wrapper.dataset.lang = lang;
+
+            const header = document.createElement('div');
+            header.className = 'code-header';
+
+            const badge = document.createElement('span');
+            badge.className = 'language-indicator';
+            badge.textContent = lang;
+            header.appendChild(badge);
+
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'copy-button';
+            copyBtn.type = 'button';
+            copyBtn.innerHTML = `${COPY_SVG}<span class="copy-label">Copy code</span>`;
+            const copyLabel = copyBtn.querySelector('.copy-label');
+            header.appendChild(copyBtn);
+
+            const pre = document.createElement('pre');
             const code = document.createElement('code');
             code.className = `language-${lang}`;
             pre.appendChild(code);
-            messageContainer.appendChild(pre);
 
-            block.el = pre;
+            // Blinking pulse cursor while live-streaming. Removed on finalize.
+            let cursor = null;
+            if (!opts.replay) {
+                cursor = document.createElement('span');
+                cursor.className = 'stream-cursor';
+                pre.appendChild(cursor);
+                block.meta.ownsCursor = true;
+            }
+
+            wrapper.appendChild(header);
+            wrapper.appendChild(pre);
+            messageContainer.appendChild(wrapper);
+
+            block.el = wrapper;
+            block.meta.preEl = pre;
             block.meta.codeEl = code;
-            return pre;
+            block.meta.cursorEl = cursor;
+            block.meta.copyBtn = copyBtn;
+            block.meta.copyLabel = copyLabel;
+            return wrapper;
         },
         update(block) {
             if (!block.meta.codeEl) return;
+            const lang = (block.meta.lang || 'plaintext').trim().toLowerCase();
+            if (lang === 'diff' || lang === 'patch') {
+                block.meta.codeEl.innerHTML = renderDiff(block.text);
+                return;
+            }
             block.meta.codeEl.textContent = block.text;
             if (window.Prism) {
                 window.Prism.highlightElement(block.meta.codeEl);
@@ -37,23 +116,54 @@ export function createCodeRenderer() {
         finalize(block) {
             this.update(block);
             if (block.el) block.el.classList.remove('is-streaming');
-            if (window.Prism && block.meta.codeEl) {
+            if (block.meta.cursorEl) {
+                block.meta.cursorEl.remove();
+                block.meta.cursorEl = null;
+            }
+            const finLang = (block.meta.lang || 'plaintext').toLowerCase();
+            if (window.Prism && block.meta.codeEl && finLang !== 'diff' && finLang !== 'patch') {
                 queueMicrotask(() => window.Prism.highlightElement(block.meta.codeEl));
             }
-            this.attachCopyButton(block);
+            this.wireCopyButton(block);
+            this.maybeCollapse(block);
         },
-        attachCopyButton(block) {
-            if (!block.el || block.el.querySelector('.code-copy-btn')) return;
-            const btn = document.createElement('button');
-            btn.className = 'code-copy-btn';
-            btn.type = 'button';
-            btn.textContent = 'Copy';
+        maybeCollapse(block) {
+            const COLLAPSE_AT = 30;
+            const totalLines = block.text ? block.text.split('\n').length : 0;
+            if (totalLines <= COLLAPSE_AT) return;
+            if (!block.el || block.el.querySelector('.code-expand-footer')) return;
+
+            block.el.classList.add('is-collapsed');
+            const hidden = totalLines - COLLAPSE_AT;
+
+            const footer = document.createElement('button');
+            footer.className = 'code-expand-footer';
+            footer.type = 'button';
+            footer.textContent = `Show ${hidden} more line${hidden === 1 ? '' : 's'}`;
+            footer.addEventListener('click', () => {
+                block.el.classList.remove('is-collapsed');
+                footer.remove();
+            });
+            block.el.appendChild(footer);
+        },
+        wireCopyButton(block) {
+            const btn = block.meta.copyBtn;
+            const label = block.meta.copyLabel;
+            if (!btn || btn.dataset.wired) return;
+            btn.dataset.wired = '1';
             btn.addEventListener('click', () => {
                 navigator.clipboard?.writeText(block.text);
-                btn.textContent = 'Copied';
-                setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+                const icon = btn.querySelector('.copy-icon');
+                icon?.outerHTML && (icon.outerHTML = CHECK_SVG);
+                if (label) label.textContent = 'Copied';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    const curIcon = btn.querySelector('.copy-icon');
+                    if (curIcon) curIcon.outerHTML = COPY_SVG;
+                    if (label) label.textContent = 'Copy code';
+                    btn.classList.remove('copied');
+                }, 1800);
             });
-            block.el.appendChild(btn);
         },
     };
 }

@@ -993,35 +993,6 @@ function isTerminalLanguage(lang) {
     return TERMINAL_LANGUAGES.has(lang.toLowerCase());
 }
 
-// Detect terminal content based on the actual content, not just language
-function isTerminalContent(content, lang) {
-    // If explicit terminal language, always true
-    if (isTerminalLanguage(lang)) return true;
-
-    // For plaintext or unspecified, analyze content
-    if (!lang || lang === 'plaintext' || lang === 'text') {
-        const lines = content.split('\n').filter(l => l.trim());
-        if (lines.length === 0) return false;
-
-        // Check if most lines look like terminal commands
-        let terminalLineCount = 0;
-        for (const line of lines) {
-            const trimmed = line.trim();
-            for (const pattern of TERMINAL_COMMAND_PATTERNS) {
-                if (pattern.test(trimmed)) {
-                    terminalLineCount++;
-                    break;
-                }
-            }
-        }
-
-        // If more than 50% of lines look like terminal commands, treat as terminal
-        return terminalLineCount > 0 && (terminalLineCount / lines.length) >= 0.5;
-    }
-
-    return false;
-}
-
 // ═══════════════════════════════════════════════════════════════
 // PROJECT STRUCTURE / TREE VIEW DETECTION & RENDERING
 // ═══════════════════════════════════════════════════════════════
@@ -1087,147 +1058,6 @@ function isTreeStructure(content, lang) {
 
     // Otherwise check percentage
     return treeIndicators >= 5 && (treeIndicators / lines.length) >= 0.4;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// MERMAID DIAGRAM DETECTION & RENDERING
-// ═══════════════════════════════════════════════════════════════
-
-function isMermaidDiagram(content, lang) {
-    // Check if language is explicitly mermaid
-    if (lang && lang.toLowerCase() === 'mermaid') {
-        return true;
-    }
-
-    // Check for mermaid syntax patterns
-    const mermaidPatterns = [
-        /^(graph|flowchart)\s+(TB|BT|LR|RL|TD)/im,
-        /^sequenceDiagram/im,
-        /^classDiagram/im,
-        /^stateDiagram/im,
-        /^erDiagram/im,
-        /^gantt/im,
-        /^pie/im,
-        /^gitGraph/im,
-        /^journey/im,
-        /^mindmap/im
-    ];
-
-    return mermaidPatterns.some(pattern => pattern.test(content.trim()));
-}
-
-function createMermaidDiagram(content) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'mermaid-container';
-    wrapper.style.cssText = `
-        background: transparent !important;
-        padding: 16px !important;
-        margin: 0.5rem 0 !important;
-        overflow-x: auto !important;
-        overflow-y: visible !important;
-        min-height: 200px !important;
-    `;
-
-    // Clean the content - remove any markdown artifacts
-    let cleanContent = content.trim();
-    // Remove any leading/trailing backticks or language tags
-    cleanContent = cleanContent.replace(/^```mermaid\s*/i, '').replace(/```\s*$/, '').trim();
-    // Remove "mermaid" if it appears as the first line (language tag leaking into content)
-    cleanContent = cleanContent.replace(/^mermaid\s*\n/i, '').trim();
-
-    // Fix common AI-generated Mermaid syntax errors
-    // Fix: -->|Label|> should be -->|Label| (extra > is invalid)
-    cleanContent = cleanContent.replace(/\|>\s+/g, '| ');
-    // Fix: -->|Label|> at end of arrow should remove extra >
-    cleanContent = cleanContent.replace(/(\|[^|]+\|)>/g, '$1');
-    // Fix: Missing space after arrow label -->|Label|Node should be -->|Label| Node
-    cleanContent = cleanContent.replace(/\|([^|]+)\|([A-Z\[])/g, '|$1| $2');
-    // Fix: Double arrows --> --> should be single -->
-    cleanContent = cleanContent.replace(/-->\s*-->/g, '-->');
-    // Fix: Arrow with extra characters like --> > should be -->
-    cleanContent = cleanContent.replace(/-->\s*>/g, '-->');
-    // Fix: Double quotes inside node labels break parsing - replace with single quotes
-    cleanContent = cleanContent.replace(/\[([^\]]*)"([^"]*)"([^\]]*)\]/g, "[$1'$2'$3]");
-    // Fix: Also handle in other bracket types like () {} <>
-    cleanContent = cleanContent.replace(/\(([^)]*)"([^"]*)"([^)]*)\)/g, "($1'$2'$3)");
-    // Fix: Spaces inside arrow labels -->| No| should be -->|No|
-    cleanContent = cleanContent.replace(/\|\s+([^|]+)\s*\|/g, '|$1|');
-    // Fix: Trim spaces inside labels
-    cleanContent = cleanContent.replace(/\|([^|]+)\|/g, (match, label) => `|${label.trim()}|`);
-
-    console.log('[Mermaid] Processing diagram:', cleanContent.substring(0, 100) + '...');
-
-    // Create unique ID for this diagram
-    const diagramId = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-
-    const diagramDiv = document.createElement('div');
-    diagramDiv.id = diagramId;
-    diagramDiv.className = 'mermaid';
-    diagramDiv.style.cssText = `
-        display: flex !important;
-        justify-content: center !important;
-        min-width: max-content !important;
-    `;
-    diagramDiv.textContent = cleanContent;
-
-    wrapper.appendChild(diagramDiv);
-
-    // Initialize mermaid if available
-    if (typeof mermaid !== 'undefined') {
-        // Configure mermaid for dark theme
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: 'dark',
-            suppressErrors: false,
-            themeVariables: {
-                primaryColor: '#10A37F',
-                primaryTextColor: '#e6edf3',
-                primaryBorderColor: '#30363d',
-                lineColor: '#8b949e',
-                secondaryColor: '#21262d',
-                tertiaryColor: '#161b22',
-                background: 'transparent',
-                mainBkg: '#0d1117',
-                nodeBorder: '#30363d',
-                clusterBkg: '#161b22',
-                clusterBorder: '#30363d',
-                titleColor: '#e6edf3',
-                edgeLabelBackground: '#0d1117'
-            },
-            flowchart: {
-                htmlLabels: true,
-                curve: 'basis',
-                nodeSpacing: 50,
-                rankSpacing: 60,
-                padding: 20,
-                useMaxWidth: false
-            }
-        });
-
-        // Render after a short delay to ensure DOM is ready
-        setTimeout(async () => {
-            try {
-                // Use mermaid.render for better error handling
-                const { svg } = await mermaid.render(diagramId + '-svg', cleanContent);
-                diagramDiv.innerHTML = svg;
-                console.log('[Mermaid] Diagram rendered successfully');
-            } catch (err) {
-                console.error('[Mermaid] Render error:', err);
-                // Show the code in a styled box on error
-                diagramDiv.innerHTML = `
-                    <div style="background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); border-radius: 8px; padding: 12px; margin: 8px 0;">
-                        <div style="color: #f85149; font-weight: 600; margin-bottom: 8px;">⚠️ Diagram syntax error</div>
-                        <pre style="color: #8b949e; font-size: 13px; white-space: pre-wrap; margin: 0;">${escapeHtmlForTerminal(cleanContent)}</pre>
-                    </div>
-                `;
-            }
-        }, 100);
-    } else {
-        console.warn('[Mermaid] Library not loaded');
-        diagramDiv.innerHTML = `<pre style="color: #8b949e;">${escapeHtmlForTerminal(cleanContent)}</pre>`;
-    }
-
-    return wrapper;
 }
 
 // RECIPE DETECTION & RENDERING
@@ -1598,67 +1428,6 @@ function createTerminalWindow(codeContent) {
     return wrapper;
 }
 
-// Function to create a code window with syntax highlighting
-async function createCodeWindow(text) {
-    if (!text?.trim()) {
-        throw new Error('Code content cannot be empty');
-    }
-
-    try {
-        const { language, codeContent } = await extractLanguageAndCode(text);
-
-        // Check if this is a tree/directory structure
-        const isTree = isTreeStructure(codeContent, language);
-        if (isTree) {
-            console.log('[CodeWindow] Creating tree view for project structure');
-            const treeView = createTreeView(codeContent);
-            return { codeWindow: treeView, codeElement: null };
-        }
-
-        // Check if this is a Mermaid diagram
-        const isMermaid = isMermaidDiagram(codeContent, language);
-        if (isMermaid) {
-            console.log('[CodeWindow] Creating Mermaid diagram');
-            const mermaidDiagram = createMermaidDiagram(codeContent);
-            return { codeWindow: mermaidDiagram, codeElement: null };
-        }
-
-        // Check if this is a recipe (using RecipeDetector module)
-        const isRecipeContent = window.RecipeDetector && window.RecipeDetector.isRecipe(codeContent, language);
-        if (isRecipeContent) {
-            console.log('[CodeWindow] Creating recipe card');
-            const recipeCard = window.RecipeDetector.createRecipeCard(codeContent);
-            return { codeWindow: recipeCard, codeElement: null };
-        }
-
-        // Check if this is terminal content (by language OR content analysis)
-        const isTerminal = isTerminalContent(codeContent, language);
-        console.log('[CodeWindow] Language detected:', language, 'isTerminal:', isTerminal);
-
-        // Render as terminal window if detected as terminal content
-        if (isTerminal) {
-            console.log('[CodeWindow] Creating terminal window for:', language || 'content-detected');
-            const terminalWindow = createTerminalWindow(codeContent);
-            return { codeWindow: terminalWindow, codeElement: null };
-        }
-
-        // Regular code window
-        const codeWindow = document.createElement('div');
-        codeWindow.className = `code-window ${CONFIG.CLASSES.DARK_MODE}`;
-
-        const header = await createCodeHeader(language, codeContent);
-        const { pre, code } = createCodeBlock(language, codeContent);
-
-        codeWindow.append(header, pre);
-        await applySyntaxHighlighting(code);
-
-        return { codeWindow, codeElement: code };
-    } catch (error) {
-        console.error('Failed to create code window:', error);
-        throw new Error('Failed to create code window');
-    }
-}
-
 // Helper function to normalize code content - fixes literal escape sequences
 function normalizeCodeContent(content) {
     if (!content || typeof content !== 'string') return content || '';
@@ -1678,103 +1447,6 @@ function normalizeCodeContent(content) {
     return content;
 }
 
-// Helper function to create code block elements
-function createCodeBlock(language, content) {
-    const pre = document.createElement('pre');
-    const code = document.createElement('code');
-    code.className = language ? `language-${language}` : '';
-    // Normalize content to fix literal escape sequences
-    code.textContent = normalizeCodeContent(content);
-    pre.appendChild(code);
-    return { pre, code };
-}
-
-// Helper function to extract language and code content from text
-async function extractLanguageAndCode(text) {
-    let codeContent = text.trim();
-
-    // Normalize content first to handle literal escape sequences
-    codeContent = normalizeCodeContent(codeContent);
-
-    const codeFenceRegex = /^```([a-zA-Z]*)\n([\s\S]*?)\n```$/;
-    const match = codeContent.match(codeFenceRegex);
-
-    if (match?.[1] || match?.[2]) {
-        return {
-            language: match[1].trim().toLowerCase() || 'text',
-            codeContent: match[2].trim()
-        };
-    }
-
-    try {
-        const language = await Promise.resolve(detector?.detectLanguage(codeContent) ?? 'text');
-        return { language, codeContent };
-    } catch (error) {
-        console.warn('Language detection failed:', error);
-        return { language: 'text', codeContent };
-    }
-}
-
-// Helper function to create the code header with copy button
-async function createCodeHeader(language, codeContent) {
-    const header = document.createElement('div');
-    header.className = 'code-header';
-
-    const langIndicator = createLanguageIndicator(language);
-    const copyButton = createCopyButton(codeContent);
-
-    header.append(langIndicator, copyButton);
-    return header;
-}
-
-// Helper function to create language indicator
-function createLanguageIndicator(language) {
-    const langIndicator = document.createElement('span');
-    langIndicator.className = 'language-indicator';
-    langIndicator.textContent = language || 'Text';
-    return langIndicator;
-}
-
-// Helper function to create the copy button with icon and text
-function createCopyButton(codeContent) {
-    const button = document.createElement('button');
-    button.className = 'copy-button';
-    button.innerHTML = `<i class="${CONFIG.ICONS.COPY}"></i><span>Copy code</span>`;
-
-    button.addEventListener('click', async () => {
-        try {
-            await navigator.clipboard.writeText(codeContent);
-            // Show success state
-            button.innerHTML = `<i class="fas fa-check"></i><span>Copied!</span>`;
-            button.classList.add('copied');
-
-            // Reset after 1 second
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            button.innerHTML = `<i class="${CONFIG.ICONS.COPY}"></i><span>Copy code</span>`;
-            button.classList.remove('copied');
-        } catch (error) {
-            console.error('Copy failed:', error);
-            button.innerHTML = `<i class="fas fa-times"></i><span>Failed</span>`;
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            button.innerHTML = `<i class="${CONFIG.ICONS.COPY}"></i><span>Copy code</span>`;
-        }
-    });
-
-    return button;
-}
-
-// Helper function to apply syntax highlighting
-async function applySyntaxHighlighting(code) {
-    if (typeof Prism === 'undefined') return;
-
-    try {
-        await Promise.resolve(Prism.highlightElement(code));
-    } catch (error) {
-        console.error('Prism highlighting failed:', error);
-    }
-}
-
-// Helper function to append user's message with animation
 /**
  * Render live attachments using the FilePreview system
  */
@@ -1997,6 +1669,15 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
         messageDiv = createMessageDiv(messageId, sender);
         chatDisplay.appendChild(messageDiv);
     } else {
+        // Same guard as startNewChatModule.renderMessage — if a live
+        // StreamRenderer is attached to this node's subtree, destroy it
+        // before wiping innerHTML so its messageEl doesn't keep mutating
+        // an orphaned tree after fast regenerate / edit.
+        const liveSr = window._activeStreamRenderer;
+        if (liveSr && !liveSr.destroyed && messageDiv.contains(liveSr.container)) {
+            liveSr.destroy();
+            window._activeStreamRenderer = null;
+        }
         messageDiv.innerHTML = ''; // Clear existing content to replace rather than append
     }
 
@@ -2467,6 +2148,21 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         // Prepare request data
         const formData = new FormData();
         formData.append('prompt', prompt);
+
+        // Request mode: single source of truth for UI intent overrides.
+        //   'auto'     → model picks ACTION: itself (default)
+        //   'search'   → force web_search
+        //   'research' → force deep research (future)
+        //   'chat'     → force chat (skip search even if model wants it)
+        //   'artifact' → force artifact creation (future)
+        // The "+" menu "Web search" item stores its on/off state on
+        // webSearchBtn.dataset.webOn. A separate #enable-search checkbox
+        // was historical; today this dataset attr is the real source.
+        var _webBtn = document.getElementById('action-web-search');
+        var _webOn = _webBtn && _webBtn.dataset.webOn === 'true';
+        var _mode = _webOn ? 'search' : 'auto';
+        formData.append('mode', _mode);
+        console.log('[MODE] sending mode=', _mode, 'webOn=', _webOn);
         if (attachments.length) {
             // Strip dataUrl from JSON metadata (too large for payload)
             const serverAttachments = attachments.map(att => {
@@ -2639,6 +2335,39 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 const _contentChunks = [];
                 let _contentJoinedAt = 0;  // index up to which streamedContent is current
 
+                // Client-side safety net: buffer until we can decide whether
+                // the stream opens with an `ACTION: xxx` line (which must be
+                // hidden from the UI). If so, strip it. Otherwise release the
+                // buffer verbatim. Disables itself once real content starts.
+                let _actionStripDone = false;
+                let _actionStripBuffer = '';
+                const _actionStripRe = /^\s*[-*]*\s*ACTION:\s*\w+[^\n]*\n(?:[ \t]*[a-zA-Z_][\w-]*\s*:[^\n]*\n)*\n*/i;
+                function _stripActionFromChunk(chunkText) {
+                    if (_actionStripDone) return chunkText;
+                    _actionStripBuffer += chunkText;
+                    // Decide as early as possible. If the buffered prefix
+                    // clearly cannot match (>= 7 chars and doesn't start with
+                    // "action:"), release it verbatim.
+                    const lead = _actionStripBuffer.replace(/^[\s\-*]+/, '');
+                    if (lead.length >= 7 && lead.slice(0, 7).toLowerCase() !== 'action:') {
+                        const out = _actionStripBuffer;
+                        _actionStripBuffer = '';
+                        _actionStripDone = true;
+                        return out;
+                    }
+                    // If it's potentially an ACTION header, wait for the blank
+                    // line that ends the header (or \n after single-line form).
+                    const m = _actionStripBuffer.match(_actionStripRe);
+                    if (m) {
+                        const stripped = _actionStripBuffer.slice(m[0].length);
+                        _actionStripBuffer = '';
+                        _actionStripDone = true;
+                        return stripped;
+                    }
+                    // Not enough data yet — swallow this chunk and wait.
+                    return '';
+                }
+
                 const processLine = (line) => {
                     if (!line.startsWith('data: ')) return;
                     const jsonStr = line.slice(6);
@@ -2762,7 +2491,18 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             // Kill any existing streaming cursor
                                             var oldCursor = targetContent.querySelector('.streaming-cursor');
                                             if (oldCursor) oldCursor.remove();
-                                            targetContent.innerHTML = '';
+                                            // Remove everything EXCEPT the search banner in
+                                            // place. Detaching and re-inserting the banner
+                                            // would re-trigger its bannerFadeIn animation
+                                            // (0.3s opacity + translateY) — user perceives
+                                            // a glitch where the banner blinks/shifts.
+                                            // Keeping the node untouched leaves the shimmer
+                                            // running smoothly.
+                                            var _preservedBanner = targetContent.querySelector('.search-banner');
+                                            console.log('[SEARCH-BANNER] first content chunk. bannerFound=', !!_preservedBanner, 'msgId=', _streamMsgId);
+                                            Array.from(targetContent.children).forEach(function (child) {
+                                                if (child !== _preservedBanner) child.remove();
+                                            });
                                             _streamRenderer = new StreamRenderer(targetContent);
                                             window._activeStreamRenderer = _streamRenderer;
                                         } else {
@@ -2771,18 +2511,49 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                         }
                                     }
                                 }
-                                // Feed StreamRenderer with live tokens
+                                // Feed StreamRenderer with live tokens (after stripping
+                                // any leading ACTION: header leak).
                                 if (_streamRenderer) {
-                                    _streamRenderer.append(chunkText);
+                                    const _cleanChunk = _stripActionFromChunk(chunkText);
+                                    if (_cleanChunk) {
+                                        _streamRenderer.append(_cleanChunk);
+                                    }
                                 }
-                                // Dismiss search banner on first synthesis content chunk
+                                // Keep the animated "Searching…" shimmer visible until
+                                // real answer content actually appears in the DOM. Then
+                                // fade it out. We poll for the first .stream-block so
+                                // the banner doesn't vanish before the user sees anything.
                                 if (searchMsgId && !searchBannerDismissed && window.SearchResults) {
                                     searchBannerDismissed = true;
-                                    var searchEl = document.getElementById(searchMsgId);
-                                    var searchContent = searchEl?.querySelector('.message-content');
-                                    if (searchContent) {
-                                        window.SearchResults.dismissBanner(searchContent);
-                                    }
+                                    var _searchMsgIdSnapshot = searchMsgId;
+                                    // Dismiss the shimmer only once the user can actually
+                                    // READ the answer: a stream-block must exist AND hold
+                                    // >= ~80 chars of visible text. Without the length
+                                    // check, a paragraph block is created as soon as the
+                                    // first newline flushes, which fires the dismiss ~28ms
+                                    // after the first chunk — the user sees the banner
+                                    // vanish instantly and then waits for real content.
+                                    var _waitStart = performance.now();
+                                    var _MIN_TEXT = 80;
+                                    var _MAX_WAIT_MS = 30000; // hard ceiling in case stream stalls
+                                    var _waitForVisibleContent = function () {
+                                        var searchEl = document.getElementById(_searchMsgIdSnapshot);
+                                        var searchContent = searchEl?.querySelector('.message-content');
+                                        if (!searchContent) return;
+                                        var block = searchContent.querySelector(
+                                            '.stream-block:not(.block-mermaid):not(.block-math)'
+                                        );
+                                        var elapsed = performance.now() - _waitStart;
+                                        var textLen = block ? (block.textContent || '').trim().length : 0;
+                                        if ((block && textLen >= _MIN_TEXT) || elapsed > _MAX_WAIT_MS) {
+                                            console.log('[SEARCH-BANNER] dismissing after',
+                                                Math.round(elapsed), 'ms. textLen=', textLen);
+                                            window.SearchResults.dismissBanner(searchContent);
+                                        } else {
+                                            requestAnimationFrame(_waitForVisibleContent);
+                                        }
+                                    };
+                                    requestAnimationFrame(_waitForVisibleContent);
                                 }
                                 if (bgRequest) {
                                     BackgroundRequestManager.appendContent(requestSessionId, chunkText);
@@ -2944,6 +2715,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     }
                                     // Reset so synthesis chunks create a fresh StreamRenderer
                                     isFirstContentChunk = true;
+                                    // Reset the client-side ACTION stripper so the synthesis
+                                    // pass's first tokens get the same safety net applied.
+                                    _actionStripDone = false;
+                                    _actionStripBuffer = '';
                                 }
                                 if (!searchMsgId) {
                                     searchMsgId = placeholderId || generateMessageId();

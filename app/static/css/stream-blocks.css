@@ -2,6 +2,24 @@
 
 .stream-block {
     animation: streamBlockIn 120ms ease-out;
+    /* Explicit sizing: parents up the chain are flex columns, where a
+       block-level child without min-width:0 collapses to its smallest
+       intrinsic width — one character per line. The old appendTextMessage
+       path didn't have this wrapper so never hit it. */
+    width: 100%;
+    min-width: 0;
+}
+
+/* Defensive min-width:0 up the chain. Flex items default to
+   min-width: auto which prevents them from shrinking below their content's
+   intrinsic width; in fast-streaming partial states the intrinsic width
+   can flip and cause a cascade where .text-message shrinks to ~1ch and
+   each character wraps to its own line. Setting min-width:0 lets flex
+   ancestors shrink without starving their block children. */
+.ai-message .text-message-container,
+.ai-message .text-message,
+.ai-message .message-content {
+    min-width: 0;
 }
 
 .block-code        { animation: streamBlockIn  80ms ease-out; }
@@ -31,22 +49,12 @@
 
 /* Skeleton shimmer while a code block is streaming */
 
-.block-code.is-streaming {
-    position: relative;
-}
-
-.block-code.is-streaming::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-        90deg,
-        transparent 0%,
-        rgba(255, 255, 255, 0.04) 50%,
-        transparent 100%
-    );
-    background-size: 200% 100%;
-    animation: streamShimmer 1.4s linear infinite;
+/* While streaming there's nothing to copy yet — keep it in flow but
+   invisible, offset to the right. When the block finalizes, is-streaming
+   is removed and the button slides in (transition lives on .copy-button). */
+.block-code.is-streaming .copy-button {
+    opacity: 0;
+    transform: translateX(8px);
     pointer-events: none;
 }
 
@@ -73,21 +81,22 @@
     50%      { opacity: 1; }
 }
 
-/* Cursor — CSS-only blinking line (unchanged from existing spec) */
+/* Cursor — ChatGPT-style pulsing dot. */
 
 .stream-cursor {
     display: inline-block;
-    width: 2px;
-    height: 1.1em;
+    width: 0.65em;
+    height: 0.65em;
+    border-radius: 50%;
     background: var(--text-primary, #e2e8f0);
-    margin-left: 1px;
-    vertical-align: text-bottom;
-    animation: streamCursorBlink 0.8s steps(2) infinite;
+    margin-left: 0.3em;
+    vertical-align: middle;
+    animation: streamCursorPulse 1.1s ease-in-out infinite;
 }
 
-@keyframes streamCursorBlink {
-    0%, 100% { opacity: 1; }
-    50%      { opacity: 0; }
+@keyframes streamCursorPulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.35; transform: scale(0.7); }
 }
 
 /* Pre-warm layout variants */

@@ -4134,7 +4134,17 @@ async loadChatHistory(pageToken = null, limit = 10) {
             messageDiv = createMessageDiv(id, sender);
             chatDisplay.appendChild(messageDiv);
         } else {
-            messageDiv.innerHTML = ''; // Clear existing content
+            // If a live StreamRenderer is attached to this message's DOM, tear
+            // it down before wiping innerHTML. Otherwise its .messageEl holds
+            // a dangling reference and subsequent .append() calls mutate an
+            // orphaned node tree — manifests as "edit history fucked up" after
+            // fast regenerate/edit cycles.
+            const live = window._activeStreamRenderer;
+            if (live && !live.destroyed && messageDiv.contains(live.container)) {
+                live.destroy();
+                window._activeStreamRenderer = null;
+            }
+            messageDiv.innerHTML = '';
         }
 
         if (typeof originalPrompt === 'string' && originalPrompt.length) {

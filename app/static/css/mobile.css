@@ -5211,3 +5211,79 @@ body.device-tablet .mobile-overlay {
     }
     /* ═══ End Action Sheet mobile ═══ */
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Code Window — mobile (macOS chrome, compact).
+   Smaller traffic-light dots, compact header, edge-to-edge width.
+   Header sticks to the viewport top so the title bar stays in reach.
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .code-window {
+        border-radius: 10px;
+        margin: 0.9rem -4px;
+        max-width: none;
+        width: calc(100% + 8px);
+        font-size: 12px;
+    }
+
+    .code-header {
+        height: 36px;
+        padding: 0 12px;
+        top: 0;
+        z-index: 5;
+        border-top-left-radius: 10px;
+        border-top-right-radius: 10px;
+        -webkit-backdrop-filter: blur(16px) saturate(150%);
+        backdrop-filter: blur(16px) saturate(150%);
+    }
+
+    .code-header::before {
+        width: 9px;
+        height: 9px;
+        left: 12px;
+        box-shadow:
+            15px 0 0 #febc2e,
+            30px 0 0 #28c840;
+    }
+
+    .language-indicator {
+        margin-left: 52px;
+        font-size: 10px;
+        padding: 3px 7px;
+        max-width: 45%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex-shrink: 1;
+    }
+
+    .copy-button {
+        padding: 4px 4px;
+        font-size: 11.5px;
+    }
+    .copy-button svg { width: 12px; height: 12px; }
+
+    .code-window pre {
+        padding: 14px 16px;
+        border-bottom-left-radius: 10px;
+        border-bottom-right-radius: 10px;
+    }
+
+    .code-window code {
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
+    /* Diff lines: match mobile pre padding. */
+    .code-window code .diff-line {
+        padding: 0 16px;
+        margin: 0 -16px;
+    }
+
+    /* Very narrow phones — hide traffic lights to reclaim header real
+       estate. The language pill and copy button are the priority. */
+    @media (max-width: 380px) {
+        .code-header::before { display: none; }
+        .language-indicator { margin-left: 0; max-width: 55%; }
+    }
+}

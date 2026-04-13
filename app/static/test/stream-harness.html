@@ -73,6 +73,28 @@ addCase('code renderer: python with Prism', (target) => {
     r.finalize(block);
 });
 
+addCase('code renderer: diff highlighting', (target) => {
+    const r = createCodeRenderer();
+    const block = {
+        id: 'b2d', type: 'code',
+        meta: { lang: 'diff' },
+        text: '', frozen: false, el: null,
+    };
+    r.create(block, target);
+    block.text = [
+        '--- a/foo.py',
+        '+++ b/foo.py',
+        '@@ -1,3 +1,4 @@',
+        ' def greet(name):',
+        '-    print("hi", name)',
+        '+    print(f"hello, {name}!")',
+        '+    return True',
+    ].join('\n');
+    r.update(block);
+    r.finalize(block);
+});
+
+
 addCase('list renderer: three items with stagger', (target) => {
     const r = createListRenderer();
     const block = { id: 'b3', type: 'list-ul', meta: {}, text: '- one\n- two\n- three\n', frozen: false, el: null };

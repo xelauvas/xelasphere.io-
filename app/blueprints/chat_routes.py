@@ -510,6 +510,12 @@ def chat_stream():
 
     prompt = request.form.get('prompt', '').strip()
     user_prompt_raw = prompt  # Keep raw user text for intent detection (before file content injection)
+    # Request mode — single UI intent override. Valid values: auto, search,
+    # research, chat, artifact. Unknown values fall back to auto.
+    _VALID_MODES = {'auto', 'search', 'research', 'chat', 'artifact'}
+    request_mode = (request.form.get('mode') or 'auto').strip().lower()
+    if request_mode not in _VALID_MODES:
+        request_mode = 'auto'
     model = request.form.get('model', 'deepseek-reasoner')
     logger.info(f"[Stream] Received model={model!r}")
     page_id = request.form.get('page_id', '').strip() or None
@@ -1059,9 +1065,28 @@ def chat_stream():
         parsed_action = None  # Set when response is complete
         action_buffer = StreamingActionBuffer()  # Buffer first line to strip ACTION:
         action_resolved = False
+        # Defensive: strip any ACTION: line that leaks past action_buffer (e.g. a
+        # model that emits it mid-stream, or paths that bypass the buffer like
+        # search synthesis). Applied to the very first content chunk we yield.
+        _first_content_yielded = {'done': False}
+        _action_leak_re = re.compile(r'^\s*[-*]*\s*ACTION:\s*\w+\s*\n+', re.IGNORECASE)
+        def _sanitize_content(text: str) -> str:
+            if _first_content_yielded['done']:
+                return text
+            cleaned = _action_leak_re.sub('', text, count=1)
+            # Only mark as "first yielded" once non-empty content leaves the server.
+            if cleaned.strip():
+                _first_content_yielded['done'] = True
+            return cleaned
         normalizer = StreamNormalizer(model_family=get_model_family(stream_model))
         _search_second_pass_done = False  # True after 2nd LLM call completes
         _search_synthesis_content = []  # Collects 2nd pass content for chat_summary
+
+        # Mode-override dispatch: if the UI forced a mode, skip the first
+        # LLM call and go straight to the corresponding pipeline. The model
+        # normally picks its ACTION via `action_buffer`, but explicit user
+        # intent (e.g. the Web Search toggle) always wins.
+        _mode_forced = request_mode in {'search', 'research', 'chat', 'artifact'}
 
         def _run_search_and_synthesize(ws_query, ws_type):
             """Run search, emit events, start synthesis immediately after
@@ -1128,7 +1153,7 @@ def chat_stream():
                     if ct == 'content':
                         text = chunk.get('text', '')
                         _search_synthesis_content.append(text)
-                        yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(text)})}\n\n"
+                        yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(normalize_paragraph_breaks(text))})}\n\n"
                     elif ct == 'reasoning':
                         text = chunk.get('text', '')
                         reasoning_buffer.append(text)
@@ -1144,8 +1169,88 @@ def chat_stream():
 
         # ── Semantic cache check (before hitting any model) ──
         _cache_job = {"chat": "general_chat", "image_gen": "general_chat"}.get(task_type, task_type) if task_type else "general_chat"
+        # Skip cache for time-sensitive prompts — fresh answer matters more
+        # than latency (news, stock prices, live events, "latest" queries).
+        _time_sensitive_re = re.compile(
+            r'\b(latest|today|yesterday|tonight|now|currently|current|recent|recently|'
+            r'breaking|news|headline|headlines|stock|stocks|price|prices|quote|market|'
+            r'weather|forecast|score|scores|live|war|election|crypto|bitcoin|ethereum)\b',
+            re.IGNORECASE,
+        )
+        _skip_cache = bool(_time_sensitive_re.search(user_prompt_raw or '')) or _mode_forced
+
+        # Explicit mode override — short-circuit BEFORE cache + first-LLM.
+        # The UI toggle is authoritative: user asked for this pipeline.
+        if request_mode == 'search':
+            logger.info(f"[Stream] MODE=search forced by UI. query={user_prompt_raw[:80]!r}")
+            # Extract system prompt up-front — the synthesis generator
+            # closes over `_sys_prompt`, so it must be bound before we
+            # call it. In the auto path this happens inside the try-block
+            # further down, but the forced-search path skips that.
+            _sys_prompt = None
+            try:
+                if built_context.messages and built_context.messages[0].get('role') == 'system':
+                    _sys_prompt = built_context.messages[0]['content']
+            except Exception:
+                _sys_prompt = None
+
+            yield f"data: {json.dumps({'type': 'search_started', 'query': user_prompt_raw, 'search_type': 'general'})}\n\n"
+            yield from _run_search_and_synthesize(user_prompt_raw, 'general')
+
+            # Assemble + emit the done payload ourselves — the synthesis
+            # generator only emits content/reasoning; the outer auto path
+            # normally handles done after its own streaming loop. We bypass
+            # that loop entirely, so we must emit done here with enough
+            # data for the client to render citation pills and the sources
+            # sidebar (search_results + fetched_urls + render_hint).
+            _final_content = ''.join(_search_synthesis_content).strip()
+
+            # Harvest search results from the orchestrator for the same
+            # query we just ran. Keyed the same way as the auto path.
+            _search_results = None
+            _fetched_urls = []
+            try:
+                _q_key = (user_prompt_raw or '').lower().strip()
+                _all_last = search_orchestrator._last_results.get(_q_key, []) or []
+                _search_results = {
+                    'web':    [search_orchestrator._result_to_dict(r) for r in _all_last if r.type == 'web'],
+                    'images': [search_orchestrator._result_to_dict(r) for r in _all_last if r.type == 'image'],
+                    'videos': [search_orchestrator._result_to_dict(r) for r in _all_last if r.type == 'video'],
+                }
+                _fetched_urls = list(search_orchestrator.get_fetched_urls())
+            except Exception as e:
+                logger.warning(f"[Stream] Could not harvest search results for forced-mode done: {e}")
+
+            _done_payload = {
+                'type': 'done',
+                'content': _final_content,
+                'chat_summary': _final_content,
+                'reasoning': '\n'.join(reasoning_buffer) if reasoning_buffer else None,
+                'render_mode': 'inline',
+                'artifact': None,
+                'artifact_error': None,
+                'artifact_patches': None,
+                'is_email': False,
+                'email': None,
+                'crypto_chart': None,
+                'session_name': None,
+                'search_results': _search_results,
+                'fetched_urls': _fetched_urls,
+                'render_hint': 'text_only',
+                'model_meta': {
+                    'model_id': stream_model,
+                    'model_label': 'Web search',
+                    'model_provider': 'search',
+                    'auto_selected': False,
+                    'task_type': 'web_search',
+                },
+                'forced_mode': 'search',
+            }
+            yield f"data: {json.dumps(_done_payload)}\n\n"
+            return
+
         try:
-            _cached = orchestrator_check_cache(user_prompt_raw, _cache_job)
+            _cached = None if _skip_cache else orchestrator_check_cache(user_prompt_raw, _cache_job)
             if _cached:
                 _cached_resp, _cached_model = _cached
                 logger.info(f"[Stream] CACHE HIT: {user_prompt_raw[:40]}... (model={_cached_model})")
@@ -1219,7 +1324,7 @@ def chat_stream():
 
                             # Forward remainder after the ACTION line (skip if search did 2nd pass)
                             if not _search_second_pass_done and action_buffer.remainder:
-                                yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(action_buffer.remainder)})}\n\n"
+                                yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(normalize_paragraph_breaks(action_buffer.remainder))})}\n\n"
                         # If not resolved yet, keep buffering (no yield)
                         if not action_resolved:
                             continue
@@ -1233,7 +1338,7 @@ def chat_stream():
                     if just_resolved:
                         continue
 
-                    yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(text)})}\n\n"
+                    yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(normalize_paragraph_breaks(text))})}\n\n"
 
                 elif chunk_type == 'done':
                     # Flush normalizer for models that don't emit trailing \n
@@ -1893,9 +1998,20 @@ def chat_stream():
                     except Exception:
                         pass
 
-                    # Store in semantic cache (good responses only)
+                    # Store in semantic cache (good responses only).
+                    # Skip caching web_search results — they're time-sensitive
+                    # (news, prices, live events) and a stale reply would
+                    # surface the old answer for up to 24h.
                     try:
-                        if full_content and len(full_content.strip()) > 50:
+                        _used_web_search = (
+                            (parsed_action and getattr(parsed_action, 'action', None) == 'web_search')
+                            or _search_second_pass_done
+                        )
+                        if (
+                            full_content
+                            and len(full_content.strip()) > 50
+                            and not _used_web_search
+                        ):
                             orchestrator_store_cache(user_prompt_raw, full_content, stream_model, _cache_job)
                     except Exception:
                         pass

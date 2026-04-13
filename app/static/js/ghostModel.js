@@ -424,8 +424,13 @@
         // Try to append inline at the end of the last text element
         const textMsg = messageDiv.querySelector('.text-message');
         if (textMsg) {
-            // Find the last block-level child (p, li, h1-h6, div, etc.)
-            const blocks = textMsg.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, div, blockquote');
+            // Find the last block-level child (p, li, h1-h6, div, etc.).
+            // Skip anything inside a code chrome — its <div class="code-header">
+            // would otherwise be picked as the last <div> and the attribution
+            // would land in the code-window's title bar.
+            const blocks = Array.from(
+                textMsg.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, div, blockquote')
+            ).filter(el => !el.closest('.code-window, .stream-block.block-code'));
             const lastBlock = blocks.length ? blocks[blocks.length - 1] : null;
             if (lastBlock) {
                 lastBlock.appendChild(document.createTextNode(' '));

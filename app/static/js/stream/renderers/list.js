@@ -40,18 +40,46 @@ export function createListRenderer() {
         },
         update(block) {
             if (!block.el) return;
+
+            // Lib-guarded render: mirror prose.js' guards. If marked isn't
+            // loaded yet (CDN slow / replay-before-init race), fall back to
+            // plain text so we don't throw TypeError mid-stream. Next update
+            // will upgrade once marked arrives.
+            const markedReady = typeof window.marked?.parse === 'function';
+            const renderMd = (raw) => {
+                if (!markedReady) return null;
+                const html = window.marked.parse(raw || '');
+                return window.DOMPurify ? window.DOMPurify.sanitize(html) : html;
+            };
+
             const items = parseItems(block);
             const existing = block.meta.renderedItemCount;
             const liNoAnim = block.meta.replay ? ' stream-no-anim' : '';
 
-            // Update the tail item's text in place (it may still be streaming)
+            // Update the tail item's text in place (still streaming). Use
+            // morphdom so partial-markdown diffs are reconciled against the
+            // existing node tree instead of blowing away any post-finalize
+            // injections (citation pills, sources buttons).
             if (existing > 0 && items.length >= existing) {
                 const tailLi = block.el.children[existing - 1];
                 if (tailLi) {
-                    const tailHTML = window.DOMPurify.sanitize(
-                        window.marked.parse(items[existing - 1] || '')
-                    );
-                    tailLi.innerHTML = tailHTML;
+                    const tailHTML = renderMd(items[existing - 1]);
+                    if (tailHTML == null) {
+                        tailLi.textContent = items[existing - 1] || '';
+                    } else if (window.morphdom) {
+                        const staging = document.createElement('li');
+                        staging.innerHTML = tailHTML;
+                        window.morphdom(tailLi, staging, {
+                            childrenOnly: true,
+                            onBeforeElUpdated(fromEl) {
+                                if (fromEl.classList?.contains('citation-pill')) return false;
+                                if (fromEl.classList?.contains('sources-btn')) return false;
+                                return true;
+                            },
+                        });
+                    } else {
+                        tailLi.innerHTML = tailHTML;
+                    }
                 }
             }
 
@@ -60,7 +88,9 @@ export function createListRenderer() {
                 const li = document.createElement('li');
                 li.className = `block-list-item${liNoAnim}`;
                 li.style.setProperty('--i', String(i));
-                li.innerHTML = window.DOMPurify.sanitize(window.marked.parse(items[i] || ''));
+                const html = renderMd(items[i]);
+                if (html == null) li.textContent = items[i] || '';
+                else li.innerHTML = html;
                 block.el.appendChild(li);
             }
             block.meta.renderedItemCount = items.length;
