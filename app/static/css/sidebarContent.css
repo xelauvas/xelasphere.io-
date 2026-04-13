@@ -52,8 +52,9 @@
     display: flex;
     flex-direction: column;
     box-shadow: none;
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
+    /* No backdrop blur — clean opaque sidebar (Claude style) */
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     overflow: visible;
 }
 
