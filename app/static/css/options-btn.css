@@ -3,9 +3,6 @@
     /* Minimal, familiar palette */
     --card-depth: 0 2px 8px rgba(0,0,0,.08),
                   0 12px 30px rgba(0,0,0,.12);
-    --card-border: 1px solid rgba(255,255,255,0.08);
-    --card-bg: rgba(32,34,37,0.9);
-    --card-bg-hover: rgba(42,45,50,0.95);
 }
   
   /* === Premium Logo Container === */
@@ -14,7 +11,7 @@
     height: 3.4375rem;
     margin: 0 auto 1.5rem;
     border-radius: 1rem;
-    background: #1a1a1a;
+    background: var(--bg-secondary, #1a1a22);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -74,7 +71,7 @@
     border-radius: 1rem;
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.03);
-    color: #e8ecf2;
+    color: var(--text-primary, #e8e8f0);
     text-align: left;
     cursor: pointer;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -181,7 +178,7 @@
     border-radius: 0.75rem;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: var(--background-dark, #212121);
-    color: #e8ecf2;
+    color: var(--text-primary, #e8e8f0);
     cursor: pointer;
     position: relative;
     isolation: isolate;

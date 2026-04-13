@@ -500,7 +500,7 @@
     position: absolute;
     z-index: 1000;
     width: 280px;
-    background: #1e1e1e;
+    background: var(--bg-secondary, #1a1a22);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
     padding: 12px 14px;
@@ -595,7 +595,7 @@
     width: 18px;
     height: 18px;
     border-radius: 3px;
-    border: 2px solid #212121;
+    border: 2px solid var(--bg-secondary, #1a1a22);
     margin-left: -7px;
     position: relative;
     object-fit: cover;
@@ -619,8 +619,8 @@
     right: 0;
     width: 360px;
     height: 100vh;
-    background: #1a1a1a;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-secondary, #1a1a22);
+    border-left: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
     z-index: 500;
     display: flex;
     flex-direction: column;
@@ -638,14 +638,14 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
     flex-shrink: 0;
 }
 
 .sources-sidebar__title {
     font-size: 0.95rem;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary, #e8e8f0);
 }
 
 .sources-sidebar__close {
@@ -664,8 +664,8 @@
 }
 
 .sources-sidebar__close:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.9);
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+    color: var(--text-primary, #e8e8f0);
 }
 
 .sources-sidebar__body {
@@ -678,11 +678,11 @@
     padding: 12px 20px;
     cursor: pointer;
     transition: background 0.12s;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.04));
 }
 
 .source-item:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
 }
 
 .source-item__publisher {
@@ -700,14 +700,14 @@
 
 .source-item__name {
     font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--text-tertiary, #5a5a70);
     font-weight: 500;
 }
 
 .source-item__title {
     font-size: 0.88rem;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.88);
+    color: var(--text-primary, #e8e8f0);
     line-height: 1.35;
     margin-bottom: 4px;
     display: -webkit-box;
@@ -718,7 +718,7 @@
 
 .source-item__snippet {
     font-size: 0.78rem;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-secondary, #9898b0);
     line-height: 1.4;
     display: -webkit-box;
     -webkit-line-clamp: 2;
