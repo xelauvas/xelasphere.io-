@@ -188,10 +188,14 @@ body.sidebar-collapsed .sidebar-brand-text {
 }
 
 .sidebar-quick-actions {
-    position: relative;
-    padding: 0.125rem 0;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 0.25rem 0 0.5rem;
     margin-bottom: 0.25rem;
-    background: transparent;
+    background: var(--bg-secondary, #262624);
+    /* Soft fade-out at the bottom so chats scroll under cleanly */
+    box-shadow: 0 6px 6px -6px var(--bg-secondary, #262624);
 }
 
 .sidebar-quick-actions-inner {
@@ -212,10 +216,13 @@ body.sidebar-collapsed .sidebar-brand-text {
     gap: 0.625rem;
     border: none;
     border-radius: 0.5rem;
-    padding: 0.5rem 0.5rem;
+    padding: 0.4rem 0.625rem;
     background: transparent;
     color: var(--text-primary);
-    font-size: 0.875rem;
+    font-family: 'Inter', 'Söhne', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.84375rem;        /* 13.5px — match Claude Desktop + chat tabs */
+    font-weight: 400;
+    letter-spacing: -0.005em;
     cursor: pointer;
     transition: none;
     box-shadow: none;
