@@ -294,51 +294,54 @@
 /* ==================== */
 
 [data-theme="light"] {
-  /* --- Theme surfaces --- */
-  --bg-primary: #f7f9fc;
-  --bg-secondary: #eef2f6;
-  --bg-tertiary: #e4eaf1;
-  --bg-elevated: #ffffff;
-  --bg-overlay: rgba(247, 249, 252, 0.85);
-  --bg-hover: rgba(0, 0, 0, 0.04);
-  --bg-input: #ffffff;
-  --bg-code: #eef2f6;
-  --bg-active: rgba(0, 0, 0, 0.1);
-  --bg-disabled: #eef2f6;
+  /* --- Theme surfaces — Claude Desktop warm cream palette ---
+     Body / chat / sidebar share #faf9f5 (warm off-white)
+     Cards lift slightly to #f3efe7 (warm beige)
+     Modals are pure white #ffffff for elevation */
+  --bg-primary: #faf9f5;          /* main canvas, body, chat container, header */
+  --bg-secondary: #faf9f5;        /* sidebar, panels — same as body (Claude pattern) */
+  --bg-tertiary: #f3efe7;         /* cards, suggestion items, nested surfaces */
+  --bg-elevated: #ffffff;         /* modals, dropdowns, popovers */
+  --bg-overlay: rgba(250, 249, 245, 0.85);
+  --bg-hover: rgba(40, 30, 15, 0.05);   /* warm dark hover tint */
+  --bg-input: #ffffff;            /* composer, search input */
+  --bg-code: #f3efe7;             /* code blocks (light warm grey) */
+  --bg-active: rgba(40, 30, 15, 0.08);
+  --bg-disabled: #f0ece4;
 
-  /* --- Theme text --- */
-  --text-primary: #1a1d2e;
-  --text-secondary: #4a5068;
-  --text-tertiary: #8890a8;
-  --text-disabled: #a3a3a3;
-  --text-inverse: #ffffff;
-  --text-muted: #6c7488;
-  --text-link: #0284c7;
-  --text-link-hover: #0369a1;
+  /* --- Theme text — warm dark hierarchy --- */
+  --text-primary: #1f1d1a;        /* warm near-black */
+  --text-secondary: #6b665c;      /* warm grey */
+  --text-tertiary: #9a9387;       /* warm light grey */
+  --text-disabled: #b8b1a4;
+  --text-inverse: #faf9f5;
+  --text-muted: #837e75;
+  --text-link: #c96442;           /* warm coral link (Claude orange) */
+  --text-link-hover: #b14e2f;
 
-  /* --- Theme borders --- */
-  --border-primary: rgba(0, 0, 0, 0.08);
-  --border-secondary: rgba(0, 0, 0, 0.04);
+  /* --- Theme borders — warm dark tints --- */
+  --border-primary: rgba(40, 30, 15, 0.10);
+  --border-secondary: rgba(40, 30, 15, 0.05);
   --border-focus: #5b46d6;
   --border-error: #ef4444;
   --border-success: #22c55e;
 
-  /* --- Theme accents --- */
+  /* --- Theme accents (purple unchanged — XelaSphere identity) --- */
   --accent: #5b46d6;
   --accent-hover: #4a38c2;
   --accent-muted: rgba(91, 70, 214, 0.12);
   --accent-translucent: rgba(91, 70, 214, 0.22);
 
-  /* --- Theme-aware overlays --- */
-  --overlay-hover: rgba(0, 0, 0, 0.04);
-  --overlay-pressed: rgba(0, 0, 0, 0.08);
+  /* --- Theme-aware overlays (warm dark tint to match warm canvas) --- */
+  --overlay-hover: rgba(40, 30, 15, 0.05);
+  --overlay-pressed: rgba(40, 30, 15, 0.08);
 
-  /* --- Theme shadows (lower opacity, cooler) --- */
-  --shadow-sm: 0 1px 2px rgba(20, 30, 60, 0.06);
-  --shadow-md: 0 4px 12px rgba(20, 30, 60, 0.08);
-  --shadow-lg: 0 10px 30px rgba(20, 30, 60, 0.12);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
-  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  /* --- Theme shadows (warm tone for depth on cream bg) --- */
+  --shadow-sm: 0 1px 2px rgba(40, 30, 15, 0.06);
+  --shadow-md: 0 4px 12px rgba(40, 30, 15, 0.08);
+  --shadow-lg: 0 10px 30px rgba(40, 30, 15, 0.12);
+  --shadow-xl: 0 20px 25px -5px rgba(40, 30, 15, 0.10), 0 8px 10px -6px rgba(40, 30, 15, 0.05);
+  --shadow-2xl: 0 25px 50px -12px rgba(40, 30, 15, 0.25);
 
   /* --- Password strength (same semantic meaning, adjusted for light bg) --- */
   --strength-weak: #dc2626;

@@ -476,10 +476,10 @@ h1 {
     box-shadow: none;
 }
 
-/* User bubble in light theme: light grey card */
+/* User bubble in light theme: warm beige card (Claude Desktop style) */
 [data-theme="light"] .user-message .text-message {
-    background: #eef2f6;
-    color: var(--text-primary, #1a1d2e);
+    background: #f3efe7;
+    color: var(--text-primary, #1f1d1a);
 }
 .ai-message .text-message {
     background: transparent;
