@@ -2348,21 +2348,23 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     padding: 0.15rem !important;
 }
 
-/* Custom tooltips for edit/copy buttons */
+/* Custom tooltips for edit/copy buttons + actions-toggle (+) */
 .edit-button[data-tooltip],
-.copy-message-button[data-tooltip] {
+.copy-message-button[data-tooltip],
+.actions-toggle[data-tooltip] {
     position: relative;
 }
 
 .edit-button[data-tooltip]::after,
-.copy-message-button[data-tooltip]::after {
+.copy-message-button[data-tooltip]::after,
+.actions-toggle[data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
     top: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%) scale(0.8);
-    background: var(--bg-primary, #0f0f12);
-    color: var(--text-secondary, #9898b0);
+    background: var(--bg-elevated, #2a2a38);
+    color: var(--text-primary, #e8e8f0);
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 11px;
@@ -2370,14 +2372,28 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     white-space: nowrap;
     opacity: 0;
     pointer-events: none;
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.35));
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
     transition: opacity 0.15s ease, transform 0.15s ease;
     z-index: 1000;
 }
 
+/* Actions-toggle tooltip appears ABOVE since popover opens below */
+.actions-toggle[data-tooltip]::after {
+    top: auto;
+    bottom: calc(100% + 6px);
+}
+
 .edit-button[data-tooltip]:hover::after,
-.copy-message-button[data-tooltip]:hover::after {
+.copy-message-button[data-tooltip]:hover::after,
+.actions-toggle[data-tooltip]:hover::after {
     opacity: 1;
     transform: translateX(-50%) scale(1);
+}
+
+/* Hide actions-toggle tooltip when popover is open (avoid overlap) */
+.actions-menu.open .actions-toggle[data-tooltip]::after {
+    opacity: 0 !important;
 }
 
 .message-container {
