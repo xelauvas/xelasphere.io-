@@ -462,7 +462,7 @@ h1 {
     display: none;
 }
 .user-message .text-message {
-    background: var(--bg-code, #1c1b19);
+    background: #0a0908;
     color: var(--text-primary, #f7f7f7);
     border-radius: 0.95rem 0.95rem 0.35rem 0.95rem;
     width: auto;
@@ -474,6 +474,12 @@ h1 {
     text-align: left;
     letter-spacing: var(--chat-letter-spacing);
     box-shadow: none;
+}
+
+/* User bubble in light theme: light grey card */
+[data-theme="light"] .user-message .text-message {
+    background: #eef2f6;
+    color: var(--text-primary, #1a1d2e);
 }
 .ai-message .text-message {
     background: transparent;
