@@ -12,9 +12,9 @@
     // ============================================
 
     const MODELS = [
-        { id: 'auto',              label: 'CHAT',  icon: '', note: '', host: '', mono: false },
-        { id: 'deepseek-chat',     label: 'CODE',  icon: '', note: '', host: '', mono: true },
-        { id: 'deepseek-reasoner', label: 'THINK', icon: '', note: '', host: '', mono: false },
+        { id: 'auto',              label: 'Chat',  icon: '', note: '', host: '', mono: false },
+        { id: 'deepseek-reasoner', label: 'Think', icon: '', note: '', host: '', mono: false },
+        { id: 'deepseek-chat',     label: 'Code',  icon: '', note: '', host: '', mono: true },
     ];
 
     const TASK_ICON_MAP = {

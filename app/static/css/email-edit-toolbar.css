@@ -50,7 +50,7 @@
     background: transparent;
     border: none;
     border-radius: 10px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -59,8 +59,8 @@
 }
 
 .eet-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
+    background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+    color: var(--text-primary, #fff);
 }
 
 .eet-btn:active {
@@ -151,7 +151,7 @@
     background: transparent;
     border: none;
     border-radius: 9px;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--text-secondary, rgba(255, 255, 255, 0.75));
     font-size: 13px;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -160,7 +160,7 @@
 
 .eet-dropdown-item:hover {
     background: rgba(16, 163, 127, 0.12);
-    color: #fff;
+    color: var(--text-primary, #fff);
 }
 
 .eet-dropdown-item i {
@@ -684,4 +684,65 @@
 
 .eet-ai-input.loading .eet-ai-input-inner > i {
     animation: iconPulse 0.5s ease-in-out infinite;
+}
+
+/* ================================================
+   LIGHT THEME — invert the dark glass surfaces
+   ================================================ */
+[data-theme="light"] .email-edit-toolbar {
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.85) 0%,
+        rgba(250, 247, 242, 0.92) 100%
+    );
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.04),
+        0 10px 40px -10px rgba(0, 0, 0, 0.12),
+        0 4px 12px rgba(0, 0, 0, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+[data-theme="light"] .eet-divider,
+[data-theme="light"] .eet-dropdown-divider {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .eet-dropdown-menu {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(250, 247, 242, 0.98));
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow:
+        0 20px 50px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+[data-theme="light"] .eet-ai-input {
+    background: linear-gradient(
+        160deg,
+        rgba(255, 255, 255, 0.94) 0%,
+        rgba(250, 247, 242, 0.98) 100%
+    );
+}
+
+[data-theme="light"] .eet-ai-input-inner {
+    border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .eet-ai-input input {
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .eet-ai-input input::placeholder {
+    color: rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="light"] .eet-ai-suggestions button {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.06);
+    color: rgba(0, 0, 0, 0.55);
+}
+
+[data-theme="light"] .eet-diff-reject {
+    background: rgba(0, 0, 0, 0.04);
+    color: rgba(0, 0, 0, 0.5);
 }

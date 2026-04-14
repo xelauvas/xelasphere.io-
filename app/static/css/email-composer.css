@@ -1,7 +1,7 @@
 /* Email Composer Card Styles - Themed with XelaSphere Design Tokens */
 
 .email-composer-card {
-    background: #2A2A2A;
+    background: var(--bg-elevated, #2a2a38);
     border: 1px solid var(--border-secondary, #262626);
     border-radius: var(--radius-xl, 12px);
     padding: var(--space-4, 16px);
@@ -87,7 +87,7 @@
     border: 1px solid var(--border-secondary, #333);
     border-radius: var(--radius-lg, 8px);
     overflow: hidden;
-    background: #2A2A2A;
+    background: var(--bg-input, #1e1e2a);
 }
 
 .email-field-row {
@@ -136,7 +136,7 @@
     font-family: var(--font-sans, inherit);
     font-size: var(--text-sm, 14px);
     box-sizing: border-box;
-    caret-color: #ffffff;
+    caret-color: var(--text-primary, #ffffff);
     cursor: text;
 }
 
@@ -171,7 +171,7 @@
     line-height: 1.6;
     min-height: 150px;
     box-sizing: border-box;
-    caret-color: #ffffff;
+    caret-color: var(--text-primary, #ffffff);
     cursor: text;
     outline: none;
     overflow-y: auto;

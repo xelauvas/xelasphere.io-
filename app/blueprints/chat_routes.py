@@ -366,6 +366,28 @@ def orchestrator_dashboard():
     return jsonify(get_full_status())
 
 
+@chat_bp.route('/api/images/create', methods=['POST'])
+@limiter.limit("6 per minute")
+@csrf_required
+@error_handler
+@login_required
+def create_image_from_surface():
+    """Generate an image from the Images page and persist it as a session attachment.
+
+    Thin wrapper around ``handle_image_request`` so the Images surface can call
+    one endpoint instead of routing through the chat stream.
+    """
+    user_id = session['user']['uid']
+    data = request.get_json(silent=True) or {}
+    prompt = (data.get('prompt') or '').strip()
+    if not prompt:
+        return jsonify({'error': 'A text prompt is required'}), 400
+    if len(prompt) > 1000:
+        return jsonify({'error': 'Prompt too long (max 1000 chars)'}), 400
+    page_id = data.get('page_id')
+    return handle_image_request(user_id, prompt, page_id=page_id)
+
+
 def handle_image_request(user_id: str, user_prompt: str, page_id: Optional[str] = None):
     """Handle image generation requests."""
     logger.info(f"Detected image request from user {user_id}: {user_prompt}")

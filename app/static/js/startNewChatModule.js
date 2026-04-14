@@ -27,9 +27,29 @@ class ChatManager {
         this.searchQuery = '';
         this.searchActive = false;
         this.autoRenameTimers = {};
-        this.imagesModalActive = false;
+        this.imagesPageActive = false;
+        this.imagesPageMode = 'home'; // 'home' | 'loading' | 'result' | 'error'
+        this.imagesLastPrompt = '';
+        this.imagesSubmitting = false;
         this.generatedImages = [];
         this.activePreviewImageId = null;
+        this.imagesStylesData = [
+            { label: '3D glam doll', prefix: '3D glam doll style', gradient: 'linear-gradient(135deg, #ff9ec7 0%, #ffd4a3 50%, #ffb3e6 100%)' },
+            { label: 'Ornament', prefix: 'Ornament style', gradient: 'linear-gradient(135deg, #f5d76e 0%, #c0392b 50%, #922b21 100%)' },
+            { label: 'Sugar cookie', prefix: 'Sugar cookie style', gradient: 'linear-gradient(135deg, #fff5e1 0%, #ffb88c 50%, #f38181 100%)' },
+            { label: 'Fisheye', prefix: 'Fisheye photography', gradient: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' },
+            { label: 'Art school', prefix: 'Art school sketch style', gradient: 'linear-gradient(135deg, #eae2b7 0%, #fcbf49 50%, #f77f00 100%)' },
+            { label: 'Watercolor', prefix: 'Watercolor painting', gradient: 'linear-gradient(135deg, #a8d8ea 0%, #aa96da 50%, #fcbad3 100%)' },
+            { label: 'Noir', prefix: 'Film noir black and white', gradient: 'linear-gradient(135deg, #232526 0%, #414345 100%)' }
+        ];
+        this.imagesDiscoverData = [
+            { label: 'Me as an emperor', text: 'Portrait of me as a Roman emperor in regal attire' },
+            { label: 'Create a cartoon', text: 'A whimsical cartoon illustration' },
+            { label: 'Reimagine my pet as a human', text: 'Reimagine my pet as a human character' },
+            { label: 'Style me', text: 'Fashion editorial portrait style' },
+            { label: 'Give them a bowl cut', text: 'Portrait of a person with a bowl cut hairstyle, 70s vibes' },
+            { label: 'What would I look like as a K-Pop star?', text: 'K-Pop idol stage photo portrait' }
+        ];
         this.genericSessionNames = [
             'new chat',
             'untitled session',
@@ -68,13 +88,28 @@ class ChatManager {
             searchResults: document.getElementById('history-search-results'),
             searchCloseTargets: document.querySelectorAll('[data-history-search-close]'),
             imagesButton: document.getElementById('action-images'),
-            imagesModal: document.getElementById('images-gallery-modal'),
+            imagesPage: document.getElementById('images-page'),
+            imagesPageBack: document.getElementById('images-page-back'),
+            imagesPageBody: document.getElementById('images-page-body'),
+            imagesPromptBar: document.getElementById('images-prompt-bar'),
+            imagesPromptInput: document.getElementById('images-prompt-input'),
+            imagesPromptSubmit: document.getElementById('images-prompt-submit'),
+            imagesStylesTrack: document.getElementById('images-styles-track'),
+            imagesDiscoverGrid: document.getElementById('images-discover-grid'),
+            imagesStylesSection: document.getElementById('images-styles-section'),
+            imagesDiscoverSection: document.getElementById('images-discover-section'),
+            imagesGallerySection: document.getElementById('images-gallery-section'),
             imagesGrid: document.getElementById('images-gallery-grid'),
             imagesEmpty: document.getElementById('images-gallery-empty'),
-            imagesCreateButton: document.getElementById('images-create-btn'),
-            imagesPromptInput: document.getElementById('images-prompt-input'),
-            imagesPromptButton: document.getElementById('images-insert-btn'),
-            imagesCloseTargets: document.querySelectorAll('[data-images-close]'),
+            imagesPageLoading: document.getElementById('images-page-loading'),
+            imagesPageResult: document.getElementById('images-page-result'),
+            imagesResultImg: document.getElementById('images-result-img'),
+            imagesResultPrompt: document.getElementById('images-result-prompt'),
+            imagesResultError: document.getElementById('images-page-error'),
+            imagesErrorRetry: document.getElementById('images-error-retry'),
+            imagesResultDownload: document.getElementById('images-result-download'),
+            imagesResultRegenerate: document.getElementById('images-result-regenerate'),
+            imagesResultEdit: document.getElementById('images-result-edit'),
             imagePreviewModal: document.getElementById('images-preview-modal'),
             imagePreviewPrompt: document.getElementById('images-preview-prompt'),
             imagePreviewMeta: document.getElementById('images-preview-meta'),
@@ -98,6 +133,25 @@ class ChatManager {
         this.bindEvents();
         this.updateSidebarToggleTooltip();
         await this.loadChatHistory();
+        this.applyInitialSurface();
+        window.addEventListener('popstate', () => this.syncSurfaceFromLocation());
+    }
+
+    applyInitialSurface() {
+        const surface = document.body?.dataset?.initialSurface
+            || (typeof window !== 'undefined' && window.location.pathname === '/images' ? 'images' : 'chat');
+        if (surface === 'images') {
+            this.showImagesPage({ updateHistory: false });
+        }
+    }
+
+    syncSurfaceFromLocation() {
+        const onImages = typeof window !== 'undefined' && window.location.pathname === '/images';
+        if (onImages && !this.imagesPageActive) {
+            this.showImagesPage({ updateHistory: false });
+        } else if (!onImages && this.imagesPageActive) {
+            this.hideImagesPage({ updateHistory: false });
+        }
     }
 
     updateSessionUrl(sessionId = null) {
@@ -173,7 +227,10 @@ class ChatManager {
                 this.updateGuestFloatingLogin(!isCollapsed);
             }
         });
-        this.elements.quickNewChat?.addEventListener('click', () => this.createNewChat());
+        this.elements.quickNewChat?.addEventListener('click', () => {
+            if (this.imagesPageActive) this.hideImagesPage();
+            this.createNewChat();
+        });
         this.elements.tempChatButton?.addEventListener('click', () => this.createNewChat(null, {
             temporary: true,
             notifySuccess: false
@@ -183,13 +240,37 @@ class ChatManager {
             notifySuccess: false
         }));
         this.elements.searchButton?.addEventListener('click', () => this.openHistorySearchModal());
-        this.elements.imagesButton?.addEventListener('click', () => this.openImagesModal());
-        this.elements.imagesCreateButton?.addEventListener('click', () => this.focusImagesPromptInput());
-        this.elements.imagesPromptButton?.addEventListener('click', () => this.useImagesPrompt());
-        this.elements.imagesPromptInput?.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                this.useImagesPrompt();
+        this.elements.imagesButton?.addEventListener('click', () => this.showImagesPage());
+        this.elements.imagesPageBack?.addEventListener('click', () => this.hideImagesPage());
+        this.elements.imagesPromptBar?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            this.submitImagesPrompt();
+        });
+        this.elements.imagesStylesTrack?.addEventListener('click', (event) => {
+            const card = event.target.closest('.images-style-card');
+            if (!card) return;
+            const prefix = card.dataset.prefix || '';
+            this.applyImagesStylePrefix(prefix);
+        });
+        this.elements.imagesDiscoverGrid?.addEventListener('click', (event) => {
+            const item = event.target.closest('.images-discover-item');
+            if (!item) return;
+            const text = item.dataset.text || '';
+            this.applyImagesDiscoverSuggestion(text);
+        });
+        document.querySelectorAll('[data-carousel-prev]').forEach(btn => {
+            btn.addEventListener('click', () => this.scrollImagesCarousel(btn.dataset.carouselPrev, -1));
+        });
+        document.querySelectorAll('[data-carousel-next]').forEach(btn => {
+            btn.addEventListener('click', () => this.scrollImagesCarousel(btn.dataset.carouselNext, 1));
+        });
+        this.elements.imagesResultDownload?.addEventListener('click', () => this.downloadImagesResult());
+        this.elements.imagesResultRegenerate?.addEventListener('click', () => this.regenerateImagesResult());
+        this.elements.imagesResultEdit?.addEventListener('click', () => this.editImagesPrompt());
+        this.elements.imagesErrorRetry?.addEventListener('click', () => {
+            this.setImagesPageMode('home');
+            if (this.imagesLastPrompt && this.elements.imagesPromptInput) {
+                this.elements.imagesPromptInput.value = this.imagesLastPrompt;
             }
         });
         this.elements.imagePreviewCloseTargets?.forEach(target => {
@@ -230,9 +311,6 @@ class ChatManager {
         this.elements.searchCloseTargets?.forEach(target => {
             target.addEventListener('click', () => this.closeHistorySearchModal());
         });
-        this.elements.imagesCloseTargets?.forEach(target => {
-            target.addEventListener('click', () => this.closeImagesModal());
-        });
         this.elements.imagesGrid?.addEventListener('click', (event) => {
             const card = event.target.closest('.images-gallery-card');
             if (!card) return;
@@ -268,9 +346,14 @@ class ChatManager {
                 this.closeHistorySearchModal();
                 return;
             }
-            if (this.imagesModalActive) {
+            if (this.imagesPageActive && this.imagesPageMode !== 'home') {
                 event.preventDefault();
-                this.closeImagesModal();
+                this.setImagesPageMode('home');
+                return;
+            }
+            if (this.imagesPageActive) {
+                event.preventDefault();
+                this.hideImagesPage();
                 return;
             }
             if (this.isPreviewModalOpen()) {
@@ -1226,6 +1309,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
     async switchSession(sessionId, forceReload = false) {
         // If we're not forcing and the session is already active, simply return.
         if (!forceReload && this.activeSessionId === sessionId) return;
+        if (this.imagesPageActive) this.hideImagesPage();
 
         // Check if target session has an active background request
         const bgManager = window.BackgroundRequestManager;
@@ -1636,38 +1720,131 @@ async loadChatHistory(pageToken = null, limit = 10) {
         }
     }
 
-    openImagesModal() {
-        if (!this.elements.imagesModal) return;
-        this.imagesModalActive = true;
-        this.elements.imagesModal.classList.add('open');
-        this.elements.imagesModal.setAttribute('aria-hidden', 'false');
+    showImagesPage({ updateHistory = true } = {}) {
+        if (!this.elements.imagesPage) return;
+        this.imagesPageActive = true;
+        this.elements.imagesPage.hidden = false;
+        this.elements.imagesPage.classList.add('is-visible');
+        this.elements.imagesPage.setAttribute('aria-hidden', 'false');
+        this.elements.imagesButton?.setAttribute('aria-pressed', 'true');
+        this.elements.imagesButton?.classList.add('is-active');
         if (typeof document !== 'undefined' && document.body) {
-            document.body.classList.add('images-modal-open');
+            document.body.classList.add('images-page-open');
         }
+        if (updateHistory && typeof window !== 'undefined' && window.location.pathname !== '/images') {
+            try { window.history.pushState({ surface: 'images' }, '', '/images'); } catch (_) {}
+        }
+        this.renderImagesStyles();
+        this.renderImagesDiscover();
         this.renderImagesGallery();
+        this.setImagesPageMode('home');
+        setTimeout(() => this.elements.imagesPromptInput?.focus(), 40);
     }
 
-    closeImagesModal() {
-        if (!this.elements.imagesModal) return;
-        this.imagesModalActive = false;
-        this.elements.imagesModal.classList.remove('open');
-        this.elements.imagesModal.setAttribute('aria-hidden', 'true');
+    hideImagesPage({ updateHistory = true } = {}) {
+        if (!this.elements.imagesPage) return;
+        this.imagesPageActive = false;
+        this.elements.imagesPage.hidden = true;
+        this.elements.imagesPage.classList.remove('is-visible');
+        this.elements.imagesPage.setAttribute('aria-hidden', 'true');
+        this.elements.imagesButton?.setAttribute('aria-pressed', 'false');
+        this.elements.imagesButton?.classList.remove('is-active');
         if (typeof document !== 'undefined' && document.body) {
-            document.body.classList.remove('images-modal-open');
+            document.body.classList.remove('images-page-open');
+        }
+        if (updateHistory && typeof window !== 'undefined' && window.location.pathname === '/images') {
+            try { window.history.pushState({ surface: 'chat' }, '', '/'); } catch (_) {}
         }
         this.hideImagePreview();
     }
 
-    focusImagesPromptInput() {
-        if (this.imagesModalActive && this.elements.imagesPromptInput) {
-            this.elements.imagesPromptInput.focus();
-            return;
-        }
-        this.openImagesModal();
-        setTimeout(() => this.elements.imagesPromptInput?.focus(), 50);
+    setImagesPageMode(mode) {
+        this.imagesPageMode = mode;
+        const isHome = mode === 'home';
+        const isLoading = mode === 'loading';
+        const isResult = mode === 'result';
+        const isError = mode === 'error';
+        if (this.elements.imagesStylesSection) this.elements.imagesStylesSection.hidden = !isHome;
+        if (this.elements.imagesDiscoverSection) this.elements.imagesDiscoverSection.hidden = !isHome;
+        if (this.elements.imagesGallerySection) this.elements.imagesGallerySection.hidden = !isHome;
+        if (this.elements.imagesPageLoading) this.elements.imagesPageLoading.hidden = !isLoading;
+        if (this.elements.imagesPageResult) this.elements.imagesPageResult.hidden = !isResult;
+        if (this.elements.imagesResultError) this.elements.imagesResultError.hidden = !isError;
+        if (this.elements.imagesPromptSubmit) this.elements.imagesPromptSubmit.disabled = isLoading;
     }
 
-    async useImagesPrompt() {
+    renderImagesStyles() {
+        const track = this.elements.imagesStylesTrack;
+        if (!track || track.dataset.rendered === '1') return;
+        const frag = document.createDocumentFragment();
+        this.imagesStylesData.forEach(style => {
+            const card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'images-style-card';
+            card.dataset.prefix = style.prefix;
+            card.setAttribute('role', 'listitem');
+            card.style.background = style.gradient;
+            const label = document.createElement('span');
+            label.className = 'images-style-card__label';
+            label.textContent = style.label;
+            card.appendChild(label);
+            frag.appendChild(card);
+        });
+        track.appendChild(frag);
+        track.dataset.rendered = '1';
+    }
+
+    renderImagesDiscover() {
+        const grid = this.elements.imagesDiscoverGrid;
+        if (!grid || grid.dataset.rendered === '1') return;
+        const frag = document.createDocumentFragment();
+        this.imagesDiscoverData.forEach((item, idx) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'images-discover-item';
+            btn.dataset.text = item.text;
+            btn.setAttribute('role', 'listitem');
+            const thumb = document.createElement('span');
+            thumb.className = 'images-discover-item__thumb';
+            const hue = (idx * 54) % 360;
+            thumb.style.background = `linear-gradient(135deg, hsl(${hue} 70% 55%), hsl(${(hue + 40) % 360} 70% 35%))`;
+            const label = document.createElement('span');
+            label.className = 'images-discover-item__label';
+            label.textContent = item.label;
+            btn.appendChild(thumb);
+            btn.appendChild(label);
+            frag.appendChild(btn);
+        });
+        grid.appendChild(frag);
+        grid.dataset.rendered = '1';
+    }
+
+    applyImagesStylePrefix(prefix) {
+        if (!this.elements.imagesPromptInput) return;
+        const current = this.elements.imagesPromptInput.value.trim();
+        const composed = current ? `${prefix}: ${current}` : `${prefix}: `;
+        this.elements.imagesPromptInput.value = composed;
+        this.elements.imagesPromptInput.focus();
+        const len = composed.length;
+        try { this.elements.imagesPromptInput.setSelectionRange(len, len); } catch (_) {}
+    }
+
+    applyImagesDiscoverSuggestion(text) {
+        if (!text || !this.elements.imagesPromptInput) return;
+        this.elements.imagesPromptInput.value = text;
+        this.submitImagesPrompt();
+    }
+
+    scrollImagesCarousel(which, direction) {
+        if (which !== 'styles') return;
+        const target = this.elements.imagesStylesTrack;
+        if (!target) return;
+        const delta = (target.clientWidth * 0.6) * direction;
+        target.scrollBy({ left: delta, behavior: 'smooth' });
+    }
+
+    async submitImagesPrompt() {
+        if (this.imagesSubmitting) return;
         const promptValue = (this.elements.imagesPromptInput?.value || '').trim();
         if (!promptValue) {
             if (this.elements.imagesPromptInput) {
@@ -1676,26 +1853,108 @@ async loadChatHistory(pageToken = null, limit = 10) {
             }
             return;
         }
-        const prefix = '/image ';
-        const fullPrompt = `${prefix}${promptValue}`;
-        this.closeImagesModal();
+        this.imagesSubmitting = true;
+        this.imagesLastPrompt = promptValue;
+        this.setImagesPageMode('loading');
+
+        const csrf = (typeof getCSRFToken === 'function')
+            ? getCSRFToken()
+            : document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+        console.log('[Images] POST /api/images/create', promptValue);
         try {
-            if (this.activeSessionId && typeof window !== 'undefined' && typeof window.sendMessage === 'function') {
-                await window.sendMessage(fullPrompt);
-            } else if (!this.activeSessionId) {
-                await this.createNewChat(fullPrompt);
+            const res = await fetch('/api/images/create', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf
+                },
+                body: JSON.stringify({ prompt: promptValue })
+            });
+            console.log('[Images] response status', res.status);
+            if (!res.ok) {
+                const errText = await res.text().catch(() => '');
+                console.error('Images endpoint error', res.status, errText);
+                this.setImagesPageMode('error');
+                return;
             }
-        } catch (error) {
-            console.error('Failed to process image prompt from modal', error);
-            if (this.elements.messageInput) {
-                this.elements.messageInput.value = fullPrompt;
-                this.elements.messageInput.focus();
+            const data = await res.json();
+            console.log('[Images] response data', data);
+            const attachment = (data.attachments && data.attachments[0]) || {};
+            const imageUrl = attachment.url || data.image_url;
+            if (!imageUrl) {
+                this.setImagesPageMode('error');
+                return;
             }
-        } finally {
+            const entry = {
+                id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                url: imageUrl,
+                prompt: promptValue,
+                sessionId: data.session_id || this.activeSessionId || null,
+                createdAt: new Date().toISOString(),
+                seed: data.seed || null,
+                model: (data.model || '').trim(),
+                provider: (data.provider || '').trim(),
+                model_label: (data.model_label || data.model || this.getActiveModelLabel()).trim()
+            };
+            this.generatedImages = [entry, ...(this.generatedImages || [])].slice(0, 60);
+            this.showImagesResult(entry);
+            this.renderImagesGallery();
             if (this.elements.imagesPromptInput) {
                 this.elements.imagesPromptInput.value = '';
             }
+        } catch (error) {
+            console.error('Images page submit failed', error);
+            this.setImagesPageMode('error');
+        } finally {
+            this.imagesSubmitting = false;
         }
+    }
+
+    showImagesResult(entry) {
+        if (!entry || !entry.url) return;
+        if (this.elements.imagesResultImg) {
+            this.elements.imagesResultImg.src = entry.url;
+        }
+        if (this.elements.imagesResultPrompt) {
+            this.elements.imagesResultPrompt.textContent = entry.prompt || this.imagesLastPrompt || '';
+        }
+        this.setImagesPageMode('result');
+    }
+
+    async downloadImagesResult() {
+        const url = this.elements.imagesResultImg?.src;
+        if (!url) return;
+        try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'image.png';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        } catch (e) {
+            window.open(url, '_blank', 'noopener');
+        }
+    }
+
+    regenerateImagesResult() {
+        if (!this.imagesLastPrompt) return;
+        if (this.elements.imagesPromptInput) {
+            this.elements.imagesPromptInput.value = this.imagesLastPrompt;
+        }
+        this.submitImagesPrompt();
+    }
+
+    editImagesPrompt() {
+        if (this.elements.imagesPromptInput && this.imagesLastPrompt) {
+            this.elements.imagesPromptInput.value = this.imagesLastPrompt;
+        }
+        this.setImagesPageMode('home');
+        this.elements.imagesPromptInput?.focus();
     }
 
     handleSearchInput(value) {
@@ -1842,6 +2101,11 @@ async loadChatHistory(pageToken = null, limit = 10) {
 
         this.generatedImages = [entry, ...(this.generatedImages || [])].slice(0, 60);
         this.renderImagesGallery();
+        // Only auto-transition when the Images page is actually waiting for a chat-stream image.
+        // submitImagesPrompt handles its own transition directly.
+        if (this.imagesPageActive && this.imagesPageMode === 'loading' && !this.imagesSubmitting) {
+            this.showImagesResult(entry);
+        }
     }
 
     hydrateImagesFromHistory(limit = 60) {

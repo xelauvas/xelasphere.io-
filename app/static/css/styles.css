@@ -4005,7 +4005,7 @@ body.right-sidebar-open .temp-chat-launcher {
     outline: none;
 }
 
-.temp-chat-button::after {
+.temp-chat-button[data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
     top: 110%;
@@ -4023,7 +4023,7 @@ body.right-sidebar-open .temp-chat-launcher {
     transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.temp-chat-button:hover::after {
+.temp-chat-button[data-tooltip]:hover::after {
     opacity: 1;
     transform: translateY(0);
 }
