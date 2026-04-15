@@ -15,6 +15,8 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
+import requests
+
 import numpy as np
 
 from flask import session, current_app
@@ -681,85 +683,145 @@ def _scaffold_from_task_type(task_type: str) -> Scaffold:
 
 def classify_user_intent(prompt: str, use_cache: bool = True) -> dict:
     """
-    Use AI to classify user intent. This is a general-purpose classifier
-    that understands what the user wants before any other processing.
+    Classify user intent AND plan response scaffold in one LLM call.
+    See spec §1, §3.
 
-    Returns dict with:
-    - intent_type: primary intent (e.g., "financial_query", "creative_task", "question", etc.)
-    - has_crypto_mention: bool - is user asking about cryptocurrency?
-    - has_stock_mention: bool - is user asking about stocks?
-    - asset_symbol: str or None - specific asset mentioned (e.g., "BTC", "AAPL")
-    - wants_chart: bool - does user want a chart/graph?
-    - wants_image: bool - does user want an image generated?
-    - wants_code: bool - does user want code/diagram code?
-    - confidence: float 0-1
+    Returns dict with (existing keys preserved):
+    - intent_type, has_crypto_mention, has_stock_mention, asset_symbol,
+      wants_chart, wants_image, wants_code, confidence
+    NEW:
+    - scaffold: dict | None — scaffold schema (spec §2). Non-None except in
+      exceptional import/runtime failures; see spec §4.
     """
     if not prompt or len(prompt.strip()) < 3:
-        return {"intent_type": "unknown", "confidence": 0}
+        return {"intent_type": "unknown", "confidence": 0, "scaffold": None}
 
-    # Check cache
     cache_key = hashlib.md5(prompt.lower().strip().encode()).hexdigest()
     if use_cache and cache_key in _intent_cache:
         cached, timestamp = _intent_cache[cache_key]
         if time.time() - timestamp < _intent_cache_ttl:
             return cached
 
-    # Classification prompt - designed to be fast and accurate
-    classification_prompt = f"""Analyze this user message and classify their intent. Respond ONLY with a JSON object.
+    classification_prompt = f"""Analyze this user message. Respond ONLY with a JSON object.
 
 User message: "{prompt}"
 
-Respond with this exact JSON format (no other text):
+Respond with this exact JSON shape (no other text):
 {{"intent_type": "<one of: financial_query, creative_task, question, recipe_request, code_request, image_request, general_chat>",
-"has_crypto_mention": <true if asking about cryptocurrency prices/charts, false otherwise>,
-"has_stock_mention": <true if asking about stock prices/charts, false otherwise>,
-"asset_symbol": "<symbol like BTC, ETH, AAPL or null if none>",
-"wants_chart": <true if wants price chart/graph, false otherwise>,
-"wants_image": <true if wants AI-generated image, false otherwise>,
-"wants_code": <true if wants code/mermaid/diagram code, false otherwise>}}
+"has_crypto_mention": <bool>,
+"has_stock_mention": <bool>,
+"asset_symbol": "<symbol like BTC, ETH, AAPL or null>",
+"wants_chart": <bool>, "wants_image": <bool>, "wants_code": <bool>,
+"scaffold": {{
+  "layout": "<one of: conversational, prose, long-prose, technical, code-heavy, list-heavy, structured>",
+  "opening": "<hook|direct|question|none>",
+  "separator": <bool>,
+  "sections": [{{"title": "...", "emoji": "...", "style": "prose|list|steps"}}],
+  "emphasis": "<bold|italic|none>",
+  "max_paragraph_sentences": <2|3|4>,
+  "list_threshold": <2|3|4>,
+  "width_hint": "<narrow|medium|wide>"
+}}}}
 
-IMPORTANT: Words like "create", "make", "build" at the start usually mean creative_task, NOT cryptocurrency.
-Only set has_crypto_mention=true if they're clearly asking about crypto PRICES or MARKET data."""
+SCAFFOLD RULES:
+- conversational + short reply → layout:conversational, no sections, no separator, emphasis:none
+- emotional/supportive → layout:prose, emphasis:none, no sections
+- factual + short → layout:prose, opening:direct, no sections
+- code_request → layout:technical, opening:direct, width_hint:wide
+- creative_task → layout:prose or long-prose, emphasis:italic, width_hint:narrow
+- planning / multi-topic → layout:structured, opening:hook, separator:true, 2-4 sections
+- comparison → layout:structured, opening:direct, 2+ sections
 
+IMPORTANT: Words like "create/make/build" at the start usually mean creative_task, NOT cryptocurrency.
+Only set has_crypto_mention=true if they're asking about crypto PRICES or MARKET data."""
+
+    # Try OpenAI gpt-4.1-nano first (spec §3), fall back to Groq llama-3.1-8b-instant.
+    providers = [
+        ("openai", "https://api.openai.com/v1/chat/completions", "gpt-4.1-nano",
+         os.environ.get("OPENAI_API_KEY")),
+        ("groq", "https://api.groq.com/openai/v1/chat/completions", "llama-3.1-8b-instant",
+         os.environ.get("GROQ_API_KEY")),
+    ]
+
+    task_type_hint = None  # populated by smart_router for fallback if LLM fails
     try:
-        # Use a fast model for classification
-        import requests as req
+        from app.smart_router import detect_task_type
+        task_type_hint = detect_task_type(prompt)
+    except Exception:
+        pass
 
-        # Try to use Groq for fast classification (or fallback to current provider)
-        groq_key = os.environ.get('GROQ_API_KEY')
-        if groq_key:
-            response = req.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json"
-                },
+    last_err: Optional[Exception] = None
+
+    for name, url, model, key in providers:
+        if not key:
+            continue
+        try:
+            response = requests.post(
+                url,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                 json={
-                    "model": "llama-3.1-8b-instant",  # Fast model
+                    "model": model,
                     "messages": [{"role": "user", "content": classification_prompt}],
-                    "max_tokens": 150,
-                    "temperature": 0
+                    "max_tokens": 250,
+                    "temperature": 0.1,
                 },
-                timeout=3  # Fast timeout
+                timeout=1.5,  # spec §3 hard cap
             )
+            if response.status_code != 200:
+                last_err = Exception(f"{name} {response.status_code}")
+                continue
 
-            if response.status_code == 200:
-                content = response.json()['choices'][0]['message']['content'].strip()
-                # Parse JSON from response
-                # Find JSON in response (handle markdown code blocks)
-                json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
-                if json_match:
-                    result = json.loads(json_match.group())
-                    result['confidence'] = 0.9
-                    # Cache result
-                    _intent_cache[cache_key] = (result, time.time())
-                    logger.info(f"🧠 Intent classified: {result.get('intent_type')} for '{prompt[:50]}...'")
-                    return result
-    except Exception as e:
-        logger.debug(f"Intent classification failed: {e}")
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            # Handle both plain JSON and JSON inside a markdown code fence.
+            json_match = re.search(r"\{.*\}", content, re.DOTALL)
+            if not json_match:
+                last_err = Exception(f"{name} no JSON match")
+                continue
+            raw = json.loads(json_match.group())
 
-    # Fallback: return unknown intent (let old logic handle it)
-    return {"intent_type": "unknown", "confidence": 0}
+            scaffold_dict = raw.get("scaffold")
+            scaffold_obj: Optional[Scaffold] = None
+            if isinstance(scaffold_dict, dict):
+                try:
+                    scaffold_obj = Scaffold.from_dict(scaffold_dict)
+                except (TypeError, ValueError) as e:
+                    logger.debug(f"Scaffold validation failed ({name}): {e}, using task-type default")
+                    scaffold_obj = _scaffold_from_task_type(task_type_hint or "chat")
+            else:
+                scaffold_obj = _scaffold_from_task_type(task_type_hint or "chat")
+
+            result = {
+                "intent_type": raw.get("intent_type", "unknown"),
+                "has_crypto_mention": bool(raw.get("has_crypto_mention", False)),
+                "has_stock_mention": bool(raw.get("has_stock_mention", False)),
+                "asset_symbol": raw.get("asset_symbol"),
+                "wants_chart": bool(raw.get("wants_chart", False)),
+                "wants_image": bool(raw.get("wants_image", False)),
+                "wants_code": bool(raw.get("wants_code", False)),
+                "confidence": 0.9,
+                "scaffold": scaffold_obj.to_dict() if scaffold_obj else None,
+            }
+            _intent_cache[cache_key] = (result, time.time())
+            logger.info(
+                f"🧠 Intent: {result['intent_type']} / scaffold: "
+                f"{scaffold_obj.layout if scaffold_obj else 'none'} via {name}"
+            )
+            return result
+        except Exception as e:
+            last_err = e
+            logger.debug(f"Intent provider {name} failed: {e}")
+            continue
+
+    # All LLM providers exhausted → fallback to task-type-derived default.
+    fallback_scaffold = _scaffold_from_task_type(task_type_hint or "chat")
+    result = {
+        "intent_type": "unknown",
+        "confidence": 0,
+        "scaffold": fallback_scaffold.to_dict(),
+    }
+    logger.info(f"🧠 Intent classification unavailable ({last_err}); using task-type fallback: "
+                f"{fallback_scaffold.layout}")
+    return result
 
 
 def detect_crypto_price_query(prompt: str) -> Optional[dict]:

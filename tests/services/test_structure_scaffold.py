@@ -165,3 +165,79 @@ def test_fallback_never_returns_none_for_any_registered_task():
             "conversational", "prose", "long-prose", "technical",
             "code-heavy", "list-heavy", "structured",
         }
+
+
+from unittest.mock import patch, MagicMock
+from app.services import chat_engine
+
+
+def _mk_openai_response(body: dict):
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {"choices": [{"message": {"content": __import__("json").dumps(body)}}]}
+    return resp
+
+
+def test_classify_returns_scaffold_when_llm_succeeds(monkeypatch):
+    chat_engine._intent_cache.clear()
+    fake_body = {
+        "intent_type": "creative_task",
+        "has_crypto_mention": False,
+        "has_stock_mention": False,
+        "asset_symbol": None,
+        "wants_chart": False,
+        "wants_image": False,
+        "wants_code": False,
+        "scaffold": {
+            "layout": "prose", "opening": "hook", "separator": False,
+            "sections": [], "emphasis": "italic",
+            "max_paragraph_sentences": 3, "list_threshold": 3,
+            "width_hint": "narrow",
+        },
+    }
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    with patch.object(chat_engine, "requests", MagicMock()) as mock_req:
+        mock_req.post.return_value = _mk_openai_response(fake_body)
+        result = chat_engine.classify_user_intent("write me a haiku about rain", use_cache=False)
+    assert result["intent_type"] == "creative_task"
+    assert "scaffold" in result
+    assert isinstance(result["scaffold"], dict)
+    assert result["scaffold"]["layout"] == "prose"
+    assert result["scaffold"]["width_hint"] == "narrow"
+
+
+def test_classify_falls_back_to_task_type_default_on_llm_failure(monkeypatch):
+    chat_engine._intent_cache.clear()
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    result = chat_engine.classify_user_intent("write a python script", use_cache=False)
+    # No LLM available → scaffold is still populated via task-type fallback.
+    assert "scaffold" in result
+    assert result["scaffold"] is not None
+    assert result["scaffold"]["layout"] in {
+        "conversational", "prose", "long-prose", "technical",
+        "code-heavy", "list-heavy", "structured",
+    }
+
+
+def test_classify_scaffold_validates_before_returning(monkeypatch):
+    """If the LLM returns an invalid layout, fall back — never propagate garbage."""
+    chat_engine._intent_cache.clear()
+    bad_body = {
+        "intent_type": "general_chat",
+        "scaffold": {
+            "layout": "spaghetti",  # invalid
+            "opening": "direct", "separator": False, "sections": [],
+            "emphasis": "none", "max_paragraph_sentences": 3,
+            "list_threshold": 3, "width_hint": "medium",
+        },
+    }
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    with patch.object(chat_engine, "requests", MagicMock()) as mock_req:
+        mock_req.post.return_value = _mk_openai_response(bad_body)
+        result = chat_engine.classify_user_intent("hey", use_cache=False)
+    assert result["scaffold"]["layout"] != "spaghetti"
+    assert result["scaffold"]["layout"] in {
+        "conversational", "prose", "long-prose", "technical",
+        "code-heavy", "list-heavy", "structured",
+    }
