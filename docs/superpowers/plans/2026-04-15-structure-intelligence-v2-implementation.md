@@ -337,12 +337,18 @@ Implements the runner per spec §6.5. Reads fixtures, calls `classify_user_inten
 - `test_anonymizer_scrubs_proper_names_from_seed_list`
 - `test_anonymizer_leaves_technical_terms_alone` — "JWT", "OAuth", "Bitcoin" must survive.
 
+**🛑 HARD HIL GATE — agent stops here and hands back to Xela.**
+
 **Process:**
 1. Write script. Run tests.
 2. Run script against Firestore prod data. Dump to stdout.
-3. **Human review** (Xela): eyeball 500 lines, reject bad ones, tag expected layouts.
-4. Append ≥146 approved entries to fixture JSONL.
-5. Re-run eval; floor may shift — retune if needed.
+3. **STOP. Hand back to Xela.** The agent does not proceed past this point.
+4. Xela eyeballs 500 lines, rejects bad ones, tags expected layouts. May take a day.
+5. Xela provides the approved/edited entries back.
+6. Agent appends ≥146 approved entries to fixture JSONL.
+7. Re-run eval; floor may shift — retune if needed.
+
+**Enforcement:** the agent must pause execution and wait for Xela's explicit go-ahead before touching `scaffold_v2_fixtures.jsonl` in this unit. No silent appends. No "best guess" filtering.
 
 **Acceptance:** fixture at ≥200 entries; eval passes; no PII present on inspection.
 

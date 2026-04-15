@@ -45,6 +45,10 @@ class Config:
     # Ollama local model configuration (no API key required)
     OLLAMA_API_URL = os.getenv('OLLAMA_API_URL', 'http://127.0.0.1:11434/v1/chat/completions')
     OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma4:e2b')
+
+    # Structure Intelligence v2 rollout flag (spec §9).
+    # False until eval accuracy baseline holds + internal-only rollout passes.
+    SCAFFOLD_V2_ENABLED = os.getenv('SCAFFOLD_V2_ENABLED', 'false').strip().lower() == 'true'
     ALLOWED_ORIGINS = [
         origin.strip() for origin in os.getenv(
             'ALLOWED_ORIGINS',
