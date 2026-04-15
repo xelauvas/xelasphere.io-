@@ -96,3 +96,31 @@ def test_instruction_italic_emphasis_excludes_bold_directive():
     out = scaffold_to_instruction(s)
     assert "italic" in out.lower()
     assert "Bold exactly" not in out
+
+
+def test_instruction_section_with_empty_emoji_has_no_double_space():
+    """Bug regression: empty emoji must not produce double space."""
+    s = Scaffold(
+        layout="structured", opening="direct", separator=False,
+        sections=[{"title": "Core Idea", "emoji": "", "style": "prose"}],
+        emphasis="none", max_paragraph_sentences=3,
+        list_threshold=3, width_hint="medium",
+    )
+    out = scaffold_to_instruction(s)
+    assert "##  " not in out  # no double space after ##
+    assert "## Core Idea" in out
+
+
+def test_instruction_opening_none_produces_no_opening_directive():
+    """Valid 'none' opening means no opening directive in the output."""
+    s = Scaffold(
+        layout="prose", opening="none", separator=False,
+        sections=[], emphasis="none", max_paragraph_sentences=3,
+        list_threshold=3, width_hint="medium",
+    )
+    out = scaffold_to_instruction(s)
+    assert "Open with" not in out
+    assert "Answer in the first sentence" not in out
+    assert "Open with a single clarifying question" not in out
+    # But other directives still emit:
+    assert "Maximum 3 sentences per paragraph" in out

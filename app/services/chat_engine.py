@@ -618,6 +618,8 @@ def scaffold_to_instruction(scaffold: Scaffold) -> str:
         parts.append("Answer in the first sentence. No preamble.")
     elif scaffold.opening == "question":
         parts.append("Open with a single clarifying question only if the request is ambiguous; otherwise answer directly.")
+    elif scaffold.opening == "none":
+        pass  # Explicit no-op: caller wants no opening directive.
 
     # Separator
     if scaffold.separator:
@@ -625,10 +627,10 @@ def scaffold_to_instruction(scaffold: Scaffold) -> str:
 
     # Sections
     if scaffold.sections:
-        section_lines = "\n".join(
-            f"- ## {s.get('emoji', '').strip()} {s.get('title', '').strip()}".rstrip()
-            for s in scaffold.sections
-        )
+        def _fmt_section(s: Dict) -> str:
+            parts = [p for p in (s.get("emoji", "").strip(), s.get("title", "").strip()) if p]
+            return "- ## " + " ".join(parts)
+        section_lines = "\n".join(_fmt_section(s) for s in scaffold.sections)
         parts.append("Structure the response with these exact sections:\n" + section_lines)
 
     # Paragraph shape
