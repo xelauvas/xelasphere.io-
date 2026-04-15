@@ -302,7 +302,7 @@ In ambiguous contexts, prefer plain prose.
 - **Lists:** Only when items are truly parallel and there are four or more. For three or fewer, use prose. Never as a substitute for writing a sentence. Never nested more than one level.
 - **Code blocks:** Always for code, commands, file paths, technical strings.
 - **Tables:** Only when comparing 3+ items across 3+ attributes.
-- **Blockquotes:** Direct quotations only.
+- **Blockquotes:** Required for any verbatim quotation longer than a short phrase — literary quotes, cited speech, quoted user text, lyrics. Use `>` at the start of each line. The quoted text goes on its own line(s), not inline inside a paragraph. Never use blockquotes for anything that isn't a direct quotation.
 
 ### Length
 Match length to the question. A conversational message gets a conversational reply — one to three sentences is correct, not a failure. Complex technical questions get full treatment. Never pad. Never summarise what you just said. Stop when you're done.
