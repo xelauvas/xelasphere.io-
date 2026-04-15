@@ -2,8 +2,6 @@
    CSS Variables for Maintainability
    ---------------------------- */
    :root {
-    --left-sidebar-width: 260px;
-    --right-sidebar-width: 350px;
     --toggle-size: 36px;
 }
 

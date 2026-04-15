@@ -64,10 +64,10 @@
     --space-5: 1.5rem;
     --space-6: 2rem;
     --space-7: 3rem;
-    --content-max-width: 880px;
+    --content-max-width: 768px;
     --chat-stage-max-width: 1200px;
     --composer-max-width: var(--content-max-width);
-    --composer-shell-max-width: 760px;
+    --composer-shell-max-width: 768px;
     --composer-gutter: var(--space-5);
     --composer-reserved-height: 150px;
     --chat-shell-max-width: var(--chat-stage-max-width);

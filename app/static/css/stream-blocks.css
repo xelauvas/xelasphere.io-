@@ -287,11 +287,11 @@
     line-height: 1.85;
 }
 
-/* --- Long-prose --- 680px */
+/* --- Long-prose --- 640px (optimal 60–75ch line length) */
 .message[data-ctx="long-prose"] .message-content,
 .message[data-ctx="long-prose"] .text-message-container,
 .text-message-container[data-ctx="long-prose"] {
-    max-width: min(100%, 680px);
+    max-width: min(100%, 640px);
 }
 [data-ctx="long-prose"] .text-message {
     line-height: 1.9;
