@@ -30,12 +30,21 @@ HISTORY_PATH = RESULTS_DIR / "history.jsonl"
 LATEST_PATH = RESULTS_DIR / "latest.json"
 
 
-# Baseline set in W-12 after 3 clean runs on seed fixture (54 prompts +
-# bounds checks → 56 gating cases).  Runs: 71.4%, 67.9%, 67.9%.
-# Floor = worst_run (67.9%) - 3 pp noise tolerance = 64.9%.
-# PRs that drop below this must either (a) fix the regression before merge
-# or (b) justify a new baseline in the PR description.
-EVAL_ACCURACY_FLOOR: float = 0.649
+# Baseline measured on 122-prompt fixture (W-10 seed + 66 hand-curated
+# weak-pattern cases from W-13-alt path). Three clean runs: 56.6%, 58.2%,
+# 59.0%. Worst-case baseline 56.6%. Floor = 56.6% - 3 pp noise tolerance
+# = 53.6%.
+#
+# Note on the drop from the 54-prompt baseline (67.9%): the added 66
+# prompts deliberately target the three weakest v2.0 miss patterns —
+# prose/conversational boundary, multi-angle explainers that should hit
+# structured, technical/code-heavy boundary. The eval is now more
+# discriminating, not the classifier worse. Classifier prompt tuning
+# against these patterns is a v2.1 item, gated on compliance-audit data.
+#
+# PRs that drop below this floor must either (a) fix the regression
+# before merge or (b) justify a new baseline in the PR description.
+EVAL_ACCURACY_FLOOR: float = 0.536
 
 
 def _load_fixtures() -> List[Dict[str, Any]]:

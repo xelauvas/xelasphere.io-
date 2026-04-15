@@ -1,0 +1,1452 @@
+{
+  "summary": {
+    "ts": "2026-04-15T23:29:25.091225+00:00",
+    "sha": "cc2a347",
+    "total": 122,
+    "hits": 72,
+    "accuracy": 0.5901639344262295,
+    "per_layout_accuracy": {
+      "conversational": 1.0,
+      "prose|conversational": 1.0,
+      "prose|long-prose": 0.0,
+      "structured|list-heavy": 0.0,
+      "technical|code-heavy": 1.0,
+      "structured": 0.5806451612903226,
+      "structured|prose|long-prose": 0.3333333333333333,
+      "technical": 0.2,
+      "prose": 0.2857142857142857,
+      "long-prose|structured": 0.0,
+      "long-prose|prose": 1.0,
+      "technical|conversational": 0.8333333333333334,
+      "technical|list-heavy": 1.0,
+      "code-heavy|technical|structured": 1.0,
+      "code-heavy|technical": 1.0,
+      "list-heavy": 1.0,
+      "list-heavy|structured": 0.0,
+      "conversational|prose": 1.0,
+      "prose|list-heavy|structured": 0.0,
+      "structured|technical|code-heavy": 1.0,
+      "long-prose|prose|structured": 0.0,
+      "structured|list-heavy|technical": 1.0,
+      "prose|long-prose|structured": 0.0
+    },
+    "per_layout_counts": {
+      "conversational": 19,
+      "prose|conversational": 5,
+      "prose|long-prose": 13,
+      "structured|list-heavy": 2,
+      "technical|code-heavy": 4,
+      "structured": 31,
+      "structured|prose|long-prose": 3,
+      "technical": 10,
+      "prose": 7,
+      "long-prose|structured": 1,
+      "long-prose|prose": 1,
+      "technical|conversational": 6,
+      "technical|list-heavy": 1,
+      "code-heavy|technical|structured": 5,
+      "code-heavy|technical": 2,
+      "list-heavy": 3,
+      "list-heavy|structured": 1,
+      "conversational|prose": 1,
+      "prose|list-heavy|structured": 1,
+      "structured|technical|code-heavy": 1,
+      "long-prose|prose|structured": 1,
+      "structured|list-heavy|technical": 2,
+      "prose|long-prose|structured": 2
+    }
+  },
+  "per_prompt": [
+    {
+      "id": "v1-btc-price",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "financial_query"
+    },
+    {
+      "id": "v1-eth-chart",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "financial_query"
+    },
+    {
+      "id": "v1-haiku-ocean",
+      "ok": true,
+      "got": "prose",
+      "expected": [
+        "prose",
+        "conversational"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "v1-poem-stars",
+      "ok": true,
+      "got": "prose",
+      "expected": [
+        "prose",
+        "conversational"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "v1-sky-blue",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "v1-rag-eli5",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 3,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "v1-chicken-curry",
+      "ok": false,
+      "got": "prose",
+      "expected": [
+        "structured",
+        "list-heavy"
+      ],
+      "sections_got": 2,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "recipe_request"
+    },
+    {
+      "id": "v1-pancakes",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "structured",
+        "list-heavy"
+      ],
+      "sections_got": 2,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "recipe_request"
+    },
+    {
+      "id": "v1-python-sort",
+      "ok": true,
+      "got": "code-heavy",
+      "expected": [
+        "technical",
+        "code-heavy"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "v1-js-for-loop",
+      "ok": true,
+      "got": "code-heavy",
+      "expected": [
+        "technical",
+        "code-heavy"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "v1-dragon-image",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "v1-sunset-image",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "image_request"
+    },
+    {
+      "id": "v1-greeting-how",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "v1-good-morning",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "regression-transformer-attention",
+      "ok": false,
+      "got": "technical",
+      "expected": "structured",
+      "sections_got": 5,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "regression-tcp-vs-udp",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "structured",
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "regression-bash-find-100mb",
+      "ok": false,
+      "got": "code-heavy",
+      "expected": "technical",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "regression-react-vue-svelte",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-quantum-entanglement",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-k8s-pod-lifecycle",
+      "ok": false,
+      "got": "conversational",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-2008-crisis",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "financial_query"
+    },
+    {
+      "id": "explainer-http2",
+      "ok": false,
+      "got": "technical",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "compare-postgres-mysql-sqlite",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "compare-redux-vs-zustand",
+      "ok": true,
+      "got": "structured",
+      "expected": [
+        "structured",
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 4,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "short-entropy",
+      "ok": true,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "conversational"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "short-capital-france",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "short-current-year",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-french-revolution",
+      "ok": true,
+      "got": "prose",
+      "expected": "prose",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-email-decline",
+      "ok": false,
+      "got": "conversational",
+      "expected": "prose",
+      "sections_got": 2,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "prose-bedtime-story",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "longprose-history-of-unix",
+      "ok": false,
+      "got": "prose",
+      "expected": [
+        "long-prose",
+        "structured"
+      ],
+      "sections_got": 3,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "longprose-why-rust-popular",
+      "ok": true,
+      "got": "long-prose",
+      "expected": [
+        "long-prose",
+        "prose"
+      ],
+      "sections_got": 4,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "technical-reverse-string-rust",
+      "ok": false,
+      "got": "code-heavy",
+      "expected": "technical",
+      "sections_got": 2,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-parse-csv-python",
+      "ok": true,
+      "got": "code-heavy",
+      "expected": [
+        "technical",
+        "code-heavy"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-regex-email",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "technical",
+        "conversational"
+      ],
+      "sections_got": 2,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-git-rebase",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "technical",
+        "list-heavy"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "code-heavy-flask-todo-app",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "code-heavy",
+        "technical",
+        "structured"
+      ],
+      "sections_got": 5,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "code-heavy-react-component",
+      "ok": true,
+      "got": "code-heavy",
+      "expected": [
+        "code-heavy",
+        "technical",
+        "structured"
+      ],
+      "sections_got": 2,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "code-heavy-sql-schema",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "code-heavy",
+        "technical"
+      ],
+      "sections_got": 5,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "list-rainy-date-ideas",
+      "ok": true,
+      "got": "list-heavy",
+      "expected": "list-heavy",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "list-node-memory-leaks",
+      "ok": false,
+      "got": "structured",
+      "expected": [
+        "list-heavy",
+        "structured"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": false,
+      "intent": "question"
+    },
+    {
+      "id": "list-tokyo-restaurants",
+      "ok": true,
+      "got": "list-heavy",
+      "expected": "list-heavy",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "list-productivity-tips",
+      "ok": true,
+      "got": "list-heavy",
+      "expected": "list-heavy",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "chat-thanks",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "chat-cool",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "chat-single-emoji",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "chat-yo-whats-up",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "edge-very-short",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "unknown"
+    },
+    {
+      "id": "edge-number-only",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "unknown"
+    },
+    {
+      "id": "adversarial-ambiguous-build",
+      "ok": true,
+      "got": "conversational",
+      "expected": [
+        "conversational",
+        "prose"
+      ],
+      "sections_got": 2,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "adversarial-conjunction-no-explainer",
+      "ok": false,
+      "got": "list-heavy",
+      "expected": [
+        "prose",
+        "list-heavy",
+        "structured"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": false,
+      "intent": "recipe_request"
+    },
+    {
+      "id": "adversarial-multi-intent",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "structured",
+        "technical",
+        "code-heavy"
+      ],
+      "sections_got": 2,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "adversarial-long-question-one-angle",
+      "ok": false,
+      "got": "technical",
+      "expected": [
+        "long-prose",
+        "prose",
+        "structured"
+      ],
+      "sections_got": 5,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "adversarial-compare-two-only",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "structured",
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 2,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "tutorial-deploy-fastapi",
+      "ok": true,
+      "got": "structured",
+      "expected": [
+        "structured",
+        "list-heavy",
+        "technical"
+      ],
+      "sections_got": 6,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "tutorial-setup-react-native",
+      "ok": true,
+      "got": "list-heavy",
+      "expected": [
+        "structured",
+        "list-heavy",
+        "technical"
+      ],
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "prose-why-sky-red-sunset",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-explain-mortgage",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose",
+        "structured"
+      ],
+      "sections_got": 3,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "financial_query"
+    },
+    {
+      "id": "prose-what-is-kubernetes",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 2,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-email-apology-late",
+      "ok": false,
+      "got": "conversational",
+      "expected": "prose",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "prose-email-intro-mentor",
+      "ok": false,
+      "got": "conversational",
+      "expected": "prose",
+      "sections_got": 4,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "prose-summary-lotr",
+      "ok": true,
+      "got": "prose",
+      "expected": "prose",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "prose-summary-cold-war",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-opinion-remote-work",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-opinion-crypto-future",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 3,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "financial_query"
+    },
+    {
+      "id": "prose-story-lost-dog",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "prose-joke-explain",
+      "ok": true,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "conversational"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-how-plane-flies",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-eli5-blockchain",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 3,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-eli5-inflation",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-define-machine-learning",
+      "ok": true,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "conversational"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "prose-advice-burnout",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose",
+        "structured"
+      ],
+      "sections_got": 3,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "prose-review-request",
+      "ok": false,
+      "got": "conversational",
+      "expected": "prose",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "prose-pitch-one-para",
+      "ok": false,
+      "got": "conversational",
+      "expected": "prose",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "creative_task"
+    },
+    {
+      "id": "prose-why-meditate",
+      "ok": false,
+      "got": "conversational",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "conv-thanks-simple",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "conv-agreement",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "conv-followup-question",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "conv-greeting-friday",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "conv-apology-short",
+      "ok": true,
+      "got": "conversational",
+      "expected": "conversational",
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "general_chat"
+    },
+    {
+      "id": "explainer-oauth-flow-3-stages",
+      "ok": false,
+      "got": "technical",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-tcp-handshake-stages",
+      "ok": false,
+      "got": "conversational",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-git-merge-vs-rebase",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-caching-strategies",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-acid-properties",
+      "ok": false,
+      "got": "conversational",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-cap-theorem",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 5,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-gc-java",
+      "ok": false,
+      "got": "technical",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-mvcc",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-consistent-hashing",
+      "ok": false,
+      "got": "technical",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-docker-layers",
+      "ok": false,
+      "got": "technical",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-wwi-overview",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-photosynthesis-stages",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-neural-net-training",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-react-lifecycle",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-ssl-handshake",
+      "ok": false,
+      "got": "technical",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-rest-vs-graphql",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-http-methods",
+      "ok": false,
+      "got": "conversational",
+      "expected": "structured",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-jwt-anatomy",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 5,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-event-loop-phases",
+      "ok": false,
+      "got": "technical",
+      "expected": "structured",
+      "sections_got": 5,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-spring-di",
+      "ok": false,
+      "got": "technical",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-climate-change-drivers",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-cnn-architecture",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-sql-joins",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "explainer-microservices-tradeoffs",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
+      "id": "technical-oneliner-count-files",
+      "ok": true,
+      "got": "technical",
+      "expected": "technical",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-oneliner-grep-pattern",
+      "ok": true,
+      "got": "technical",
+      "expected": "technical",
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-docker-build-cmd",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "technical",
+        "conversational"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-fn-fibonacci-py",
+      "ok": false,
+      "got": "code-heavy",
+      "expected": "technical",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-fn-debounce-js",
+      "ok": false,
+      "got": "code-heavy",
+      "expected": "technical",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-regex-phone",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "technical",
+        "conversational"
+      ],
+      "sections_got": 3,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-sql-group-by",
+      "ok": false,
+      "got": "code-heavy",
+      "expected": [
+        "technical",
+        "conversational"
+      ],
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-curl-post-json",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "technical",
+        "conversational"
+      ],
+      "sections_got": 2,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-git-undo-last",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "technical",
+        "conversational"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "code-heavy-full-auth-express",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "code-heavy",
+        "technical",
+        "structured"
+      ],
+      "sections_got": 4,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "code-heavy-react-dashboard",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "code-heavy",
+        "technical",
+        "structured"
+      ],
+      "sections_got": 5,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "code-heavy-fastapi-crud",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "code-heavy",
+        "technical",
+        "structured"
+      ],
+      "sections_got": 5,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "code-heavy-chat-server",
+      "ok": true,
+      "got": "technical",
+      "expected": [
+        "code-heavy",
+        "technical"
+      ],
+      "sections_got": 4,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-class-linkedlist-py",
+      "ok": true,
+      "got": "code-heavy",
+      "expected": [
+        "technical",
+        "code-heavy"
+      ],
+      "sections_got": 1,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-algo-binary-search",
+      "ok": false,
+      "got": "code-heavy",
+      "expected": "technical",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-ts-generic-fn",
+      "ok": false,
+      "got": "code-heavy",
+      "expected": "technical",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-hook-useDebounce",
+      "ok": false,
+      "got": "code-heavy",
+      "expected": "technical",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "code_request"
+    },
+    {
+      "id": "technical-middleware-express",
+      "ok": false,
+      "got": "code-heavy",
+      "expected": "technical",
+      "sections_got": 1,
+      "layout_match": false,
+      "sections_match": true,
+      "intent": "code_request"
+    }
+  ]
+}
