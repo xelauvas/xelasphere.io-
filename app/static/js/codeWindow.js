@@ -2401,6 +2401,31 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     try {
                         const chunk = JSON.parse(jsonStr);
 
+                        if (chunk.type === 'scaffold') {
+                            // Spec §5: server decided structure before streaming.
+                            // Set data-ctx immediately on the active message wrapper
+                            // so CSS (stream-blocks.css) adapts width/rhythm before
+                            // the first content token renders.
+                            try {
+                                const wrapper = document.querySelector(
+                                    '.message.ai-message.streaming .text-message-container'
+                                ) || document.querySelector('.message.ai-message:last-of-type .text-message-container');
+                                if (wrapper) {
+                                    wrapper.dataset.ctx = chunk.layout;
+                                    wrapper.dataset.ctxSource = 'server';  // marker for streamRenderer fallback gate
+                                    const msgEl = wrapper.closest('.message, .ai-message');
+                                    if (msgEl) {
+                                        msgEl.dataset.ctx = chunk.layout;
+                                        msgEl.dataset.ctxSource = 'server';
+                                    }
+                                }
+                                console.log('[scaffold] server layout:', chunk.layout);
+                            } catch (e) {
+                                console.warn('[scaffold] failed to apply data-ctx', e);
+                            }
+                            return;
+                        }
+
                         if (chunk.type === 'reasoning') {
                             streamedReasoning += chunk.text || '';
                             // Buffer in BackgroundRequestManager
