@@ -1401,11 +1401,22 @@ def chat_stream():
                                 else:
                                     yield f"data: {json.dumps({'type': 'image_generating', 'description': img_description})}\n\n"
 
-                            # web_search: fire progressive search
-                            if result == "web_search" and action_buffer.header_fields.get("query"):
-                                ws_query = action_buffer.header_fields["query"]
+                            # web_search: fire progressive search.
+                            # If the model emitted the ACTION line but forgot
+                            # the query: field (common with small/lite models),
+                            # fall back to the user's prompt as the query so
+                            # the search still runs instead of silently
+                            # dropping. Log the fallback so routing issues
+                            # are visible.
+                            if result == "web_search":
+                                ws_query = action_buffer.header_fields.get("query") or prompt
                                 ws_type = action_buffer.header_fields.get("search_type", "general")
                                 ws_reason = action_buffer.header_fields.get("reason", "")
+                                if not action_buffer.header_fields.get("query"):
+                                    logger.warning(
+                                        f"[Stream] web_search: model emitted action without query — "
+                                        f"falling back to user prompt. type={ws_type}"
+                                    )
                                 logger.info(f"[Stream] web_search: query='{ws_query}', type={ws_type}, reason='{ws_reason}'")
 
                                 yield f"data: {json.dumps({'type': 'search_started', 'query': ws_query, 'search_type': ws_type})}\n\n"

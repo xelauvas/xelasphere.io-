@@ -71,10 +71,16 @@ FALLBACK_CHAINS = {
         ("openai",   "gpt-4.1-nano",                           "tier0"),
     ],
     "long_context": [
-        ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD, 1M context
-        ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k context
-        ("deepseek", "deepseek-chat",                          "tier1"),
-        ("groq",     "llama-3.3-70b-versatile",                "tier1"),
+        # Order matters: long_context is often paired with web_search, and
+        # web_search relies on strict ACTION-header compliance (query:
+        # field must be present). Small lite/preview models emit the
+        # action line but drop the query field, silently failing the
+        # search. Prefer larger, more instruction-compliant models first;
+        # keep Flash Lite as a last-resort fallback for raw context size.
+        ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k, reliable ACTION format
+        ("groq",     "llama-3.3-70b-versatile",                "tier1"),  # 128k, fast + compliant
+        ("deepseek", "deepseek-chat",                          "tier1"),  # 128k
+        ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD, 1M context — last
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
     "vision": [
