@@ -119,27 +119,29 @@
    double spacing.
    --------------------------------------------------------------------------- */
 
+/* ChatGPT-style unified rhythm: 1em between every stream-block by default,
+   slightly more (1.25em) after a heading so sections breathe. */
 .text-message .stream-block + .stream-block {
-    margin-top: 0.75em;
+    margin-top: 1em;
 }
 
 /* Post-stream injections (crypto chart wrapper, email composer card, image
    caption, chart-intro-text, etc.) append to .message-content AFTER the
    stream blocks. They aren't wrapped in .stream-block, so the adjacent-
-   sibling rule above doesn't match them and they land flush against the
-   last paragraph. Restore rhythm for any non-stream-block that directly
-   follows a stream-block. Action buttons are excluded — they have their
-   own spacing. */
+   sibling rule above doesn't match them. Action buttons are excluded —
+   they have their own spacing. */
 .text-message .stream-block + *:not(.stream-block):not(.action-buttons) {
-    margin-top: 0.75em;
-}
-
-.text-message .stream-block.block-heading + .stream-block {
     margin-top: 1em;
 }
 
-.text-message .stream-block.block-paragraph + .stream-block.block-heading {
-    margin-top: 1.25em;
+.text-message .stream-block.block-heading + .stream-block {
+    margin-top: 0.6em;
+}
+
+.text-message .stream-block.block-paragraph + .stream-block.block-heading,
+.text-message .stream-block.block-list-ul + .stream-block.block-heading,
+.text-message .stream-block.block-list-ol + .stream-block.block-heading {
+    margin-top: 1.5em;
 }
 
 .text-message .stream-block > p,
