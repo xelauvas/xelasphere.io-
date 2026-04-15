@@ -11,6 +11,19 @@ export function createBlockStateMachine(emit) {
     // type, we keep the block open (markdown's "loose list"); anything else
     // flushes the close before processing normally.
     let pendingBlankInList = false;
+    // Same idea for pipe-table paragraphs. Some models (notably Llama 3.x
+    // with the new compact prompt) emit blank lines between every table
+    // row, which would otherwise split the table across N paragraph blocks
+    // and prevent marked from ever rendering <table>. If the next line
+    // starts with '|' we drop the held blank and keep the block open so
+    // rows stay consecutive.
+    let pendingBlankInTable = false;
+
+    function currentIsTableParagraph() {
+        if (!current || current.type !== 'paragraph' || !current.text) return false;
+        const lines = current.text.split('\n').filter((l) => l.length > 0);
+        return lines.length > 0 && lines.every((l) => l.startsWith('|'));
+    }
 
     function openBlock(type, meta = {}) {
         closeBlock('natural');
@@ -86,8 +99,32 @@ export function createBlockStateMachine(emit) {
                 }
                 return;
             }
+            if (currentIsTableParagraph()) {
+                if (pendingBlankInTable) {
+                    closeBlock('natural');
+                    pendingBlankInTable = false;
+                } else {
+                    pendingBlankInTable = true;
+                }
+                return;
+            }
             if (current) closeBlock('natural');
             return;
+        }
+
+        // Non-blank line after a held blank inside a pipe-table paragraph:
+        // if this line is another table row, drop the blank so rows stay
+        // consecutive (marked requires that); otherwise flush.
+        if (pendingBlankInTable) {
+            if (line.startsWith('|')) {
+                // Drop the held blank — marked needs consecutive rows.
+                pendingBlankInTable = false;
+                // fall through to paragraph handling, which appends this line
+            } else {
+                closeBlock('natural');
+                pendingBlankInTable = false;
+                // fall through to normal processing
+            }
         }
 
         // Non-blank line after a held blank inside a list: decide whether to
@@ -187,6 +224,7 @@ export function createBlockStateMachine(emit) {
         finalize() {
             drain(true);
             pendingBlankInList = false;
+            pendingBlankInTable = false;
             closeBlock('finalize');
         },
     };
