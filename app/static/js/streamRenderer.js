@@ -176,11 +176,18 @@ class StreamRenderer {
         // and .text-message-container — which are each bound to the
         // composer's --composer-max-width token.
         try {
-            const profile = buildMessageProfile(this.ast.blocks());
-            const ctx = classifyContext(profile);
-            if (this.wrapperEl) this.wrapperEl.dataset.ctx = ctx;
-            const messageEl = this.wrapperEl && this.wrapperEl.closest('.message, .ai-message');
-            if (messageEl) messageEl.dataset.ctx = ctx;
+            // If the server already set data-ctx via the scaffold SSE event
+            // (spec §5), don't overwrite it — the server's pre-stream decision
+            // is authoritative. Post-stream classifyContext() remains as fallback
+            // when no scaffold event arrived (spec §4 step 3).
+            const serverSet = this.wrapperEl && this.wrapperEl.dataset.ctxSource === 'server';
+            if (!serverSet) {
+                const profile = buildMessageProfile(this.ast.blocks());
+                const ctx = classifyContext(profile);
+                if (this.wrapperEl) this.wrapperEl.dataset.ctx = ctx;
+                const messageEl = this.wrapperEl && this.wrapperEl.closest('.message, .ai-message');
+                if (messageEl) messageEl.dataset.ctx = ctx;
+            }
         } catch (_e) { /* non-critical */ }
     }
 
