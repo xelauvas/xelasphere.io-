@@ -27,16 +27,24 @@ FETCH_TIMEOUT = 10
 MAX_CONTENT_BYTES = 5 * 1024 * 1024  # 5 MB
 USER_AGENT = 'XelaSphere/1.0 (Search Bot)'
 
+# Tags to decompose before markdownify. Do NOT include self-closing tags
+# like <link>, <meta>, or <img> here — BeautifulSoup's html.parser can
+# misparse unclosed/void elements and adopt subsequent siblings as
+# children, so decomposing them rips out real content. <link> and <meta>
+# emit nothing in markdownify anyway, so stripping is pointless.
 STRIP_TAGS = [
     'nav', 'footer', 'aside', 'script', 'style', 'noscript',
     'iframe', 'form', 'button', 'svg', 'header',
-    'time', 'figure', 'figcaption', 'meta', 'link',
+    'figure', 'figcaption',
 ]
 
-# CSS class fragments commonly found on ad/cookie/UI noise
+# CSS class fragments commonly found on ad/cookie/UI noise.
+# Matched with hyphen-boundary semantics (see _matches_noise_class) so
+# "main-menu" doesn't match "vector-feature-main-menu-pinned-disabled",
+# which would have killed the entire Wikipedia body wrapper.
 _AD_COOKIE_CLASSES = [
     'cookie', 'gdpr', 'consent', 'banner', 'popup', 'modal',
-    'overlay', 'advertisement', 'ad-', '-ad', 'promo', 'subscribe',
+    'overlay', 'advertisement', 'ad', 'promo', 'subscribe',
     'live-blog', 'metadata', 'save-button', 'social-share',
     'breaking-news-bar', 'newsletter', 'related-links',
     'main-menu', 'skip-link', 'follow-us', 'terms-privacy',
@@ -44,6 +52,27 @@ _AD_COOKIE_CLASSES = [
     'paywall', 'subscribe-box', 'ad-banner', 'js-required',
     'site-footer', 'site-header', 'nav-bar', 'breadcrumb',
 ]
+
+
+def _matches_noise_class(class_name: str, token: str) -> bool:
+    """
+    Hyphen-boundary match: the token matches the class if it equals the
+    class exactly, appears as a prefix (token-...), appears as a suffix
+    (...-token), or appears as an inner hyphenated word (...-token-...).
+    Avoids substring-in-the-middle false positives like "main-menu"
+    matching "vector-feature-main-menu-pinned-disabled".
+    """
+    if not class_name or not token:
+        return False
+    if class_name == token:
+        return True
+    if class_name.startswith(token + '-'):
+        return True
+    if class_name.endswith('-' + token):
+        return True
+    if ('-' + token + '-') in class_name:
+        return True
+    return False
 
 
 class WebFetcher:
@@ -223,14 +252,26 @@ class WebFetcher:
             for tag in soup.find_all(tag_name):
                 tag.decompose()
 
-        # Remove elements whose class attribute contains ad/cookie-related tokens
+        # Remove elements whose class attribute contains ad/cookie-related
+        # tokens with hyphen-boundary matching. Never strip <body>/<html>
+        # outright — a body-level class match is a feature flag, not noise.
         for element in list(soup.find_all(class_=True)):
             try:
+                if element.name in ('body', 'html'):
+                    continue
                 cls = element.get('class')
                 if not cls:
                     continue
-                classes = ' '.join(cls).lower()
-                if any(token in classes for token in _AD_COOKIE_CLASSES):
+                classes_lower = [c.lower() for c in cls]
+                hit = False
+                for c in classes_lower:
+                    for token in _AD_COOKIE_CLASSES:
+                        if _matches_noise_class(c, token):
+                            hit = True
+                            break
+                    if hit:
+                        break
+                if hit:
                     element.decompose()
             except Exception:
                 continue
