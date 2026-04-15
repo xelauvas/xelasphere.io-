@@ -49,3 +49,50 @@ def test_scaffold_to_dict_roundtrip():
     assert d["sections"][0]["title"] == "Setup"
     s2 = Scaffold.from_dict(d)
     assert s2 == s
+
+
+from app.services.chat_engine import scaffold_to_instruction
+
+
+def test_instruction_for_conversational_scaffold_is_empty_or_minimal():
+    """A conversational scaffold should produce no heavy formatting directives."""
+    s = Scaffold(
+        layout="conversational", opening="direct", separator=False,
+        sections=[], emphasis="none", max_paragraph_sentences=3,
+        list_threshold=3, width_hint="medium",
+    )
+    out = scaffold_to_instruction(s)
+    assert "section" not in out.lower()
+    assert "---" not in out  # no separator
+    assert "Answer in the first sentence" in out
+
+
+def test_instruction_for_structured_scaffold_includes_sections():
+    s = Scaffold(
+        layout="structured", opening="hook", separator=True,
+        sections=[
+            {"title": "Core Idea", "emoji": "🎯", "style": "prose"},
+            {"title": "Tradeoffs",  "emoji": "⚖️", "style": "list"},
+        ],
+        emphasis="bold", max_paragraph_sentences=3,
+        list_threshold=3, width_hint="medium",
+    )
+    out = scaffold_to_instruction(s)
+    assert "RESPONSE FORMAT INSTRUCTIONS" in out
+    assert "## 🎯 Core Idea" in out
+    assert "## ⚖️ Tradeoffs" in out
+    assert "---" in out
+    assert "Open with 1-2 sentences" in out
+    assert "Maximum 3 sentences per paragraph" in out
+    assert "Bold exactly one key phrase" in out
+
+
+def test_instruction_italic_emphasis_excludes_bold_directive():
+    s = Scaffold(
+        layout="prose", opening="direct", separator=False,
+        sections=[], emphasis="italic", max_paragraph_sentences=3,
+        list_threshold=3, width_hint="narrow",
+    )
+    out = scaffold_to_instruction(s)
+    assert "italic" in out.lower()
+    assert "Bold exactly" not in out

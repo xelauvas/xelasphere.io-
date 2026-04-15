@@ -607,6 +607,49 @@ class Scaffold:
         return cls(**d)
 
 
+def scaffold_to_instruction(scaffold: Scaffold) -> str:
+    """Serialize a Scaffold into a system-prompt fragment. See spec §5."""
+    parts: List[str] = []
+
+    # Opening
+    if scaffold.opening == "hook":
+        parts.append("Open with 1-2 sentences that frame the topic — no header, no preamble.")
+    elif scaffold.opening == "direct":
+        parts.append("Answer in the first sentence. No preamble.")
+    elif scaffold.opening == "question":
+        parts.append("Open with a single clarifying question only if the request is ambiguous; otherwise answer directly.")
+
+    # Separator
+    if scaffold.separator:
+        parts.append("Add --- on its own line after the opening paragraph.")
+
+    # Sections
+    if scaffold.sections:
+        section_lines = "\n".join(
+            f"- ## {s.get('emoji', '').strip()} {s.get('title', '').strip()}".rstrip()
+            for s in scaffold.sections
+        )
+        parts.append("Structure the response with these exact sections:\n" + section_lines)
+
+    # Paragraph shape
+    parts.append(f"Maximum {scaffold.max_paragraph_sentences} sentences per paragraph.")
+
+    # Emphasis
+    if scaffold.emphasis == "bold":
+        parts.append("Bold exactly one key phrase per section. No more.")
+    elif scaffold.emphasis == "italic":
+        parts.append("Use italic for emphasis. No bold.")
+    elif scaffold.emphasis == "none":
+        parts.append("No bold. No italic.")
+
+    # Lists
+    parts.append(
+        f"Only use bullet lists when there are {scaffold.list_threshold}+ parallel items."
+    )
+
+    return "RESPONSE FORMAT INSTRUCTIONS:\n" + "\n".join(parts)
+
+
 def classify_user_intent(prompt: str, use_cache: bool = True) -> dict:
     """
     Use AI to classify user intent. This is a general-purpose classifier
