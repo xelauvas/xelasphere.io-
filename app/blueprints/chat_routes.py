@@ -439,6 +439,26 @@ def _fire_audit_async(
         logger.warning(f"[v2 audit] submit failed (swallowed): {e}")
 
 
+def _v2_enabled_for_email(user_email: Optional[str]) -> bool:
+    """W-26 — rollout gate. True iff:
+       - SCAFFOLD_V2_ENABLED=true, AND
+       - SCAFFOLD_V2_INTERNAL_EMAILS is empty (open rollout)
+         OR user_email is in the comma-separated allowlist.
+
+    Case- and whitespace-insensitive on the allowlist.
+    Guests (user_email=None) are excluded when the allowlist is set.
+    """
+    if os.getenv("SCAFFOLD_V2_ENABLED", "false").strip().lower() != "true":
+        return False
+    raw_list = os.getenv("SCAFFOLD_V2_INTERNAL_EMAILS", "").strip()
+    if not raw_list:
+        return True  # Open rollout
+    allowed = {e.strip().lower() for e in raw_list.split(",") if e.strip()}
+    if not user_email:
+        return False
+    return user_email.strip().lower() in allowed
+
+
 def _render_mode_for_scaffold(scaffold) -> str:
     """W-21 — the SSE render_mode value this scaffold implies.
 
@@ -508,25 +528,22 @@ def _try_structured_stream(*, scaffold, prompt: str, model: str,
                     "content": "", "chat_summary": "", "reasoning": None}}
 
 
-def _maybe_classify_and_inject_scaffold(*, base_system: str, user_prompt: str) -> dict:
-    """W-09 — single gate-point for Structure Intelligence v2 injection.
+def _maybe_classify_and_inject_scaffold(
+    *, base_system: str, user_prompt: str,
+    user_email: Optional[str] = None,
+) -> dict:
+    """W-09 + W-26 — single gate-point for Structure Intelligence v2 injection.
 
-    When Config.SCAFFOLD_V2_ENABLED is True:
-      - runs the v2 classifier
-      - appends a scaffold description to base_system
-      - logs the chosen layout + sections
-    When False, no classifier call and base_system passes through unchanged.
+    When v2 is enabled for this user (flag on + optional email allowlist
+    per _v2_enabled_for_email), runs the classifier and appends a scaffold
+    hint to base_system. Otherwise, no-op pass-through.
 
     Returns dict with keys: base_system, scaffold, envelope.
-    scaffold is None on flag-off or classifier-full-fallback-no-sections.
-
-    Injection behavior here is intentionally minimal — a single descriptive
-    line, not the full rule block. The actual structured-output generation
-    path lands in W-15+. This function exists so the gate is testable now.
+    scaffold is None when the gate is off or classifier yields no sections.
     """
-    # Read env var directly so tests can flip the flag without module reloads,
-    # and so ops can toggle it with a gunicorn reload (no redeploy).
-    if os.getenv("SCAFFOLD_V2_ENABLED", "false").strip().lower() != "true":
+    # Gate: flag + optional email allowlist (W-26). Dynamic so ops can
+    # toggle via gunicorn reload without redeploying.
+    if not _v2_enabled_for_email(user_email):
         return {"base_system": base_system, "scaffold": None, "envelope": None}
 
     try:
@@ -1170,9 +1187,12 @@ def chat_stream():
         base_system = base_system + "\n\n" + system_addition
         logger.info(f"[Stream] system_addition applied ({len(system_addition)} chars)")
 
-    # W-09 — Structure Intelligence v2 gate (no-op when flag off).
+    # W-09 + W-26 — Structure Intelligence v2 gate. No-op when flag off
+    # OR when SCAFFOLD_V2_INTERNAL_EMAILS is set and this user isn't on it.
+    _v2_user_email = (session.get('user') or {}).get('email')
     _v2_result = _maybe_classify_and_inject_scaffold(
         base_system=base_system, user_prompt=user_prompt_raw,
+        user_email=_v2_user_email,
     )
     base_system = _v2_result["base_system"]
 
