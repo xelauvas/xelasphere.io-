@@ -204,7 +204,10 @@ class LLMMemoryExtractor:
             return memories
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM extraction response: {e}")
+            logger.error(
+                f"Failed to parse LLM extraction response: {e} | "
+                f"raw[:400]={response_text[:400]!r}"
+            )
             return []
         except Exception as e:
             logger.error(f"Error parsing extraction response: {e}")
