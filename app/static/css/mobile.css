@@ -322,7 +322,7 @@ body.is-ios .mobile-header-bar {
     height: var(--mobile-header-height);
     padding: 0 4px;
     padding-top: env(safe-area-inset-top, 0px);
-    background: #2b2a27 !important;
+    background: var(--bg-secondary, #1a1a22) !important;
     border-bottom: none;
     z-index: 9999 !important;
     box-sizing: content-box;
@@ -395,7 +395,7 @@ body.is-ios .mobile-header-bar {
 .mobile-header-burger span {
     display: block;
     height: 2px;
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--text-primary, #e8e8f0);
     border-radius: 1px;
 }
 
@@ -679,7 +679,7 @@ body.device-phone .left-sidebar {
     transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
                 visibility 0s linear 0.5s,
                 box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1);
-    background: #2b2a27;
+    background: var(--bg-secondary, #1a1a22);
     will-change: transform;
 }
 
@@ -1128,7 +1128,7 @@ body.is-ios .arrow-down {
     left: 0;
     right: 0;
     height: var(--header-height);
-    background: var(--background-dark, #2b2a27);
+    background: var(--bg-secondary, #1a1a22);
     z-index: var(--z-header-bar, 200);
     pointer-events: none;
 }
@@ -1216,7 +1216,7 @@ body.is-ios .arrow-down {
         box-shadow: none;
         min-height: 0;
         visibility: hidden;
-        background: #2b2a27;
+        background: var(--bg-secondary, #1a1a22);
     }
 
     /* Enable transitions only after page is ready */
@@ -1317,7 +1317,7 @@ body.is-ios .arrow-down {
         position: absolute;
         width: 18px;
         height: 2px;
-        background-color: var(--line-color, rgb(110, 110, 110));
+        background-color: var(--line-color, var(--text-secondary, rgb(110, 110, 110)));
         border-radius: 2px;
         top: 50%;
         left: 50%;
@@ -1328,7 +1328,7 @@ body.is-ios .arrow-down {
     .toggle-button:hover .hamburger-line,
     .toggle-button:hover::before,
     .toggle-button:hover::after {
-        background-color: var(--line-color-hover, #fff);
+        background-color: var(--line-color-hover, var(--text-primary, rgb(110, 110, 110)));
     }
 
     /* --- Sidebar Toggle Button on Mobile --- */
@@ -1685,20 +1685,9 @@ body.is-ios .arrow-down {
    ============================================ */
 
 @media (max-width: 1024px) {
-    /* Override CSS variables for dark theme on mobile */
-    :root,
-    body {
-        --background-dark: #2b2a27;
-        --background-darker: #211f1d;
-        --card-bg: rgba(43, 42, 39, 0.9);
-        --card-bg-hover: rgba(52, 50, 47, 0.95);
-        --input-row-bg: #353330;
-        --input-row-bg-focus: #3d3b37;
-    }
-
     body, html {
-        background: #2b2a27;
-        background-color: #2b2a27;
+        background: var(--bg-primary, #0f0f12);
+        background-color: var(--bg-primary, #0f0f12);
     }
 
     /* Header area */
@@ -1716,8 +1705,8 @@ body.is-ios .arrow-down {
     .message-input-container,
     .composer-container,
     .chat-shell__composer {
-        background: #2b2a27;
-        background-color: #2b2a27;
+        background: var(--bg-primary, #0f0f12);
+        background-color: var(--bg-primary, #0f0f12);
         border: none;
     }
 
@@ -1732,8 +1721,8 @@ body.is-ios .arrow-down {
     .input-container,
     .chat-shell__composer,
     .options {
-        background: #2b2a27;
-        background-color: #2b2a27;
+        background: var(--bg-primary, #0f0f12);
+        background-color: var(--bg-primary, #0f0f12);
         border: none;
         border-top: none;
         border-bottom: none;
@@ -3004,7 +2993,7 @@ body.is-ios .arrow-down {
         margin: 0;
         padding: 10px 14px;
         padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-        background: linear-gradient(to top, #2b2a27 80%, transparent);
+        background: linear-gradient(to top, var(--bg-primary, #0f0f12) 80%, transparent);
         z-index: 100;
         box-sizing: border-box;
         pointer-events: none; /* Let taps pass through the gradient area */
@@ -3142,7 +3131,7 @@ body.is-ios .arrow-down {
     }
 
     .chat-shell__composer .input-row textarea.chat-input::placeholder {
-        color: rgba(255, 255, 255, 0.35);
+        color: var(--text-tertiary, #5a5a70);
         font-size: 15px;
         line-height: 34px;
     }
@@ -4590,7 +4579,7 @@ body.viewport-mobile .left-sidebar {
     transition: transform 0.5s cubic-bezier(0.4, 0, 0.6, 1),
                 visibility 0s linear 0.5s,
                 box-shadow 0.5s cubic-bezier(0.4, 0, 0.6, 1) !important;
-    background: #2b2a27 !important;
+    background: var(--bg-secondary, #1a1a22) !important;
     will-change: transform;
     box-shadow: none !important;
 }
@@ -4650,7 +4639,7 @@ body.viewport-mobile .mobile-header-bar {
     right: 0 !important;
     height: var(--mobile-header-height) !important;
     padding: 0 4px !important;
-    background: #2b2a27 !important;
+    background: var(--bg-secondary, #1a1a22) !important;
     border-bottom: none !important;
     z-index: 9999 !important;
     box-sizing: content-box !important;
@@ -5140,7 +5129,7 @@ body.device-phone .left-sidebar,
 body.device-tablet .left-sidebar {
     width: 280px !important;
     transform: translateX(-100%) !important;
-    background: #2b2a27 !important;
+    background: var(--bg-secondary, #1a1a22) !important;
     transition: transform 0.5s ease !important;
     box-shadow: none !important;
 }
@@ -5210,4 +5199,80 @@ body.device-tablet .mobile-overlay {
         width: 100% !important;
     }
     /* ═══ End Action Sheet mobile ═══ */
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Code Window — mobile (macOS chrome, compact).
+   Smaller traffic-light dots, compact header, edge-to-edge width.
+   Header sticks to the viewport top so the title bar stays in reach.
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .code-window {
+        border-radius: 10px;
+        margin: 0.9rem -4px;
+        max-width: none;
+        width: calc(100% + 8px);
+        font-size: 12px;
+    }
+
+    .code-header {
+        height: 36px;
+        padding: 0 12px;
+        top: 0;
+        z-index: 5;
+        border-top-left-radius: 10px;
+        border-top-right-radius: 10px;
+        -webkit-backdrop-filter: blur(16px) saturate(150%);
+        backdrop-filter: blur(16px) saturate(150%);
+    }
+
+    .code-header::before {
+        width: 9px;
+        height: 9px;
+        left: 12px;
+        box-shadow:
+            15px 0 0 #febc2e,
+            30px 0 0 #28c840;
+    }
+
+    .language-indicator {
+        margin-left: 52px;
+        font-size: 10px;
+        padding: 3px 7px;
+        max-width: 45%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex-shrink: 1;
+    }
+
+    .copy-button {
+        padding: 4px 4px;
+        font-size: 11.5px;
+    }
+    .copy-button svg { width: 12px; height: 12px; }
+
+    .code-window pre {
+        padding: 14px 16px;
+        border-bottom-left-radius: 10px;
+        border-bottom-right-radius: 10px;
+    }
+
+    .code-window code {
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
+    /* Diff lines: match mobile pre padding. */
+    .code-window code .diff-line {
+        padding: 0 16px;
+        margin: 0 -16px;
+    }
+
+    /* Very narrow phones — hide traffic lights to reclaim header real
+       estate. The language pill and copy button are the priority. */
+    @media (max-width: 380px) {
+        .code-header::before { display: none; }
+        .language-indicator { margin-left: 0; max-width: 55%; }
+    }
 }

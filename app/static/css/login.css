@@ -1092,6 +1092,56 @@ html {
 
   .login-card {
     box-shadow: none;
-    border: 1px solid #333;
+    border: 1px solid var(--border-primary, #333);
   }
+}
+
+/* ==================== */
+/* LIGHT THEME OVERRIDES */
+/* ==================== */
+
+[data-theme="light"] {
+  --login-bg-primary: #f7f9fc;
+  --login-bg-card: rgba(255, 255, 255, 0.92);
+  --login-bg-input: rgba(240, 244, 250, 0.9);
+  --login-bg-social: rgba(0, 0, 0, 0.04);
+  --login-gradient-1: rgba(91, 70, 214, 0.1);
+  --login-gradient-2: rgba(59, 130, 246, 0.08);
+  --login-gradient-3: rgba(236, 72, 153, 0.06);
+  --login-text-primary: #1a1d2e;
+  --login-text-secondary: #2a2d40;
+  --login-text-body: #4a5068;
+  --login-text-muted: #8890a8;
+  --login-text-link: #5b46d6;
+  --login-text-link-hover: #4a38c2;
+  --login-border-primary: rgba(0, 0, 0, 0.08);
+  --login-border-input: rgba(0, 0, 0, 0.1);
+  --login-border-focus: #5b46d6;
+  --login-border-hover: rgba(0, 0, 0, 0.15);
+  --login-btn-gradient-start: #5b46d6;
+  --login-btn-gradient-end: #7c6aef;
+  --login-shadow-card:
+    0 20px 50px -12px rgba(20, 30, 60, 0.12),
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+  --login-shadow-focus:
+    0 0 0 3px rgba(91, 70, 214, 0.2),
+    0 1px 2px 0 rgba(20, 30, 60, 0.1);
+  --login-shadow-button-hover:
+    0 8px 16px -4px rgba(91, 70, 214, 0.3),
+    0 4px 8px -2px rgba(91, 70, 214, 0.15);
+}
+
+[data-theme="light"] .login-page-background {
+  background: var(--bg-primary);
+}
+
+[data-theme="light"] .login-card {
+  background: var(--login-bg-card);
+  border-color: var(--login-border-primary);
+}
+
+[data-theme="light"] .form-divider-text {
+  background: var(--login-bg-card);
+  color: var(--login-text-muted);
 }

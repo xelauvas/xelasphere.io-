@@ -21,16 +21,17 @@
     display: none;
 }
 
-/* ── No track, no background — just words ── */
+/* ── Segmented control — Claude Desktop style ── */
 
 .ghost-pills {
     display: inline-flex !important;
+    align-items: center;
     position: static;
-    background: none;
+    background: rgba(255, 255, 255, 0.04);
     border: none;
-    border-radius: 0;
-    padding: 0;
-    gap: 16px;
+    border-radius: 10px;
+    padding: 4px;
+    gap: 2px;
     min-width: 0;
     max-width: none;
     max-height: none;
@@ -45,74 +46,128 @@
 .ghost-pill__icon { display: none; }
 .ghost-pill__note { display: none; }
 
-/* ── Bare text pill ── */
-
 .ghost-pill {
     all: unset;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
+    padding: 6px 14px;
+    border-radius: 7px;
     cursor: pointer;
     white-space: nowrap;
+    background: transparent;
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
-    position: relative;
-}
-
-/* Dot separator between words */
-.ghost-pill + .ghost-pill::before {
-    content: '';
-    position: absolute;
-    left: -9px;
-    top: 50%;
-    width: 2.5px;
-    height: 2.5px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
+    transition: background 150ms ease, color 150ms ease;
 }
 
 .ghost-pill__label {
     font-size: 13px;
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
-    font-weight: 420;
-    color: rgba(255, 255, 255, 0.22);
-    letter-spacing: 0.05em;
+    font-weight: 400;
+    color: var(--text-tertiary, #7a7a90);
+    letter-spacing: 0;
     text-transform: none;
-    transition: color 0.3s ease, text-shadow 0.3s ease;
+    transition: color 150ms ease;
+}
+
+.ghost-pill:hover:not(.active):not(.locked) {
+    background: rgba(255, 255, 255, 0.03);
 }
 
 .ghost-pill:hover .ghost-pill__label {
-    color: rgba(255, 255, 255, 0.42);
+    color: var(--text-secondary, #b8b8c8);
 }
 
-/* ── Active: text lights up with mode identity ── */
+/* ── Active: raised surface, slightly brighter text ── */
+.ghost-pill.active,
+.ghost-pill.locked {
+    background: rgba(255, 255, 255, 0.055);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
 
 .ghost-pill.active .ghost-pill__label,
 .ghost-pill.locked .ghost-pill__label {
-    font-weight: 560;
-    letter-spacing: 0.06em;
+    color: var(--text-primary, #f0f0f4);
+    font-weight: 500;
 }
 
-/* Chat — warm cream glow */
-.ghost-pill[data-model="auto"].active .ghost-pill__label,
-.ghost-pill[data-model="auto"].locked .ghost-pill__label {
-    color: rgba(255, 245, 230, 0.9);
-    text-shadow: 0 0 14px rgba(255, 220, 180, 0.12);
+/* ── Think — editorial serif italic (contemplative), always on ── */
+.ghost-pill[data-model="deepseek-reasoner"] .ghost-pill__label {
+    font-family: 'Newsreader', 'Instrument Serif', Georgia, 'Times New Roman', serif;
+    font-style: italic;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0;
 }
 
-/* Code — electric ice */
+/* ── Code active only — monospace + pushed-in 3D emboss
+   Inactive keeps the same neutral style as Chat/Think. ── */
+
+.ghost-pill[data-model="deepseek-chat"].active,
+.ghost-pill[data-model="deepseek-chat"].locked {
+    background: #141419;
+    box-shadow:
+        inset 0 2px 5px rgba(0, 0, 0, 0.6),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+        0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
 .ghost-pill[data-model="deepseek-chat"].active .ghost-pill__label,
 .ghost-pill[data-model="deepseek-chat"].locked .ghost-pill__label {
-    color: rgba(160, 195, 255, 0.9);
-    text-shadow: 0 0 14px rgba(120, 160, 255, 0.12);
+    font-family: 'Roboto Mono', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: -0.01em;
+    color: var(--text-primary, #f0f0f4);
+    font-weight: 500;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
 }
 
-/* Think — molten gold */
-.ghost-pill[data-model="deepseek-reasoner"].active .ghost-pill__label,
-.ghost-pill[data-model="deepseek-reasoner"].locked .ghost-pill__label {
-    color: rgba(235, 195, 120, 0.9);
-    text-shadow: 0 0 14px rgba(220, 170, 80, 0.12);
+/* Light theme — push-in = darker than the track, crisp edge highlight */
+[data-theme="light"] .ghost-pill[data-model="deepseek-chat"].active,
+[data-theme="light"] .ghost-pill[data-model="deepseek-chat"].locked {
+    background: #d4cabb;
+    box-shadow:
+        inset 0 2px 5px rgba(40, 30, 50, 0.25),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.5),
+        0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="light"] .ghost-pill[data-model="deepseek-chat"].active .ghost-pill__label,
+[data-theme="light"] .ghost-pill[data-model="deepseek-chat"].locked .ghost-pill__label {
+    color: var(--text-primary, #2a2330);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+/* ── Light theme ── */
+[data-theme="light"] .ghost-pills {
+    background: rgba(40, 30, 50, 0.05);
+    border: none;
+    box-shadow: none;
+}
+
+[data-theme="light"] .ghost-pill__label {
+    color: var(--text-tertiary, #8a8090);
+}
+
+[data-theme="light"] .ghost-pill:hover:not(.active):not(.locked) {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .ghost-pill:hover .ghost-pill__label {
+    color: var(--text-secondary, #4a4450);
+}
+
+[data-theme="light"] .ghost-pill.active,
+[data-theme="light"] .ghost-pill.locked {
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 1px 2px rgba(40, 30, 50, 0.06);
+}
+
+[data-theme="light"] .ghost-pill.active .ghost-pill__label,
+[data-theme="light"] .ghost-pill.locked .ghost-pill__label {
+    color: var(--text-primary, #2a2330);
+    font-weight: 500;
 }
 
 /* ── Attribution ── */
@@ -120,7 +175,7 @@
 .message-model-attribution {
     display: inline;
     font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.25);
+    color: var(--text-tertiary, #5a5a70);
     margin-left: 0.4em;
     user-select: none;
     white-space: nowrap;

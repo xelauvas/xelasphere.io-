@@ -294,7 +294,6 @@ Prism.highlightElement(codeBlock);
 | codeWindow.js | 60KB | Code rendering and detection | Prism.js |
 | startNewChatModule.js | 149KB | Chat session management | All above |
 | sidebarHandler.js | 8KB | Sidebar interactions | - |
-| typeTextWorker.js | 15KB | Text streaming effects | - |
 | speechSynthesisModule.js | 28KB | Text-to-speech | Web Speech API |
 | modelSelect.js | 9KB | Model selection UI | - |
 | scrollState.js | 8KB | Scroll behavior management | - |

@@ -3,8 +3,8 @@
     --button-size: 40px;
     --line-width: 2.5px;
     --line-height: 10px;
-    --line-color: rgb(110, 110, 110);
-    --line-color-hover: rgb(255, 255, 255);
+    --line-color: var(--text-secondary, rgb(110, 110, 110));
+    --line-color-hover: var(--text-primary, rgb(110, 110, 110));
     --transition-timing: cubic-bezier(0.68, -0.55, 0.27, 1.55);
     
     position: fixed;

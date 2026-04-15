@@ -349,11 +349,16 @@
     }
 
     /* -------------------------------------------------------
-       createSearchBanner — shimmer "Searching the web"
+       createSearchBanner — ChatGPT-style shimmer with icon,
+       label, query, and live site-count / favicon strip.
     ------------------------------------------------------- */
     function createSearchBanner(query, searchType) {
         const banner = document.createElement('div');
         banner.className = 'search-banner';
+
+        // Top row: shimmer label + dots. No icon (clean / premium look).
+        const top = document.createElement('div');
+        top.className = 'search-banner__top';
 
         const searchTypeLabels = {
             'news': 'Searching news',
@@ -361,10 +366,17 @@
             'video': 'Searching videos',
             'general': 'Searching the web',
         };
-        const label = document.createElement('div');
+        const label = document.createElement('span');
         label.className = 'search-banner__label';
         label.textContent = searchTypeLabels[searchType] || 'Searching the web';
-        banner.appendChild(label);
+        top.appendChild(label);
+
+        const dots = document.createElement('span');
+        dots.className = 'search-banner__dots';
+        dots.innerHTML = '<span></span><span></span><span></span>';
+        top.appendChild(dots);
+
+        banner.appendChild(top);
 
         if (query) {
             const queryEl = document.createElement('div');
@@ -372,6 +384,21 @@
             queryEl.textContent = '"' + query + '"';
             banner.appendChild(queryEl);
         }
+
+        // Live progress row — populated by handleSearchEvent as results arrive.
+        const progress = document.createElement('div');
+        progress.className = 'search-banner__progress';
+
+        const count = document.createElement('span');
+        count.className = 'search-banner__count';
+        count.textContent = 'Finding sources…';
+        progress.appendChild(count);
+
+        const favStrip = document.createElement('span');
+        favStrip.className = 'search-banner__favicons';
+        progress.appendChild(favStrip);
+
+        banner.appendChild(progress);
 
         return banner;
     }
@@ -510,7 +537,7 @@
                 card.style.scrollSnapAlign = 'start';
                 card.style.overflow = 'hidden';
                 card.style.border = '1px solid rgba(255,255,255,0.08)';
-                card.style.background = 'rgba(255,255,255,0.03)';
+                card.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))';
                 card.style.textDecoration = 'none';
                 card.style.color = 'inherit';
                 card.style.display = 'flex';
@@ -587,7 +614,8 @@
             wrap.appendChild(track);
 
             Array.from(track.children).forEach(function (item) {
-                item.style.cssText = 'flex: 0 0 120px; height: 85px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); position: relative; background: rgba(255,255,255,0.03);';
+                item.style.cssText = 'flex: 0 0 120px; height: 85px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); position: relative;';
+                item.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))';
             });
 
             // Touch swipe — calculate maxOffset lazily (element not in DOM yet)
@@ -696,7 +724,7 @@
                 img.alt = v.title || '';
                 img.loading = 'lazy';
                 img.onerror = function () {
-                    thumbWrap.style.background = 'rgba(0,0,0,0.4)';
+                    thumbWrap.style.background = 'var(--bg-overlay, rgba(10,10,18,0.85))';
                     this.style.display = 'none';
                 };
                 thumbWrap.appendChild(img);
@@ -1207,32 +1235,109 @@
 
         if (eventType === 'search_started') {
             if (!st.bannerEl) {
-                st.bannerEl = createSearchBanner(data.query, data.search_type);
-                container.appendChild(st.bannerEl);
+                st.searchType = data.search_type || 'general';
+                st.bannerEl = createSearchBanner(data.query, st.searchType);
+                // Insert FIRST so the banner sits above the (initially empty)
+                // text-message-container placeholder. Keeps its position stable
+                // when the StreamRenderer replaces that placeholder with its
+                // own wrapper later — otherwise the banner appears below the
+                // placeholder first, then jumps above the answer on phase-2.
+                container.insertBefore(st.bannerEl, container.firstChild);
             }
 
         } else if (eventType === 'search_web_results') {
             st.webResults = data.results || [];
+            _updateBannerProgress(st);
 
         } else if (eventType === 'search_images') {
             st.imageResults = data.images || [];
+            _updateBannerProgress(st);
 
         } else if (eventType === 'search_videos') {
             st.videoResults = data.videos || [];
+            _updateBannerProgress(st);
 
         } else if (eventType === 'search_content') {
             if (data.url) st.fetchedUrls.add(data.url);
+            _updateBannerProgress(st);
 
         } else if (eventType === 'search_complete') {
-            // Mark complete — dismissBanner() handles the smooth fade
+            // Mark complete — banner stays in "Reading" state until dismiss.
             st.searchComplete = true;
+            _updateBannerProgress(st, true);
+        }
+    }
+
+    // Live update the count + favicon strip inside the shimmer banner.
+    // Adapts the noun and the data source to the search type so "Searching
+    // videos" counts video results, "Searching images" counts images, and
+    // the general/news path counts unique web domains.
+    function _updateBannerProgress(st, complete) {
+        if (!st.bannerEl) return;
+        var countEl = st.bannerEl.querySelector('.search-banner__count');
+        var stripEl = st.bannerEl.querySelector('.search-banner__favicons');
+
+        var type = st.searchType || 'general';
+        var noun, domains = new Set(), nounPlural;
+
+        if (type === 'video') {
+            // Domains from video result URLs.
+            (st.videoResults || []).forEach(function (v) {
+                var u = v.url || v.link || v.watchUrl || v.thumbnail;
+                if (!u) return;
+                try { domains.add(new URL(u).hostname); } catch (_) { /* ignore */ }
+            });
+            noun = 'video'; nounPlural = 'videos';
+        } else if (type === 'images') {
+            (st.imageResults || []).forEach(function (img) {
+                var u = img.source || img.link || img.url || img.thumbnail;
+                if (!u) return;
+                try { domains.add(new URL(u).hostname); } catch (_) { /* ignore */ }
+            });
+            noun = 'image'; nounPlural = 'images';
+        } else {
+            (st.webResults || []).forEach(function (r) {
+                var d = _getDomain(r);
+                if (d) domains.add(d);
+            });
+            (Array.from(st.fetchedUrls || [])).forEach(function (u) {
+                try { domains.add(new URL(u).hostname); } catch (_) { /* ignore */ }
+            });
+            noun = 'source'; nounPlural = 'sources';
+        }
+
+        var n = domains.size;
+        if (countEl) {
+            if (complete) {
+                countEl.textContent = 'Reading ' + n + ' ' +
+                    (n === 1 ? noun : nounPlural) + '…';
+            } else if (n > 0) {
+                countEl.textContent = 'Checking ' + n + ' ' +
+                    (n === 1 ? noun : nounPlural) + '…';
+            } else {
+                countEl.textContent = 'Finding ' + nounPlural + '…';
+            }
+        }
+
+        if (stripEl) {
+            var arr = Array.from(domains).slice(0, 6);
+            var existing = stripEl.children.length;
+            for (var i = existing; i < arr.length; i++) {
+                var f = document.createElement('img');
+                f.className = 'search-banner__favicon';
+                f.src = _getFavicon({ url: 'https://' + arr[i] });
+                f.loading = 'lazy';
+                f.alt = '';
+                f.onerror = function () { this.style.display = 'none'; };
+                stripEl.appendChild(f);
+            }
         }
     }
 
     /* -------------------------------------------------------
        _onTypingComplete — run callback when typing animation
        finishes. Listens for 'typing-complete' custom event
-       dispatched by ProgressiveTextDisplay, with a timeout
+       dispatched by the rendering pipeline, with a timeout
        fallback in case the event never fires.
     ------------------------------------------------------- */
     function _processCitationsWhenReady(messageEl, sources, attempt, lastLen) {
@@ -1389,6 +1494,31 @@
     }
 
     /* -------------------------------------------------------
+       collapseBanner — ChatGPT-style: shrink the big "Searching…"
+       banner into a compact "Searched the web" pill that sits above
+       the streaming answer. Stays clickable to open the sources
+       sidebar. No fade out.
+    ------------------------------------------------------- */
+    function collapseBanner(container) {
+        if (!container) return;
+        var banner = container.querySelector('.search-banner');
+        if (!banner) return;
+        if (banner.classList.contains('search-banner--collapsed')) return;
+
+        banner.classList.add('search-banner--collapsed');
+
+        // Replace any "Searching for X…" label with a compact "Searched the web" pill.
+        // Preserve existing click handlers (they route to the sources sidebar).
+        var label = banner.querySelector('.search-banner__label, .search-banner__query');
+        if (label) {
+            label.textContent = 'Searched the web';
+        }
+        // Remove spinner / animated dots if present.
+        var spinner = banner.querySelector('.search-banner__spinner, .search-banner__dots');
+        if (spinner) spinner.remove();
+    }
+
+    /* -------------------------------------------------------
        Public API
     ------------------------------------------------------- */
     window.SearchResults = {
@@ -1396,6 +1526,7 @@
         renderFinalResults:   renderFinalResults,
         processCitations:     processCitations,
         dismissBanner:        dismissBanner,
+        collapseBanner:       collapseBanner,
         openSidebar:          openSidebar,
         openSidebarForCitations: openSidebarForCitations,
         closeSidebar:         closeSidebar,

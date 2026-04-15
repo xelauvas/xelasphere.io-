@@ -87,6 +87,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/components/prism-css.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/components/prism-python.min.js"></script>
 
+    <!-- Theme manager (loaded early to prevent flash of wrong theme) -->
+    <script src="{{ url_for('static', filename='js/themeManager.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-toggle.css') }}">
+
     <!-- morphdom + StreamRenderer -->
     <script src="{{ url_for('static', filename='js/morphdom.min.js') }}"></script>
     <script>
@@ -117,7 +121,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/edit/closebrackets.min.js"></script>
 
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Manrope:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
 
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
@@ -125,7 +129,7 @@
     <!-- Custom CSS -->
     <!-- Responsive Foundation (load first for CSS variables) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-foundation.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=1.9">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=2.0">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/code-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tree-view.css') }}?v=1.1">
@@ -134,10 +138,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/prism.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/options-btn.css') }}?v=18">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/search-results.css') }}?v=6">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=7">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/search-results.css') }}?v=9">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=9">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=6">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=50">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}">
@@ -159,7 +163,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/email-edit-toolbar.css') }}">
 
     <!-- Mobile Responsive -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=43">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=54">
 
     <!-- Context Menu (long-press actions) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/context-menu.css') }}">
@@ -168,7 +172,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/crypto-chart.css') }}">
 
     <!-- Stream Blocks -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-blocks.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-blocks.css') }}?v=6">
 
     <!-- Lightweight Charts (TradingView) -->
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
@@ -200,7 +204,8 @@
 <body data-guest-mode="{{ 'true' if is_guest else 'false' }}"
       data-guest-message-count="{{ guest_message_count|default(0) }}"
       data-guest-message-limit="{{ guest_message_limit|default(5) }}"
-      data-guest-banner-threshold="{{ guest_banner_threshold|default(3) }}">
+      data-guest-banner-threshold="{{ guest_banner_threshold|default(3) }}"
+      data-initial-surface="{{ initial_surface|default('chat') }}">
 
     {% if is_guest %}
     <!-- Guest Mode Signup Modal -->
@@ -275,22 +280,48 @@
         <!-- Legacy temp-chat-launcher for desktop (hidden on mobile) -->
         {% if not is_guest %}
         <div class="temp-chat-launcher desktop-only">
-            <button id="temp-chat-button-desktop" class="temp-chat-button" type="button" aria-label="Start a temporary chat" data-tooltip="Go Incognito">
-                <span class="temp-chat-icon" aria-hidden="true">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-                      <path
-                        d="M12 5.4
-                           c-3.55 0-6.4 2.85-6.4 6.4v6.0
-                           l1.85-1.25 1.85 1.25 1.85-1.25 1.85 1.25 1.85-1.25 1.85 1.25v-6.0
-                           c0-3.55-2.85-6.4-6.4-6.4z"
-                        fill="none"
-                        stroke="#e6e6e6"
-                        stroke-width="1.25"
-                        stroke-linejoin="round"
-                        stroke-linecap="round"
-                      />
-                      <circle class="ghost-eye ghost-eye-left" cx="10.55" cy="12.05" r="0.7" fill="#e6e6e6"/>
-                      <circle class="ghost-eye ghost-eye-right" cx="13.45" cy="12.05" r="0.7" fill="#e6e6e6"/>
+            <button id="theme-toggle-owl" class="temp-chat-button ghost-mascot-btn" type="button" aria-label="Toggle dark / light theme" onclick="window.ThemeManager?.toggle()">
+                <span class="temp-chat-icon ghost-mascot" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" width="36" height="36" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <radialGradient id="xs-moon-glow" cx="50%" cy="50%" r="50%">
+                                <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.45"/>
+                                <stop offset="55%"  stop-color="#ffffff" stop-opacity="0.15"/>
+                                <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+                            </radialGradient>
+                            <mask id="xs-moon-mask">
+                                <rect width="48" height="48" fill="#ffffff"/>
+                                <circle cx="44" cy="8" r="6" fill="#000000"/>
+                            </mask>
+                        </defs>
+
+                        <!-- Owl (silhouette + tufts merged into one shape) -->
+                        <g class="owl-body">
+                            <path class="owl-silhouette"
+                                  d="M14.5 9
+                                     L16 2.5 L18.5 8.5
+                                     Q21 7.5 24 7.5
+                                     Q27 7.5 29.5 8.5
+                                     L32 2.5 L33.5 9
+                                     Q39.5 12 39.5 22
+                                     Q39.5 33 32.5 40.5
+                                     Q24 43.5 15.5 40.5
+                                     Q8.5 33 8.5 22
+                                     Q8.5 12 14.5 9 Z"/>
+
+                            <!-- Eyes: sclera + pupil. Pupil tracks cursor via JS. -->
+                            <circle class="owl-sclera" cx="18" cy="22" r="3"/>
+                            <circle class="owl-pupil"  cx="18" cy="22" r="1.3"/>
+
+                            <circle class="owl-sclera" cx="30" cy="22" r="3"/>
+                            <circle class="owl-pupil"  cx="30" cy="22" r="1.3"/>
+
+                            <!-- Tiny beak -->
+                            <path class="owl-beak" d="M22.6 27 L25.4 27 L24 29.5 Z"/>
+                        </g>
+
+                        <!-- Clean crescent moon (rendered on top, no halo, no craters) -->
+                        <circle class="owl-moon" cx="39" cy="10" r="7" fill="#ffffff" mask="url(#xs-moon-mask)"/>
                     </svg>
                 </span>
             </button>
@@ -300,50 +331,30 @@
         <div id="sidebar" class="left-sidebar closed{% if is_guest %} guest-sidebar{% endif %}">
             <div class="sidebar-header">
                 <a href="/" class="sidebar-logo-link" title="Go to Home">
-                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="XelaSphere logo" class="sidebar-logo">
+                    <span class="sidebar-brand-text">Xelasphere</span>
                 </a>
-                <button id="sidebar-toggle-button" class="sidebar-toggle-button" aria-label="Toggle sidebar" data-tooltip="Toggle sidebar">
-                    <!-- Desktop: sidebar panel icon -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" class="sidebar-icon-svg sidebar-icon-desktop">
-                        <rect
-                          x="3"
-                          y="4"
-                          width="18"
-                          height="16"
-                          rx="2"
-                          ry="2"
-                          stroke="#B3B3B3"
-                          stroke-width="1.5"
-                          fill="none"
+                <button type="button" class="sidebar-header-ghost" aria-label="Start incognito chat" data-tooltip="Go Incognito" onclick="window.chatManager?.createNewChat(null, { temporary: true, notifySuccess: false })">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="34" height="34" aria-hidden="true">
+                        <path
+                            d="M12 5.4
+                               c-3.55 0-6.4 2.85-6.4 6.4v6.0
+                               l1.85-1.25 1.85 1.25 1.85-1.25 1.85 1.25 1.85-1.25 1.85 1.25v-6.0
+                               c0-3.55-2.85-6.4-6.4-6.4z"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.25"
+                            stroke-linejoin="round"
+                            stroke-linecap="round"
                         />
-                        <line
-                          x1="9"
-                          y1="4"
-                          x2="9"
-                          y2="20"
-                          stroke="#B3B3B3"
-                          stroke-width="1.5"
-                        />
-                    </svg>
-                    <!-- Mobile: X close icon -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" class="sidebar-icon-mobile">
-                        <line x1="6" y1="6" x2="18" y2="18" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" stroke-linecap="round"/>
-                        <line x1="18" y1="6" x2="6" y2="18" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" stroke-linecap="round"/>
+                        <circle class="sidebar-ghost-eye" cx="10.55" cy="12.05" r="0.75" fill="currentColor"/>
+                        <circle class="sidebar-ghost-eye" cx="13.45" cy="12.05" r="0.75" fill="currentColor"/>
                     </svg>
                 </button>
             </div>
-                <div class="sidebar-content">
-                {% if is_guest %}
-                <!-- Guest Sidebar Content - Clean minimal style -->
-                <div class="guest-sidebar-content">
-                    <div class="guest-sidebar-empty">
-                        <p>Sign up or log in to save your chat history</p>
-                    </div>
-                </div>
-                {% else %}
-                <!-- Regular User Sidebar Content -->
-                <div class="sidebar-quick-actions">
-                    <div class="sidebar-quick-actions-inner">
+            {% if not is_guest %}
+            <!-- Action buttons live OUTSIDE .sidebar-content as part of the header block -->
+            <div class="sidebar-quick-actions">
+                <div class="sidebar-quick-actions-inner">
                     <button class="sidebar-action-btn has-shortcut" id="action-new-chat" aria-label="New Chat" data-shortcut-win="Ctrl+Shift+O" data-shortcut-mac="⌘+Shift+O">
                         <span class="sidebar-action-icon" aria-hidden="true">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -399,8 +410,18 @@
                         <span class="sidebar-action-text">Images</span>
                         <span class="shortcut-hint"></span>
                     </button>
+                </div>
+            </div>
+            {% endif %}
+            <div class="sidebar-content">
+                {% if is_guest %}
+                <!-- Guest Sidebar Content - Clean minimal style -->
+                <div class="guest-sidebar-content">
+                    <div class="guest-sidebar-empty">
+                        <p>Sign up or log in to save your chat history</p>
                     </div>
                 </div>
+                {% else %}
                 <ul id="tab-list">
                     <!-- Chat session items will be dynamically added here -->
                 </ul>
@@ -626,6 +647,95 @@
                         </div>
                     </div>
 
+                    <section class="images-page" id="images-page" aria-hidden="true" hidden>
+                    <header class="images-page__header">
+                        <button class="images-page__back" type="button" id="images-page-back" aria-label="Back to chats">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                            Chats
+                        </button>
+                        <h1 class="images-page__title">Images</h1>
+                        <div class="images-page__header-spacer"></div>
+                    </header>
+
+                    <div class="images-page__body" id="images-page-body">
+                        <div class="images-page__composer" id="images-page-composer">
+                            <form class="images-prompt-bar" id="images-prompt-bar" autocomplete="off">
+                                <span class="images-prompt-bar__icon" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                </span>
+                                <input type="text" id="images-prompt-input" class="images-prompt-bar__input" placeholder="Describe a new image" aria-label="Describe a new image">
+                                <button type="submit" class="images-prompt-bar__submit" id="images-prompt-submit" aria-label="Generate image">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                                </button>
+                            </form>
+                        </div>
+
+                        <section class="images-section" id="images-styles-section">
+                            <div class="images-section__head">
+                                <h2 class="images-section__title">Try a style on an image</h2>
+                                <div class="images-section__arrows">
+                                    <button type="button" class="images-arrow-btn" data-carousel-prev="styles" aria-label="Previous styles">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                    </button>
+                                    <button type="button" class="images-arrow-btn" data-carousel-next="styles" aria-label="Next styles">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="images-styles-track" id="images-styles-track" role="list"></div>
+                        </section>
+
+                        <section class="images-section" id="images-discover-section">
+                            <div class="images-section__head">
+                                <h2 class="images-section__title">Discover something new</h2>
+                            </div>
+                            <div class="images-discover-grid" id="images-discover-grid" role="list"></div>
+                        </section>
+
+                        <section class="images-section images-section--gallery" id="images-gallery-section">
+                            <div class="images-section__head">
+                                <h2 class="images-section__title">Your creations</h2>
+                            </div>
+                            <div class="images-gallery-grid" id="images-gallery-grid">
+                                <!-- Cards injected dynamically -->
+                            </div>
+                            <div class="images-gallery-empty" id="images-gallery-empty">
+                                No images yet. Generate one to see it here.
+                            </div>
+                        </section>
+
+                        <section class="images-page__loading" id="images-page-loading" hidden aria-live="polite">
+                            <div class="images-skeleton"></div>
+                            <p class="images-skeleton__caption">Generating image…</p>
+                        </section>
+
+                        <section class="images-page__result" id="images-page-result" hidden>
+                            <img id="images-result-img" alt="Generated image">
+                            <p class="images-result__prompt" id="images-result-prompt"></p>
+                            <div class="images-result__actions">
+                                <button type="button" id="images-result-download" class="images-result-btn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    Download
+                                </button>
+                                <button type="button" id="images-result-regenerate" class="images-result-btn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15A9 9 0 0 1 5.64 18.36L1 14"/></svg>
+                                    Regenerate
+                                </button>
+                                <button type="button" id="images-result-edit" class="images-result-btn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                    Edit prompt
+                                </button>
+                            </div>
+                        </section>
+
+                        <section class="images-page__error" id="images-page-error" hidden>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            <span>Something went wrong. Please try again.</span>
+                            <button type="button" class="images-result-btn" id="images-error-retry">Retry</button>
+                        </section>
+                    </div>
+                    </section>
+
                     <footer class="chat-shell__composer" role="form" aria-label="Message Input">
                         <div class="input-container">
                             {% if not is_guest %}
@@ -655,7 +765,7 @@
                             {% endif %}
                             <div class="input-row">
                                 <div class="actions-menu" id="actions-menu">
-                                    <button class="actions-toggle" id="actions-toggle" aria-haspopup="true" aria-expanded="false" aria-label="More actions">
+                                    <button class="actions-toggle" id="actions-toggle" aria-haspopup="true" aria-expanded="false" aria-label="More actions" data-tooltip="More actions">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                             <line x1="12" y1="5" x2="12" y2="19"/>
                                             <line x1="5" y1="12" x2="19" y2="12"/>
@@ -879,50 +989,6 @@
         </div>
     </div>
 
-    <div class="images-gallery-modal" id="images-gallery-modal" aria-hidden="true">
-        <div class="images-gallery-backdrop" data-images-close></div>
-        <div class="images-gallery-dialog" role="dialog" aria-modal="true" aria-labelledby="images-gallery-title">
-            <header class="images-gallery-header">
-                <div class="images-gallery-heading">
-                    <p class="images-gallery-eyebrow">AI Images</p>
-                    <h2 id="images-gallery-title">Recent creations</h2>
-                </div>
-                <button class="images-close-btn" type="button" data-images-close aria-label="Close image gallery overlay">
-                    Esc
-                </button>
-            </header>
-            <div class="images-gallery-cta">
-                <div>
-                    <p class="images-cta-title">Create something new</p>
-                    <p class="images-cta-desc">Use your imagination or paste a prompt to generate visuals.</p>
-                </div>
-                <button class="images-primary-btn" id="images-create-btn" type="button">
-                    <i class="fas fa-wand-magic-sparkles"></i>
-                    New image
-                </button>
-            </div>
-            <div class="images-gallery-body" role="region" aria-label="Generated images">
-                <div class="images-gallery-composer">
-                    <div class="images-composer-field">
-                        <textarea id="images-prompt-input" placeholder="Describe the image you want to create..." rows="2"></textarea>
-                    </div>
-                    <div class="images-composer-actions">
-                        <button type="button" class="images-insert-btn" id="images-insert-btn">
-                            <i class="fas fa-arrow-turn-down"></i>
-                            Use prompt
-                        </button>
-                    </div>
-                </div>
-                <div class="images-gallery-grid" id="images-gallery-grid">
-                    <!-- Cards injected dynamically -->
-                </div>
-                <div class="images-gallery-empty" id="images-gallery-empty">
-                    No images yet. Generate one to see it here.
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="images-preview-modal" id="images-preview-modal" aria-hidden="true">
         <div class="images-preview-backdrop" data-images-preview-close></div>
         <div class="images-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="images-preview-title">
@@ -956,7 +1022,7 @@
     <script src="{{ url_for('static', filename='js/filePreview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/scrollState.js') }}"></script>
     <script src="{{ url_for('static', filename='js/recipeDetector.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=44"></script>
+    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=53"></script>
     <script src="{{ url_for('static', filename='script.js') }}?v=5"></script>
     <script src="{{ url_for('static', filename='js/styleManager.js') }}?v=4"></script>
     <script>
@@ -1000,18 +1066,17 @@
     <script src="{{ url_for('static', filename='js/sidebarHandler.js') }}"></script>
     <script src="{{ url_for('static', filename='js/weatherIcon.js') }}"></script>
     <script src="{{ url_for('static', filename='js/greeting.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/searchResults.js') }}?v=32"></script>
+    <script src="{{ url_for('static', filename='js/searchResults.js') }}?v=37"></script>
     <script src="{{ url_for('static', filename='js/cryptoChartModule.js') }}"></script>
     <script src="{{ url_for('static', filename='js/unreadManager.js') }}?v=2"></script>
     <script>
         window.sharedSessionId = "{{ shared_session_id|default('', true) }}";
     </script>
     <script src="{{ url_for('static', filename='js/toast.js') }}?v=6"></script>
-    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=11"></script>
+    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=15"></script>
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}?v=9"></script>
-    <script src="{{ url_for('static', filename='js/typeTextWorker.js') }}"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=4"></script>
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=47"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -1046,6 +1111,68 @@
         });
     </script>
 
+    <script>
+    // Cursor-following eyes for the owl mascot AND the sidebar header ghost
+    (function() {
+        let mx = window.innerWidth / 2, my = window.innerHeight / 2;
+        document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; }, { passive: true });
+
+        function setupTracker(svg, selector, vbSize, eyeDefs, max, yDamp) {
+            const els = svg.querySelectorAll(selector);
+            if (!els.length) return null;
+            const eyes = eyeDefs.map(d => ({ ...d, parts: [], ox: 0, oy: 0 }));
+            els.forEach(el => {
+                const cx = parseFloat(el.getAttribute('cx'));
+                el.dataset.ocx = cx;
+                el.dataset.ocy = el.getAttribute('cy');
+                eyes[cx < (vbSize / 2) ? 0 : 1].parts.push(el);
+            });
+            return { svg, eyes, vbSize, max, yDamp };
+        }
+
+        const trackers = [];
+        const owlSvg = document.querySelector('#temp-chat-button-desktop .ghost-mascot svg');
+        if (owlSvg) {
+            const t = setupTracker(owlSvg, '.owl-pupil', 48,
+                [{ cx: 18, cy: 22 }, { cx: 30, cy: 22 }], 1.4, 0.85);
+            if (t) trackers.push(t);
+        }
+        const ghostSvg = document.querySelector('.sidebar-header-ghost svg');
+        if (ghostSvg) {
+            const t = setupTracker(ghostSvg, '.sidebar-ghost-eye', 24,
+                [{ cx: 10.55, cy: 12.05 }, { cx: 13.45, cy: 12.05 }], 1.0, 1.0);
+            if (t) trackers.push(t);
+        }
+        if (!trackers.length) return;
+
+        const SMOOTH = 0.28;
+        function tick() {
+            for (const t of trackers) {
+                const rect = t.svg.getBoundingClientRect();
+                if (rect.width <= 0) continue;
+                const scale = rect.width / t.vbSize;
+                for (const eye of t.eyes) {
+                    const cxV = rect.left + eye.cx * scale;
+                    const cyV = rect.top  + eye.cy * scale;
+                    const dx = mx - cxV, dy = my - cyV;
+                    const d  = Math.hypot(dx, dy) || 1;
+                    const tx = (dx / d) * t.max;
+                    const ty = (dy / d) * t.max * t.yDamp;
+                    eye.ox += (tx - eye.ox) * SMOOTH;
+                    eye.oy += (ty - eye.oy) * SMOOTH;
+                    for (const el of eye.parts) {
+                        el.setAttribute('cx', (parseFloat(el.dataset.ocx) + eye.ox).toFixed(3));
+                        el.setAttribute('cy', (parseFloat(el.dataset.ocy) + eye.oy).toFixed(3));
+                    }
+                }
+            }
+            requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+    })();
+    </script>
+
+
     <!-- Ghost Model Bottom Sheet (Mobile) -->
     <!-- Ghost Model Selector (fixed position, top-left) -->
     <div class="ghost-model-wrapper{% if is_guest %} guest-disabled{% endif %}" id="ghost-model-wrapper">
@@ -1074,57 +1201,57 @@
     </div>
 <!-- ═══ Action Sheet Modal (outside all containers) ═══ -->
 <div id="action-sheet-backdrop" style="display:none;position:fixed;inset:0;z-index:9998" onclick="document.getElementById('action-sheet-modal').style.display='none';this.style.display='none';document.getElementById('actions-toggle')?.setAttribute('aria-expanded','false');document.getElementById('actions-menu')?.classList.remove('open')"></div>
-<div id="action-sheet-modal" style="display:none;position:fixed;z-index:9999;width:260px;background:#2b2a27;border-radius:12px;border:0.5px solid rgba(255,255,255,0.08);box-shadow:0 6px 24px rgba(0,0,0,0.5);overflow:visible">
+<div id="action-sheet-modal" style="display:none;position:fixed;z-index:9999;width:260px;background:var(--bg-elevated, #2b2a27);border-radius:12px;border:0.5px solid var(--border-primary, rgba(255,255,255,0.08));box-shadow:var(--shadow-lg, 0 6px 24px rgba(0,0,0,0.5));overflow:visible">
     <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data" style="margin:0;padding:0">
         <!-- Group 1 -->
         <div style="overflow:visible">
-            <label for="file-upload" class="asi" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px;user-select:none">
-                <span style="opacity:0.8;color:#fff;display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>
+            <label for="file-upload" class="asi" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px;user-select:none">
+                <span style="opacity:0.8;color:var(--text-primary, #fff);display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>
                 <span style="flex:1">Add files or photos</span>
             </label>
             <input type="file" id="file-upload" name="file" accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.epub,.odt,.ods,.odp,.txt,.text,.md,.csv,.json,.rtf,.yaml,.yml,.toml,.xml,.html,.htm,.svg,.webp,.bmp,.tiff,.tif,.heic,.heif,.mp3,.wav,.m4a,.ogg,.flac,.webm,.ini,.cfg,.conf,.env,.py,.pyw,.js,.mjs,.cjs,.ts,.tsx,.jsx,.java,.kt,.kts,.scala,.c,.h,.cpp,.hpp,.cc,.cs,.go,.rs,.rb,.erb,.php,.swift,.dart,.lua,.pl,.pm,.r,.sql,.sh,.bash,.zsh,.fish,.css,.scss,.sass,.less,.vue,.svelte,.hs,.lhs,.ex,.exs,.clj,.cljs,.cljc,.ml,.mli,.fs,.fsx,.erl,.hrl,.elm,.v,.sv,.vhd,.vhdl,.asm,.s,.dockerfile,.makefile,.mk,.gradle,.cmake,.tf,.tfvars,.proto,.graphql,.gql,.sol,.zig,.nim,.cr,.jl,.log" style="display:none" multiple{% if is_guest %} disabled{% endif %}>
-            <div class="asi" id="action-camera" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px;user-select:none"><span style="opacity:0.8;color:#fff;display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span><span style="flex:1">Take a screenshot</span></div>
+            <div class="asi" id="action-camera" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px;user-select:none"><span style="opacity:0.8;color:var(--text-primary, #fff);display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span><span style="flex:1">Take a screenshot</span></div>
             <input type="file" id="camera-capture" accept="image/*" capture="environment" style="display:none">
-            <div class="asi" id="action-add-to-project" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px;user-select:none"><span style="opacity:0.8;color:#fff;display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span style="flex:1">Add to project</span><span style="opacity:0.4;display:flex;align-items:center;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span></div>
+            <div class="asi" id="action-add-to-project" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px;user-select:none"><span style="opacity:0.8;color:var(--text-primary, #fff);display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span style="flex:1">Add to project</span><span style="opacity:0.4;display:flex;align-items:center;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span></div>
         </div>
-        <div style="height:0.5px;background:rgba(255,255,255,0.07);margin:3px 0"></div>
+        <div style="height:0.5px;background:var(--border-secondary, rgba(255,255,255,0.07));margin:3px 0"></div>
         <!-- Group 2 -->
         <div style="overflow:visible">
             <div style="position:relative;overflow:visible">
-                <div class="asi" id="action-skills" data-submenu="submenu-skills" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px;user-select:none"><span style="opacity:0.8;color:#fff;display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="5" rx="1"/><rect x="3" y="10" width="18" height="5" rx="1"/><rect x="3" y="17" width="18" height="4" rx="1"/></svg></span><span style="flex:1">Skills</span><span style="opacity:0.4;display:flex;align-items:center;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span></div>
-                <div id="submenu-skills" style="display:none;width:190px;background:#2b2a27;border-radius:12px;overflow:hidden;border:0.5px solid rgba(255,255,255,0.08);box-shadow:0 6px 24px rgba(0,0,0,0.5);position:absolute;bottom:0;left:calc(100% + 6px);z-index:100">
-                    <div style="font-family:monospace;font-size:13px;opacity:0.45;padding:9px 14px;color:#fff;user-select:none">skill-creator</div>
-                    <div style="height:0.5px;background:rgba(255,255,255,0.07);margin:3px 0"></div>
-                    <div class="asi" id="action-manage-skills" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span style="flex:1">Manage skills</span></div>
-                    <div style="height:0.5px;background:rgba(255,255,255,0.07);margin:0 12px"></div>
-                    <div class="asi" id="action-add-skill" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span><span style="flex:1">Add skill</span></div>
+                <div class="asi" id="action-skills" data-submenu="submenu-skills" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px;user-select:none"><span style="opacity:0.8;color:var(--text-primary, #fff);display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="5" rx="1"/><rect x="3" y="10" width="18" height="5" rx="1"/><rect x="3" y="17" width="18" height="4" rx="1"/></svg></span><span style="flex:1">Skills</span><span style="opacity:0.4;display:flex;align-items:center;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span></div>
+                <div id="submenu-skills" style="display:none;width:190px;background:var(--bg-elevated, #2b2a27);border-radius:12px;overflow:hidden;border:0.5px solid var(--border-primary, rgba(255,255,255,0.08));box-shadow:var(--shadow-lg, 0 6px 24px rgba(0,0,0,0.5));position:absolute;bottom:0;left:calc(100% + 6px);z-index:100">
+                    <div style="font-family:monospace;font-size:13px;opacity:0.45;padding:9px 14px;color:var(--text-primary, #fff);user-select:none">skill-creator</div>
+                    <div style="height:0.5px;background:var(--border-secondary, rgba(255,255,255,0.07));margin:3px 0"></div>
+                    <div class="asi" id="action-manage-skills" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span style="flex:1">Manage skills</span></div>
+                    <div style="height:0.5px;background:var(--border-secondary, rgba(255,255,255,0.07));margin:0 12px"></div>
+                    <div class="asi" id="action-add-skill" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span><span style="flex:1">Add skill</span></div>
                 </div>
             </div>
-            <div class="asi" id="action-connectors" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px;user-select:none"><span style="opacity:0.8;color:#fff;display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="2" width="6" height="6" rx="1"/><rect x="16" y="14" width="6" height="6" rx="1"/><path d="M8 10h4M12 10V5h4M12 10v5h4"/></svg></span><span style="flex:1">Add connectors</span></div>
+            <div class="asi" id="action-connectors" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px;user-select:none"><span style="opacity:0.8;color:var(--text-primary, #fff);display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="2" width="6" height="6" rx="1"/><rect x="16" y="14" width="6" height="6" rx="1"/><path d="M8 10h4M12 10V5h4M12 10v5h4"/></svg></span><span style="flex:1">Add connectors</span></div>
         </div>
-        <div style="height:0.5px;background:rgba(255,255,255,0.07);margin:3px 0"></div>
+        <div style="height:0.5px;background:var(--border-secondary, rgba(255,255,255,0.07));margin:3px 0"></div>
         <!-- Group 3 -->
         <div style="overflow:visible">
-            <div class="asi" id="action-deep-research" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px;user-select:none"><span style="opacity:0.8;color:#fff;display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span><span style="flex:1">Research</span></div>
+            <div class="asi" id="action-deep-research" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px;user-select:none"><span style="opacity:0.8;color:var(--text-primary, #fff);display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span><span style="flex:1">Research</span></div>
             <div class="asi" id="action-web-search" style="display:flex;align-items:center;gap:13px;padding:11px 14px;cursor:pointer;font-size:15px;user-select:none" data-web-on="true">
-                <span class="asi-web-icon" style="opacity:1;color:#378ADD;display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20"/></svg></span>
-                <span style="flex:1;color:#378ADD" class="asi-web-label">Web search</span>
-                <span class="asi-web-check" style="color:#378ADD;display:flex;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+                <span class="asi-web-icon" style="opacity:1;color:var(--web-accent, #378ADD);display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20"/></svg></span>
+                <span style="flex:1;color:var(--web-accent, #378ADD)" class="asi-web-label">Web search</span>
+                <span class="asi-web-check" style="color:var(--web-accent, #378ADD);display:flex;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
             </div>
             <div style="position:relative;overflow:visible">
-                <div class="asi" id="action-use-style" data-submenu="submenu-styles" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px;user-select:none"><span style="opacity:0.8;color:#fff;display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Use style</span><span style="opacity:0.4;display:flex;align-items:center;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span></div>
-                <div id="submenu-styles" style="display:none;width:190px;background:#2b2a27;border-radius:12px;overflow:hidden;border:0.5px solid rgba(255,255,255,0.08);box-shadow:0 6px 24px rgba(0,0,0,0.5);position:absolute;bottom:0;left:calc(100% + 6px);z-index:100">
-                    <div class="asi action-style-opt" data-style="Normal" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px;background:#353331;border-radius:8px;margin:2px 4px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Normal</span><span class="style-check" style="color:#378ADD;display:flex;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
-                    <div style="height:0.5px;background:rgba(255,255,255,0.07);margin:0 12px"></div>
-                    <div class="asi action-style-opt" data-style="Learning" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Learning</span><span class="style-check" style="color:#378ADD;display:none;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
-                    <div style="height:0.5px;background:rgba(255,255,255,0.07);margin:0 12px"></div>
-                    <div class="asi action-style-opt" data-style="Concise" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Concise</span><span class="style-check" style="color:#378ADD;display:none;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
-                    <div style="height:0.5px;background:rgba(255,255,255,0.07);margin:0 12px"></div>
-                    <div class="asi action-style-opt" data-style="Explanatory" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Explanatory</span><span class="style-check" style="color:#378ADD;display:none;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
-                    <div style="height:0.5px;background:rgba(255,255,255,0.07);margin:0 12px"></div>
-                    <div class="asi action-style-opt" data-style="Formal" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Formal</span><span class="style-check" style="color:#378ADD;display:none;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
-                    <div style="height:0.5px;background:rgba(255,255,255,0.07);margin:3px 0"></div>
-                    <div class="asi" id="action-create-style" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:rgba(255,255,255,0.88);font-size:13.5px"><span style="opacity:0.6;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span><span style="flex:1">Create &amp; edit styles</span></div>
+                <div class="asi" id="action-use-style" data-submenu="submenu-styles" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px;user-select:none"><span style="opacity:0.8;color:var(--text-primary, #fff);display:flex;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Use style</span><span style="opacity:0.4;display:flex;align-items:center;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span></div>
+                <div id="submenu-styles" style="display:none;width:190px;background:var(--bg-elevated, #2b2a27);border-radius:12px;overflow:hidden;border:0.5px solid var(--border-primary, rgba(255,255,255,0.08));box-shadow:var(--shadow-lg, 0 6px 24px rgba(0,0,0,0.5));position:absolute;bottom:0;left:calc(100% + 6px);z-index:100">
+                    <div class="asi action-style-opt" data-style="Normal" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px;background:var(--bg-hover, #353331);border-radius:8px;margin:2px 4px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Normal</span><span class="style-check" style="color:var(--web-accent, #378ADD);display:flex;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+                    <div style="height:0.5px;background:var(--border-secondary, rgba(255,255,255,0.07));margin:0 12px"></div>
+                    <div class="asi action-style-opt" data-style="Learning" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Learning</span><span class="style-check" style="color:var(--web-accent, #378ADD);display:none;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+                    <div style="height:0.5px;background:var(--border-secondary, rgba(255,255,255,0.07));margin:0 12px"></div>
+                    <div class="asi action-style-opt" data-style="Concise" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Concise</span><span class="style-check" style="color:var(--web-accent, #378ADD);display:none;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+                    <div style="height:0.5px;background:var(--border-secondary, rgba(255,255,255,0.07));margin:0 12px"></div>
+                    <div class="asi action-style-opt" data-style="Explanatory" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Explanatory</span><span class="style-check" style="color:var(--web-accent, #378ADD);display:none;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+                    <div style="height:0.5px;background:var(--border-secondary, rgba(255,255,255,0.07));margin:0 12px"></div>
+                    <div class="asi action-style-opt" data-style="Formal" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px"><span style="opacity:0.75;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span style="flex:1">Formal</span><span class="style-check" style="color:var(--web-accent, #378ADD);display:none;align-items:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+                    <div style="height:0.5px;background:var(--border-secondary, rgba(255,255,255,0.07));margin:3px 0"></div>
+                    <div class="asi" id="action-create-style" style="display:flex;align-items:center;gap:11px;padding:9px 12px;cursor:pointer;color:var(--text-primary, rgba(255,255,255,0.88));font-size:13.5px"><span style="opacity:0.6;display:flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span><span style="flex:1">Create &amp; edit styles</span></div>
                 </div>
             </div>
         </div>

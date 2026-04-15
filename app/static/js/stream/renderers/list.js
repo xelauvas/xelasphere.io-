@@ -1,7 +1,9 @@
 /**
- * List renderer — renders a <ul> or <ol> with per-item stagger animation.
+ * List renderer — per-item buffered <ul>/<ol>.
  * Items are parsed out of block.text by splitting on the opener regex.
- * Completed items (all but the last) are sub-frozen — we skip re-render for them.
+ * The tail item is held out of the DOM until a newer item opens (closing
+ * it) or the block finalizes — so every <li> lands fully formed exactly
+ * once and never mutates visibly after insertion.
  */
 
 const UL_ITEM_RE = /^[-+*] (.*)$/;
@@ -38,35 +40,52 @@ export function createListRenderer() {
             block.meta.replay = !!opts.replay;
             return el;
         },
-        update(block) {
+        _flush(block, { includeTail }) {
             if (!block.el) return;
+
+            const markedReady = typeof window.marked?.parse === 'function';
+            const renderMd = (raw) => {
+                if (!markedReady) return null;
+                const html = window.marked.parse(raw || '');
+                return window.DOMPurify ? window.DOMPurify.sanitize(html) : html;
+            };
+
             const items = parseItems(block);
             const existing = block.meta.renderedItemCount;
             const liNoAnim = block.meta.replay ? ' stream-no-anim' : '';
 
-            // Update the tail item's text in place (it may still be streaming)
-            if (existing > 0 && items.length >= existing) {
-                const tailLi = block.el.children[existing - 1];
-                if (tailLi) {
-                    const tailHTML = window.DOMPurify.sanitize(
-                        window.marked.parse(items[existing - 1] || '')
-                    );
-                    tailLi.innerHTML = tailHTML;
-                }
-            }
+            // An item is "closed" when a later item has started, or when the
+            // block is finalizing. Only closed items are flushed to the DOM,
+            // so each <li> appears fully formed and never mutates after.
+            const insertUpTo = includeTail ? items.length : items.length - 1;
 
-            // Append any new items after the previous tail
-            for (let i = existing; i < items.length; i++) {
+            const frag = document.createDocumentFragment();
+            let added = 0;
+            for (let i = existing; i < insertUpTo; i++) {
+                const text = items[i] || '';
+                if (text.trim() === '') continue;
                 const li = document.createElement('li');
                 li.className = `block-list-item${liNoAnim}`;
                 li.style.setProperty('--i', String(i));
-                li.innerHTML = window.DOMPurify.sanitize(window.marked.parse(items[i] || ''));
-                block.el.appendChild(li);
+                const html = renderMd(text);
+                if (html == null) li.textContent = text;
+                else li.innerHTML = html;
+                frag.appendChild(li);
+                added++;
             }
-            block.meta.renderedItemCount = items.length;
+            if (added) {
+                block.el.appendChild(frag);
+                block.meta.renderedItemCount = existing + added;
+            }
+        },
+        update(block) {
+            // Streaming path: hold the tail out. Only flush items that a
+            // newer item has superseded (therefore closed).
+            this._flush(block, { includeTail: false });
         },
         finalize(block) {
-            this.update(block);
+            // Block is ending — tail is now closed, flush everything.
+            this._flush(block, { includeTail: true });
         },
     };
 }

@@ -733,21 +733,20 @@ async function streamAssistantResponse(messageData) {
     messageEl.querySelector('.message-bubble').appendChild(contentEl);
     chatDisplay.appendChild(messageEl);
 
-    // Stream text character by character
-    const fullText = messageData.content;
-    await typeTextWorker.streamText(contentEl, fullText, {
-        onComplete: () => {
-            // Apply syntax highlighting if code detected
-            if (messageData.contains_code) {
-                Prism.highlightAllUnder(messageEl);
-            }
+    // StreamRenderer streams the text via SSE chunks
+    const renderer = new StreamRenderer(contentEl);
+    // SSE loop: renderer.append(chunk)
+    renderer.finalize();
 
-            // Attach artifact preview
-            if (messageData.artifact_reference) {
-                attachArtifactPreview(messageEl, messageData);
-            }
-        }
-    });
+    // Apply syntax highlighting if code detected
+    if (messageData.contains_code) {
+        Prism.highlightAllUnder(messageEl);
+    }
+
+    // Attach artifact preview
+    if (messageData.artifact_reference) {
+        attachArtifactPreview(messageEl, messageData);
+    }
 }
 ```
 

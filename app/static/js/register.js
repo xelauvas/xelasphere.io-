@@ -39,23 +39,23 @@
                     break;
                 case 1:
                     strengthBar.style.width = '20%';
-                    strengthBar.style.backgroundColor = '#ff4d4d';
+                    strengthBar.style.backgroundColor = 'var(--strength-weak, #ff4d4d)';
                     break;
                 case 2:
                     strengthBar.style.width = '40%';
-                    strengthBar.style.backgroundColor = '#ff944d';
+                    strengthBar.style.backgroundColor = 'var(--strength-fair, #ff944d)';
                     break;
                 case 3:
                     strengthBar.style.width = '60%';
-                    strengthBar.style.backgroundColor = '#ffff4d';
+                    strengthBar.style.backgroundColor = 'var(--strength-good, #ffcc4d)';
                     break;
                 case 4:
                     strengthBar.style.width = '80%';
-                    strengthBar.style.backgroundColor = '#94ff4d';
+                    strengthBar.style.backgroundColor = 'var(--strength-strong, #66cc66)';
                     break;
                 case 5:
                     strengthBar.style.width = '100%';
-                    strengthBar.style.backgroundColor = '#4dff88';
+                    strengthBar.style.backgroundColor = 'var(--strength-strong, #66cc66)';
                     break;
                 default:
                     strengthBar.style.width = '0%';

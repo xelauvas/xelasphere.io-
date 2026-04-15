@@ -366,6 +366,28 @@ def orchestrator_dashboard():
     return jsonify(get_full_status())
 
 
+@chat_bp.route('/api/images/create', methods=['POST'])
+@limiter.limit("6 per minute")
+@csrf_required
+@error_handler
+@login_required
+def create_image_from_surface():
+    """Generate an image from the Images page and persist it as a session attachment.
+
+    Thin wrapper around ``handle_image_request`` so the Images surface can call
+    one endpoint instead of routing through the chat stream.
+    """
+    user_id = session['user']['uid']
+    data = request.get_json(silent=True) or {}
+    prompt = (data.get('prompt') or '').strip()
+    if not prompt:
+        return jsonify({'error': 'A text prompt is required'}), 400
+    if len(prompt) > 1000:
+        return jsonify({'error': 'Prompt too long (max 1000 chars)'}), 400
+    page_id = data.get('page_id')
+    return handle_image_request(user_id, prompt, page_id=page_id)
+
+
 def handle_image_request(user_id: str, user_prompt: str, page_id: Optional[str] = None):
     """Handle image generation requests."""
     logger.info(f"Detected image request from user {user_id}: {user_prompt}")
@@ -510,6 +532,12 @@ def chat_stream():
 
     prompt = request.form.get('prompt', '').strip()
     user_prompt_raw = prompt  # Keep raw user text for intent detection (before file content injection)
+    # Request mode — single UI intent override. Valid values: auto, search,
+    # research, chat, artifact. Unknown values fall back to auto.
+    _VALID_MODES = {'auto', 'search', 'research', 'chat', 'artifact'}
+    request_mode = (request.form.get('mode') or 'auto').strip().lower()
+    if request_mode not in _VALID_MODES:
+        request_mode = 'auto'
     model = request.form.get('model', 'deepseek-reasoner')
     logger.info(f"[Stream] Received model={model!r}")
     page_id = request.form.get('page_id', '').strip() or None
@@ -1059,9 +1087,46 @@ def chat_stream():
         parsed_action = None  # Set when response is complete
         action_buffer = StreamingActionBuffer()  # Buffer first line to strip ACTION:
         action_resolved = False
+        # Defensive: strip any ACTION: line that leaks past action_buffer (e.g. a
+        # model that emits it mid-stream, or paths that bypass the buffer like
+        # search synthesis). Applied to the very first content chunk we yield.
+        _first_content_yielded = {'done': False}
+        _action_leak_re = re.compile(r'^\s*[-*]*\s*ACTION:\s*\w+\s*\n+', re.IGNORECASE)
+        def _sanitize_content(text: str) -> str:
+            if _first_content_yielded['done']:
+                return text
+            cleaned = _action_leak_re.sub('', text, count=1)
+            # Only mark as "first yielded" once non-empty content leaves the server.
+            if cleaned.strip():
+                _first_content_yielded['done'] = True
+            return cleaned
         normalizer = StreamNormalizer(model_family=get_model_family(stream_model))
         _search_second_pass_done = False  # True after 2nd LLM call completes
         _search_synthesis_content = []  # Collects 2nd pass content for chat_summary
+
+        # Mode-override dispatch: if the UI forced a mode, skip the first
+        # LLM call and go straight to the corresponding pipeline. The model
+        # normally picks its ACTION via `action_buffer`, but explicit user
+        # intent (e.g. the Web Search toggle) always wins.
+        _mode_forced = request_mode in {'search', 'research', 'chat', 'artifact'}
+
+        # ─── Context-aware search-type classifier ──────────────────────
+        # When the UI forces "search", we still want the right flavour
+        # (videos, images, news, general). Heuristic first — fast and
+        # deterministic. Keyed on word-boundary matches in the user
+        # prompt; returns the highest-priority match.
+        def _classify_search_type(text: str) -> str:
+            t = (text or '').lower()
+            rules = (
+                # (priority_order, search_type, regex)
+                ('video',  re.compile(r'\b(video|videos|tutorial|watch|youtube|demo|trailer|clip|footage|stream)\b')),
+                ('images', re.compile(r'\b(image|images|picture|pictures|photo|photos|photography|wallpaper|screenshot|screenshots|logo|logos|poster|posters)\b')),
+                ('news',   re.compile(r'\b(news|latest|breaking|headline|headlines|today|tonight|current|currently|recent|war|election|crash|outage|announce[ds]?|launch(?:ed|es|ing)?)\b')),
+            )
+            for stype, pat in rules:
+                if pat.search(t):
+                    return stype
+            return 'general'
 
         def _run_search_and_synthesize(ws_query, ws_type):
             """Run search, emit events, start synthesis immediately after
@@ -1109,16 +1174,59 @@ def chat_stream():
                 logger.warning("[Stream] No search context for synthesis")
                 return
 
+            # Count available sources so we can hard-cap citation numbers.
+            # Without this, the model invents indices past N and the client's
+            # processCitations() can't match them → user sees "[11], [12]" raw.
+            try:
+                _q_key = (ws_query or '').lower().strip()
+                _srcs = search_orchestrator._last_results.get(_q_key, []) or []
+                _source_count = len(_srcs)
+            except Exception:
+                _source_count = 0
+            _max_idx = max(_source_count, 1)
+            _range_hint = (
+                "[1]" if _max_idx == 1
+                else f"[1]…[{_max_idx}]"
+            )
+
             synthesis_prompt = (
                 f"{search_context}\n\n"
                 f"---\n"
                 f"The user asked: {user_prompt_raw}\n\n"
-                f"Summarize the search results above into a clear, direct answer. "
-                f"Use inline citations [1], [2], [3] matching the source numbers. "
-                f"Every factual claim must have a citation. Be concise."
+                f"Summarize the search results above into a clear, direct answer.\n"
+                f"CITATION RULES (strict):\n"
+                f"- There are exactly {_max_idx} source(s). Valid citation numbers: {_range_hint}.\n"
+                f"- Use SEPARATE brackets for each citation: [1][2][3]. "
+                f"NEVER combine them inside one bracket like [1, 2, 3] or [1-3].\n"
+                f"- Do NOT invent citation numbers above {_max_idx}. If no source supports "
+                f"a claim, omit the citation — do not guess.\n"
+                f"- Every factual claim must carry at least one valid citation.\n"
+                f"Be concise and direct."
             )
 
             logger.info(f"[Stream] Starting search synthesis (2nd LLM call) with {stream_model}")
+
+            # Belt-and-braces: strip any citation numbers the model still
+            # hallucinates above the valid range. Keeps the rendered text
+            # clean if the prompt cap fails (which LLMs sometimes do).
+            # Handles three shapes the model uses:
+            #   [11]               — single
+            #   [11][12][13]       — adjacent (already per-bracket)
+            #   [11, 12, 13]       — comma-separated inside one pair
+            # For the comma form we filter to valid indices and rewrite to
+            # the adjacent form [1][2][3] so processCitations can pill them.
+            _cite_any_re = re.compile(r'\[(\d+(?:\s*,\s*\d+)*)\]')
+            def _strip_invalid_citations(s: str) -> str:
+                if _max_idx <= 0:
+                    return _cite_any_re.sub('', s)
+                def _repl(m):
+                    nums = [int(n.strip()) for n in m.group(1).split(',') if n.strip().isdigit()]
+                    valid = [n for n in nums if 1 <= n <= _max_idx]
+                    if not valid:
+                        return ''
+                    return ''.join(f'[{n}]' for n in valid)
+                return _cite_any_re.sub(_repl, s)
+
             try:
                 for chunk in stream_deepseek_response(synthesis_prompt, stream_model, system_prompt_override=_sys_prompt):
                     if _client_disconnected():
@@ -1128,7 +1236,9 @@ def chat_stream():
                     if ct == 'content':
                         text = chunk.get('text', '')
                         _search_synthesis_content.append(text)
-                        yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(text)})}\n\n"
+                        _cleaned = _sanitize_content(normalize_paragraph_breaks(text))
+                        _cleaned = _strip_invalid_citations(_cleaned)
+                        yield f"data: {json.dumps({'type': 'content', 'text': _cleaned})}\n\n"
                     elif ct == 'reasoning':
                         text = chunk.get('text', '')
                         reasoning_buffer.append(text)
@@ -1144,8 +1254,94 @@ def chat_stream():
 
         # ── Semantic cache check (before hitting any model) ──
         _cache_job = {"chat": "general_chat", "image_gen": "general_chat"}.get(task_type, task_type) if task_type else "general_chat"
+        # Skip cache for time-sensitive prompts — fresh answer matters more
+        # than latency (news, stock prices, live events, "latest" queries).
+        _time_sensitive_re = re.compile(
+            r'\b(latest|today|yesterday|tonight|now|currently|current|recent|recently|'
+            r'breaking|news|headline|headlines|stock|stocks|price|prices|quote|market|'
+            r'weather|forecast|score|scores|live|war|election|crypto|bitcoin|ethereum)\b',
+            re.IGNORECASE,
+        )
+        _skip_cache = bool(_time_sensitive_re.search(user_prompt_raw or '')) or _mode_forced
+
+        # Explicit mode override — short-circuit BEFORE cache + first-LLM.
+        # The UI toggle is authoritative: user asked for this pipeline.
+        if request_mode == 'search':
+            _forced_search_type = _classify_search_type(user_prompt_raw)
+            logger.info(f"[Stream] MODE=search forced by UI. type={_forced_search_type} query={user_prompt_raw[:80]!r}")
+            # Extract system prompt up-front — the synthesis generator
+            # closes over `_sys_prompt`, so it must be bound before we
+            # call it. In the auto path this happens inside the try-block
+            # further down, but the forced-search path skips that.
+            _sys_prompt = None
+            try:
+                if built_context.messages and built_context.messages[0].get('role') == 'system':
+                    _sys_prompt = built_context.messages[0]['content']
+            except Exception:
+                _sys_prompt = None
+
+            yield f"data: {json.dumps({'type': 'search_started', 'query': user_prompt_raw, 'search_type': _forced_search_type})}\n\n"
+            yield from _run_search_and_synthesize(user_prompt_raw, _forced_search_type)
+
+            # Assemble + emit the done payload ourselves — the synthesis
+            # generator only emits content/reasoning; the outer auto path
+            # normally handles done after its own streaming loop. We bypass
+            # that loop entirely, so we must emit done here with enough
+            # data for the client to render citation pills and the sources
+            # sidebar (search_results + fetched_urls + render_hint).
+            _final_content = ''.join(_search_synthesis_content).strip()
+
+            # Harvest search results from the orchestrator for the same
+            # query we just ran. Keyed the same way as the auto path.
+            _search_results = None
+            _fetched_urls = []
+            try:
+                _q_key = (user_prompt_raw or '').lower().strip()
+                _all_last = search_orchestrator._last_results.get(_q_key, []) or []
+                _search_results = {
+                    'web':    [search_orchestrator._result_to_dict(r) for r in _all_last if r.type == 'web'],
+                    'images': [search_orchestrator._result_to_dict(r) for r in _all_last if r.type == 'image'],
+                    'videos': [search_orchestrator._result_to_dict(r) for r in _all_last if r.type == 'video'],
+                }
+                _fetched_urls = list(search_orchestrator.get_fetched_urls())
+            except Exception as e:
+                logger.warning(f"[Stream] Could not harvest search results for forced-mode done: {e}")
+
+            _done_payload = {
+                'type': 'done',
+                'content': _final_content,
+                'chat_summary': _final_content,
+                'reasoning': '\n'.join(reasoning_buffer) if reasoning_buffer else None,
+                'render_mode': 'inline',
+                'artifact': None,
+                'artifact_error': None,
+                'artifact_patches': None,
+                'is_email': False,
+                'email': None,
+                'crypto_chart': None,
+                'session_name': None,
+                'search_results': _search_results,
+                'fetched_urls': _fetched_urls,
+                # Pick the right downstream renderer based on classified type.
+                'render_hint': {
+                    'news':   'news_cards',
+                    'images': 'image_grid',
+                    'video':  'video_embeds',
+                }.get(_forced_search_type, 'text_only'),
+                'model_meta': {
+                    'model_id': stream_model,
+                    'model_label': 'Web search',
+                    'model_provider': 'search',
+                    'auto_selected': False,
+                    'task_type': 'web_search',
+                },
+                'forced_mode': 'search',
+            }
+            yield f"data: {json.dumps(_done_payload)}\n\n"
+            return
+
         try:
-            _cached = orchestrator_check_cache(user_prompt_raw, _cache_job)
+            _cached = None if _skip_cache else orchestrator_check_cache(user_prompt_raw, _cache_job)
             if _cached:
                 _cached_resp, _cached_model = _cached
                 logger.info(f"[Stream] CACHE HIT: {user_prompt_raw[:40]}... (model={_cached_model})")
@@ -1219,7 +1415,7 @@ def chat_stream():
 
                             # Forward remainder after the ACTION line (skip if search did 2nd pass)
                             if not _search_second_pass_done and action_buffer.remainder:
-                                yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(action_buffer.remainder)})}\n\n"
+                                yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(normalize_paragraph_breaks(action_buffer.remainder))})}\n\n"
                         # If not resolved yet, keep buffering (no yield)
                         if not action_resolved:
                             continue
@@ -1233,7 +1429,7 @@ def chat_stream():
                     if just_resolved:
                         continue
 
-                    yield f"data: {json.dumps({'type': 'content', 'text': normalize_paragraph_breaks(text)})}\n\n"
+                    yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(normalize_paragraph_breaks(text))})}\n\n"
 
                 elif chunk_type == 'done':
                     # Flush normalizer for models that don't emit trailing \n
@@ -1893,9 +2089,20 @@ def chat_stream():
                     except Exception:
                         pass
 
-                    # Store in semantic cache (good responses only)
+                    # Store in semantic cache (good responses only).
+                    # Skip caching web_search results — they're time-sensitive
+                    # (news, prices, live events) and a stale reply would
+                    # surface the old answer for up to 24h.
                     try:
-                        if full_content and len(full_content.strip()) > 50:
+                        _used_web_search = (
+                            (parsed_action and getattr(parsed_action, 'action', None) == 'web_search')
+                            or _search_second_pass_done
+                        )
+                        if (
+                            full_content
+                            and len(full_content.strip()) > 50
+                            and not _used_web_search
+                        ):
                             orchestrator_store_cache(user_prompt_raw, full_content, stream_model, _cache_job)
                     except Exception:
                         pass

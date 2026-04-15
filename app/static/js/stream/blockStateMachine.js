@@ -6,6 +6,11 @@ export function createBlockStateMachine(emit) {
     let cursor = 0;
     let current = null;
     let blockCounter = 0;
+    // Loose-list support: a single blank line inside a list is held, not
+    // closed. If the next non-blank line is another list-item of the same
+    // type, we keep the block open (markdown's "loose list"); anything else
+    // flushes the close before processing normally.
+    let pendingBlankInList = false;
 
     function openBlock(type, meta = {}) {
         closeBlock('natural');
@@ -71,8 +76,39 @@ export function createBlockStateMachine(emit) {
         }
 
         if (line === '') {
+            if (current && (current.type === 'list-ul' || current.type === 'list-ol')) {
+                if (pendingBlankInList) {
+                    // Second consecutive blank inside a list → end the list.
+                    closeBlock('natural');
+                    pendingBlankInList = false;
+                } else {
+                    pendingBlankInList = true;
+                }
+                return;
+            }
             if (current) closeBlock('natural');
             return;
+        }
+
+        // Non-blank line after a held blank inside a list: decide whether to
+        // resume the list (same-type item opener) or flush and process anew.
+        if (pendingBlankInList) {
+            const ulItem = line.match(UL_ITEM_RE);
+            const olItem = line.match(OL_ITEM_RE);
+            const sameList =
+                (current?.type === 'list-ul' && ulItem) ||
+                (current?.type === 'list-ol' && olItem);
+            if (sameList) {
+                // Preserve the blank as a newline in the block text so
+                // list.js' parseItems still sees a clean line boundary.
+                appendToBlock('\n');
+                pendingBlankInList = false;
+                // fall through to the "Inside a list" handler below
+            } else {
+                closeBlock('natural');
+                pendingBlankInList = false;
+                // fall through to normal processing
+            }
         }
 
         const headingMatch = line.match(/^(#{1,6}) (.*)$/);
@@ -150,6 +186,7 @@ export function createBlockStateMachine(emit) {
         },
         finalize() {
             drain(true);
+            pendingBlankInList = false;
             closeBlock('finalize');
         },
     };

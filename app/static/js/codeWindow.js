@@ -410,386 +410,6 @@ const BackgroundRequestManager = (() => {
 
 window.BackgroundRequestManager = BackgroundRequestManager;
 
-// ==================== Progressive Text Display ====================
-// Displays text progressively using chunk streaming (like real AI streaming)
-const ProgressiveTextDisplay = (() => {
-    // Track active displays by session ID
-    const activeDisplays = new Map();
-
-    // Streaming configuration
-    const MIN_CHUNK_SIZE = 30;  // Minimum characters per chunk
-    const MAX_CHUNK_SIZE = 80;  // Maximum characters per chunk
-    const MIN_DELAY = 100;      // Minimum ms between chunks
-    const MAX_DELAY = 200;      // Maximum ms between chunks
-
-    class TextDisplay {
-        constructor(sessionId, text, container, options = {}) {
-            this.sessionId = sessionId;
-            this.fullText = text;
-            // Split into streaming chunks (sentences or size-based)
-            this.chunks = this.createChunks(text);
-            this.container = container;  // Can be null for background streaming
-            this.chunkIndex = 0;
-            this.outputText = '';
-            this.isComplete = false;
-            this.isPaused = false;
-            this.onComplete = options.onComplete || null;
-            this.isCode = options.isCode || false;
-            this.timeoutId = null;
-            // Store completion data for background sessions
-            this.completionData = options.completionData || null;
-            this.isBackgroundStream = !container;
-            // IntersectionObserver for smart scrolling
-            this.scrollObserver = null;
-            this.cursorVisible = true;
-            this.setupScrollObserver();
-        }
-
-        // Setup IntersectionObserver for smart scrolling
-        setupScrollObserver() {
-            if (typeof IntersectionObserver === 'undefined') return;
-
-            // Get composer height for root margin calculation
-            const composerHeight = getComputedStyle(document.documentElement)
-                .getPropertyValue('--composer-reserved-height') || '150px';
-            const bottomMargin = parseInt(composerHeight) + 60;
-
-            this.scrollObserver = new IntersectionObserver(
-                (entries) => {
-                    entries.forEach(entry => {
-                        this.cursorVisible = entry.isIntersecting;
-                    });
-                },
-                {
-                    root: null, // viewport
-                    rootMargin: `-80px 0px -${bottomMargin}px 0px`, // top, right, bottom, left
-                    threshold: 0
-                }
-            );
-        }
-
-        // Scroll cursor into view only if it left the viewport AND user is pinned to bottom
-        scrollIfNeeded() {
-            // Don't scroll if keeping user message at top (ChatGPT-style)
-            if (window._keepMessageAtTop) {
-                return;
-            }
-            // Respect user scroll intent - don't scroll if user scrolled up
-            if (window.scrollState && !window.scrollState.isPinnedToBottom) {
-                return;
-            }
-            if (!this.cursorVisible) {
-                const cursor = this.container?.querySelector('.streaming-cursor');
-                if (cursor) {
-                    cursor.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }
-        }
-
-        // Observe cursor element
-        observeCursor(cursor) {
-            if (this.scrollObserver && cursor) {
-                this.scrollObserver.disconnect();
-                this.scrollObserver.observe(cursor);
-            }
-        }
-
-        // Cleanup observer
-        destroyObserver() {
-            if (this.scrollObserver) {
-                this.scrollObserver.disconnect();
-                this.scrollObserver = null;
-            }
-        }
-
-        // Create chunks that simulate streaming (sentences or character-based)
-        createChunks(text) {
-            const chunks = [];
-            let remaining = text;
-
-            while (remaining.length > 0) {
-                // Try to find a sentence boundary within max chunk size
-                let chunkSize = Math.min(remaining.length, MAX_CHUNK_SIZE);
-                let chunk = remaining.substring(0, chunkSize);
-
-                // Look for sentence endings (. ! ? followed by space or end)
-                const sentenceEnd = chunk.search(/[.!?][\s<]|[.!?]$/);
-                if (sentenceEnd > MIN_CHUNK_SIZE) {
-                    // Found a sentence boundary, cut there
-                    chunkSize = sentenceEnd + 1;
-                    // Include trailing space if present
-                    if (remaining[chunkSize] === ' ') chunkSize++;
-                } else if (chunkSize >= MIN_CHUNK_SIZE) {
-                    // No sentence boundary, try to break at word boundary
-                    const lastSpace = chunk.lastIndexOf(' ');
-                    if (lastSpace > MIN_CHUNK_SIZE) {
-                        chunkSize = lastSpace + 1;
-                    }
-                }
-
-                chunks.push(remaining.substring(0, chunkSize));
-                remaining = remaining.substring(chunkSize);
-            }
-
-            return chunks;
-        }
-
-        // Get random delay for natural streaming feel
-        getRandomDelay() {
-            return MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY);
-        }
-
-        // Advance by one chunk
-        advance() {
-            if (this.isComplete || this.isPaused) return false;
-
-            if (this.chunkIndex < this.chunks.length) {
-                this.outputText += this.chunks[this.chunkIndex++];
-                return true;
-            } else {
-                this.isComplete = true;
-                return false;
-            }
-        }
-
-        // Schedule next chunk with random delay
-        scheduleNextChunk() {
-            if (this.isComplete || this.isPaused) return;
-
-            this.timeoutId = setTimeout(() => {
-                const activeSessionId = window.chatManager?.activeSessionId;
-                const isActiveSession = this.sessionId === activeSessionId;
-
-                // Always advance chunks (even for background sessions)
-                const advanced = this.advance();
-
-                // Only update DOM if this is the active session AND we have a container
-                if (advanced && isActiveSession && this.container) {
-                    this.updateDOM();
-
-                    // Auto-scroll (only if user is pinned to bottom)
-                    if (window.scrollState?.isPinnedToBottom) {
-                        if (typeof window.scrollToBottom === 'function') {
-                            window.scrollToBottom(false);
-                        }
-                    }
-                }
-
-                // Handle completion
-                if (this.isComplete) {
-                    // Update DOM if visible
-                    if (this.container) {
-                        this.updateDOM();
-                    }
-
-                    if (this.onComplete) {
-                        this.onComplete();
-                    }
-
-                    // Reset send button if this was the active session
-                    if (isActiveSession) {
-                        if (typeof resetSendButtonIfIdle === 'function') {
-                            resetSendButtonIfIdle();
-                        } else if (typeof updateSendButton === 'function') {
-                            updateSendButton(false);
-                        }
-                    } else {
-                        // Show blue dot ONLY after streaming completes for background sessions
-                        console.log('Background streaming complete for session:', this.sessionId);
-                        BackgroundRequestManager.updateSessionNotificationDot(this.sessionId, true);
-                    }
-                } else {
-                    // Schedule next chunk
-                    this.scheduleNextChunk();
-                }
-            }, this.getRandomDelay());
-        }
-
-        // Start the streaming
-        start() {
-            this.scheduleNextChunk();
-        }
-
-        // Get current display text
-        getCurrentText() {
-            return this.outputText;
-        }
-
-        // Get progress percentage
-        getProgress() {
-            return this.chunks.length > 0
-                ? (this.chunkIndex / this.chunks.length) * 100
-                : 100;
-        }
-
-        // Update DOM if container exists
-        updateDOM() {
-            if (!this.container || !document.body.contains(this.container)) {
-                return false;
-            }
-
-            if (this.isComplete) {
-                this.container.innerHTML = this.fullText;
-                this.cursorElement = null;
-                this.destroyObserver();
-            } else {
-                // Get the latest chunk for fade-in effect
-                const latestChunk = this.chunks[this.chunkIndex - 1] || '';
-                const previousText = this.outputText.slice(0, -latestChunk.length);
-                const fadeInChunk = latestChunk ? `<span class="stream-fade-in">${latestChunk}</span>` : '';
-
-                // Create persistent cursor once (stored on instance)
-                if (!this.cursorElement) {
-                    this.cursorElement = document.createElement('span');
-                    this.cursorElement.className = 'streaming-cursor';
-                }
-
-                // Update text content
-                this.container.innerHTML = previousText + fadeInChunk;
-
-                // Append cursor to the last element so it stays inline
-                const lastChild = this.container.lastElementChild;
-                if (lastChild) {
-                    lastChild.appendChild(this.cursorElement);
-                } else {
-                    this.container.appendChild(this.cursorElement);
-                }
-
-                // Smart scroll: only scroll if cursor left viewport
-                this.observeCursor(this.cursorElement);
-                this.scrollIfNeeded();
-            }
-            return true;
-        }
-
-        // Complete immediately (show all text)
-        complete() {
-            if (this.timeoutId) {
-                clearTimeout(this.timeoutId);
-                this.timeoutId = null;
-            }
-            this.outputText = this.fullText;
-            this.chunkIndex = this.chunks.length;
-            this.isComplete = true;
-            this.destroyObserver();
-            // Fire onComplete so pending Promises resolve (e.g. handleComplexMessage chain)
-            if (this.onComplete) {
-                this.onComplete();
-                this.onComplete = null;
-            }
-        }
-
-        // Pause the display
-        pause() {
-            this.isPaused = true;
-            if (this.timeoutId) {
-                clearTimeout(this.timeoutId);
-                this.timeoutId = null;
-            }
-        }
-
-        // Resume the display
-        resume() {
-            this.isPaused = false;
-            this.scheduleNextChunk();
-        }
-
-        // Attach to a new container (when switching back to session)
-        attachToContainer(container) {
-            this.container = container;
-            this.updateDOM();
-        }
-    }
-
-    // Start a new progressive display
-    function start(sessionId, text, container, options = {}) {
-        // Remove any existing display for this session
-        if (activeDisplays.has(sessionId)) {
-            const existing = activeDisplays.get(sessionId);
-            existing.complete();
-        }
-
-        const display = new TextDisplay(sessionId, text, container, options);
-        activeDisplays.set(sessionId, display);
-
-        // Initial DOM update
-        display.updateDOM();
-
-        // Start chunk streaming for this display
-        display.start();
-
-        return display;
-    }
-
-    // Get display for a session
-    function getDisplay(sessionId) {
-        return activeDisplays.get(sessionId);
-    }
-
-    // Check if session has active display (not complete)
-    function hasActiveDisplay(sessionId) {
-        const display = activeDisplays.get(sessionId);
-        return display && !display.isComplete;
-    }
-
-    // Check if session has a completed display (notification pending)
-    function hasCompletedDisplay(sessionId) {
-        const display = activeDisplays.get(sessionId);
-        return display && display.isComplete;
-    }
-
-    // Resume display for a session (when switching back)
-    function resume(sessionId, container) {
-        const display = activeDisplays.get(sessionId);
-        if (!display) return null;
-
-        display.attachToContainer(container);
-
-        // Resume streaming if not complete
-        if (!display.isComplete) {
-            display.resume();
-        }
-
-        return display;
-    }
-
-    // Complete display immediately
-    function complete(sessionId) {
-        const display = activeDisplays.get(sessionId);
-        if (display) {
-            display.complete();
-            display.updateDOM();
-        }
-    }
-
-    // Remove display
-    function remove(sessionId) {
-        activeDisplays.delete(sessionId);
-    }
-
-    // Clear all displays
-    function clear() {
-        // Stop all active displays
-        activeDisplays.forEach(display => {
-            display.complete();
-        });
-        activeDisplays.clear();
-    }
-
-    return {
-        start,
-        getDisplay,
-        hasActiveDisplay,
-        hasCompletedDisplay,
-        resume,
-        complete,
-        remove,
-        clear
-    };
-})();
-
-window.ProgressiveTextDisplay = ProgressiveTextDisplay;
-
 // ==================== Thinking Indicator System ====================
 const ThinkingIndicator = (() => {
     const TIPS = [
@@ -1316,12 +936,6 @@ function isTypingAnimationActive() {
         return true;
     }
 
-    // Check ProgressiveTextDisplay for current session
-    const currentSessionId = window.chatManager?.activeSessionId;
-    if (currentSessionId && ProgressiveTextDisplay?.hasActiveDisplay?.(currentSessionId)) {
-        return true;
-    }
-
     return false;
 }
 
@@ -1349,6 +963,7 @@ function renderMathInMessage(element) {
         console.error('Math rendering error:', error);
     }
 }
+window.renderMathInMessage = renderMathInMessage;
 
 // Terminal/shell languages that should render as terminal window
 const TERMINAL_LANGUAGES = new Set([
@@ -1376,35 +991,6 @@ const TERMINAL_COMMAND_PATTERNS = [
 function isTerminalLanguage(lang) {
     if (!lang) return false;
     return TERMINAL_LANGUAGES.has(lang.toLowerCase());
-}
-
-// Detect terminal content based on the actual content, not just language
-function isTerminalContent(content, lang) {
-    // If explicit terminal language, always true
-    if (isTerminalLanguage(lang)) return true;
-
-    // For plaintext or unspecified, analyze content
-    if (!lang || lang === 'plaintext' || lang === 'text') {
-        const lines = content.split('\n').filter(l => l.trim());
-        if (lines.length === 0) return false;
-
-        // Check if most lines look like terminal commands
-        let terminalLineCount = 0;
-        for (const line of lines) {
-            const trimmed = line.trim();
-            for (const pattern of TERMINAL_COMMAND_PATTERNS) {
-                if (pattern.test(trimmed)) {
-                    terminalLineCount++;
-                    break;
-                }
-            }
-        }
-
-        // If more than 50% of lines look like terminal commands, treat as terminal
-        return terminalLineCount > 0 && (terminalLineCount / lines.length) >= 0.5;
-    }
-
-    return false;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1472,147 +1058,6 @@ function isTreeStructure(content, lang) {
 
     // Otherwise check percentage
     return treeIndicators >= 5 && (treeIndicators / lines.length) >= 0.4;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// MERMAID DIAGRAM DETECTION & RENDERING
-// ═══════════════════════════════════════════════════════════════
-
-function isMermaidDiagram(content, lang) {
-    // Check if language is explicitly mermaid
-    if (lang && lang.toLowerCase() === 'mermaid') {
-        return true;
-    }
-
-    // Check for mermaid syntax patterns
-    const mermaidPatterns = [
-        /^(graph|flowchart)\s+(TB|BT|LR|RL|TD)/im,
-        /^sequenceDiagram/im,
-        /^classDiagram/im,
-        /^stateDiagram/im,
-        /^erDiagram/im,
-        /^gantt/im,
-        /^pie/im,
-        /^gitGraph/im,
-        /^journey/im,
-        /^mindmap/im
-    ];
-
-    return mermaidPatterns.some(pattern => pattern.test(content.trim()));
-}
-
-function createMermaidDiagram(content) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'mermaid-container';
-    wrapper.style.cssText = `
-        background: transparent !important;
-        padding: 16px !important;
-        margin: 0.5rem 0 !important;
-        overflow-x: auto !important;
-        overflow-y: visible !important;
-        min-height: 200px !important;
-    `;
-
-    // Clean the content - remove any markdown artifacts
-    let cleanContent = content.trim();
-    // Remove any leading/trailing backticks or language tags
-    cleanContent = cleanContent.replace(/^```mermaid\s*/i, '').replace(/```\s*$/, '').trim();
-    // Remove "mermaid" if it appears as the first line (language tag leaking into content)
-    cleanContent = cleanContent.replace(/^mermaid\s*\n/i, '').trim();
-
-    // Fix common AI-generated Mermaid syntax errors
-    // Fix: -->|Label|> should be -->|Label| (extra > is invalid)
-    cleanContent = cleanContent.replace(/\|>\s+/g, '| ');
-    // Fix: -->|Label|> at end of arrow should remove extra >
-    cleanContent = cleanContent.replace(/(\|[^|]+\|)>/g, '$1');
-    // Fix: Missing space after arrow label -->|Label|Node should be -->|Label| Node
-    cleanContent = cleanContent.replace(/\|([^|]+)\|([A-Z\[])/g, '|$1| $2');
-    // Fix: Double arrows --> --> should be single -->
-    cleanContent = cleanContent.replace(/-->\s*-->/g, '-->');
-    // Fix: Arrow with extra characters like --> > should be -->
-    cleanContent = cleanContent.replace(/-->\s*>/g, '-->');
-    // Fix: Double quotes inside node labels break parsing - replace with single quotes
-    cleanContent = cleanContent.replace(/\[([^\]]*)"([^"]*)"([^\]]*)\]/g, "[$1'$2'$3]");
-    // Fix: Also handle in other bracket types like () {} <>
-    cleanContent = cleanContent.replace(/\(([^)]*)"([^"]*)"([^)]*)\)/g, "($1'$2'$3)");
-    // Fix: Spaces inside arrow labels -->| No| should be -->|No|
-    cleanContent = cleanContent.replace(/\|\s+([^|]+)\s*\|/g, '|$1|');
-    // Fix: Trim spaces inside labels
-    cleanContent = cleanContent.replace(/\|([^|]+)\|/g, (match, label) => `|${label.trim()}|`);
-
-    console.log('[Mermaid] Processing diagram:', cleanContent.substring(0, 100) + '...');
-
-    // Create unique ID for this diagram
-    const diagramId = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-
-    const diagramDiv = document.createElement('div');
-    diagramDiv.id = diagramId;
-    diagramDiv.className = 'mermaid';
-    diagramDiv.style.cssText = `
-        display: flex !important;
-        justify-content: center !important;
-        min-width: max-content !important;
-    `;
-    diagramDiv.textContent = cleanContent;
-
-    wrapper.appendChild(diagramDiv);
-
-    // Initialize mermaid if available
-    if (typeof mermaid !== 'undefined') {
-        // Configure mermaid for dark theme
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: 'dark',
-            suppressErrors: false,
-            themeVariables: {
-                primaryColor: '#10A37F',
-                primaryTextColor: '#e6edf3',
-                primaryBorderColor: '#30363d',
-                lineColor: '#8b949e',
-                secondaryColor: '#21262d',
-                tertiaryColor: '#161b22',
-                background: 'transparent',
-                mainBkg: '#0d1117',
-                nodeBorder: '#30363d',
-                clusterBkg: '#161b22',
-                clusterBorder: '#30363d',
-                titleColor: '#e6edf3',
-                edgeLabelBackground: '#0d1117'
-            },
-            flowchart: {
-                htmlLabels: true,
-                curve: 'basis',
-                nodeSpacing: 50,
-                rankSpacing: 60,
-                padding: 20,
-                useMaxWidth: false
-            }
-        });
-
-        // Render after a short delay to ensure DOM is ready
-        setTimeout(async () => {
-            try {
-                // Use mermaid.render for better error handling
-                const { svg } = await mermaid.render(diagramId + '-svg', cleanContent);
-                diagramDiv.innerHTML = svg;
-                console.log('[Mermaid] Diagram rendered successfully');
-            } catch (err) {
-                console.error('[Mermaid] Render error:', err);
-                // Show the code in a styled box on error
-                diagramDiv.innerHTML = `
-                    <div style="background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); border-radius: 8px; padding: 12px; margin: 8px 0;">
-                        <div style="color: #f85149; font-weight: 600; margin-bottom: 8px;">⚠️ Diagram syntax error</div>
-                        <pre style="color: #8b949e; font-size: 13px; white-space: pre-wrap; margin: 0;">${escapeHtmlForTerminal(cleanContent)}</pre>
-                    </div>
-                `;
-            }
-        }, 100);
-    } else {
-        console.warn('[Mermaid] Library not loaded');
-        diagramDiv.innerHTML = `<pre style="color: #8b949e;">${escapeHtmlForTerminal(cleanContent)}</pre>`;
-    }
-
-    return wrapper;
 }
 
 // RECIPE DETECTION & RENDERING
@@ -1983,67 +1428,6 @@ function createTerminalWindow(codeContent) {
     return wrapper;
 }
 
-// Function to create a code window with syntax highlighting
-async function createCodeWindow(text) {
-    if (!text?.trim()) {
-        throw new Error('Code content cannot be empty');
-    }
-
-    try {
-        const { language, codeContent } = await extractLanguageAndCode(text);
-
-        // Check if this is a tree/directory structure
-        const isTree = isTreeStructure(codeContent, language);
-        if (isTree) {
-            console.log('[CodeWindow] Creating tree view for project structure');
-            const treeView = createTreeView(codeContent);
-            return { codeWindow: treeView, codeElement: null };
-        }
-
-        // Check if this is a Mermaid diagram
-        const isMermaid = isMermaidDiagram(codeContent, language);
-        if (isMermaid) {
-            console.log('[CodeWindow] Creating Mermaid diagram');
-            const mermaidDiagram = createMermaidDiagram(codeContent);
-            return { codeWindow: mermaidDiagram, codeElement: null };
-        }
-
-        // Check if this is a recipe (using RecipeDetector module)
-        const isRecipeContent = window.RecipeDetector && window.RecipeDetector.isRecipe(codeContent, language);
-        if (isRecipeContent) {
-            console.log('[CodeWindow] Creating recipe card');
-            const recipeCard = window.RecipeDetector.createRecipeCard(codeContent);
-            return { codeWindow: recipeCard, codeElement: null };
-        }
-
-        // Check if this is terminal content (by language OR content analysis)
-        const isTerminal = isTerminalContent(codeContent, language);
-        console.log('[CodeWindow] Language detected:', language, 'isTerminal:', isTerminal);
-
-        // Render as terminal window if detected as terminal content
-        if (isTerminal) {
-            console.log('[CodeWindow] Creating terminal window for:', language || 'content-detected');
-            const terminalWindow = createTerminalWindow(codeContent);
-            return { codeWindow: terminalWindow, codeElement: null };
-        }
-
-        // Regular code window
-        const codeWindow = document.createElement('div');
-        codeWindow.className = `code-window ${CONFIG.CLASSES.DARK_MODE}`;
-
-        const header = await createCodeHeader(language, codeContent);
-        const { pre, code } = createCodeBlock(language, codeContent);
-
-        codeWindow.append(header, pre);
-        await applySyntaxHighlighting(code);
-
-        return { codeWindow, codeElement: code };
-    } catch (error) {
-        console.error('Failed to create code window:', error);
-        throw new Error('Failed to create code window');
-    }
-}
-
 // Helper function to normalize code content - fixes literal escape sequences
 function normalizeCodeContent(content) {
     if (!content || typeof content !== 'string') return content || '';
@@ -2063,152 +1447,6 @@ function normalizeCodeContent(content) {
     return content;
 }
 
-// Helper function to create code block elements
-function createCodeBlock(language, content) {
-    const pre = document.createElement('pre');
-    const code = document.createElement('code');
-    code.className = language ? `language-${language}` : '';
-    // Normalize content to fix literal escape sequences
-    code.textContent = normalizeCodeContent(content);
-    pre.appendChild(code);
-    return { pre, code };
-}
-
-// Helper function to extract language and code content from text
-async function extractLanguageAndCode(text) {
-    let codeContent = text.trim();
-
-    // Normalize content first to handle literal escape sequences
-    codeContent = normalizeCodeContent(codeContent);
-
-    const codeFenceRegex = /^```([a-zA-Z]*)\n([\s\S]*?)\n```$/;
-    const match = codeContent.match(codeFenceRegex);
-
-    if (match?.[1] || match?.[2]) {
-        return {
-            language: match[1].trim().toLowerCase() || 'text',
-            codeContent: match[2].trim()
-        };
-    }
-
-    try {
-        const language = await Promise.resolve(detector?.detectLanguage(codeContent) ?? 'text');
-        return { language, codeContent };
-    } catch (error) {
-        console.warn('Language detection failed:', error);
-        return { language: 'text', codeContent };
-    }
-}
-
-// Helper function to create the code header with copy button
-async function createCodeHeader(language, codeContent) {
-    const header = document.createElement('div');
-    header.className = 'code-header';
-
-    const langIndicator = createLanguageIndicator(language);
-    const copyButton = createCopyButton(codeContent);
-
-    header.append(langIndicator, copyButton);
-    return header;
-}
-
-// Helper function to create language indicator
-function createLanguageIndicator(language) {
-    const langIndicator = document.createElement('span');
-    langIndicator.className = 'language-indicator';
-    langIndicator.textContent = language || 'Text';
-    return langIndicator;
-}
-
-// Helper function to create the copy button with icon and text
-function createCopyButton(codeContent) {
-    const button = document.createElement('button');
-    button.className = 'copy-button';
-    button.innerHTML = `<i class="${CONFIG.ICONS.COPY}"></i><span>Copy code</span>`;
-
-    button.addEventListener('click', async () => {
-        try {
-            await navigator.clipboard.writeText(codeContent);
-            // Show success state
-            button.innerHTML = `<i class="fas fa-check"></i><span>Copied!</span>`;
-            button.classList.add('copied');
-
-            // Reset after 1 second
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            button.innerHTML = `<i class="${CONFIG.ICONS.COPY}"></i><span>Copy code</span>`;
-            button.classList.remove('copied');
-        } catch (error) {
-            console.error('Copy failed:', error);
-            button.innerHTML = `<i class="fas fa-times"></i><span>Failed</span>`;
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            button.innerHTML = `<i class="${CONFIG.ICONS.COPY}"></i><span>Copy code</span>`;
-        }
-    });
-
-    return button;
-}
-
-// Helper function to apply syntax highlighting
-async function applySyntaxHighlighting(code) {
-    if (typeof Prism === 'undefined') return;
-
-    try {
-        await Promise.resolve(Prism.highlightElement(code));
-    } catch (error) {
-        console.error('Prism highlighting failed:', error);
-    }
-}
-
-// Helper function to create and append the code section
-async function createAndAppendCodeSection(container, codeText, isHistory = false) {
-    if (!container || !codeText) {
-        console.warn('createAndAppendCodeSection: Missing container or codeText');
-        return;
-    }
-
-    try {
-        const { codeWindow, codeElement } = await createCodeWindow(codeText);
-        const cleanCode = codeText.replace(/^[a-zA-Z]+\s*\n/, '').trim();
-
-        container.appendChild(codeWindow);
-
-        // If codeElement is null (e.g., terminal window), we're done - no syntax highlighting needed
-        if (!codeElement) {
-            return;
-        }
-
-        if (isHistory) {
-            // For history, set text directly
-            codeElement.textContent = cleanCode;
-            await applySyntaxHighlighting(codeElement);
-        } else {
-            // For new messages, try typing animation with fallback
-            if (typeof window.typeText === 'function') {
-                try {
-                    await window.typeText(cleanCode, codeElement, true);
-                } catch (typeError) {
-                    console.warn('typeText failed, falling back to direct render:', typeError);
-                    codeElement.textContent = cleanCode;
-                    await applySyntaxHighlighting(codeElement);
-                }
-            } else {
-                // Fallback if typeText is not available
-                console.log('typeText not available, rendering directly');
-                codeElement.textContent = cleanCode;
-                await applySyntaxHighlighting(codeElement);
-            }
-        }
-    } catch (error) {
-        console.error('Failed to create code section:', error);
-        // Create a simple fallback display
-        const fallbackPre = document.createElement('pre');
-        fallbackPre.className = 'code-window';
-        fallbackPre.textContent = codeText;
-        container.appendChild(fallbackPre);
-    }
-}
-
-// Helper function to append user's message with animation
 /**
  * Render live attachments using the FilePreview system
  */
@@ -2366,7 +1604,7 @@ function appendUserMessage(messageDiv, message, messageId) {
         wrapper.appendChild(card);
         container.appendChild(wrapper);
     } else {
-        appendTextMessage(container, message, true);
+        renderUserMessage(container, message, messageId);
     }
 
     let footer = messageDiv.querySelector('.message-bubble-footer');
@@ -2431,6 +1669,15 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
         messageDiv = createMessageDiv(messageId, sender);
         chatDisplay.appendChild(messageDiv);
     } else {
+        // Same guard as startNewChatModule.renderMessage — if a live
+        // StreamRenderer is attached to this node's subtree, destroy it
+        // before wiping innerHTML so its messageEl doesn't keep mutating
+        // an orphaned tree after fast regenerate / edit.
+        const liveSr = window._activeStreamRenderer;
+        if (liveSr && !liveSr.destroyed && messageDiv.contains(liveSr.container)) {
+            liveSr.destroy();
+            window._activeStreamRenderer = null;
+        }
         messageDiv.innerHTML = ''; // Clear existing content to replace rather than append
     }
 
@@ -2499,7 +1746,7 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
                 appendFileMessage(messageContent, safeMessage);
                 break;
             default:
-                handleComplexMessage(messageContent, safeMessage, messageType, messageId, showButtons);
+                renderAiTextImmediate(messageContent, safeMessage, messageId, showButtons);
         }
     }
 
@@ -2732,6 +1979,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
     // Declare bgRequest before try so it's accessible in catch/finally
     let bgRequest = null;
+    // Hoisted so the outer catch (line ~4435) can clean up on mid-stream errors.
+    let _streamRenderer = null;
+    let _streamMsgId = null;
 
     try {
         // Note: We no longer set global isRequestInProgress - we use per-session tracking
@@ -2898,6 +2148,21 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         // Prepare request data
         const formData = new FormData();
         formData.append('prompt', prompt);
+
+        // Request mode: single source of truth for UI intent overrides.
+        //   'auto'     → model picks ACTION: itself (default)
+        //   'search'   → force web_search
+        //   'research' → force deep research (future)
+        //   'chat'     → force chat (skip search even if model wants it)
+        //   'artifact' → force artifact creation (future)
+        // The "+" menu "Web search" item stores its on/off state on
+        // webSearchBtn.dataset.webOn. A separate #enable-search checkbox
+        // was historical; today this dataset attr is the real source.
+        var _webBtn = document.getElementById('action-web-search');
+        var _webOn = _webBtn && _webBtn.dataset.webOn === 'true';
+        var _mode = _webOn ? 'search' : 'auto';
+        formData.append('mode', _mode);
+        console.log('[MODE] sending mode=', _mode, 'webOn=', _webOn);
         if (attachments.length) {
             // Strip dataUrl from JSON metadata (too large for payload)
             const serverAttachments = attachments.map(att => {
@@ -3061,14 +2326,47 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let artifactStreamActive = false;
                 let searchMsgId = null; // Track message element for search banner
                 let searchBannerDismissed = false; // Track if search banner was dismissed
-                let _streamRenderer = null; window._activeStreamRenderer = null; // Phase 2: live SSE-to-DOM renderer
-                let _streamMsgId = null;    // Message ID for StreamRenderer container
+                _streamRenderer = null; window._activeStreamRenderer = null; // Phase 2: live SSE-to-DOM renderer (hoisted above try)
+                _streamMsgId = null;    // Message ID for StreamRenderer container (hoisted above try)
                 let artifactFencePosition = -1;
                 let isFirstContentChunk = true; // Track first chunk for instant scroll
                 // Use array to avoid O(n²) string concatenation per chunk.
                 // streamedContent is only built (joined) when needed.
                 const _contentChunks = [];
                 let _contentJoinedAt = 0;  // index up to which streamedContent is current
+
+                // Client-side safety net: buffer until we can decide whether
+                // the stream opens with an `ACTION: xxx` line (which must be
+                // hidden from the UI). If so, strip it. Otherwise release the
+                // buffer verbatim. Disables itself once real content starts.
+                let _actionStripDone = false;
+                let _actionStripBuffer = '';
+                const _actionStripRe = /^\s*[-*]*\s*ACTION:\s*\w+[^\n]*\n(?:[ \t]*[a-zA-Z_][\w-]*\s*:[^\n]*\n)*\n*/i;
+                function _stripActionFromChunk(chunkText) {
+                    if (_actionStripDone) return chunkText;
+                    _actionStripBuffer += chunkText;
+                    // Decide as early as possible. If the buffered prefix
+                    // clearly cannot match (>= 7 chars and doesn't start with
+                    // "action:"), release it verbatim.
+                    const lead = _actionStripBuffer.replace(/^[\s\-*]+/, '');
+                    if (lead.length >= 7 && lead.slice(0, 7).toLowerCase() !== 'action:') {
+                        const out = _actionStripBuffer;
+                        _actionStripBuffer = '';
+                        _actionStripDone = true;
+                        return out;
+                    }
+                    // If it's potentially an ACTION header, wait for the blank
+                    // line that ends the header (or \n after single-line form).
+                    const m = _actionStripBuffer.match(_actionStripRe);
+                    if (m) {
+                        const stripped = _actionStripBuffer.slice(m[0].length);
+                        _actionStripBuffer = '';
+                        _actionStripDone = true;
+                        return stripped;
+                    }
+                    // Not enough data yet — swallow this chunk and wait.
+                    return '';
+                }
 
                 const processLine = (line) => {
                     if (!line.startsWith('data: ')) return;
@@ -3173,7 +2471,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                         var targetEl = document.getElementById(_streamMsgId);
                                         if (!targetEl) {
                                             // Create message element directly — don't use displayMessage
-                                            // which would start ProgressiveTextDisplay and show the old cursor
                                             if (window.setHasMessages) window.setHasMessages(true);
                                             else document.body.classList.add('has-messages');
                                             var chatDisplay = document.getElementById('chat-display');
@@ -3191,36 +2488,72 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                         }
                                         var targetContent = targetEl?.querySelector('.message-content');
                                         if (targetContent) {
-                                            // Kill any existing ProgressiveTextDisplay cursor
+                                            // Kill any existing streaming cursor
                                             var oldCursor = targetContent.querySelector('.streaming-cursor');
                                             if (oldCursor) oldCursor.remove();
-                                            targetContent.innerHTML = '';
+                                            // Remove everything EXCEPT the search banner in
+                                            // place. Detaching and re-inserting the banner
+                                            // would re-trigger its bannerFadeIn animation
+                                            // (0.3s opacity + translateY) — user perceives
+                                            // a glitch where the banner blinks/shifts.
+                                            // Keeping the node untouched leaves the shimmer
+                                            // running smoothly.
+                                            var _preservedBanner = targetContent.querySelector('.search-banner');
+                                            console.log('[SEARCH-BANNER] first content chunk. bannerFound=', !!_preservedBanner, 'msgId=', _streamMsgId);
+                                            Array.from(targetContent.children).forEach(function (child) {
+                                                if (child !== _preservedBanner) child.remove();
+                                            });
                                             _streamRenderer = new StreamRenderer(targetContent);
                                             window._activeStreamRenderer = _streamRenderer;
-                                            // Stop any active ProgressiveTextDisplay for this session
-                                            var sid = window.chatManager?.activeSessionId || 'default';
-                                            if (typeof ProgressiveTextDisplay !== 'undefined') {
-                                                ProgressiveTextDisplay.complete(sid);
-                                                ProgressiveTextDisplay.remove(sid);
-                                            }
                                         } else {
                                             console.warn('[StreamRenderer] No target element — falling back');
                                             _streamRenderer = null; window._activeStreamRenderer = null;
                                         }
                                     }
                                 }
-                                // Feed StreamRenderer with live tokens
+                                // Feed StreamRenderer with live tokens (after stripping
+                                // any leading ACTION: header leak).
                                 if (_streamRenderer) {
-                                    _streamRenderer.append(chunkText);
+                                    const _cleanChunk = _stripActionFromChunk(chunkText);
+                                    if (_cleanChunk) {
+                                        _streamRenderer.append(_cleanChunk);
+                                    }
                                 }
-                                // Dismiss search banner on first synthesis content chunk
+                                // Keep the animated "Searching…" shimmer visible until
+                                // real answer content actually appears in the DOM. Then
+                                // fade it out. We poll for the first .stream-block so
+                                // the banner doesn't vanish before the user sees anything.
                                 if (searchMsgId && !searchBannerDismissed && window.SearchResults) {
                                     searchBannerDismissed = true;
-                                    var searchEl = document.getElementById(searchMsgId);
-                                    var searchContent = searchEl?.querySelector('.message-content');
-                                    if (searchContent) {
-                                        window.SearchResults.dismissBanner(searchContent);
-                                    }
+                                    var _searchMsgIdSnapshot = searchMsgId;
+                                    // Dismiss the shimmer only once the user can actually
+                                    // READ the answer: a stream-block must exist AND hold
+                                    // >= ~80 chars of visible text. Without the length
+                                    // check, a paragraph block is created as soon as the
+                                    // first newline flushes, which fires the dismiss ~28ms
+                                    // after the first chunk — the user sees the banner
+                                    // vanish instantly and then waits for real content.
+                                    var _waitStart = performance.now();
+                                    var _MIN_TEXT = 80;
+                                    var _MAX_WAIT_MS = 30000; // hard ceiling in case stream stalls
+                                    var _waitForVisibleContent = function () {
+                                        var searchEl = document.getElementById(_searchMsgIdSnapshot);
+                                        var searchContent = searchEl?.querySelector('.message-content');
+                                        if (!searchContent) return;
+                                        var block = searchContent.querySelector(
+                                            '.stream-block:not(.block-mermaid):not(.block-math)'
+                                        );
+                                        var elapsed = performance.now() - _waitStart;
+                                        var textLen = block ? (block.textContent || '').trim().length : 0;
+                                        if ((block && textLen >= _MIN_TEXT) || elapsed > _MAX_WAIT_MS) {
+                                            console.log('[SEARCH-BANNER] dismissing after',
+                                                Math.round(elapsed), 'ms. textLen=', textLen);
+                                            window.SearchResults.dismissBanner(searchContent);
+                                        } else {
+                                            requestAnimationFrame(_waitForVisibleContent);
+                                        }
+                                    };
+                                    requestAnimationFrame(_waitForVisibleContent);
                                 }
                                 if (bgRequest) {
                                     BackgroundRequestManager.appendContent(requestSessionId, chunkText);
@@ -3382,6 +2715,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     }
                                     // Reset so synthesis chunks create a fresh StreamRenderer
                                     isFirstContentChunk = true;
+                                    // Reset the client-side ACTION stripper so the synthesis
+                                    // pass's first tokens get the same safety net applied.
+                                    _actionStripDone = false;
+                                    _actionStripBuffer = '';
                                 }
                                 if (!searchMsgId) {
                                     searchMsgId = placeholderId || generateMessageId();
@@ -4117,18 +3454,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 BackgroundRequestManager.completeRequest(requestSessionId, completionData);
             }
 
-            // Start background streaming with null container
-            // Blue dot will appear ONLY when streaming completes
-            const htmlContent = marked.parse(displayContent);
-            const sanitizedHtmlContent = DOMPurify.sanitize(htmlContent);
-
-            ProgressiveTextDisplay.start(requestSessionId, sanitizedHtmlContent, null, {
-                isCode: false,
-                completionData: completionData,
-                onComplete: () => {
-                    console.log('Background streaming finished for session:', requestSessionId);
-                }
-            });
+            // Session switched away — no fake-stream delay needed.
+            // BackgroundRequestManager.completeRequest already stored completion data;
+            // flip the blue-dot notification immediately.
+            console.log('Background response captured for session:', requestSessionId);
+            if (typeof BackgroundRequestManager !== 'undefined') {
+                BackgroundRequestManager.updateSessionNotificationDot(requestSessionId, true);
+            }
 
             return null;
         }
@@ -4560,12 +3892,6 @@ function abortMessage() {
     isRequestInProgress = false;
     isTypingStopped = true;
 
-    // Stop ProgressiveTextDisplay for current session
-    if (currentSessionId && ProgressiveTextDisplay) {
-        ProgressiveTextDisplay.complete(currentSessionId);
-        ProgressiveTextDisplay.remove(currentSessionId);
-    }
-
     // Also stop the old typewriter animator if active
     if (window.activeAnimator) {
         window.activeAnimator.stop();
@@ -4577,7 +3903,7 @@ function abortMessage() {
         window._activeStreamRenderer = null;
     }
 
-    // Remove all cursors from the DOM (both StreamRenderer and ProgressiveTextDisplay)
+    // Remove all cursors from the DOM
     document.querySelectorAll('.streaming-cursor, .stream-cursor').forEach(el => el.remove());
 
     // Hide thinking indicator and pulsing dot
@@ -4897,7 +4223,7 @@ function makeResizable(el) {
     resizer.style.boxShadow = '0px 0px 5px rgba(0, 0, 0, 0.5)';
     resizer.textContent = '↘'; // Add a Unicode arrow symbol for resize
 
-    resizer.style.color = '#ffffff'; // Make sure the symbol stands out
+    resizer.style.color = 'var(--text-primary, #e8e8f0)'; // Make sure the symbol stands out
 
     // Ensure the element has relative or absolute positioning for resizing to work correctly
     const computedStyle = window.getComputedStyle(el);
@@ -5116,20 +4442,16 @@ function animateCodeCorrection(originalCode, debuggedCode, codeWrapper, options 
 
 
 
-function appendTextMessage(container, text, isUserMessage, messageId, isHistory = false) {
-    // Skip if email composer has taken over this container
+/**
+ * Render a user message: markdown-it inline → DOMPurify → innerHTML.
+ * No streaming, no code-window chrome, no animation.
+ * User code blocks render as <pre><code> via markdown-it's default rules —
+ * intentionally plain, matching the text bubble styling.
+ */
+function renderUserMessage(container, text, messageId) {
     if (container && container.dataset.emailComposer === 'true') {
-        return Promise.resolve();
+        return;
     }
-
-    // RC-3 guard: if a live StreamRenderer is rendering this container, bail
-    // to avoid double-rendering (ProgressiveTextDisplay would write into a
-    // container StreamRenderer is actively managing).
-    if (!isUserMessage && window._activeStreamRenderer) {
-        return Promise.resolve();
-    }
-
-    // Create a container for the message
     const div = document.createElement('div');
     div.classList.add('text-message-container');
     if (messageId) {
@@ -5137,134 +4459,87 @@ function appendTextMessage(container, text, isUserMessage, messageId, isHistory 
     }
     container.appendChild(div);
 
-    // Create the message element
-    const messageElement = document.createElement(isUserMessage ? 'p' : 'div');
-    messageElement.classList.add('text-message');
-    div.appendChild(messageElement);
+    const messageEl = document.createElement('div');
+    messageEl.classList.add('text-message');
+    div.appendChild(messageEl);
 
-    // Handle user messages - parse markdown for proper rendering
-    if (isUserMessage) {
-        const htmlContent = marked.parse(text);
-        const sanitizedHtml = DOMPurify.sanitize(htmlContent);
-        messageElement.innerHTML = sanitizedHtml;
-        return Promise.resolve();
-    }
-
-    // Check if this is a tree structure for AI messages
-    if (isTreeStructure(text, null)) {
-        console.log('[TreeView] Detected tree structure in text message, rendering as tree view');
-        const treeView = createTreeView(text);
-        div.innerHTML = '';  // Clear the container
-        div.appendChild(treeView);
-        return Promise.resolve();
-    }
-
-    // Check if this is a recipe for AI messages (using RecipeDetector module)
-    if (window.RecipeDetector && window.RecipeDetector.isRecipe(text, null)) {
-        console.log('[Recipe] Detected recipe in text message, rendering as card');
-        const recipeCard = window.RecipeDetector.createRecipeCard(text);
-        div.innerHTML = '';  // Clear the container
-        div.appendChild(recipeCard);
-        return Promise.resolve();
-    }
-
-    // Handle AI or other non-user messages
-    const htmlContent = marked.parse(text);
-    const sanitizedHtmlContent = DOMPurify.sanitize(htmlContent);
-
-    // Helper: apply model attribution after text is rendered
-    const applyAttribution = () => {
-        const msgDiv = messageElement.closest('.message');
-        if (msgDiv && msgDiv._modelMeta && typeof window.addModelAttribution === 'function') {
-            window.addModelAttribution(msgDiv, msgDiv._modelMeta);
-            delete msgDiv._modelMeta;
-        }
-    };
-
-    if (isHistory) {
-        // For historical messages, skip typing animation and render immediately
-        messageElement.innerHTML = sanitizedHtmlContent;
-        renderMathInMessage(messageElement);
-        applyAttribution();
-        return Promise.resolve();
+    if (window.md) {
+        messageEl.innerHTML = DOMPurify.sanitize(window.md.render(text || ''));
     } else {
-        // For real-time messages, always use ProgressiveTextDisplay for background-aware animation
-        const sessionId = window.chatManager?.activeSessionId || 'default';
-
-        return new Promise((resolve) => {
-            ProgressiveTextDisplay.start(sessionId, sanitizedHtmlContent, messageElement, {
-                isCode: false,
-                onComplete: () => {
-                    renderMathInMessage(messageElement);
-                    applyAttribution();
-                    // Signal that typing animation is done (used by citation processing)
-                    const msgEl = messageElement.closest('.message');
-                    if (msgEl) msgEl.dispatchEvent(new CustomEvent('typing-complete', { bubbles: false }));
-                    resolve();
-                }
-            });
-        });
+        // markdown-it CDN failed to load (e.g. offline). Render as plain text
+        // rather than throwing — preserves send flow over flaky networks.
+        messageEl.textContent = text || '';
     }
 }
 
-
-function handleComplexMessage(container, message, messageType, messageId, showButtons, isHistory = false) {
-    if (!message || typeof message !== 'string') {
-        console.error('Invalid message passed to handleComplexMessage:', message);
+/**
+ * Render an AI text message that did NOT come from the live SSE stream.
+ * Routes through StreamRenderer (replay mode) so history, fallbacks,
+ * and non-streamed responses produce identical DOM to the live stream.
+ * Preserves tree-view and recipe special cases.
+ *
+ * `container` is the .message-content element; this function appends to it.
+ */
+function renderAiTextImmediate(container, text, messageId, showButtons) {
+    if (container && container.dataset.emailComposer === 'true') {
+        return;
+    }
+    if (!text || typeof text !== 'string') {
         return;
     }
 
-    console.log('handleComplexMessage:', { messageType, hasCodeFence: message.includes('```'), messageLength: message.length });
-
-    // Split the message into sections by code blocks (delimited by ```)
-    const sections = message.split("```");
-    const hasCodeBlocks = sections.length > 1;
-
-    console.log('handleComplexMessage sections:', sections.length, 'hasCodeBlocks:', hasCodeBlocks);
-
-    const tasks = sections.map((section, index) => {
-        const isCodeSection = index % 2 === 1; // Odd indices are inside code fences
-
-        // Handle code blocks - create code window when:
-        // 1. This is a code section (inside ```)
-        // 2. AND messageType is 'code' (is_code=true from backend)
-        if (isCodeSection && messageType === "code") {
-            console.log(`Section ${index}: Creating code window for code block`);
-            return () => createAndAppendCodeSection(container, section.trim(), isHistory);
+    // Special widget: tree view
+    if (typeof isTreeStructure === 'function' && isTreeStructure(text, null)) {
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('text-message-container');
+        wrapper.appendChild(createTreeView(text));
+        container.appendChild(wrapper);
+        if (showButtons && typeof appendActionButtons === 'function') {
+            appendActionButtons(container, messageId);
         }
+        return;
+    }
 
-        // Handle text sections
-        const textContent = section.trim();
-        if (!textContent) {
-            // Skip empty sections
-            return () => Promise.resolve();
+    // Special widget: recipe card
+    if (window.RecipeDetector && window.RecipeDetector.isRecipe(text, null)) {
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('text-message-container');
+        wrapper.appendChild(window.RecipeDetector.createRecipeCard(text));
+        container.appendChild(wrapper);
+        if (showButtons && typeof appendActionButtons === 'function') {
+            appendActionButtons(container, messageId);
         }
+        return;
+    }
 
-        console.log(`Section ${index}: Appending text message`);
-        return () => appendTextMessage(container, textContent, false, messageId, isHistory);
-    });
+    // Default: StreamRenderer in replay mode (no typing animation, DOM matches live)
+    const renderer = new StreamRenderer(container, { replay: true });
+    renderer.append(text);
+    renderer.finalize();
 
-    // Process the tasks sequentially
-    tasks.reduce((promise, task) => promise.then(task), Promise.resolve())
-        .then(() => {
-            // Add action buttons if required
-            if (showButtons) {
-                appendActionButtons(container, messageId);
-            }
-            // Scroll handled by scrollState.js MutationObserver
-            console.log('handleComplexMessage: All sections processed');
-        })
-        .catch(error => {
-            console.error('Error processing complex message:', error);
-            // Fallback: Just display the raw message
-            const fallbackDiv = document.createElement('div');
-            fallbackDiv.className = 'text-message';
-            fallbackDiv.textContent = message;
-            container.appendChild(fallbackDiv);
-        });
+    // KaTeX inline math (\(...\), $$...$$) — live stream path does this at line ~3227
+    // after finalize; replay path needs it explicit here.
+    if (typeof renderMathInMessage === 'function') {
+        renderMathInMessage(container);
+    }
+
+    // Model attribution (live stream applies this at finalize; replay needs it explicit)
+    const msgDiv = container.closest('.message');
+    if (msgDiv && msgDiv._modelMeta && typeof window.addModelAttribution === 'function') {
+        window.addModelAttribution(msgDiv, msgDiv._modelMeta);
+        delete msgDiv._modelMeta;
+    }
+
+    // typing-complete event — matches legacy appendTextMessage dispatch
+    // (consumed by citation/search-results post-processing)
+    if (msgDiv) {
+        msgDiv.dispatchEvent(new CustomEvent('typing-complete', { bubbles: false }));
+    }
+
+    if (showButtons && typeof appendActionButtons === 'function') {
+        appendActionButtons(container, messageId);
+    }
 }
-
-
 
 function resetAndFocusInput() {
     const promptInput = document.getElementById('prompt');

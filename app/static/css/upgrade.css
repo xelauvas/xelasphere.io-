@@ -9,7 +9,7 @@ body.upgrade-body {
     background: radial-gradient(circle at 20% 20%, rgba(103, 85, 231, 0.2), transparent 45%),
                 radial-gradient(circle at 80% 10%, rgba(113, 246, 255, 0.15), transparent 40%),
                 #05060c;
-    color: #f2f4ff;
+    color: var(--text-primary, #e8e8f0);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -142,7 +142,7 @@ body.upgrade-body {
     margin: 0;
     font-size: clamp(2.4rem, 3.8vw, 3.2rem);
     font-weight: 600;
-    color: #fdfefe;
+    color: var(--text-primary, #e8e8f0);
 }
 
 .upgrade-header .lede {

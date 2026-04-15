@@ -90,6 +90,17 @@ def fetch_user_preferences(user_id):
 @pages_bp.route('/', methods=['GET'])
 @error_handler
 def index():
+    return _render_home(initial_surface='chat')
+
+
+@pages_bp.route('/images', methods=['GET'])
+@error_handler
+def images_page():
+    """Images surface — reuses the home template with an auto-open flag."""
+    return _render_home(initial_surface='images')
+
+
+def _render_home(initial_surface='chat'):
     """Main index page."""
     try:
         # Check if user is logged in, if not set up guest mode
@@ -185,7 +196,8 @@ def index():
             guest_message_count=guest_count,
             guest_message_limit=GUEST_MESSAGE_LIMIT,
             guest_banner_threshold=GUEST_BANNER_THRESHOLD,
-            session_has_messages=False
+            session_has_messages=False,
+            initial_surface=initial_surface
         )
     except Exception as e:
         logger.error(f"Failed to load the index page: {e}")

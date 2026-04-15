@@ -13,9 +13,9 @@
     align-items: center;
     gap: 6px;
     padding: 8px 12px;
-    background: rgba(48, 48, 48, 0.95);
-    color: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--bg-elevated, #2a2a38);
+    color: var(--text-primary, #e8e8f0);
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
     border-radius: 8px;
     font-size: 13px;
     font-weight: 500;
@@ -35,9 +35,9 @@
 }
 
 .text-selection-ask-btn:hover {
-    background: rgba(60, 60, 60, 0.98);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: #fff;
+    background: var(--bg-elevated, #2a2a38);
+    border-color: var(--border-primary, rgba(255, 255, 255, 0.08));
+    color: var(--text-primary, #e8e8f0);
 }
 
 .text-selection-ask-btn:active {
@@ -91,7 +91,7 @@
 
 .quote-reply-bar {
     width: 3px;
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--border-primary, rgba(255, 255, 255, 0.08));
     flex-shrink: 0;
 }
 
@@ -105,7 +105,7 @@
     display: block;
     font-size: 11px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-secondary, #9898b0);
     margin-bottom: 3px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -115,7 +115,7 @@
     margin: 0;
     font-size: 13px;
     line-height: 1.4;
-    color: #a1a1aa;
+    color: var(--text-secondary, #9898b0);
     overflow: hidden;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -131,8 +131,8 @@
     padding: 0;
     background: transparent;
     border: none;
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
-    color: #6b6b6b;
+    border-left: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.04));
+    color: var(--text-tertiary, #5a5a70);
     cursor: pointer;
     transition: all 0.15s ease;
     flex-shrink: 0;
@@ -179,6 +179,6 @@
 .assistant-message ::selection,
 [data-role="assistant"] ::selection,
 .message.ai .message-content ::selection {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
     color: inherit;
 }

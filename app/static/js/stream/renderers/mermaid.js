@@ -37,19 +37,28 @@ export function createMermaidRenderer() {
                 block.el.textContent = block.text;
                 return;
             }
+            // Snapshot the node + text at finalize-time. Between the awaits
+            // below the parent message may be destroyed, cleared, or the
+            // block detached — in which case we must NOT write to the (now
+            // orphaned) node. Guard with isConnected on every resume.
+            const el = block.el;
+            const src = block.text;
             try {
-                await window.mermaid.parse(block.text);
+                await window.mermaid.parse(src);
+                if (!el.isConnected) return;
                 const { svg } = await window.mermaid.render(
                     `mermaid-${block.id}`,
-                    block.text,
+                    src,
                 );
-                block.el.innerHTML = svg;
+                if (!el.isConnected) return;
+                el.innerHTML = svg;
             } catch (err) {
+                if (!el.isConnected) return;
                 const pre = document.createElement('pre');
                 pre.className = 'mermaid-error';
-                pre.textContent = block.text;
-                block.el.innerHTML = '';
-                block.el.appendChild(pre);
+                pre.textContent = src;
+                el.innerHTML = '';
+                el.appendChild(pre);
             }
         },
     };

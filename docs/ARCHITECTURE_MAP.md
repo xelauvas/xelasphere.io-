@@ -69,7 +69,6 @@ xelasphere.io-/
 │       │   ├── sidebarHandler.js   # Sidebar interactions
 │       │   ├── modelSelect.js      # Model selection UI
 │       │   ├── speechSynthesisModule.js # Text-to-speech
-│       │   ├── typeTextWorker.js   # Text streaming/typing effects
 │       │   ├── detectorCode.js     # Code detection utilities
 │       │   ├── scrollState.js      # Scroll behavior management
 │       │   ├── fetchMoreOptions.js # Option fetching
@@ -287,9 +286,7 @@ def create_app():
    - Session list rendering
    - Search functionality
 
-6. **typeTextWorker.js**
-   - Text streaming effects
-   - Character-by-character display
+6. **Rendering** — `streamRenderer.js` (live SSE + replay for AI), `codeWindow.js::renderUserMessage` (markdown-it inline for user). See `ARCHITECTURE_RATIONALE.md` for details.
 
 7. **speechSynthesisModule.js**
    - Text-to-speech integration
@@ -321,7 +318,7 @@ def create_app():
    ```
    Response received → Parse JSON
    → Render user message bubble
-   → Stream AI response with typeTextWorker
+   → Stream AI response with StreamRenderer
    → Detect artifact payload
    → artifactPanel.attachPreview()
    → Render artifact pill/button

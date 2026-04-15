@@ -103,9 +103,15 @@ class StreamRenderer {
                     type: event.blockType,
                     meta: event.meta,
                 });
+                if (!this.replay) {
+                    // Retire the cursor from the previous block before the new
+                    // renderer paints. Renderers that want to own their cursor
+                    // will create it inside .create() and set ownsCursor=true.
+                    removeCursor(this.messageEl);
+                }
                 const r = rendererFor(block.type);
                 r.create(block, this.messageEl, { replay: this.replay });
-                if (!this.replay) {
+                if (!this.replay && !block.meta?.ownsCursor) {
                     transferCursor(this.messageEl, block.el);
                 }
                 break;

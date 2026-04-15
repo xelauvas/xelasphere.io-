@@ -1,37 +1,49 @@
-/* === Professional Code Window - VS Code Inspired === */
+/* ============================================================
+   Code Window — macOS-chrome VSCode-inspired.
+   Gradient title bar with traffic-light dots, language pill, copy
+   button. Sticky header floats near the viewport top while scrolling
+   long blocks. Frosted glass blur on the header.
+   ============================================================ */
 
-/* --- Main Container --- */
 .code-window {
-    background: #1e1e1e;
+    /* Fully transparent — sits on the chat theme. Glass effect comes only
+       from the backdrop blur + a faint hairline border. */
+    background: transparent;
     border-radius: 12px;
-    overflow: hidden;
     width: 100%;
     max-width: 760px;
     margin: 1.25rem auto;
-    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', monospace;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, 'SF Mono', monospace;
     font-size: 13.5px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    line-height: 1.7;
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
     box-shadow:
-        0 4px 6px rgba(0, 0, 0, 0.1),
-        0 10px 40px rgba(0, 0, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        0 2px 6px rgba(0, 0, 0, 0.08),
+        inset 0 1px 0 var(--border-secondary, rgba(255, 255, 255, 0.04));
     position: relative;
 }
 
-/* --- Code Header (Title Bar) --- */
+/* --- Title bar — solid opaque. No glass, no blur, no transparency. --- */
 .code-header {
-    background: linear-gradient(180deg, #323233 0%, #2d2d2d 100%);
+    position: sticky;
+    top: 12px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 0 16px;
     height: 42px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.4);
-    position: relative;
+    background: var(--bg-tertiary, #22222e);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.5);
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
     user-select: none;
+    transition: top 180ms ease;
 }
 
-/* Traffic Light Dots (macOS style) */
+/* macOS traffic-light dots, painted via ::before. */
 .code-header::before {
     content: '';
     position: absolute;
@@ -47,109 +59,88 @@
         40px 0 0 #28c840;
 }
 
-/* Language Indicator Badge */
+/* Language — plain text label, no pill, no background, no border. */
 .language-indicator {
-    background: rgba(255, 255, 255, 0.08);
-    color: #9d9d9d;
-    padding: 4px 10px;
-    border: none;
-    border-radius: 6px;
-    font-weight: 500;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-left: 70px;
-    transition: all 0.2s ease;
-}
-
-.language-indicator:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: #c5c5c5;
-}
-
-/* Language icon dot */
-.language-indicator::before {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #4ec9b0;
-}
-
-/* Copy Button */
-.copy-button {
     background: transparent;
-    color: #858585;
-    padding: 6px 12px;
-    border: 1px solid transparent;
-    border-radius: 6px;
+    color: var(--text-secondary, #9898b0);
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    font-size: 11px;
     font-weight: 500;
-    font-size: 12px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 70px;
+    transition: color 0.2s ease;
+}
+.language-indicator:hover { color: var(--text-primary, #e8e8f0); }
+
+/* Copy button — plain text + icon, no pill. Hover brightens.
+   Overrides needed because debug.css has a global `button{}` rule that
+   adds background+box-shadow to every button, and responsive-foundation
+   imposes a min-height. !important is defensive against load-order shifts. */
+.copy-button {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    cursor: pointer;
-    transition: all 0.15s ease;
+    background: transparent !important;
+    color: var(--text-secondary, #9898b0);
+    border: none !important;
+    border-radius: 4px;
+    padding: 4px 6px !important;
     margin-left: auto;
+    min-height: 0 !important;
+    min-width: 0 !important;
     font-family: inherit;
-}
-
-.copy-button:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #d4d4d4;
-    border-color: rgba(255, 255, 255, 0.1);
-}
-
-.copy-button:active {
-    transform: scale(0.96);
-}
-
-.copy-button.copied {
-    color: #4ec9b0;
-    background: rgba(78, 201, 176, 0.1);
-}
-
-.copy-button i,
-.copy-button svg {
-    font-size: 13px;
-    transition: transform 0.15s ease;
-}
-
-.copy-button span {
     font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: none !important;
+    transition:
+        color 0.15s ease,
+        opacity 260ms ease,
+        transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
     white-space: nowrap;
 }
+.copy-button:hover  { color: var(--text-primary, #e8e8f0); box-shadow: none !important; transform: none; }
+.copy-button:active { transform: scale(0.97); box-shadow: none !important; }
+/* Copied state keeps the same grey — only icon + label text change. */
+.copy-button svg    { flex-shrink: 0; }
 
-/* Sticky Copy Button */
-.copy-button.sticky {
-    position: fixed;
-    top: 12px;
-    right: 16px;
-    z-index: 100;
-    background: rgba(30, 30, 30, 0.95);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+/* Hide the copy button while streaming — slide in once finalized. */
+.block-code.is-streaming .copy-button {
+    opacity: 0;
+    transform: translateX(8px);
+    pointer-events: none;
 }
 
-/* --- Code Content Area --- */
+/* --- Code content — opaque gradient glass sheet.
+   Glass feel from 18px backdrop blur + 160% saturation, with a thin
+   rgba(255,255,255,0.06) bottom hairline. --- */
 .code-window pre {
     margin: 0;
     padding: 20px 24px;
-    overflow: auto !important; /* Single scrollbar on pre only */
-    max-height: 560px;
-    background: #1e1e1e;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    max-height: none;
+    background: var(--bg-code, #13131a);
+    border-bottom: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
     position: relative;
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
 }
 
-/* Override Prism's overflow - pre handles scrolling, not inner code */
 .code-window pre[class*="language-"] {
-    overflow: auto !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    max-height: none;
     margin: 0;
     padding: 20px 24px;
+    /* background inherits from .code-window pre above. */
 }
 
 .code-window code {
@@ -157,289 +148,147 @@
     padding: 0;
     line-height: 1.7;
     font-size: 13.5px;
-    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', monospace;
-    color: #d4d4d4;
+    font-family: inherit;
+    color: var(--text-primary, #e8e8f0);
     background: transparent;
     white-space: pre;
     tab-size: 4;
     -moz-tab-size: 4;
-    word-wrap: normal;
-    word-break: normal;
-    overflow-wrap: normal;
-    overflow: visible !important; /* Code element should NOT scroll - let pre handle it */
-    max-height: none !important;
     font-variant-ligatures: contextual;
-    font-feature-settings: "calt" 1, "liga" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    text-rendering: optimizeLegibility;
 }
 
-/* Ensure Prism code elements don't add scrollbars - only pre scrolls */
-.code-window code[class*="language-"] {
-    overflow: visible !important;
-    max-height: none !important;
+/* Keep <code> and stray divs transparent so the <pre>'s bg
+   shows through — do NOT include <pre> itself here (its own background
+   is the body glass layer). */
+.code-window code,
+.code-window div:not(.code-header) {
+    background: transparent !important;
+    color: var(--text-primary, #e8e8f0);
 }
 
-/* --- Professional Scrollbar --- */
+/* Scrollbar. */
 .code-window pre::-webkit-scrollbar {
     width: 10px;
     height: 10px;
 }
-
-.code-window pre::-webkit-scrollbar-track {
-    background: #1e1e1e;
-}
-
+.code-window pre::-webkit-scrollbar-track { background: transparent; }
 .code-window pre::-webkit-scrollbar-thumb {
-    background: #424242;
+    background: var(--border-primary, rgba(255, 255, 255, 0.08));
     border-radius: 5px;
-    border: 2px solid #1e1e1e;
 }
-
-.code-window pre::-webkit-scrollbar-thumb:hover {
-    background: #555;
-}
-
-.code-window pre::-webkit-scrollbar-corner {
-    background: #1e1e1e;
-}
-
-/* Firefox scrollbar */
+.code-window pre::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
+.code-window pre::-webkit-scrollbar-corner { background: transparent; }
 .code-window pre {
     scrollbar-width: thin;
-    scrollbar-color: #424242 #1e1e1e;
+    scrollbar-color: var(--border-primary, rgba(255, 255, 255, 0.08)) transparent;
 }
 
-/* --- Syntax Highlighting (Prism/Highlight.js compatible) --- */
-
-/* Comments */
-.code-window .token.comment,
-.code-window .token.prolog,
-.code-window .token.doctype,
-.code-window .token.cdata,
-.code-window .hljs-comment {
-    color: #6a9955;
-    font-style: italic;
-}
-
-/* Keywords */
-.code-window .token.keyword,
-.code-window .token.tag,
-.code-window .token.boolean,
-.code-window .token.constant,
-.code-window .hljs-keyword,
-.code-window .hljs-built_in {
-    color: #569cd6;
-}
-
-/* Strings */
-.code-window .token.string,
-.code-window .token.char,
-.code-window .token.attr-value,
-.code-window .hljs-string {
-    color: #ce9178;
-}
-
-/* Numbers */
-.code-window .token.number,
-.code-window .hljs-number {
-    color: #b5cea8;
-}
-
-/* Functions */
-.code-window .token.function,
-.code-window .hljs-title.function_ {
-    color: #dcdcaa;
-}
-
-/* Classes & Types */
-.code-window .token.class-name,
-.code-window .token.builtin,
-.code-window .hljs-title.class_ {
-    color: #4ec9b0;
-}
-
-/* Variables & Parameters */
-.code-window .token.variable,
-.code-window .token.parameter,
-.code-window .hljs-variable,
-.code-window .hljs-params {
-    color: #9cdcfe;
-}
-
-/* Operators & Punctuation */
-.code-window .token.operator,
-.code-window .token.punctuation,
-.code-window .hljs-punctuation {
-    color: #d4d4d4;
-}
-
-/* Properties */
-.code-window .token.property,
-.code-window .hljs-property,
-.code-window .hljs-attr {
-    color: #9cdcfe;
-}
-
-/* Regex */
-.code-window .token.regex {
-    color: #d16969;
-}
-
-/* Important/Bold */
-.code-window .token.important,
-.code-window .token.bold {
-    font-weight: bold;
-}
-
-/* Italic */
-.code-window .token.italic {
-    font-style: italic;
-}
-
-/* --- Line Numbers (Optional) --- */
-.code-window.with-line-numbers pre {
-    padding-left: 60px;
-    counter-reset: line;
-}
-
-.code-window.with-line-numbers code {
-    position: relative;
-}
-
-.code-window .line-numbers-rows {
-    position: absolute;
-    left: 0;
-    top: 20px;
-    width: 44px;
-    padding-right: 12px;
-    text-align: right;
-    color: #858585;
-    font-size: 13px;
-    line-height: 1.7;
-    border-right: 1px solid #333;
-    user-select: none;
-    pointer-events: none;
-}
-
-/* --- Selection Styling --- */
+/* Selection */
 .code-window code::selection,
 .code-window code *::selection {
     background: rgba(38, 79, 120, 0.6);
     color: inherit;
 }
 
-/* --- Focus State --- */
-.code-window:focus-within {
-    outline: none;
-    box-shadow:
-        0 4px 6px rgba(0, 0, 0, 0.1),
-        0 10px 40px rgba(0, 0, 0, 0.25),
-        0 0 0 2px rgba(78, 201, 176, 0.3);
-}
-
-/* --- Dark/Light Mode Variants --- */
-.code-window.light-mode {
-    background: #ffffff;
-    border-color: rgba(0, 0, 0, 0.12);
-    box-shadow:
-        0 4px 6px rgba(0, 0, 0, 0.05),
-        0 10px 40px rgba(0, 0, 0, 0.08);
-}
-
-.code-window.light-mode .code-header {
-    background: linear-gradient(180deg, #f8f8f8 0%, #e8e8e8 100%);
-    border-bottom-color: rgba(0, 0, 0, 0.1);
-}
-
-.code-window.light-mode .language-indicator {
-    background: rgba(0, 0, 0, 0.06);
-    color: #666;
-}
-
-.code-window.light-mode .copy-button {
-    color: #666;
-}
-
-.code-window.light-mode pre,
-.code-window.light-mode code {
-    background: #ffffff;
-    color: #1e1e1e;
-}
-
-.code-window.light-mode pre::-webkit-scrollbar-track {
-    background: #f5f5f5;
-}
-
-.code-window.light-mode pre::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-color: #f5f5f5;
-}
-
-/* --- Override Conflicts --- */
-pre[class*="language-"]::before {
+/* Hide any prototype-era elements that earlier renderer versions may
+   still emit, so stale DOM doesn't leak decorations. */
+.code-header-left,
+.code-header-right,
+.code-actions,
+.lang-dot,
+.lang-name,
+.line-count,
+.live-indicator,
+.code-progress {
     display: none !important;
 }
 
+/* No focus ring — stay simple. */
+.code-window:focus-within { outline: none; }
+
+/* --- Diff / Patch line coloring --- */
+.code-window code .diff-line {
+    display: block;
+    padding: 0 24px;
+    margin: 0 -24px;
+    min-width: max-content;
+    white-space: pre;
+}
+.code-window code .diff-line.diff-added {
+    background: rgba(46, 160, 67, 0.18);
+    color: #7ee787;
+    box-shadow: inset 2px 0 0 #2ea043;
+}
+.code-window code .diff-line.diff-removed {
+    background: rgba(248, 81, 73, 0.18);
+    color: #ffa198;
+    box-shadow: inset 2px 0 0 #f85149;
+}
+.code-window code .diff-line.diff-hunk {
+    color: #79c0ff;
+    background: rgba(56, 139, 253, 0.08);
+}
+.code-window code .diff-line.diff-meta {
+    color: #8b949e;
+    font-style: italic;
+}
+.code-window code .diff-line.diff-ctx {
+    color: #c9d1d9;
+}
+
+/* Override Prism's own `::before` language label which conflicts with
+   the traffic-light painting. */
+pre[class*="language-"]::before { display: none !important; }
 pre[class*="language-"] {
     padding-top: 20px !important;
     margin: 0 !important;
-    background: #1e1e1e !important;
+    /* background handled by .code-window pre. */
 }
 
-.code-window pre,
-.code-window code,
-.code-window div:not(.code-header) {
-    background: #1e1e1e !important;
-    color: #d4d4d4;
+/* --- Collapse long blocks ---
+   Past ~30 lines the body is clipped; a footer button reveals the rest.
+   The fade-out below the clip points the eye at the footer. */
+.code-window.is-collapsed pre {
+    /* ~30 lines × 1.7 line-height × 13.5px font ≈ 688px, rounded. */
+    max-height: 640px;
+    overflow-y: hidden !important;
+    /* Soft fade at the bottom of the clipped region. */
+    -webkit-mask-image: linear-gradient(180deg,
+        #000 0,
+        #000 calc(100% - 48px),
+        transparent 100%);
+    mask-image: linear-gradient(180deg,
+        #000 0,
+        #000 calc(100% - 48px),
+        transparent 100%);
 }
 
-/* --- Responsive --- */
-@media (max-width: 768px) {
-    .code-window {
-        border-radius: 8px;
-        margin: 1rem auto;
-    }
-
-    .code-header {
-        height: 38px;
-        padding: 0 12px;
-    }
-
-    .code-header::before {
-        width: 10px;
-        height: 10px;
-        left: 12px;
-        box-shadow:
-            16px 0 0 #febc2e,
-            32px 0 0 #28c840;
-    }
-
-    .language-indicator {
-        margin-left: 56px;
-        font-size: 10px;
-        padding: 3px 8px;
-    }
-
-    .code-window pre {
-        padding: 16px;
-        max-height: 400px;
-    }
-
-    .code-window code {
-        font-size: 12px;
-        line-height: 1.6;
-    }
+.code-expand-footer {
+    display: block;
+    width: 100%;
+    background: transparent !important;
+    color: var(--text-secondary, #9898b0);
+    border: none !important;
+    border-top: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
+    border-radius: 0 0 12px 12px;
+    padding: 10px 14px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: none !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+.code-expand-footer:hover {
+    color: var(--text-primary, #e8e8f0);
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05)) !important;
+    box-shadow: none !important;
+    transform: none !important;
 }
 
-/* --- Animation for Copy Feedback --- */
-@keyframes copyPulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-}
-
-.copy-button.copied {
-    animation: copyPulse 0.3s ease;
-}
+/* Mobile tuning lives in mobile.css. */

@@ -3,6 +3,23 @@
  * Renders bash/shell/terminal code blocks as terminal windows
  */
 
+/* ============================================================
+   TERMINAL — hardcoded dark in both light and dark themes.
+   Terminal UX expectation: always dark (like VS Code integrated
+   terminal, iTerm, etc.). No theme flip.
+   ============================================================ */
+.terminal-window,
+.terminal-body,
+.terminal-output {
+    background: #0d1117 !important;
+    color: #c9d1d9 !important;
+}
+
+.terminal-output,
+.terminal-output * {
+    color: #8b949e !important;
+}
+
 /* === Terminal Window Container === */
 .terminal-window {
     background: #0d1117;

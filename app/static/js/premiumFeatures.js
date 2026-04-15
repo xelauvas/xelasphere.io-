@@ -317,7 +317,11 @@
 
     function processNewContent(container) {
         // Enhance code blocks
-        container.querySelectorAll('.text-message pre:not([data-enhanced])').forEach(enhanceCodeBlock);
+        // Skip <pre> already wrapped by StreamRenderer (has its own .code-window chrome).
+        container.querySelectorAll('.text-message pre:not([data-enhanced])').forEach(pre => {
+            if (pre.closest('.stream-block.block-code, .code-window')) return;
+            enhanceCodeBlock(pre);
+        });
 
         // Enhance blockquotes
         container.querySelectorAll('.text-message blockquote:not([data-callout-enhanced])').forEach(enhanceBlockquote);
