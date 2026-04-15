@@ -57,8 +57,15 @@ def test_classifier_schema_rejects_out_of_range_max_paragraph():
 
 
 def test_classifier_schema_validates_minimal_golden_sample():
+    """Minimal but complete — every required key present."""
     good = {
         "intent_type": "question",
+        "has_crypto_mention": False,
+        "has_stock_mention": False,
+        "asset_symbol": None,
+        "wants_chart": False,
+        "wants_image": False,
+        "wants_code": False,
         "scaffold": _valid_scaffold(),
     }
     Draft7Validator(CLASSIFIER_RESPONSE_SCHEMA).validate(good)
@@ -93,7 +100,12 @@ def test_classifier_schema_validates_full_golden_sample():
 def test_classifier_schema_allows_null_asset_symbol():
     good = {
         "intent_type": "general_chat",
+        "has_crypto_mention": False,
+        "has_stock_mention": False,
         "asset_symbol": None,
+        "wants_chart": False,
+        "wants_image": False,
+        "wants_code": False,
         "scaffold": _valid_scaffold(),
     }
     Draft7Validator(CLASSIFIER_RESPONSE_SCHEMA).validate(good)

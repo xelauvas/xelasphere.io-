@@ -14,15 +14,17 @@ from app.services.chat_engine import (
 )
 
 
+# OpenAI strict-schema mode requires additionalProperties:false on every
+# object, and every property listed as required. We comply.
 _SECTION_SCHEMA = {
     "type": "object",
-    "required": ["title", "style"],
+    "required": ["title", "emoji", "style"],
     "properties": {
         "title": {"type": "string", "minLength": 1},
-        "emoji": {"type": "string"},  # may be empty
+        "emoji": {"type": "string"},
         "style": {"enum": ["prose", "list", "steps"]},
     },
-    "additionalProperties": True,
+    "additionalProperties": False,
 }
 
 
@@ -47,9 +49,11 @@ _SCAFFOLD_SCHEMA = {
 
 
 CLASSIFIER_RESPONSE_SCHEMA = {
-    "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
-    "required": ["intent_type", "scaffold"],
+    "required": [
+        "intent_type", "has_crypto_mention", "has_stock_mention",
+        "asset_symbol", "wants_chart", "wants_image", "wants_code", "scaffold",
+    ],
     "properties": {
         "intent_type": {
             "enum": [

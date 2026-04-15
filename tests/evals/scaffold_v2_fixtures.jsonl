@@ -1,0 +1,56 @@
+{"id": "v1-btc-price", "prompt": "what's BTC trading at today?", "expected_layout": "conversational", "tags": ["v1", "financial"]}
+{"id": "v1-eth-chart", "prompt": "ETH price chart please", "expected_layout": "conversational", "tags": ["v1", "financial"]}
+{"id": "v1-haiku-ocean", "prompt": "write me a haiku about the ocean", "expected_layout": ["prose", "conversational"], "tags": ["v1", "creative"]}
+{"id": "v1-poem-stars", "prompt": "compose a short poem about stars", "expected_layout": ["prose", "conversational"], "tags": ["v1", "creative"]}
+{"id": "v1-sky-blue", "prompt": "why is the sky blue?", "expected_layout": ["prose", "long-prose"], "tags": ["v1", "question"]}
+{"id": "v1-rag-eli5", "prompt": "explain RAG like I'm five", "expected_layout": ["prose", "long-prose"], "tags": ["v1", "question"]}
+{"id": "v1-chicken-curry", "prompt": "give me a recipe for chicken curry", "expected_layout": ["structured", "list-heavy"], "expected_section_count_min": 2, "expected_section_count_max": 5, "tags": ["v1", "recipe"]}
+{"id": "v1-pancakes", "prompt": "how do I make pancakes?", "expected_layout": ["structured", "list-heavy"], "expected_section_count_min": 2, "expected_section_count_max": 5, "tags": ["v1", "recipe"]}
+{"id": "v1-python-sort", "prompt": "write a python script to sort a list", "expected_layout": ["technical", "code-heavy"], "tags": ["v1", "code"]}
+{"id": "v1-js-for-loop", "prompt": "show me a for-loop in javascript", "expected_layout": ["technical", "code-heavy"], "tags": ["v1", "code"]}
+{"id": "v1-dragon-image", "prompt": "draw me a picture of a dragon", "expected_layout": "conversational", "tags": ["v1", "image"]}
+{"id": "v1-sunset-image", "prompt": "generate an image of a sunset", "expected_layout": "conversational", "tags": ["v1", "image"]}
+{"id": "v1-greeting-how", "prompt": "hey, how's it going?", "expected_layout": "conversational", "tags": ["v1", "chat"]}
+{"id": "v1-good-morning", "prompt": "good morning!", "expected_layout": "conversational", "tags": ["v1", "chat"]}
+{"id": "regression-transformer-attention", "prompt": "write a deep explainer on how transformer attention works, including history and intuition", "expected_layout": "structured", "expected_section_count_min": 2, "expected_section_count_max": 5, "tags": ["v1-regression", "explainer", "multi-angle"]}
+{"id": "regression-tcp-vs-udp", "prompt": "what is the difference between TCP and UDP", "expected_layout": ["structured", "prose", "long-prose"], "expected_section_count_min": 2, "expected_section_count_max": 4, "tags": ["v1-regression", "comparison"]}
+{"id": "regression-bash-find-100mb", "prompt": "give me a bash one-liner to find files larger than 100MB", "expected_layout": "technical", "tags": ["v1-regression", "code"]}
+{"id": "regression-react-vue-svelte", "prompt": "compare React, Vue, and Svelte across performance, learning curve, and ecosystem", "expected_layout": "structured", "expected_section_count_min": 3, "expected_section_count_max": 6, "tags": ["v1-regression", "comparison", "3-angles"]}
+{"id": "explainer-quantum-entanglement", "prompt": "explain quantum entanglement covering discovery, mechanism, and real-world applications", "expected_layout": "structured", "expected_section_count_min": 3, "expected_section_count_max": 5, "tags": ["explainer", "3-angles"]}
+{"id": "explainer-k8s-pod-lifecycle", "prompt": "walk me through Kubernetes pod lifecycle: pending, running, termination", "expected_layout": "structured", "expected_section_count_min": 3, "expected_section_count_max": 5, "tags": ["explainer", "3-angles", "technical-topic"]}
+{"id": "explainer-2008-crisis", "prompt": "break down the 2008 financial crisis — causes, key events, and aftermath", "expected_layout": "structured", "expected_section_count_min": 3, "expected_section_count_max": 5, "tags": ["explainer", "3-angles"]}
+{"id": "explainer-http2", "prompt": "deep dive into HTTP/2 including header compression, multiplexing, and server push", "expected_layout": "structured", "expected_section_count_min": 3, "expected_section_count_max": 5, "tags": ["explainer", "3-angles", "technical-topic"]}
+{"id": "compare-postgres-mysql-sqlite", "prompt": "compare Postgres vs MySQL vs SQLite across performance, concurrency, and deployment", "expected_layout": "structured", "expected_section_count_min": 3, "expected_section_count_max": 6, "tags": ["comparison", "3-angles"]}
+{"id": "compare-redux-vs-zustand", "prompt": "compare Redux and Zustand for state management", "expected_layout": ["structured", "prose", "long-prose"], "expected_section_count_min": 2, "expected_section_count_max": 4, "tags": ["comparison", "2-angles"]}
+{"id": "short-entropy", "prompt": "in one sentence, what is entropy?", "expected_layout": ["prose", "conversational"], "tags": ["short-answer"]}
+{"id": "short-capital-france", "prompt": "what's the capital of France", "expected_layout": "conversational", "tags": ["short-answer", "factual"]}
+{"id": "short-current-year", "prompt": "what year is it", "expected_layout": "conversational", "tags": ["short-answer"]}
+{"id": "prose-french-revolution", "prompt": "summarize the French Revolution in 3 sentences", "expected_layout": "prose", "tags": ["prose", "summary"]}
+{"id": "prose-email-decline", "prompt": "draft a thank-you email declining a mentor's meeting request politely", "expected_layout": "prose", "tags": ["prose", "email"]}
+{"id": "prose-bedtime-story", "prompt": "tell me a short bedtime story about a brave squirrel", "expected_layout": ["prose", "long-prose"], "tags": ["creative", "narrative"]}
+{"id": "longprose-history-of-unix", "prompt": "give me a detailed history of Unix from its origins through today", "expected_layout": ["long-prose", "structured"], "tags": ["long-prose", "history"], "expected_section_count_min": 2, "expected_section_count_max": 6}
+{"id": "longprose-why-rust-popular", "prompt": "write at length about why Rust has become popular with systems programmers", "expected_layout": ["long-prose", "prose"], "tags": ["long-prose", "opinion"]}
+{"id": "technical-reverse-string-rust", "prompt": "how do I reverse a string in Rust?", "expected_layout": "technical", "tags": ["code", "snippet"]}
+{"id": "technical-parse-csv-python", "prompt": "write a python function to parse a CSV file", "expected_layout": ["technical", "code-heavy"], "tags": ["code"]}
+{"id": "technical-regex-email", "prompt": "regex to match an email address", "expected_layout": ["technical", "conversational"], "tags": ["code", "snippet"]}
+{"id": "technical-git-rebase", "prompt": "show me how to rebase a branch onto main in git", "expected_layout": ["technical", "list-heavy"], "tags": ["code", "workflow"]}
+{"id": "code-heavy-flask-todo-app", "prompt": "build a complete Flask REST API with auth, db models, and tests for a todo app", "expected_layout": ["code-heavy", "technical", "structured"], "tags": ["code-heavy", "full-app"], "expected_section_count_min": 2, "expected_section_count_max": 6}
+{"id": "code-heavy-react-component", "prompt": "write a full React component for a drag-and-drop file uploader with progress bar and tests", "expected_layout": ["code-heavy", "technical", "structured"], "tags": ["code-heavy", "component"], "expected_section_count_min": 2, "expected_section_count_max": 5}
+{"id": "code-heavy-sql-schema", "prompt": "design a complete SQL schema for a blog platform with users, posts, comments, and tags", "expected_layout": ["code-heavy", "technical"], "tags": ["code-heavy", "schema"]}
+{"id": "list-rainy-date-ideas", "prompt": "give me 10 date ideas for a rainy Saturday", "expected_layout": "list-heavy", "tags": ["list", "top-N"]}
+{"id": "list-node-memory-leaks", "prompt": "what are the top 5 causes of memory leaks in Node.js?", "expected_layout": ["list-heavy", "structured"], "tags": ["list", "top-N"], "expected_section_count_min": 2, "expected_section_count_max": 5}
+{"id": "list-tokyo-restaurants", "prompt": "top 7 sushi restaurants in Tokyo", "expected_layout": "list-heavy", "tags": ["list", "top-N"]}
+{"id": "list-productivity-tips", "prompt": "list 8 productivity tips for remote developers", "expected_layout": "list-heavy", "tags": ["list", "top-N"]}
+{"id": "chat-thanks", "prompt": "thanks that was helpful", "expected_layout": "conversational", "tags": ["chat"]}
+{"id": "chat-cool", "prompt": "cool story", "expected_layout": "conversational", "tags": ["chat"]}
+{"id": "chat-single-emoji", "prompt": "haha 😂", "expected_layout": "conversational", "tags": ["chat", "emoji"]}
+{"id": "chat-yo-whats-up", "prompt": "yo what's up", "expected_layout": "conversational", "tags": ["chat"]}
+{"id": "edge-very-short", "prompt": "ok", "expected_layout": "conversational", "tags": ["edge", "short"]}
+{"id": "edge-number-only", "prompt": "42", "expected_layout": "conversational", "tags": ["edge"]}
+{"id": "adversarial-ambiguous-build", "prompt": "build me something cool", "expected_layout": ["conversational", "prose"], "tags": ["adversarial", "ambiguous"]}
+{"id": "adversarial-conjunction-no-explainer", "prompt": "I'm looking for salt and pepper recipes", "expected_layout": ["prose", "list-heavy", "structured"], "tags": ["adversarial", "false-positive-risk"], "expected_section_count_min": 2, "expected_section_count_max": 4}
+{"id": "adversarial-multi-intent", "prompt": "explain recursion and also write a python example", "expected_layout": ["structured", "technical", "code-heavy"], "tags": ["adversarial", "multi-intent"], "expected_section_count_min": 2, "expected_section_count_max": 4}
+{"id": "adversarial-long-question-one-angle", "prompt": "can you explain in great detail how the event loop works in Node.js", "expected_layout": ["long-prose", "prose", "structured"], "tags": ["adversarial", "long-but-single-angle"], "expected_section_count_min": 2, "expected_section_count_max": 5}
+{"id": "adversarial-compare-two-only", "prompt": "iPhone or Android, which is better?", "expected_layout": ["structured", "prose", "long-prose"], "expected_section_count_min": 2, "expected_section_count_max": 4, "tags": ["adversarial", "comparison"]}
+{"id": "tutorial-deploy-fastapi", "prompt": "walk me through deploying a FastAPI app to AWS step by step", "expected_layout": ["structured", "list-heavy", "technical"], "expected_section_count_min": 3, "expected_section_count_max": 8, "tags": ["tutorial", "steps"]}
+{"id": "tutorial-setup-react-native", "prompt": "step by step guide to set up React Native on a Mac", "expected_layout": ["structured", "list-heavy", "technical"], "expected_section_count_min": 3, "expected_section_count_max": 8, "tags": ["tutorial", "steps"]}
