@@ -222,6 +222,30 @@
                 // Strip markdown syntax for accurate word count
                 var plainText = data.content.replace(/[#*\[\]()>_`~!|-]/g, '');
                 var wordCount = plainText.split(/\s+/).filter(Boolean).length;
+
+                // Empty / paywall / cookie-wall detection. If content is
+                // too short after stripping markdown, OR reads like a
+                // cookie/paywall banner, bail to a clearer error state
+                // rather than rendering useless content.
+                var lowerPlain = plainText.toLowerCase();
+                var cookieHints = ['cookie', 'consent', 'accept', 'privacy'];
+                var paywallHints = ['subscribe', 'subscription', 'log in', 'paywall', 'members only'];
+                var cookieCount = 0, paywallCount = 0;
+                for (var ch = 0; ch < cookieHints.length; ch++) if (lowerPlain.indexOf(cookieHints[ch]) !== -1) cookieCount++;
+                for (var pc = 0; pc < paywallHints.length; pc++) if (lowerPlain.indexOf(paywallHints[pc]) !== -1) paywallCount++;
+                if (wordCount < 30) {
+                    _showError('This page returned almost no readable content — likely JS-rendered or blocked. Open in browser to view.');
+                    return;
+                }
+                if (wordCount < 120 && cookieCount >= 2) {
+                    _showError('This site is asking for cookie consent before serving content. Open in browser to accept.');
+                    return;
+                }
+                if (wordCount < 120 && paywallCount >= 2) {
+                    _showError('This article appears to be behind a paywall. Open in browser if you have access.');
+                    return;
+                }
+
                 var readTime = Math.max(1, Math.ceil(wordCount / 200));
                 var articleHtml = '';
 
@@ -257,6 +281,53 @@
 
                 content.innerHTML = articleHtml;
                 readerBody = content.querySelector('.reader-body');
+
+                // RTL detection — if the majority of alphabetic characters
+                // in the content are Arabic/Hebrew/Persian, flip direction.
+                try {
+                    var sample = plainText.slice(0, 2000);
+                    var rtlChars = (sample.match(/[\u0590-\u08FF]/g) || []).length;
+                    var latinChars = (sample.match(/[A-Za-z]/g) || []).length;
+                    if (rtlChars > latinChars && rtlChars > 30) {
+                        readerBody.setAttribute('dir', 'rtl');
+                        readerBody.style.textAlign = 'right';
+                    }
+                } catch (e) { /* ignore */ }
+
+                // Syntax highlighting — Prism is already loaded in the app.
+                if (window.Prism && typeof window.Prism.highlightAllUnder === 'function') {
+                    try { window.Prism.highlightAllUnder(readerBody); } catch (e) { /* ignore */ }
+                }
+
+                // Math rendering — KaTeX auto-render extracts $...$ / $$...$$
+                // from the rendered body. Guard in try/catch in case the
+                // content has unbalanced delimiters.
+                if (window.renderMathInElement) {
+                    try {
+                        window.renderMathInElement(readerBody, {
+                            delimiters: [
+                                { left: '$$', right: '$$', display: true },
+                                { left: '$', right: '$', display: false },
+                                { left: '\\[', right: '\\]', display: true },
+                                { left: '\\(', right: '\\)', display: false }
+                            ],
+                            throwOnError: false
+                        });
+                    } catch (e) { /* ignore */ }
+                }
+
+                // Scroll position restore, per URL.
+                try {
+                    var scrollKey = 'reader-scroll:' + url;
+                    var saved = parseInt(sessionStorage.getItem(scrollKey) || '0', 10);
+                    if (saved > 0) {
+                        // Defer so the browser has laid the article out.
+                        setTimeout(function () { content.scrollTop = saved; }, 30);
+                    }
+                    content.addEventListener('scroll', function () {
+                        sessionStorage.setItem(scrollKey, String(content.scrollTop));
+                    });
+                } catch (e) { /* ignore */ }
             })
             .catch(function () {
                 _showError('Failed to load article');
@@ -272,27 +343,98 @@
         return d.innerHTML;
     }
 
+    // Parse a markdown pipe-table starting at lines[i]. Returns
+     // { html, next } where next is the index AFTER the last table row.
+     // Returns null if no valid table is found at this position.
+    function _parseMarkdownTable(lines, i) {
+        var headerLine = lines[i];
+        var sepLine = lines[i + 1];
+        // Both must have '|' and separator must be dashes/colons/pipes.
+        if (!headerLine || headerLine.indexOf('|') === -1) return null;
+        if (!sepLine || !/^\s*\|?[\s|:\-]+\|?\s*$/.test(sepLine)) return null;
+        if (!/-/.test(sepLine)) return null;
+
+        function splitRow(row) {
+            var trimmed = row.trim().replace(/^\|/, '').replace(/\|$/, '');
+            return trimmed.split('|').map(function (c) { return c.trim(); });
+        }
+
+        var header = splitRow(headerLine);
+        // Alignment info from the separator row
+        var aligns = splitRow(sepLine).map(function (c) {
+            var left = c.charAt(0) === ':';
+            var right = c.charAt(c.length - 1) === ':';
+            if (left && right) return 'center';
+            if (right) return 'right';
+            if (left) return 'left';
+            return '';
+        });
+
+        var rows = [];
+        var j = i + 2;
+        while (j < lines.length && lines[j].indexOf('|') !== -1 && lines[j].trim() !== '') {
+            rows.push(splitRow(lines[j]));
+            j++;
+        }
+
+        function cellStyle(idx) {
+            return aligns[idx] ? ' style="text-align:' + aligns[idx] + ';"' : '';
+        }
+        var out = '<div class="reader-body__table-wrap"><table>';
+        out += '<thead><tr>';
+        for (var h = 0; h < header.length; h++) {
+            out += '<th' + cellStyle(h) + '>' + _inlineMd(header[h]) + '</th>';
+        }
+        out += '</tr></thead>';
+        if (rows.length) {
+            out += '<tbody>';
+            for (var r = 0; r < rows.length; r++) {
+                out += '<tr>';
+                for (var c = 0; c < rows[r].length; c++) {
+                    out += '<td' + cellStyle(c) + '>' + _inlineMd(rows[r][c]) + '</td>';
+                }
+                out += '</tr>';
+            }
+            out += '</tbody>';
+        }
+        out += '</table></div>';
+        return { html: out, next: j };
+    }
+
     function _markdownToHtml(md) {
+        // Decode common HTML entities that markdownify sometimes leaves in.
+        md = md.replace(/&nbsp;/g, ' ');
+
         var lines = md.split('\n');
         var html = '';
         var inList = false;
         var listTag = 'ul';
         var inCodeBlock = false;
+        var codeLang = '';
         var codeLines = [];
+
+        function closeList() {
+            if (inList) { html += '</' + listTag + '>'; inList = false; }
+        }
 
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
 
-            // Code block fences
-            if (/^```/.test(line)) {
-                if (inCodeBlock) {
-                    html += '<pre><code>' + codeLines.join('\n') + '</code></pre>';
-                    codeLines = [];
-                    inCodeBlock = false;
-                } else {
-                    if (inList) { html += '</' + listTag + '>'; inList = false; }
-                    inCodeBlock = true;
-                }
+            // Code block fences with optional language tag (```python)
+            var fenceOpen = line.match(/^```(\w[\w+-]*)?\s*$/);
+            var fenceClose = /^```\s*$/.test(line);
+            if (fenceOpen && !inCodeBlock) {
+                closeList();
+                inCodeBlock = true;
+                codeLang = fenceOpen[1] || '';
+                continue;
+            }
+            if (inCodeBlock && fenceClose) {
+                var cls = codeLang ? ' class="language-' + _escHtml(codeLang) + '"' : '';
+                html += '<pre><code' + cls + '>' + codeLines.join('\n') + '</code></pre>';
+                codeLines = [];
+                codeLang = '';
+                inCodeBlock = false;
                 continue;
             }
             if (inCodeBlock) {
@@ -300,9 +442,20 @@
                 continue;
             }
 
+            // Pipe tables (look ahead one line for the separator row).
+            if (line.indexOf('|') !== -1) {
+                var tbl = _parseMarkdownTable(lines, i);
+                if (tbl) {
+                    closeList();
+                    html += tbl.html;
+                    i = tbl.next - 1;
+                    continue;
+                }
+            }
+
             // Horizontal rule
             if (/^(\s*[-*_]\s*){3,}$/.test(line)) {
-                if (inList) { html += '</' + listTag + '>'; inList = false; }
+                closeList();
                 html += '<hr>';
                 continue;
             }
@@ -333,17 +486,24 @@
                 continue;
             }
 
-            // Unordered list
+            // Unordered list (with task-list checkbox support)
             if (/^\s*[-*]\s+/.test(line)) {
                 if (!inList || listTag !== 'ul') {
                     if (inList) html += '</' + listTag + '>';
                     html += '<ul>'; inList = true; listTag = 'ul';
                 }
-                html += '<li>' + _inlineMd(line.replace(/^\s*[-*]\s+/, '')) + '</li>';
+                var itemText = line.replace(/^\s*[-*]\s+/, '');
+                var taskMatch = itemText.match(/^\[( |x|X)\]\s+(.*)$/);
+                if (taskMatch) {
+                    var checked = /x/i.test(taskMatch[1]) ? ' checked' : '';
+                    html += '<li class="reader-body__task"><input type="checkbox" disabled' + checked + '> ' + _inlineMd(taskMatch[2]) + '</li>';
+                } else {
+                    html += '<li>' + _inlineMd(itemText) + '</li>';
+                }
                 continue;
             }
 
-            if (inList) { html += '</' + listTag + '>'; inList = false; }
+            closeList();
 
             // Blank line
             if (!line.trim()) continue;
