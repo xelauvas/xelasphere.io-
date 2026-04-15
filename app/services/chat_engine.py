@@ -1094,17 +1094,34 @@ def detect_crypto_price_query(prompt: str) -> Optional[dict]:
                 return {'symbol': symbol.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
 
     # ── 5. Short direct queries (≤4 words) — likely just an asset name ──
-    # e.g. "solana", "bitcoin price", "AAPL" — try to resolve the whole prompt
+    # e.g. "solana", "bitcoin", "AAPL", "apple". Curated lists only; do NOT
+    # fall through to the dynamic CoinGecko lookup here — without explicit
+    # financial intent it routinely hijacks English greetings ("hello" →
+    # "hello-labs", "ok" → random token). Explicit-intent layer 2 above is
+    # the right place for dynamic resolution.
     if word_count <= 4:
-        result = _resolve_asset(prompt_lower)
+        result = _resolve_asset(prompt_lower, allow_dynamic=False)
         if result:
             return result
 
     return None
 
 
-def _resolve_asset(query: str) -> Optional[dict]:
-    """Try to resolve a query string to a known crypto or stock asset."""
+def _resolve_asset(query: str, allow_dynamic: bool = True) -> Optional[dict]:
+    """
+    Try to resolve a query string to a known crypto or stock asset.
+
+    allow_dynamic=True: use get_coin_id_dynamic (CoinGecko full catalog) as a
+    fallback. Safe only when the query already carries explicit financial
+    intent ("price of X", "X chart"), because CoinGecko lists thousands of
+    obscure tokens with English-word tickers ("hello-labs" for "hello",
+    "ok" for "ok", etc.) that would otherwise hijack greetings and short
+    replies.
+
+    allow_dynamic=False: match only against curated lists (CRYPTO_SYMBOLS,
+    STOCK_SYMBOLS, COMPANY_TO_SYMBOL). Use this from the short-query layer
+    where the user hasn't expressed financial intent.
+    """
     query = query.lower().strip()
     # Reject pronouns, articles, and common non-asset words
     _non_assets = {
@@ -1123,21 +1140,22 @@ def _resolve_asset(query: str) -> Optional[dict]:
         candidates.append(query[:-1])
 
     for q in candidates:
-        # Crypto fast path (top coins)
+        # Crypto fast path (top coins) — curated, safe.
         if q in CRYPTO_SYMBOLS:
             coin_id = CRYPTO_SYMBOLS[q]
             logger.info(f"💰 Crypto price query: {q} -> {coin_id}")
             return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
-        # Dynamic crypto lookup
-        coin_id = get_coin_id_dynamic(q)
-        if coin_id:
-            logger.info(f"💰 Crypto price query (dynamic): {q} -> {coin_id}")
-            return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
-        # Stock symbol
+        # Dynamic crypto lookup — gated by explicit financial intent.
+        if allow_dynamic:
+            coin_id = get_coin_id_dynamic(q)
+            if coin_id:
+                logger.info(f"💰 Crypto price query (dynamic): {q} -> {coin_id}")
+                return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
+        # Stock symbol — curated, safe.
         if q.upper() in STOCK_SYMBOLS:
             logger.info(f"📈 Stock price query: {q}")
             return {'symbol': q.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
-        # Company name
+        # Company name — curated, safe.
         if q in COMPANY_TO_SYMBOL:
             symbol = COMPANY_TO_SYMBOL[q]
             logger.info(f"📈 Stock price query (company): {q} -> {symbol}")
