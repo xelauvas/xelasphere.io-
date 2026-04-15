@@ -20,6 +20,85 @@ import { transferCursor, removeCursor } from './stream/cursor.js';
 
 const PREWARM_THRESHOLD = 100; // chars before we fire layout inference
 
+/**
+ * Content-profile classification — walks the finalized block list and
+ * decides a context label ('code-heavy', 'list-heavy', 'conversational',
+ * etc.) so CSS can adapt the message container's layout to the content
+ * that actually landed. Deterministic; no model calls. Costs ~1ms.
+ */
+function buildMessageProfile(blocks) {
+    const profile = {
+        totalBlocks: blocks.length,
+        codeBlocks: 0,
+        listBlocks: 0,
+        headingBlocks: 0,
+        proseBlocks: 0,
+        mathBlocks: 0,
+        mermaidBlocks: 0,
+        totalListItems: 0,
+        totalProseChars: 0,
+    };
+    for (const block of blocks) {
+        switch (block.type) {
+            case 'code':
+                profile.codeBlocks++;
+                break;
+            case 'list-ul':
+            case 'list-ol':
+                profile.listBlocks++;
+                // Prefer the rendered DOM child count (authoritative);
+                // fall back to counting markdown item lines if DOM missing.
+                if (block.el && block.el.children) {
+                    profile.totalListItems += block.el.children.length;
+                } else if (block.text) {
+                    const lines = block.text.split('\n');
+                    for (const line of lines) {
+                        if (/^\s*(?:[-*+]|\d+\.)\s+/.test(line)) profile.totalListItems++;
+                    }
+                }
+                break;
+            case 'heading':
+                profile.headingBlocks++;
+                break;
+            case 'math':
+                profile.mathBlocks++;
+                break;
+            case 'mermaid':
+                profile.mermaidBlocks++;
+                break;
+            case 'blockquote':
+            case 'paragraph':
+            default:
+                profile.proseBlocks++;
+                profile.totalProseChars += (block.text && block.text.length) || 0;
+                break;
+        }
+    }
+    return profile;
+}
+
+function classifyContext(profile) {
+    const {
+        totalBlocks, codeBlocks, listBlocks, headingBlocks,
+        proseBlocks, totalListItems, totalProseChars,
+    } = profile;
+
+    if (totalBlocks === 0) return 'conversational';
+    // Code-dominant: at least one code block and it's ≥ prose blocks.
+    if (codeBlocks > 0 && codeBlocks >= proseBlocks) return 'code-heavy';
+    // Any code mixed with prose = technical.
+    if (codeBlocks > 0) return 'technical';
+    // Substantial list content.
+    if (listBlocks > 0 && totalListItems >= 6) return 'list-heavy';
+    // Multiple headings → document-like.
+    if (headingBlocks >= 2) return 'structured';
+    // Multi-paragraph explanation.
+    if (proseBlocks >= 2 && totalProseChars > 800) return 'long-prose';
+    // Single short block → conversational.
+    if (totalBlocks === 1 && totalProseChars < 200) return 'conversational';
+    return 'prose';
+}
+
 const _renderers = {
     prose: createProseRenderer(),
     code: createCodeRenderer(),
@@ -59,6 +138,7 @@ class StreamRenderer {
         wrapper.appendChild(inner);
         this.container.appendChild(wrapper);
         this.messageEl = inner;
+        this.wrapperEl = wrapper;
 
         this.ast = createBlockAST();
         this.sm = createBlockStateMachine(event => this._handleEvent(event));
@@ -88,6 +168,15 @@ class StreamRenderer {
         // exactly once through that path — do NOT re-iterate the block array here.
         this.sm.finalize();
         removeCursor(this.messageEl);
+
+        // Content profile → data-ctx on the wrapper. CSS contexts in
+        // stream-blocks.css pick up the attribute and adapt max-width,
+        // line-height, and stream-block spacing to what actually rendered.
+        try {
+            const profile = buildMessageProfile(this.ast.blocks());
+            const ctx = classifyContext(profile);
+            if (this.wrapperEl) this.wrapperEl.dataset.ctx = ctx;
+        } catch (_e) { /* non-critical */ }
     }
 
     destroy() {

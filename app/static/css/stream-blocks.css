@@ -245,3 +245,71 @@
 /* Minor cosmetic: .text-message has a contentFadeIn animation that stacks
    with per-block streamBlockIn. On replay mode we suppress per-block; the
    container fade is unchanged. Not overridden. */
+
+/* ---------------------------------------------------------------------------
+   CONTENT-AWARE CONTEXTS
+   ---------------------------------------------------------------------------
+   StreamRenderer classifies each finalized message and sets
+   data-ctx="..." on .text-message-container. Every context adapts the
+   inner .text-message width, line-height, and stream-block rhythm to the
+   kind of content that actually rendered. Deterministic, no model call.
+   Fallback: if data-ctx is missing, base .text-message rules apply.
+   --------------------------------------------------------------------------- */
+
+/* Conversational — short replies, greetings, one-line answers.
+   Narrower measure + tighter feel so single-line responses don't
+   stretch across a wide column. */
+[data-ctx="conversational"] .text-message {
+    max-width: 580px;
+    font-size: 15px;
+    line-height: 1.7;
+}
+
+/* Prose — default mid-length explanation, no structure. */
+[data-ctx="prose"] .text-message {
+    max-width: 640px;
+    line-height: 1.85;
+}
+
+/* Long-prose — multi-paragraph essay-style content. Generous leading +
+   slightly larger inter-block gap so long reads scan comfortably. */
+[data-ctx="long-prose"] .text-message {
+    max-width: 680px;
+    line-height: 1.9;
+}
+[data-ctx="long-prose"] .stream-block + .stream-block {
+    margin-top: 1.2em;
+}
+
+/* Technical — prose mixed with code. Wider so code blocks don't
+   wrap aggressively, normal reading width for surrounding prose. */
+[data-ctx="technical"] .text-message {
+    max-width: 760px;
+}
+
+/* Code-heavy — mostly or entirely code output. Wide + tight line-height,
+   with reduced block rhythm so stacked code blocks read as one unit. */
+[data-ctx="code-heavy"] .text-message {
+    max-width: 920px;
+    line-height: 1.6;
+}
+[data-ctx="code-heavy"] .stream-block + .stream-block {
+    margin-top: 0.6em;
+}
+
+/* List-heavy — 6+ items, reference/enumerated content. Tighter
+   inter-block gap so lists don't feel airy. */
+[data-ctx="list-heavy"] .text-message {
+    max-width: 680px;
+}
+[data-ctx="list-heavy"] .stream-block + .stream-block {
+    margin-top: 0.4em;
+}
+
+/* Structured — multiple headings, document-like responses. */
+[data-ctx="structured"] .text-message {
+    max-width: 720px;
+}
+[data-ctx="structured"] .stream-block + .stream-block {
+    margin-top: 1em;
+}
