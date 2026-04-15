@@ -388,6 +388,55 @@ def create_image_from_surface():
     return handle_image_request(user_id, prompt, page_id=page_id)
 
 
+def _maybe_classify_and_inject_scaffold(*, base_system: str, user_prompt: str) -> dict:
+    """W-09 — single gate-point for Structure Intelligence v2 injection.
+
+    When Config.SCAFFOLD_V2_ENABLED is True:
+      - runs the v2 classifier
+      - appends a scaffold description to base_system
+      - logs the chosen layout + sections
+    When False, no classifier call and base_system passes through unchanged.
+
+    Returns dict with keys: base_system, scaffold, envelope.
+    scaffold is None on flag-off or classifier-full-fallback-no-sections.
+
+    Injection behavior here is intentionally minimal — a single descriptive
+    line, not the full rule block. The actual structured-output generation
+    path lands in W-15+. This function exists so the gate is testable now.
+    """
+    # Read env var directly so tests can flip the flag without module reloads,
+    # and so ops can toggle it with a gunicorn reload (no redeploy).
+    if os.getenv("SCAFFOLD_V2_ENABLED", "false").strip().lower() != "true":
+        return {"base_system": base_system, "scaffold": None, "envelope": None}
+
+    try:
+        envelope = classify_user_intent(user_prompt)
+    except Exception as e:
+        logger.debug(f"[v2] Classifier errored (non-fatal): {e}")
+        return {"base_system": base_system, "scaffold": None, "envelope": None}
+
+    scaffold = envelope.get("scaffold")
+    if not scaffold:
+        return {"base_system": base_system, "scaffold": None, "envelope": envelope}
+
+    section_titles = [s.get("title", "?") for s in (scaffold.get("sections") or [])]
+    logger.info(
+        f"[v2] scaffold classified: layout={scaffold.get('layout')} "
+        f"opening={scaffold.get('opening')} "
+        f"sections={section_titles} "
+        f"intent={envelope.get('intent_type')}"
+    )
+
+    # Minimal W-09 injection — a single-line hint. Structured-output path
+    # (W-15+) replaces this with a schema-enforced call.
+    augmented = (
+        base_system
+        + f"\n\n[Structure hint: layout={scaffold.get('layout')}, "
+        + f"sections={section_titles or 'none'}.]"
+    )
+    return {"base_system": augmented, "scaffold": scaffold, "envelope": envelope}
+
+
 def handle_image_request(user_id: str, user_prompt: str, page_id: Optional[str] = None):
     """Handle image generation requests."""
     logger.info(f"Detected image request from user {user_id}: {user_prompt}")
@@ -1000,6 +1049,13 @@ def chat_stream():
     if system_addition:
         base_system = base_system + "\n\n" + system_addition
         logger.info(f"[Stream] system_addition applied ({len(system_addition)} chars)")
+
+    # W-09 — Structure Intelligence v2 gate (no-op when flag off).
+    _v2_result = _maybe_classify_and_inject_scaffold(
+        base_system=base_system, user_prompt=user_prompt_raw,
+    )
+    base_system = _v2_result["base_system"]
+
     built_context = context_builder.build(
         system_prompt=base_system,
         full_history=previous_messages,

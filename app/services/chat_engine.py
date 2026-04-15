@@ -16,14 +16,16 @@ from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import requests
 
 from flask import session, current_app
 
 from app.config import Config, db
-from app.blueprints.shared import (
-    chat_session, ModelProviderError, TokenLimitError,
-    GUEST_MESSAGE_LIMIT, GUEST_BANNER_THRESHOLD,
-)
+# NOTE: app.blueprints.shared has a bidirectional dependency with this module
+# via the blueprints package __init__. The names below are therefore pulled
+# lazily inside the functions that use them (chat_session, ModelProviderError,
+# TokenLimitError). GUEST_MESSAGE_LIMIT / GUEST_BANNER_THRESHOLD were imported
+# but never referenced — removed to reduce coupling.
 from app.utilities import (
     count_tokens, send_prompt, send_prompt_with_images,
     generate_fallback_response, categorize_sessions,
@@ -121,7 +123,11 @@ SYSTEM_INSTRUCTIONS = (
 
 
 _intent_cache = {}
-_intent_cache_ttl = 300  # 5 minutes
+_intent_cache_ttl = 300  # 5 minutes (legacy v1 cache — unused in v2 path)
+
+# v2 classifier cache (W-08): bounded size + TTL eviction.
+from cachetools import TTLCache as _TTLCache
+_intent_cache_v2 = _TTLCache(maxsize=1000, ttl=300)
 
 
 MAX_TOKENS = 16384  # Models on Groq/Cerebras support 8K-128K context
@@ -565,86 +571,181 @@ def _friendly_ai_error_message(error_payload: Dict[str, Any]) -> str:
 
 
 def classify_user_intent(prompt: str, use_cache: bool = True) -> dict:
-    """
-    Use AI to classify user intent. This is a general-purpose classifier
-    that understands what the user wants before any other processing.
+    """Structure Intelligence v2 classifier (W-06, W-07, W-08).
 
-    Returns dict with:
-    - intent_type: primary intent (e.g., "financial_query", "creative_task", "question", etc.)
-    - has_crypto_mention: bool - is user asking about cryptocurrency?
-    - has_stock_mention: bool - is user asking about stocks?
-    - asset_symbol: str or None - specific asset mentioned (e.g., "BTC", "AAPL")
-    - wants_chart: bool - does user want a chart/graph?
-    - wants_image: bool - does user want an image generated?
-    - wants_code: bool - does user want code/diagram code?
-    - confidence: float 0-1
+    Returns an envelope dict containing:
+      - intent_type: one of the allowed intent enum values (or "unknown" on full fallback)
+      - has_crypto_mention, has_stock_mention, asset_symbol, wants_chart,
+        wants_image, wants_code: classification signals
+      - scaffold: dict matching Scaffold.to_dict()
+
+    Provider cascade:
+      1. OpenAI schema mode (response_format=json_schema) — API-enforced
+      2. Groq json_mode (response_format=json_object) + post-parse validation
+      3. Fallback to task-type default scaffold
     """
     if not prompt or len(prompt.strip()) < 3:
-        return {"intent_type": "unknown", "confidence": 0}
+        return _build_fallback_envelope(prompt, reason="prompt_too_short")
 
-    # Check cache
-    cache_key = hashlib.md5(prompt.lower().strip().encode()).hexdigest()
-    if use_cache and cache_key in _intent_cache:
-        cached, timestamp = _intent_cache[cache_key]
-        if time.time() - timestamp < _intent_cache_ttl:
-            return cached
+    cache_key = prompt
+    if use_cache and cache_key in _intent_cache_v2:
+        return _intent_cache_v2[cache_key]
 
-    # Classification prompt - designed to be fast and accurate
-    classification_prompt = f"""Analyze this user message and classify their intent. Respond ONLY with a JSON object.
-
-User message: "{prompt}"
-
-Respond with this exact JSON format (no other text):
-{{"intent_type": "<one of: financial_query, creative_task, question, recipe_request, code_request, image_request, general_chat>",
-"has_crypto_mention": <true if asking about cryptocurrency prices/charts, false otherwise>,
-"has_stock_mention": <true if asking about stock prices/charts, false otherwise>,
-"asset_symbol": "<symbol like BTC, ETH, AAPL or null if none>",
-"wants_chart": <true if wants price chart/graph, false otherwise>,
-"wants_image": <true if wants AI-generated image, false otherwise>,
-"wants_code": <true if wants code/mermaid/diagram code, false otherwise>}}
-
-IMPORTANT: Words like "create", "make", "build" at the start usually mean creative_task, NOT cryptocurrency.
-Only set has_crypto_mention=true if they're clearly asking about crypto PRICES or MARKET data."""
-
+    # Feed task-type hint into fallback path (see app.smart_router).
+    task_type_hint = None
     try:
-        # Use a fast model for classification
-        import requests as req
+        from app.smart_router import detect_task_type
+        task_type_hint = detect_task_type(prompt)
+    except Exception:
+        pass
 
-        # Try to use Groq for fast classification (or fallback to current provider)
-        groq_key = os.environ.get('GROQ_API_KEY')
-        if groq_key:
-            response = req.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "llama-3.1-8b-instant",  # Fast model
-                    "messages": [{"role": "user", "content": classification_prompt}],
-                    "max_tokens": 150,
-                    "temperature": 0
-                },
-                timeout=3  # Fast timeout
+    # Cascade: schema-capable providers first, then json_mode providers.
+    from app.services.scaffold_schema import (
+        CLASSIFIER_RESPONSE_SCHEMA, get_json_mode,
+    )
+
+    providers = [
+        # (name, url, model, api_key_env, json_mode)
+        ("openai", "https://api.openai.com/v1/chat/completions",
+         "gpt-4.1-mini", os.environ.get("OPENAI_API_KEY"),
+         get_json_mode("openai", "gpt-4.1-mini")),
+        ("groq", "https://api.groq.com/openai/v1/chat/completions",
+         "llama-3.1-8b-instant", os.environ.get("GROQ_API_KEY"),
+         get_json_mode("groq", "llama-3.1-8b-instant")),
+    ]
+
+    last_err: Optional[Exception] = None
+    for name, url, model, key, json_mode in providers:
+        if not key:
+            continue
+        try:
+            body = _build_classifier_request_body(
+                prompt=prompt, model=model, json_mode=json_mode,
+                schema=CLASSIFIER_RESPONSE_SCHEMA,
             )
+            response = requests.post(
+                url,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json=body,
+                timeout=3.0,
+            )
+            if response.status_code != 200:
+                last_err = Exception(f"{name} HTTP {response.status_code}")
+                continue
 
-            if response.status_code == 200:
-                content = response.json()['choices'][0]['message']['content'].strip()
-                # Parse JSON from response
-                # Find JSON in response (handle markdown code blocks)
-                json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
-                if json_match:
-                    result = json.loads(json_match.group())
-                    result['confidence'] = 0.9
-                    # Cache result
-                    _intent_cache[cache_key] = (result, time.time())
-                    logger.info(f"🧠 Intent classified: {result.get('intent_type')} for '{prompt[:50]}...'")
-                    return result
-    except Exception as e:
-        logger.debug(f"Intent classification failed: {e}")
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            raw = _parse_and_validate_classifier_json(content)
+            if raw is None:
+                last_err = Exception(f"{name} schema-validate failed")
+                continue
 
-    # Fallback: return unknown intent (let old logic handle it)
-    return {"intent_type": "unknown", "confidence": 0}
+            envelope = _build_envelope_from_raw(raw)
+            _intent_cache_v2[cache_key] = envelope
+            logger.info(
+                f"🧠 Intent v2: {envelope['intent_type']} / "
+                f"layout={envelope['scaffold']['layout']} via {name}"
+            )
+            return envelope
+        except Exception as e:
+            last_err = e
+            logger.debug(f"Classifier v2 {name} failed: {e}")
+            continue
+
+    # All providers exhausted or none configured → task-type fallback.
+    envelope = _build_fallback_envelope(prompt, reason=str(last_err) if last_err else "no_providers",
+                                        task_type_hint=task_type_hint)
+    _intent_cache_v2[cache_key] = envelope
+    return envelope
+
+
+def _build_classifier_request_body(*, prompt: str, model: str, json_mode: str,
+                                    schema: dict) -> dict:
+    """Build the provider-request body. Schema vs json_object response_format
+    chosen by json_mode capability (W-05)."""
+    system_lines = [
+        "You classify user chat messages and plan the response structure.",
+        "Return ONE JSON object matching the schema below. No preamble, no markdown.",
+    ]
+    if json_mode == "json_mode":
+        # json_object providers don't enforce the schema — inject it so the
+        # model sees the exact shape required.
+        system_lines.append("Schema:")
+        system_lines.append(json.dumps(schema, separators=(",", ":")))
+
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "\n".join(system_lines)},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": 800,
+        "temperature": 0.1,
+    }
+    if json_mode == "schema":
+        body["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "classifier_response",
+                "schema": schema,
+                "strict": True,
+            },
+        }
+    elif json_mode == "json_mode":
+        body["response_format"] = {"type": "json_object"}
+    return body
+
+
+def _parse_and_validate_classifier_json(content: str) -> Optional[dict]:
+    """Parse JSON from the classifier response and validate against the schema.
+    Returns the validated dict, or None on any failure (caller cascades)."""
+    from jsonschema import Draft7Validator, ValidationError
+    from app.services.scaffold_schema import CLASSIFIER_RESPONSE_SCHEMA
+    try:
+        match = re.search(r"\{", content, re.DOTALL)
+        if not match:
+            return None
+        parsed, _ = json.JSONDecoder().raw_decode(content, match.start())
+    except (json.JSONDecodeError, ValueError):
+        return None
+    try:
+        Draft7Validator(CLASSIFIER_RESPONSE_SCHEMA).validate(parsed)
+    except ValidationError as e:
+        logger.debug(f"Classifier JSON failed schema validation: {e.message}")
+        return None
+    return parsed
+
+
+def _build_envelope_from_raw(raw: dict) -> dict:
+    """Shape the classifier JSON into the caller-facing envelope."""
+    return {
+        "intent_type":        raw["intent_type"],
+        "has_crypto_mention": bool(raw.get("has_crypto_mention", False)),
+        "has_stock_mention":  bool(raw.get("has_stock_mention", False)),
+        "asset_symbol":       raw.get("asset_symbol"),
+        "wants_chart":        bool(raw.get("wants_chart", False)),
+        "wants_image":        bool(raw.get("wants_image", False)),
+        "wants_code":         bool(raw.get("wants_code", False)),
+        "scaffold":           raw["scaffold"],
+        "confidence":         0.9,  # retained for back-compat with v1 callers
+    }
+
+
+def _build_fallback_envelope(prompt: str, reason: str,
+                             task_type_hint: Optional[str] = None) -> dict:
+    """Build an envelope when classifier cascade fails or prompt is too short."""
+    scaffold = _scaffold_from_task_type(task_type_hint or "chat")
+    logger.info(f"🧠 Intent v2 fallback ({reason}): layout={scaffold.layout}")
+    return {
+        "intent_type":        "unknown",
+        "has_crypto_mention": False,
+        "has_stock_mention":  False,
+        "asset_symbol":       None,
+        "wants_chart":        False,
+        "wants_image":        False,
+        "wants_code":         False,
+        "scaffold":           scaffold.to_dict(),
+        "confidence":         0,
+    }
 
 
 def detect_crypto_price_query(prompt: str) -> Optional[dict]:
@@ -843,6 +944,7 @@ def load_or_create_session(user_id: str) -> Tuple[str, Dict[str, Any]]:
 
     if not session_id:
         logger.info(f"📥 SESSION DEBUG: No active session for user {user_id}, creating a new one.")
+        from app.blueprints.shared import chat_session  # lazy — see top-of-file note
         session_id = chat_session.create_session(user_id)
         session['current_session_id'] = session_id
         session_doc = db.collection('users').document(user_id).collection('chat_sessions').document(session_id).get()
@@ -951,6 +1053,7 @@ def build_prompt(
 
     Stops adding when budget is exhausted. More consistent under long chats.
     """
+    from app.blueprints.shared import TokenLimitError  # lazy — see top-of-file note
     # Calculate available budget
     budget = max_tokens - response_token_buffer
 
@@ -1166,6 +1269,7 @@ def get_ai_response(full_prompt: str, model: str, images: Optional[List[Dict[str
             response.get('error')
         )
         friendly_message = _friendly_ai_error_message(response)
+        from app.blueprints.shared import ModelProviderError  # lazy
         raise ModelProviderError(
             friendly_message,
             response.get('error_code') or 'model_failure',
@@ -1423,6 +1527,7 @@ def save_interaction(
             is_active_session = (session.get('current_session_id') == session_id)
         except RuntimeError:
             is_active_session = True  # Assume active when called from stream generator
+        from app.blueprints.shared import chat_session  # lazy
         chat_session.save_messages(user_id, session_id, [chat_data], is_active_session=is_active_session)
         logger.info(f"Chat response generated for user {user_id}, session {session_id} (active={is_active_session})")
         return chat_data, True

@@ -1,19 +1,120 @@
 """Scaffold JSON schemas + provider capability map.
 
-Spec: docs/superpowers/specs/2026-04-15-structure-intelligence-v2-design.md §4.3, §4.4
-Plan: W-02 skeleton → W-04, W-05, W-14 fill in.
+Spec: docs/superpowers/specs/2026-04-15-structure-intelligence-v2-design.md §4
+Plan: docs/superpowers/plans/2026-04-15-structure-intelligence-v2-implementation.md
 
-This module is deliberately empty at W-02. Subsequent work units add:
-  - W-04  CLASSIFIER_RESPONSE_SCHEMA
-  - W-05  PROVIDER_JSON_MODE + get_json_mode()
-  - W-14  STRUCTURED_RESPONSE_SCHEMA
+W-04 — CLASSIFIER_RESPONSE_SCHEMA
+W-05 — PROVIDER_JSON_MODE + get_json_mode()
+W-14 — STRUCTURED_RESPONSE_SCHEMA
 """
+from typing import List
 
-# Placeholder — filled in W-04.
-CLASSIFIER_RESPONSE_SCHEMA: dict = {}
+from app.services.chat_engine import (
+    ALLOWED_LAYOUTS, ALLOWED_OPENINGS, ALLOWED_EMPHASIS, ALLOWED_WIDTHS,
+)
+
+
+_SECTION_SCHEMA = {
+    "type": "object",
+    "required": ["title", "style"],
+    "properties": {
+        "title": {"type": "string", "minLength": 1},
+        "emoji": {"type": "string"},  # may be empty
+        "style": {"enum": ["prose", "list", "steps"]},
+    },
+    "additionalProperties": True,
+}
+
+
+_SCAFFOLD_SCHEMA = {
+    "type": "object",
+    "required": [
+        "layout", "opening", "separator", "sections",
+        "emphasis", "max_paragraph_sentences", "list_threshold", "width_hint",
+    ],
+    "properties": {
+        "layout":    {"enum": list(ALLOWED_LAYOUTS)},
+        "opening":   {"enum": list(ALLOWED_OPENINGS)},
+        "separator": {"type": "boolean"},
+        "sections":  {"type": "array", "items": _SECTION_SCHEMA, "maxItems": 6},
+        "emphasis":  {"enum": list(ALLOWED_EMPHASIS)},
+        "max_paragraph_sentences": {"type": "integer", "minimum": 2, "maximum": 4},
+        "list_threshold":          {"type": "integer", "minimum": 2, "maximum": 4},
+        "width_hint": {"enum": list(ALLOWED_WIDTHS)},
+    },
+    "additionalProperties": False,
+}
+
+
+CLASSIFIER_RESPONSE_SCHEMA = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": ["intent_type", "scaffold"],
+    "properties": {
+        "intent_type": {
+            "enum": [
+                "financial_query", "creative_task", "question",
+                "recipe_request", "code_request", "image_request", "general_chat",
+            ],
+        },
+        "has_crypto_mention": {"type": "boolean"},
+        "has_stock_mention": {"type": "boolean"},
+        "asset_symbol": {"type": ["string", "null"]},
+        "wants_chart": {"type": "boolean"},
+        "wants_image": {"type": "boolean"},
+        "wants_code": {"type": "boolean"},
+        "scaffold": _SCAFFOLD_SCHEMA,
+    },
+    "additionalProperties": False,
+}
+
 
 # Placeholder — filled in W-14.
 STRUCTURED_RESPONSE_SCHEMA: dict = {}
 
-# Placeholder — filled in W-05.
-PROVIDER_JSON_MODE: dict = {}
+
+# ============================================================
+# W-05 — Provider capability map
+# ============================================================
+# Two enforcement levels:
+#   'schema'    — API-enforced json_schema validation at decode time
+#                 (OpenAI gpt-4.1 family, Gemini). Compliance ~99%.
+#   'json_mode' — API returns JSON-parseable text; caller validates
+#                 shape against schema post-parse.
+#
+# Per-provider dict keys:
+#   - specific model id → exact match wins
+#   - "*"                → wildcard fallback for that provider
+PROVIDER_JSON_MODE: dict = {
+    "openai": {
+        "gpt-4.1":      "schema",
+        "gpt-4.1-mini": "schema",
+        "gpt-4.1-nano": "schema",
+        "gpt-4o":       "schema",
+        "gpt-4o-mini":  "schema",
+        # Reasoning models ship JSON mode only, not full schema enforcement.
+        "o1":                     "json_mode",
+        "o4-mini-deep-research":  "json_mode",
+        "*":            "json_mode",
+    },
+    "gemini":   {"*": "schema"},
+    "groq":     {"*": "json_mode"},
+    "deepseek": {"*": "json_mode"},
+    "moonshot": {"*": "json_mode"},
+    "cerebras": {"*": "json_mode"},
+    "ollama":   {"*": "json_mode"},
+}
+
+
+def get_json_mode(provider: str, model: str) -> str:
+    """Resolve the structured-output mechanism for (provider, model).
+
+    Returns 'schema' | 'json_mode' | 'unsupported'.
+    Specific model entries win over the provider wildcard.
+    """
+    provider_map = PROVIDER_JSON_MODE.get(provider)
+    if not provider_map:
+        return "unsupported"
+    if model in provider_map:
+        return provider_map[model]
+    return provider_map.get("*", "unsupported")
