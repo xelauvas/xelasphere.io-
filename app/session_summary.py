@@ -26,10 +26,10 @@ Usage:
 import json
 import logging
 import re
-import requests
 from typing import Optional
 
 from .config import Config
+from .utilities import send_metadata_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -169,37 +169,13 @@ def format_summary(sections: dict) -> str:
 # =============================================================================
 
 def _call_summary_llm(prompt: str) -> Optional[str]:
-    """Call LLM for summary generation."""
-    try:
-        api_key = Config.GROQ_API_KEY
-        if not api_key:
-            return None
-
-        response = requests.post(
-            Config.API_URL,
-            json={
-                "messages": [{"role": "user", "content": prompt}],
-                "model": "llama-3.1-8b-instant",
-                "max_tokens": 400,
-                "temperature": 0.2
-            },
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            },
-            timeout=5
-        )
-
-        if response.status_code != 200:
-            logger.warning(f"Summary LLM returned {response.status_code}")
-            return None
-
-        content = response.json()["choices"][0]["message"]["content"].strip()
-        return content
-
-    except Exception as e:
-        logger.warning(f"Summary LLM call failed: {e}")
-        return None
+    """Call LLM for summary generation (Gemini primary, Groq 70B fallback)."""
+    return send_metadata_prompt(
+        prompt,
+        max_tokens=400,
+        temperature=0.2,
+        timeout=8,
+    )
 
 
 # =============================================================================

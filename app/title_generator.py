@@ -2,15 +2,14 @@ import logging
 import re
 from typing import Set, Optional, List
 from .config import Config
-from .utilities import send_prompt
+from .utilities import send_metadata_prompt
 
 
 class TitleGenerator:
-    """Handles title generation using Groq's LLM API."""
+    """Handles title generation using the metadata model stack
+    (Gemini primary, Groq 70B fallback)."""
 
-    # Using local heuristics for titles to avoid flaky API calls
     MAX_TITLE_LENGTH = 50
-    LLM_TITLE_MODEL = getattr(Config, "TITLE_MODEL", "llama-3.1-8b-instant")
     MAX_SOURCE_CHARS = 1200
 
     def __init__(self):
@@ -82,7 +81,7 @@ class TitleGenerator:
         return title[:self.MAX_TITLE_LENGTH].title()
 
     def _generate_llm_title(self, text: str) -> Optional[str]:
-        """Use Groq/OpenRouter model to craft a high-quality title."""
+        """Craft a high-quality title via the metadata model stack."""
         if not text:
             return None
 
@@ -93,13 +92,13 @@ class TitleGenerator:
         prompt = self._generate_summary_prompt(snippet)
 
         try:
-            response, _ = send_prompt(prompt, model=self.LLM_TITLE_MODEL)
-            if isinstance(response, dict):
-                # send_prompt returns error payloads as dicts
-                self.logger.warning("LLM title generation error: %s", response.get('error'))
-                return None
-
-            if not isinstance(response, str):
+            response = send_metadata_prompt(
+                prompt,
+                max_tokens=40,
+                temperature=0.3,
+                timeout=8,
+            )
+            if not response:
                 return None
 
             candidate = response.strip().splitlines()[0]

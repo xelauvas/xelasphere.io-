@@ -35,6 +35,10 @@ class Config:
     # Gemini API configuration (Google AI Studio — OpenAI-compatible endpoint)
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
     GEMINI_API_URL = os.getenv('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions')
+    # Metadata-task model stack (title generation, session summaries, memory
+    # extraction). Gemini primary, Groq 70B fallback. Env-overridable.
+    METADATA_MODEL_PRIMARY = os.getenv('METADATA_MODEL_PRIMARY', 'gemini-2.5-flash')
+    METADATA_MODEL_FALLBACK = os.getenv('METADATA_MODEL_FALLBACK', 'llama-3.3-70b-versatile')
     # OpenAI API configuration (GPT-4.1)
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     OPENAI_API_URL = os.getenv('OPENAI_API_URL', 'https://api.openai.com/v1/chat/completions')

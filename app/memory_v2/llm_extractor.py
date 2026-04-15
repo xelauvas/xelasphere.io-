@@ -3,8 +3,9 @@ Memory V2 LLM Extractor
 ========================
 Smart, language-agnostic memory extraction using LLM.
 
-Uses qwen3-32b for better accuracy in extracting facts.
-Falls back to Cerebras if Groq is rate limited.
+Uses the shared metadata model stack (Gemini primary, Groq 70B fallback)
+with JSON mode for schema-compliant output. Replaces the previous
+qwen3-32b direct-Groq + Cerebras fallback wiring.
 
 No hard-coded patterns - the LLM decides what's worth remembering.
 """
@@ -12,17 +13,12 @@ No hard-coded patterns - the LLM decides what's worth remembering.
 import json
 import logging
 import os
-import requests
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-logger = logging.getLogger(__name__)
+from ..utilities import send_metadata_prompt
 
-# Extraction model - upgraded to qwen3-32b for better accuracy
-EXTRACTION_MODEL = "qwen/qwen3-32b"
-EXTRACTION_MODEL_FALLBACK = "qwen-3-32b"  # Cerebras fallback
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-CEREBRAS_API_URL = "https://api.cerebras.ai/v1/chat/completions"
+logger = logging.getLogger(__name__)
 
 # System prompt for memory extraction - keep it concise for better results
 EXTRACTION_SYSTEM_PROMPT = """You are a memory extraction assistant. Extract personal facts from user messages.
@@ -101,14 +97,15 @@ class LLMMemoryExtractor:
         """
         Initialize the LLM extractor.
 
-        Args:
-            api_key: Groq API key. If None, uses GROQ_API_KEY env var.
-            cerebras_api_key: Cerebras API key for fallback. If None, uses CEREBRAS_API_KEY env var.
+        api_key / cerebras_api_key are accepted for backward compatibility
+        but no longer used — extraction now routes through the shared
+        metadata model stack (Config.METADATA_MODEL_PRIMARY / _FALLBACK),
+        which resolves its own credentials from Config.
         """
+        # Preserved on the instance only so adapters inspecting attrs don't
+        # break; the values are not read during extraction anymore.
         self.api_key = api_key or os.environ.get('GROQ_API_KEY')
         self.cerebras_api_key = cerebras_api_key or os.environ.get('CEREBRAS_API_KEY')
-        if not self.api_key:
-            logger.warning("No Groq API key configured for memory extraction")
 
     def extract(self, user_message: str) -> List[ExtractedMemory]:
         """
@@ -120,10 +117,6 @@ class LLMMemoryExtractor:
         Returns:
             List of ExtractedMemory objects
         """
-        if not self.api_key:
-            logger.debug("LLM extraction skipped - no API key")
-            return []
-
         if not user_message or len(user_message.strip()) < 3:
             return []
 
@@ -140,72 +133,23 @@ class LLMMemoryExtractor:
             return []
 
     def _call_llm(self, user_message: str) -> str:
-        """Call the LLM API for extraction with fallback to Cerebras."""
-        # Try Groq first
-        result = self._try_provider(
-            api_url=GROQ_API_URL,
-            api_key=self.api_key,
-            model=EXTRACTION_MODEL,
-            user_message=user_message
+        """
+        Extract via the metadata model stack. Gemini primary returns clean
+        JSON under json_mode; Groq 70B fallback likewise. Helper handles
+        all provider errors transparently — we just care about the string.
+        """
+        result = send_metadata_prompt(
+            f"Extract facts from: {user_message}",
+            system=EXTRACTION_SYSTEM_PROMPT,
+            max_tokens=500,
+            temperature=0.1,
+            json_mode=True,
+            timeout=15,
         )
-
-        if result is not None:
-            return result
-
-        # Fallback to Cerebras
-        if self.cerebras_api_key:
-            logger.info("🔄 Groq rate limited, falling back to Cerebras for memory extraction")
-            result = self._try_provider(
-                api_url=CEREBRAS_API_URL,
-                api_key=self.cerebras_api_key,
-                model=EXTRACTION_MODEL_FALLBACK,
-                user_message=user_message
-            )
-            if result is not None:
-                return result
-
-        logger.warning("All providers failed for memory extraction")
-        return '{"memories": []}'
-
-    def _try_provider(self, api_url: str, api_key: str, model: str, user_message: str) -> Optional[str]:
-        """Try a single provider for extraction."""
-        if not api_key:
-            return None
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Extract facts from: {user_message}"}
-            ],
-            "temperature": 0.1,  # Low temperature for consistent extraction
-            "max_tokens": 500,
-        }
-
-        try:
-            response = requests.post(
-                api_url,
-                headers=headers,
-                json=payload,
-                timeout=15
-            )
-
-            if response.status_code == 429:
-                logger.warning(f"Rate limited on {api_url}")
-                return None
-
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-
-        except Exception as e:
-            logger.warning(f"Provider {api_url} failed: {e}")
-            return None
+        if not result:
+            logger.warning("Memory extraction: both metadata providers failed")
+            return '{"memories": []}'
+        return result
 
     def _parse_response(self, response_text: str) -> List[ExtractedMemory]:
         """Parse LLM response into ExtractedMemory objects."""

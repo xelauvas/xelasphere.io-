@@ -8,11 +8,11 @@ import pytesseract
 import PyPDF2
 import re
 from .config import Config
-from .model_catalog import MODEL_PROVIDERS, resolve_model_id, DEFAULT_MODEL, FALLBACK_MODELS
+from .model_catalog import MODEL_PROVIDERS, MODEL_CATALOG, resolve_model_id, DEFAULT_MODEL, FALLBACK_MODELS
 from .artifacts import contains_code_block
 import tiktoken
 from datetime import datetime, timedelta
-from typing import List, Set, Dict
+from typing import List, Set, Dict, Optional, Any
 from flask import g as flask_g, has_request_context
 
 # Configure logging
@@ -511,6 +511,105 @@ def send_prompt(prompt, model="llama-3.1-70b-versatile"):
 
     # Return original error if no fallback or fallback failed
     return error_payload, False
+
+
+def send_metadata_prompt(
+    user_msg: str,
+    *,
+    primary: Optional[str] = None,
+    fallback: Optional[str] = None,
+    system: Optional[str] = None,
+    max_tokens: int = 500,
+    temperature: float = 0.2,
+    json_mode: bool = False,
+    timeout: int = 15,
+) -> Optional[str]:
+    """
+    Internal metadata prompt with primary→fallback provider routing.
+
+    Used by title generation, session summaries, and memory extraction —
+    tasks where we want a specific two-model stack, structured output,
+    and no HTML-stripping system instruction. Defaults come from
+    Config.METADATA_MODEL_PRIMARY / METADATA_MODEL_FALLBACK.
+
+    Returns the response content string on success. Returns None if both
+    primary and fallback fail (callers decide their own degraded path).
+    """
+    primary = primary or getattr(Config, 'METADATA_MODEL_PRIMARY', 'gemini-2.5-flash')
+    fallback = fallback or getattr(Config, 'METADATA_MODEL_FALLBACK', 'llama-3.3-70b-versatile')
+
+    api_overrides: Dict[str, str] = {}
+    if has_request_context():
+        overrides = getattr(flask_g, 'api_keys', None)
+        if isinstance(overrides, dict):
+            api_overrides = overrides
+
+    attempts = [("primary", primary), ("fallback", fallback)]
+    for label, model in attempts:
+        if not model:
+            continue
+        resolved = resolve_model_id(model)
+        provider = MODEL_PROVIDERS.get(resolved, "groq")
+
+        try:
+            url, headers, _t, provider_label = _get_provider_config(provider, resolved, api_overrides)
+        except ValueError as e:
+            logger.warning(f"metadata[{label}] {provider} config error: {e}")
+            continue
+
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": user_msg})
+
+        payload: Dict[str, Any] = {
+            "messages": messages,
+            "model": resolved,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        # Reasoning models (e.g. gemini-2.5-flash) burn the max_tokens budget
+        # on thinking tokens and return empty content for tight budgets.
+        # Metadata tasks don't need chain-of-thought, so disable it — but
+        # only for models flagged as reasoning-capable. Sending it to a
+        # plain model (e.g. Groq Llama) would be rejected with HTTP 400.
+        if MODEL_CATALOG.get(resolved, {}).get("reasoning"):
+            payload["reasoning_effort"] = "none"
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=timeout)
+            if response.status_code >= 400:
+                logger.warning(
+                    f"metadata[{label}] {provider_label} HTTP {response.status_code}: "
+                    f"{response.text[:200]}"
+                )
+                continue
+            data = response.json()
+            choices = data.get("choices") or []
+            if not choices:
+                logger.warning(f"metadata[{label}] {provider_label}: empty choices")
+                continue
+            message = choices[0].get("message") or {}
+            # Some reasoning models return both content and reasoning_content;
+            # we only care about the final content for metadata tasks.
+            content = (message.get("content") or "").strip()
+            if not content:
+                logger.warning(f"metadata[{label}] {provider_label}: empty content")
+                continue
+            if label == "fallback":
+                logger.info(f"metadata fallback via {provider_label} ({model}) succeeded")
+            return content
+        except requests.Timeout:
+            logger.warning(f"metadata[{label}] {provider_label}: timeout")
+            continue
+        except Exception as e:
+            logger.warning(f"metadata[{label}] {provider_label}: {e}")
+            continue
+
+    logger.warning("metadata prompt: primary and fallback both failed")
+    return None
 
 
 def stream_deepseek_response(prompt: str, model: str = "deepseek-reasoner", system_prompt_override: str = None):
