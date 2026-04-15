@@ -786,20 +786,34 @@ def scaffold_to_instruction(scaffold: Scaffold) -> str:
         f"Only use bullet lists when there are {scaffold.list_threshold}+ parallel items."
     )
 
-    rule_block = (
+    # A — When sections exist, emit ONLY the template. The rule block
+    # and the skeleton were fighting each other: models satisfied the
+    # rules (prose), then satisfied the skeleton (templated), emitting
+    # both back-to-back. Exclusive template wins cleanly.
+    if scaffold.sections:
+        skeleton = _format_skeleton(scaffold)
+        emphasis_rule = ""
+        if scaffold.emphasis == "bold":
+            emphasis_rule = " Bold exactly one key phrase per section."
+        elif scaffold.emphasis == "italic":
+            emphasis_rule = " Use italic for emphasis; no bold."
+        return (
+            "OUTPUT FORMAT — STRICT:\n"
+            "Your response must be EXACTLY the template below with bracketed "
+            "placeholders replaced by real content. Do not write anything "
+            "before the template. Do not write anything after it. Do not "
+            "output any version of the answer that is not this template. "
+            "Keep every header line verbatim.\n"
+            f"Paragraph rule: max {scaffold.max_paragraph_sentences} sentences "
+            f"per paragraph, blank line between paragraphs."
+            f"{emphasis_rule}\n\n"
+            "TEMPLATE:\n\n"
+            + skeleton
+        )
+    return (
         "STRUCTURAL CONTRACT (these rules are mandatory, not suggestions):\n"
         + "\n".join(f"- {p}" for p in parts)
     )
-
-    # A — When sections exist, also emit a literal skeleton the model fills.
-    if scaffold.sections:
-        skeleton = _format_skeleton(scaffold)
-        return (
-            rule_block
-            + "\n\nRESPONSE TEMPLATE — fill this exact template, keep headers verbatim:\n\n"
-            + skeleton
-        )
-    return rule_block
 
 
 # Task-type → default Scaffold fallback. Spec §4.

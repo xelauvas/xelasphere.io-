@@ -87,5 +87,5 @@ def test_deep_explainer_with_named_angles_produces_structured_scaffold():
     # The skeleton must actually render headers for these sections:
     from app.services.chat_engine import Scaffold, scaffold_to_instruction
     rendered = scaffold_to_instruction(Scaffold.from_dict(scaffold))
-    assert "RESPONSE TEMPLATE" in rendered
+    assert "TEMPLATE" in rendered
     assert rendered.count("## ") >= 2

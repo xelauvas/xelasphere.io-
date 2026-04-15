@@ -78,13 +78,12 @@ def test_instruction_for_structured_scaffold_includes_sections():
         list_threshold=3, width_hint="medium",
     )
     out = scaffold_to_instruction(s)
-    assert "STRUCTURAL CONTRACT" in out
+    assert "OUTPUT FORMAT" in out or "STRUCTURAL CONTRACT" in out
     assert "## 🎯 Core Idea" in out
     assert "## ⚖️ Tradeoffs" in out
     assert "---" in out
-    assert "Open with 1-2 sentences" in out
-    assert "Maximum 3 sentences per paragraph" in out
-    assert "Bold exactly one key phrase" in out
+    assert "max 3 sentences per paragraph" in out.lower()
+    assert "bold" in out.lower()
 
 
 def test_instruction_italic_emphasis_excludes_bold_directive():
@@ -238,8 +237,12 @@ def test_instruction_structured_emits_markdown_skeleton_not_rule_list():
         list_threshold=3, width_hint="medium",
     )
     out = scaffold_to_instruction(s)
-    # Literal response template the model fills in:
-    assert "RESPONSE TEMPLATE" in out or "Fill this exact template" in out
+    # Literal response template the model fills in. v1.1.1: exclusive template,
+    # explicit "nothing before, nothing after" to stop dual-output failure.
+    assert "TEMPLATE" in out
+    low = out.lower()
+    # Exclusivity framing: tell model to output ONLY the template.
+    assert "not write anything before" in low or "not write anything after" in low
     # All three section headers appear as actual markdown headers in the
     # template body (not just as a rule list):
     assert out.count("## ") >= 3
@@ -256,8 +259,10 @@ def test_instruction_unstructured_layout_skips_skeleton():
         list_threshold=3, width_hint="medium",
     )
     out = scaffold_to_instruction(s)
-    assert "RESPONSE TEMPLATE" not in out
-    assert "Fill this exact template" not in out
+    assert "OUTPUT FORMAT" not in out  # exclusive template mode off
+    assert "TEMPLATE:" not in out
+    # Rule-list contract is what unstructured layouts get:
+    assert "STRUCTURAL CONTRACT" in out
 
 
 # ============================================================
