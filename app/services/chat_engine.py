@@ -12,7 +12,8 @@ import re
 import time
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field, asdict
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 
@@ -561,6 +562,49 @@ def _friendly_ai_error_message(error_payload: Dict[str, Any]) -> str:
             return f"{base} (HTTP {status_code}). Please try again shortly."
         return f"{base} Please try again shortly."
     return FRIENDLY_AI_ERROR_MESSAGES.get(code, generate_fallback_response())
+
+
+# ============================================
+# SCAFFOLD (spec §2)
+# ============================================
+
+ALLOWED_LAYOUTS = (
+    "conversational", "prose", "long-prose", "technical",
+    "code-heavy", "list-heavy", "structured",
+)
+ALLOWED_OPENINGS = ("hook", "direct", "question", "none")
+ALLOWED_EMPHASIS = ("bold", "italic", "none")
+ALLOWED_WIDTHS = ("narrow", "medium", "wide")
+
+
+@dataclass
+class Scaffold:
+    """Pre-stream response scaffold. See spec §2."""
+    layout: str
+    opening: str
+    separator: bool
+    sections: List[Dict]
+    emphasis: str
+    max_paragraph_sentences: int
+    list_threshold: int
+    width_hint: str
+
+    def __post_init__(self):
+        if self.layout not in ALLOWED_LAYOUTS:
+            raise ValueError(f"layout must be one of {ALLOWED_LAYOUTS}, got {self.layout!r}")
+        if self.opening not in ALLOWED_OPENINGS:
+            raise ValueError(f"opening must be one of {ALLOWED_OPENINGS}, got {self.opening!r}")
+        if self.emphasis not in ALLOWED_EMPHASIS:
+            raise ValueError(f"emphasis must be one of {ALLOWED_EMPHASIS}, got {self.emphasis!r}")
+        if self.width_hint not in ALLOWED_WIDTHS:
+            raise ValueError(f"width_hint must be one of {ALLOWED_WIDTHS}, got {self.width_hint!r}")
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Scaffold":
+        return cls(**d)
 
 
 def classify_user_intent(prompt: str, use_cache: bool = True) -> dict:
