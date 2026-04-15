@@ -25,11 +25,9 @@
 .block-code        { animation: streamBlockIn  80ms ease-out; }
 .block-math        { animation: streamBlockIn 100ms ease-out; }
 .block-mermaid     { animation: streamBlockIn 100ms ease-out; }
-.block-list-item   {
-    animation: streamBlockIn 60ms ease-out;
-    animation-delay: calc(var(--i, 0) * 30ms);
-    animation-fill-mode: both;
-}
+/* List items appear as tokens stream in — no per-item entry animation
+   (the stagger read as a visual cascade on multi-item lists). The parent
+   .stream-block wrapper still animates once on list open. */
 
 @keyframes streamBlockIn {
     from { opacity: 0; transform: translateY(4px); }

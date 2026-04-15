@@ -968,21 +968,8 @@ h1 {
     text-decoration-color: var(--accent-muted, rgba(147, 197, 253, 0.5));
 }
 
-.text-message a:visited {
-    color: var(--accent, #a78bfa);
-    text-decoration-color: var(--accent-muted, rgba(167, 139, 250, 0.3));
-}
-
 .text-message a:active {
     color: var(--accent, #3b82f6);
-}
-
-/* External link indicator (optional) */
-.text-message a[href^="http"]:not([href*="xelasphere"])::after {
-    content: ' ↗';
-    font-size: 0.75em;
-    opacity: 0.6;
-    margin-left: 0.1em;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1306,15 +1293,6 @@ h1 {
     background: var(--bg-hover, rgba(255, 255, 255, 0.02));
 }
 
-/* Row hover */
-.text-message tbody tr {
-    transition: background 0.15s ease;
-}
-
-.text-message tbody tr:hover {
-    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
-}
-
 /* Last row - no border */
 .text-message tbody tr:last-child td {
     border-bottom: none;
@@ -1394,30 +1372,8 @@ h1 {
 
 .text-message hr {
     border: none;
-    height: 1px;
-    background: linear-gradient(
-        90deg,
-        transparent 0%,
-        rgba(255, 255, 255, 0.08) 15%,
-        rgba(255, 255, 255, 0.2) 50%,
-        rgba(255, 255, 255, 0.08) 85%,
-        transparent 100%
-    );
+    border-top: 1px solid var(--border-primary, rgba(255, 255, 255, 0.1));
     margin: 2rem 0;
-    position: relative;
-}
-
-/* Decorative center dot */
-.text-message hr::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 6px;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 50%;
 }
 
 /* Scene break spacing */
@@ -1542,7 +1498,10 @@ h1 {
     max-width: 100%;
 }
 
-/* Animated placeholder for image generation */
+/* Loading placeholder for image generation. One cheap animation (spinner
+   rotation, transform-only). No shimmer layer, no blur-filter pulse, no
+   mix-blend-mode — the old stack was expensive on low-end hardware without
+   adding signal beyond "something is loading". */
 .image-placeholder {
     position: relative;
     width: 100%;
@@ -1552,21 +1511,14 @@ h1 {
     background:
         radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.04), transparent 45%),
         linear-gradient(135deg, #121212, #0f0f0f 40%, #141414);
-    filter: blur(0.2px);
     opacity: 0;
-    animation: attachmentFadeIn 0.35s ease-out forwards, placeholderPulse 1.6s ease-in-out infinite;
+    animation: attachmentFadeIn 0.35s ease-out forwards;
 }
 
+/* Legacy shimmer overlay — element may still be emitted by markup; keep
+   it out of the layer tree so no compositing cost is incurred. */
 .image-placeholder__shimmer {
-    position: absolute;
-    inset: 0;
-    background:
-        linear-gradient(120deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.08) 25%, rgba(255, 255, 255, 0.02) 50%),
-        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.015) 0 2px, transparent 2px 4px);
-    filter: blur(10px);
-    animation: shimmer 1.4s linear infinite;
-    opacity: 0.9;
-    mix-blend-mode: screen;
+    display: none;
 }
 
 .image-placeholder__glyph {
@@ -1579,24 +1531,12 @@ h1 {
     border-radius: 50%;
     border: 2px solid rgba(255, 255, 255, 0.18);
     border-top-color: rgba(255, 255, 255, 0.08);
-    animation: glyphSpin 1.6s ease-in-out infinite;
+    animation: glyphSpin 1.2s linear infinite;
     opacity: 0.7;
 }
 
-@keyframes shimmer {
-    0% { transform: translateX(-60%); }
-    100% { transform: translateX(120%); }
-}
-
-@keyframes placeholderPulse {
-    0% { filter: blur(0.2px); opacity: 0.92; }
-    50% { filter: blur(0.6px); opacity: 0.85; }
-    100% { filter: blur(0.2px); opacity: 0.92; }
-}
-
 @keyframes glyphSpin {
-    0% { transform: translate(-50%, -50%) rotate(0deg); }
-    100% { transform: translate(-50%, -50%) rotate(360deg); }
+    to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 @keyframes attachmentFadeIn {
     from {
@@ -2151,68 +2091,6 @@ h1 {
     color: var(--text-primary, #ffffff);
 }
 
-/* List item hover */
-.text-message li {
-    transition: transform 0.15s ease, background 0.15s ease;
-    padding: 0.15rem 0.25rem;
-    margin-left: -0.25rem;
-    border-radius: 4px;
-}
-
-.text-message li:hover {
-    background: var(--bg-hover, rgba(255, 255, 255, 0.02));
-}
-
-/* Link glow on hover */
-.text-message a {
-    transition: color 0.2s ease, text-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.text-message a:hover {
-    text-shadow: 0 0 12px var(--accent-muted, rgba(96, 165, 250, 0.3));
-}
-
-/* Code inline hover */
-.text-message code:not(pre code) {
-    transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.text-message code:not(pre code):hover {
-    background: var(--bg-code, rgba(110, 118, 129, 0.35));
-}
-
-/* Blockquote hover lift */
-.text-message blockquote {
-    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-}
-
-.text-message blockquote:hover {
-    transform: translateX(4px);
-    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
-}
-
-/* Table row highlight */
-.text-message tbody tr {
-    transition: background 0.15s ease, transform 0.15s ease;
-}
-
-.text-message tbody tr:hover {
-    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
-}
-
-/* Horizontal rule glow */
-.text-message hr {
-    transition: opacity 0.3s ease;
-}
-
-.text-message hr:hover {
-    opacity: 1;
-}
-
-.text-message hr:hover::after {
-    background: var(--text-secondary, rgba(255, 255, 255, 0.3));
-    box-shadow: 0 0 8px var(--border-primary, rgba(255, 255, 255, 0.2));
-}
 
 /* Button press effect */
 .code-block-copy:active {

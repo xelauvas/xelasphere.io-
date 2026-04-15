@@ -1,7 +1,9 @@
 /**
- * List renderer — renders a <ul> or <ol> with per-item stagger animation.
+ * List renderer — per-item buffered <ul>/<ol>.
  * Items are parsed out of block.text by splitting on the opener regex.
- * Completed items (all but the last) are sub-frozen — we skip re-render for them.
+ * The tail item is held out of the DOM until a newer item opens (closing
+ * it) or the block finalizes — so every <li> lands fully formed exactly
+ * once and never mutates visibly after insertion.
  */
 
 const UL_ITEM_RE = /^[-+*] (.*)$/;
@@ -38,13 +40,9 @@ export function createListRenderer() {
             block.meta.replay = !!opts.replay;
             return el;
         },
-        update(block) {
+        _flush(block, { includeTail }) {
             if (!block.el) return;
 
-            // Lib-guarded render: mirror prose.js' guards. If marked isn't
-            // loaded yet (CDN slow / replay-before-init race), fall back to
-            // plain text so we don't throw TypeError mid-stream. Next update
-            // will upgrade once marked arrives.
             const markedReady = typeof window.marked?.parse === 'function';
             const renderMd = (raw) => {
                 if (!markedReady) return null;
@@ -56,49 +54,16 @@ export function createListRenderer() {
             const existing = block.meta.renderedItemCount;
             const liNoAnim = block.meta.replay ? ' stream-no-anim' : '';
 
-            // Update the tail item's text in place (still streaming). Use
-            // morphdom so partial-markdown diffs are reconciled against the
-            // existing node tree instead of blowing away any post-finalize
-            // injections (citation pills, sources buttons).
-            if (existing > 0 && items.length >= existing) {
-                const tailLi = block.el.children[existing - 1];
-                if (tailLi) {
-                    const tailHTML = renderMd(items[existing - 1]);
-                    if (tailHTML == null) {
-                        tailLi.textContent = items[existing - 1] || '';
-                    } else if (window.morphdom) {
-                        const staging = document.createElement('li');
-                        staging.innerHTML = tailHTML;
-                        window.morphdom(tailLi, staging, {
-                            childrenOnly: true,
-                            onBeforeElUpdated(fromEl) {
-                                if (fromEl.classList?.contains('citation-pill')) return false;
-                                if (fromEl.classList?.contains('sources-btn')) return false;
-                                return true;
-                            },
-                        });
-                    } else {
-                        tailLi.innerHTML = tailHTML;
-                    }
-                }
-            }
+            // An item is "closed" when a later item has started, or when the
+            // block is finalizing. Only closed items are flushed to the DOM,
+            // so each <li> appears fully formed and never mutates after.
+            const insertUpTo = includeTail ? items.length : items.length - 1;
 
-            // Append any new items after the previous tail. Two rules to avoid
-            // the "empty row appears, then fills" cascade during streaming:
-            //   1) Hold the currently-streaming tail item OUT of the DOM until
-            //      it has real content. A brand-new list-item opener like "5. "
-            //      arrives before any words; materialising an empty <li> now
-            //      just to morphdom content into it reads visually as a blank
-            //      row popping in then filling character-by-character.
-            //   2) Batch every materialization into a DocumentFragment so one
-            //      stream-chunk = one DOM mutation (mirrors prose's morphdom
-            //      atomicity).
             const frag = document.createDocumentFragment();
             let added = 0;
-            for (let i = existing; i < items.length; i++) {
+            for (let i = existing; i < insertUpTo; i++) {
                 const text = items[i] || '';
-                const isTail = i === items.length - 1;
-                if (isTail && text.trim() === '') break; // hold empty tail
+                if (text.trim() === '') continue;
                 const li = document.createElement('li');
                 li.className = `block-list-item${liNoAnim}`;
                 li.style.setProperty('--i', String(i));
@@ -108,11 +73,19 @@ export function createListRenderer() {
                 frag.appendChild(li);
                 added++;
             }
-            if (added) block.el.appendChild(frag);
-            block.meta.renderedItemCount = existing + added;
+            if (added) {
+                block.el.appendChild(frag);
+                block.meta.renderedItemCount = existing + added;
+            }
+        },
+        update(block) {
+            // Streaming path: hold the tail out. Only flush items that a
+            // newer item has superseded (therefore closed).
+            this._flush(block, { includeTail: false });
         },
         finalize(block) {
-            this.update(block);
+            // Block is ending — tail is now closed, flush everything.
+            this._flush(block, { includeTail: true });
         },
     };
 }
