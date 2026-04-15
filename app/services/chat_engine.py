@@ -609,8 +609,140 @@ class Scaffold:
         return cls(**d)
 
 
+# ============================================================
+# B — Deterministic signal layer (spec §5.1, v1.1 intelligence)
+# ============================================================
+# Regex-based prompt analysis that runs BEFORE the LLM classifier.
+# When prompt structure makes the right layout obvious, we force it
+# rather than hoping the LLM guesses right. The LLM still refines
+# (intent_type, opening, emphasis, width_hint).
+
+_EXPLAINER_VERBS = r"(?:explain|describe|walk|teach|give|show|write)"
+_EXPLAINER_TARGETS = r"(?:explainer|overview|breakdown|deep\s+dive|guide|rundown|tutorial)"
+_CONJUNCTION = r"\b(?:and|including|with|plus|along\s+with|as\s+well\s+as)\b"
+_ANGLE_SEP = re.compile(r"\s*,\s*|\s+and\s+|\s+&\s+", re.IGNORECASE)
+_CODE_SIGNALS = re.compile(
+    r"\b(?:write|build|create|generate)\s+(?:a\s+|an\s+)?(?:python|javascript|js|ts|typescript|bash|shell|rust|go|java|c\+\+|sql|script|function|class|endpoint|api|component|module)\b",
+    re.IGNORECASE,
+)
+
+
+def analyze_prompt_signals(prompt: str) -> dict:
+    """Deterministic pre-LLM prompt analysis. Returns signal dict:
+      - force_layout: str | None — if set, overrides LLM's layout choice
+      - inferred_sections: List[Dict] — auto-derived sections when
+        the prompt explicitly names angles (e.g. "history and intuition")
+    Never raises; returns {} on any parse issue.
+    """
+    if not prompt or not isinstance(prompt, str):
+        return {"force_layout": None, "inferred_sections": []}
+
+    p = prompt.strip()
+    p_low = p.lower()
+    out: Dict[str, object] = {"force_layout": None, "inferred_sections": []}
+
+    # ── Code signal — bias away from structured/prose, toward technical ──
+    if _CODE_SIGNALS.search(p):
+        out["force_layout"] = "technical"
+        return out
+
+    # ── Multi-angle explainer detection ──
+    # Match patterns like:
+    #   "explain X including A and B"
+    #   "deep explainer on X, with A, B, and C"
+    #   "compare A, B, and C"
+    #   "walk me through A, B and C"
+    is_explainer = bool(
+        re.search(rf"{_EXPLAINER_VERBS}\b.*\b{_EXPLAINER_TARGETS}\b", p_low)
+        or re.search(rf"\b(?:deep|detailed|thorough|comprehensive)\s+{_EXPLAINER_TARGETS}", p_low)
+        or re.search(r"\bcompare\b.*\b(?:and|,)\b", p_low)
+        or re.search(r"\bwalk\s+(?:me\s+)?through\b", p_low)
+    )
+
+    # Find the angle list following "including|with|across|on"
+    angles: List[str] = []
+    m = re.search(
+        r"\b(?:including|with|across|covering|about|on)\s+(.+?)(?:\.|\?|$)",
+        p_low, re.IGNORECASE,
+    )
+    if m:
+        tail = m.group(1).strip()
+        # Split on commas + "and"; keep 1-3 word phrases, reject filler.
+        raw_parts = [x.strip() for x in _ANGLE_SEP.split(tail) if x.strip()]
+        for part in raw_parts:
+            words = part.split()
+            if 1 <= len(words) <= 4 and not part.startswith(("the ", "a ", "an ")):
+                angles.append(part)
+            elif len(words) <= 4:
+                angles.append(part)
+
+    # A bare "X vs Y" or "X, Y, and Z" comparison also counts.
+    if len(angles) < 2:
+        m2 = re.search(
+            r"compare\s+(.+?)(?:\s+across\b|\s+on\b|\.|\?|$)",
+            p_low, re.IGNORECASE,
+        )
+        if m2:
+            raw_parts = [x.strip() for x in _ANGLE_SEP.split(m2.group(1)) if x.strip()]
+            angles.extend(p for p in raw_parts if 1 <= len(p.split()) <= 3)
+
+    # Guard: short prompts stay conversational regardless
+    if len(p.split()) < 5:
+        return out
+
+    if (is_explainer and len(angles) >= 2) or len(angles) >= 3:
+        out["force_layout"] = "structured"
+        # Auto-infer sections from the angle list (dedup + titlecase)
+        seen: set = set()
+        sections: List[Dict] = []
+        for a in angles[:6]:  # cap at 6
+            title = a.strip().rstrip(".,;:").title()
+            if title.lower() in seen:
+                continue
+            seen.add(title.lower())
+            sections.append({"title": title, "emoji": "", "style": "prose"})
+        out["inferred_sections"] = sections
+
+    return out
+
+
+def _format_skeleton(scaffold: Scaffold) -> str:
+    """Render sections as a literal markdown skeleton for the model to fill."""
+    lines: List[str] = []
+    if scaffold.opening in ("hook", "direct"):
+        lines.append("[Opening paragraph here — 1-3 sentences.]")
+        lines.append("")
+    if scaffold.separator:
+        lines.append("---")
+        lines.append("")
+    for s in scaffold.sections:
+        header_parts = [p for p in (s.get("emoji", "").strip(), s.get("title", "").strip()) if p]
+        lines.append("## " + " ".join(header_parts))
+        lines.append("")
+        style = s.get("style", "prose")
+        if style == "list":
+            lines.append("- [point 1]")
+            lines.append("- [point 2]")
+            lines.append("- [point 3]")
+        elif style == "steps":
+            lines.append("1. [step]")
+            lines.append("2. [step]")
+            lines.append("3. [step]")
+        else:
+            lines.append(f"[2-3 paragraphs, max {scaffold.max_paragraph_sentences} sentences each, blank line between.]")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def scaffold_to_instruction(scaffold: Scaffold) -> str:
-    """Serialize a Scaffold into a system-prompt fragment. See spec §5."""
+    """Serialize a Scaffold into a system-prompt fragment. See spec §5.
+
+    Two modes:
+      - Structured (sections non-empty): emit a literal markdown skeleton
+        the model must fill in. Skeleton-following is ~10x more reliable
+        than rule-following for formatting compliance.
+      - Unstructured: emit the rule-list contract (v1 behavior).
+    """
     parts: List[str] = []
 
     # Opening
@@ -635,8 +767,11 @@ def scaffold_to_instruction(scaffold: Scaffold) -> str:
         section_lines = "\n".join(_fmt_section(s) for s in scaffold.sections)
         parts.append("Structure the response with these exact sections:\n" + section_lines)
 
-    # Paragraph shape
-    parts.append(f"Maximum {scaffold.max_paragraph_sentences} sentences per paragraph.")
+    # Paragraph shape — explicit break rule, not just a cap
+    parts.append(
+        f"Maximum {scaffold.max_paragraph_sentences} sentences per paragraph. "
+        f"Insert a blank line between paragraphs. Never merge paragraphs into one block."
+    )
 
     # Emphasis
     if scaffold.emphasis == "bold":
@@ -651,7 +786,20 @@ def scaffold_to_instruction(scaffold: Scaffold) -> str:
         f"Only use bullet lists when there are {scaffold.list_threshold}+ parallel items."
     )
 
-    return "RESPONSE FORMAT INSTRUCTIONS:\n" + "\n".join(parts)
+    rule_block = (
+        "STRUCTURAL CONTRACT (these rules are mandatory, not suggestions):\n"
+        + "\n".join(f"- {p}" for p in parts)
+    )
+
+    # A — When sections exist, also emit a literal skeleton the model fills.
+    if scaffold.sections:
+        skeleton = _format_skeleton(scaffold)
+        return (
+            rule_block
+            + "\n\nRESPONSE TEMPLATE — fill this exact template, keep headers verbatim:\n\n"
+            + skeleton
+        )
+    return rule_block
 
 
 # Task-type → default Scaffold fallback. Spec §4.
@@ -664,6 +812,36 @@ _TASK_TYPE_SCAFFOLD_DEFAULTS: Dict[str, Dict] = {
     "long_context": {"layout": "long-prose",     "opening": "direct", "width_hint": "narrow"},
     "chat":         {"layout": "conversational", "opening": "direct", "width_hint": "medium"},
 }
+
+
+def _apply_signal_override(scaffold_obj: "Scaffold", prompt: str) -> "Scaffold":
+    """Apply deterministic prompt signals on top of any scaffold (LLM or fallback).
+    Signals override layout when they fire; never lowers specificity."""
+    try:
+        signals = analyze_prompt_signals(prompt)
+    except Exception as e:
+        logger.debug(f"Signal analyzer errored (non-fatal): {e}")
+        return scaffold_obj
+    forced = signals.get("force_layout")
+    if not forced or scaffold_obj.layout == forced:
+        return scaffold_obj
+    logger.info(
+        f"🧠 Signal override: was {scaffold_obj.layout!r}, signals forced {forced!r}"
+    )
+    inferred_sections = signals.get("inferred_sections") or []
+    use_sections = scaffold_obj.sections
+    if forced == "structured" and len(scaffold_obj.sections) < 2 and len(inferred_sections) >= 2:
+        use_sections = inferred_sections
+    return Scaffold(
+        layout=forced,
+        opening=scaffold_obj.opening,
+        separator=(forced == "structured") or scaffold_obj.separator,
+        sections=use_sections,
+        emphasis=scaffold_obj.emphasis,
+        max_paragraph_sentences=scaffold_obj.max_paragraph_sentences,
+        list_threshold=scaffold_obj.list_threshold,
+        width_hint=scaffold_obj.width_hint,
+    )
 
 
 def _scaffold_from_task_type(task_type: str) -> Scaffold:
@@ -731,6 +909,8 @@ SCAFFOLD RULES:
 - creative_task → layout:prose or long-prose, emphasis:italic, width_hint:narrow
 - planning / multi-topic → layout:structured, opening:hook, separator:true, 2-4 sections
 - comparison → layout:structured, opening:direct, 2+ sections
+- deep explainer requesting multiple angles (e.g. "history AND intuition", "X, Y, and Z", "including A and B") → layout:structured, opening:hook, separator:true, one section per named angle (minimum 3). NEVER long-prose for these — they need headers.
+- long-prose output must still break into paragraphs of max 3 sentences each, separated by blank lines. Never one monolith.
 
 IMPORTANT: Words like "create/make/build" at the start usually mean creative_task, NOT cryptocurrency.
 Only set has_crypto_mention=true if they're asking about crypto PRICES or MARKET data."""
@@ -795,6 +975,8 @@ Only set has_crypto_mention=true if they're asking about crypto PRICES or MARKET
             else:
                 scaffold_obj = _scaffold_from_task_type(task_type_hint or "chat")
 
+            scaffold_obj = _apply_signal_override(scaffold_obj, prompt)
+
             result = {
                 "intent_type": raw.get("intent_type", "unknown"),
                 "has_crypto_mention": bool(raw.get("has_crypto_mention", False)),
@@ -817,8 +999,10 @@ Only set has_crypto_mention=true if they're asking about crypto PRICES or MARKET
             logger.debug(f"Intent provider {name} failed: {e}")
             continue
 
-    # All LLM providers exhausted → fallback to task-type-derived default.
+    # All LLM providers exhausted → fallback to task-type-derived default,
+    # THEN apply deterministic signals. Signals work without an LLM.
     fallback_scaffold = _scaffold_from_task_type(task_type_hint or "chat")
+    fallback_scaffold = _apply_signal_override(fallback_scaffold, prompt)
     result = {
         "intent_type": "unknown",
         "confidence": 0,

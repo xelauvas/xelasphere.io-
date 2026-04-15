@@ -59,3 +59,33 @@ def test_unified_prompt_does_not_regress_intent_accuracy():
         "internal LLM calls: (1) original intent-only prompt, (2) scaffold-only "
         "prompt conditioned on intent_type."
     )
+
+
+# Regression test for v1.1 intelligence upgrade (A+B+E).
+# This is the exact prompt that produced a monolithic 15-sentence paragraph
+# in v1 — the user-reported failure case. With signal override + skeleton
+# instructions, the scaffold must come back as structured with ≥2 sections.
+@pytest.mark.skipif(
+    not (os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY")),
+    reason="Requires LLM access",
+)
+def test_deep_explainer_with_named_angles_produces_structured_scaffold():
+    chat_engine._intent_cache.clear()
+    prompt = (
+        "write a deep explainer on how transformer attention works, "
+        "including history and intuition"
+    )
+    result = chat_engine.classify_user_intent(prompt, use_cache=False)
+    scaffold = result.get("scaffold") or {}
+    assert scaffold.get("layout") == "structured", (
+        f"Expected structured (signal override), got {scaffold.get('layout')!r}"
+    )
+    sections = scaffold.get("sections") or []
+    assert len(sections) >= 2, (
+        f"Expected ≥2 sections for multi-angle explainer, got {len(sections)}: {sections}"
+    )
+    # The skeleton must actually render headers for these sections:
+    from app.services.chat_engine import Scaffold, scaffold_to_instruction
+    rendered = scaffold_to_instruction(Scaffold.from_dict(scaffold))
+    assert "RESPONSE TEMPLATE" in rendered
+    assert rendered.count("## ") >= 2

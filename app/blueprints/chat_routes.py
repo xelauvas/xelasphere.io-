@@ -1022,7 +1022,18 @@ def chat_stream():
             _scaffold_obj = _Scaffold.from_dict(_scaffold_dict)
             _scaffold_instruction = _scaffold_to_instr(_scaffold_obj)
             base_system = base_system + "\n\n" + _scaffold_instruction
-            logger.info(f"[Stream] scaffold injected: layout={_scaffold_obj.layout}")
+            # E — full scaffold observability: layout + sections + opening
+            # so failures can be grepped from logs.
+            try:
+                _section_titles = [s.get("title", "?") for s in (_scaffold_obj.sections or [])]
+                logger.info(
+                    f"[Stream] scaffold injected: layout={_scaffold_obj.layout} "
+                    f"opening={_scaffold_obj.opening} separator={_scaffold_obj.separator} "
+                    f"sections={_section_titles} emphasis={_scaffold_obj.emphasis} "
+                    f"max_para={_scaffold_obj.max_paragraph_sentences}"
+                )
+            except Exception:
+                logger.info(f"[Stream] scaffold injected: layout={_scaffold_obj.layout}")
         except Exception as e:
             logger.debug(f"[Stream] scaffold materialization failed: {e}")
             _scaffold_dict = None

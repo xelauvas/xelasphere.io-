@@ -78,7 +78,7 @@ def test_instruction_for_structured_scaffold_includes_sections():
         list_threshold=3, width_hint="medium",
     )
     out = scaffold_to_instruction(s)
-    assert "RESPONSE FORMAT INSTRUCTIONS" in out
+    assert "STRUCTURAL CONTRACT" in out
     assert "## 🎯 Core Idea" in out
     assert "## ⚖️ Tradeoffs" in out
     assert "---" in out
@@ -218,6 +218,121 @@ def test_classify_falls_back_to_task_type_default_on_llm_failure(monkeypatch):
         "conversational", "prose", "long-prose", "technical",
         "code-heavy", "list-heavy", "structured",
     }
+
+
+# ============================================================
+# A — Skeleton-based instructions for structured layouts
+# ============================================================
+
+def test_instruction_structured_emits_markdown_skeleton_not_rule_list():
+    """When sections are provided, the instruction should contain a literal
+    markdown skeleton the model fills in (spec §5 enforcement upgrade)."""
+    s = Scaffold(
+        layout="structured", opening="hook", separator=True,
+        sections=[
+            {"title": "History",   "emoji": "📜", "style": "prose"},
+            {"title": "Intuition", "emoji": "💡", "style": "prose"},
+            {"title": "Mechanism", "emoji": "⚙️", "style": "prose"},
+        ],
+        emphasis="bold", max_paragraph_sentences=3,
+        list_threshold=3, width_hint="medium",
+    )
+    out = scaffold_to_instruction(s)
+    # Literal response template the model fills in:
+    assert "RESPONSE TEMPLATE" in out or "Fill this exact template" in out
+    # All three section headers appear as actual markdown headers in the
+    # template body (not just as a rule list):
+    assert out.count("## ") >= 3
+    assert "## 📜 History" in out
+    assert "## 💡 Intuition" in out
+    assert "## ⚙️ Mechanism" in out
+
+
+def test_instruction_unstructured_layout_skips_skeleton():
+    """Conversational / prose without sections must NOT emit a skeleton."""
+    s = Scaffold(
+        layout="conversational", opening="direct", separator=False,
+        sections=[], emphasis="none", max_paragraph_sentences=3,
+        list_threshold=3, width_hint="medium",
+    )
+    out = scaffold_to_instruction(s)
+    assert "RESPONSE TEMPLATE" not in out
+    assert "Fill this exact template" not in out
+
+
+# ============================================================
+# B — Deterministic signal layer (pre-LLM prompt analysis)
+# ============================================================
+
+from app.services.chat_engine import analyze_prompt_signals
+
+
+def test_signals_detects_multi_angle_explainer():
+    sig = analyze_prompt_signals(
+        "write a deep explainer on how transformer attention works, "
+        "including history and intuition"
+    )
+    assert sig["force_layout"] == "structured"
+    # inferred sections pulled from the conjunction targets:
+    titles = [s["title"].lower() for s in sig["inferred_sections"]]
+    assert any("history" in t for t in titles)
+    assert any("intuition" in t for t in titles)
+
+
+def test_signals_detects_three_angle_comparison():
+    sig = analyze_prompt_signals(
+        "compare React, Vue, and Svelte across performance, learning curve, and ecosystem"
+    )
+    assert sig["force_layout"] == "structured"
+    assert len(sig["inferred_sections"]) >= 3
+
+
+def test_signals_leaves_short_conversational_alone():
+    sig = analyze_prompt_signals("hey")
+    assert sig.get("force_layout") is None
+    assert sig.get("inferred_sections", []) == []
+
+
+def test_signals_does_not_false_positive_on_simple_and():
+    """A prompt with a single 'and' but no explainer framing stays free."""
+    sig = analyze_prompt_signals("give me salt and pepper recipes")
+    assert sig.get("force_layout") != "structured"
+
+
+def test_signals_biases_code_prompts_to_technical():
+    sig = analyze_prompt_signals("write a python function to parse CSV files")
+    assert sig.get("force_layout") in ("technical", "code-heavy", None)
+    # Not forcing prose/structured for code:
+    assert sig.get("force_layout") != "structured"
+
+
+# ============================================================
+# A+B integration — classifier respects forced signals
+# ============================================================
+
+def test_classify_signals_override_weak_llm_layout(monkeypatch):
+    """If deterministic signals say 'structured' but LLM says 'long-prose',
+    the signals win. This is the v1.1 intelligence upgrade."""
+    chat_engine._intent_cache.clear()
+    bad_body = {
+        "intent_type": "question",
+        "scaffold": {
+            "layout": "long-prose",  # LLM guess — should be overridden
+            "opening": "direct", "separator": False, "sections": [],
+            "emphasis": "none", "max_paragraph_sentences": 3,
+            "list_threshold": 3, "width_hint": "narrow",
+        },
+    }
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    with patch.object(chat_engine, "requests", MagicMock()) as mock_req:
+        mock_req.post.return_value = _mk_openai_response(bad_body)
+        result = chat_engine.classify_user_intent(
+            "write a deep explainer on transformer attention, "
+            "including history and intuition",
+            use_cache=False,
+        )
+    assert result["scaffold"]["layout"] == "structured"
+    assert len(result["scaffold"]["sections"]) >= 2
 
 
 def test_classify_scaffold_validates_before_returning(monkeypatch):
