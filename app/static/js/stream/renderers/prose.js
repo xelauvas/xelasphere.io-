@@ -21,6 +21,63 @@ function stripTrailingPreamble(text) {
     return stripped.replace(/,\s*$/, '.');
 }
 
+// Verbatim-quote detect-and-wrap. Llama-family models emit long literary
+// quotations inline inside paragraphs with straight double quotes rather
+// than using `> ` blockquote syntax, even when the system prompt requires
+// it. This heuristic finds a substantial quoted span in a paragraph and
+// splits it into prose-before / blockquote / prose-after at markdown
+// level, so the existing .text-message blockquote CSS kicks in.
+//
+// Triggers when a paragraph contains a straight-double-quoted span of
+// >= 30 characters. If the paragraph has multiple quoted spans (e.g. a
+// book title in quotes + a long quotation), the longest ≥30 span is
+// promoted; shorter quotes are left inline. Short embedded quotes
+// ("insane", "hello") are never promoted.
+const MIN_QUOTE_LEN = 35;
+
+function wrapInlineQuotesAsBlockquotes(text) {
+    if (!text) return text;
+    return text
+        .split(/\n\n+/)
+        .map((para) => {
+            // Skip paragraphs that already start with '>' (already a blockquote)
+            // or are code fences (defensive; blockStateMachine handles these).
+            if (/^\s*>/.test(para) || /^\s*```/.test(para)) return para;
+
+            // Collect all straight-double-quoted spans with their positions.
+            const quotes = [];
+            const re = /"([^"\n]+?)"/g;
+            let m;
+            while ((m = re.exec(para)) !== null) {
+                quotes.push({ full: m[0], inner: m[1], index: m.index, len: m[1].length });
+            }
+            if (quotes.length === 0) return para;
+
+            // Pick the longest span that meets the length threshold.
+            const eligible = quotes.filter((q) => q.len >= MIN_QUOTE_LEN);
+            if (eligible.length === 0) return para;
+            eligible.sort((a, b) => b.len - a.len);
+            const pick = eligible[0];
+
+            // Guard against long prose with a medium-length quoted phrase
+            // being hijacked — require surrounding prose to be ≤3× the
+            // quote length. Typical "intro + quote + attribution" comes in
+            // well under this; a 500-word essay mentioning a 35-char term
+            // in passing stays as prose.
+            const nonQuoteLen = (para.length - pick.full.length);
+            if (nonQuoteLen > pick.len * 3) return para;
+
+            const before = para.slice(0, pick.index).trim();
+            const after = para.slice(pick.index + pick.full.length).trim();
+            const parts = [];
+            if (before) parts.push(before);
+            parts.push('> ' + pick.inner);
+            if (after) parts.push(after);
+            return parts.join('\n\n');
+        })
+        .join('\n\n');
+}
+
 export function createProseRenderer() {
     return {
         create(block, messageContainer, opts = {}) {
@@ -72,8 +129,10 @@ export function createProseRenderer() {
             }
         },
         finalize(block) {
-            // Strip the AI-preamble closer if present, then re-render once.
-            const cleaned = stripTrailingPreamble(block.text);
+            // Strip the AI-preamble closer if present.
+            let cleaned = stripTrailingPreamble(block.text);
+            // Promote inline long quotes to blockquote syntax.
+            cleaned = wrapInlineQuotesAsBlockquotes(cleaned);
             if (cleaned !== block.text) {
                 block.text = cleaned;
             }
