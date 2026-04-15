@@ -45,6 +45,17 @@
     /* -------------------------------------------------------
        Premium Reader — Pocket/Instapaper-style overlay
     ------------------------------------------------------- */
+
+    // Validate an outbound href — reject javascript:, data:, vbscript:
+    // so markdown links in article content can't inject scripts.
+    function _safeHref(href) {
+        if (!href) return '#';
+        var trimmed = String(href).trim();
+        // Allow protocol-relative, http(s), mailto, tel, and relative URLs.
+        if (/^\s*(javascript|data|vbscript|file):/i.test(trimmed)) return '#';
+        return trimmed;
+    }
+
     function _openLink(url) {
         if (window.innerWidth > 640) {
             window.open(_ensureUrl(url), '_blank');
@@ -77,12 +88,14 @@
         header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:12px 16px;background:#0d0d0d;flex-shrink:0;padding-top:calc(12px + env(safe-area-inset-top,0px));border-bottom:1px solid rgba(255,255,255,0.08);';
 
         var closeBtn = document.createElement('button');
+        closeBtn.setAttribute('aria-label', 'Close reader');
         closeBtn.innerHTML = '&#10005;';
         closeBtn.style.cssText = 'width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.8);font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
-        closeBtn.onclick = function () { overlay.remove(); };
+        closeBtn.onclick = function () { _closeReader(); };
 
         var favEl = document.createElement('img');
         favEl.src = faviconUrl;
+        favEl.alt = '';
         favEl.style.cssText = 'width:18px;height:18px;border-radius:4px;flex-shrink:0;';
         favEl.onerror = function () { this.style.display = 'none'; };
 
@@ -91,10 +104,12 @@
         domainEl.style.cssText = 'flex:1;font-size:0.78rem;color:rgba(255,255,255,0.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
 
         var aaBtn = document.createElement('button');
+        aaBtn.setAttribute('aria-label', 'Change text size');
         aaBtn.textContent = 'Aa';
         aaBtn.style.cssText = 'border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:0.8rem;padding:6px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;';
 
         var extBtn = document.createElement('button');
+        extBtn.setAttribute('aria-label', 'Open in browser');
         extBtn.innerHTML = '&#8599;';
         extBtn.style.cssText = 'width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
         extBtn.onclick = function () { window.open(url, '_blank'); };
@@ -105,15 +120,19 @@
         header.appendChild(aaBtn);
         header.appendChild(extBtn);
 
-        // Scrollable content
+        // Helpers attached to overlay so they can be removed on close.
+        function _closeReader() {
+            document.removeEventListener('keydown', _onKey);
+            overlay.remove();
+        }
+        function _onKey(e) {
+            if (e.key === 'Escape') { e.preventDefault(); _closeReader(); }
+        }
+        document.addEventListener('keydown', _onKey);
+
+        // Scrollable content (loading spinner is injected in _fetchArticle)
         var content = document.createElement('div');
         content.style.cssText = 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;';
-
-        // Loading spinner
-        content.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;">'
-            + '<div style="width:36px;height:36px;border:2px solid rgba(255,255,255,0.1);border-top-color:rgba(255,255,255,0.6);border-radius:50%;animation:reader-spin 0.8s linear infinite;"></div>'
-            + '<span style="color:rgba(255,255,255,0.4);font-size:0.85rem;">Fetching article...</span>'
-            + '</div>';
 
         overlay.appendChild(progress);
         overlay.appendChild(header);
@@ -137,7 +156,8 @@
             if (readerBody) readerBody.style.fontSize = fontSizes[sizeIndex];
         };
 
-        // Error UI builder (no inline onclick — uses event listeners)
+        // Error UI builder (no inline onclick — uses event listeners).
+        // Shows both a retry button and an open-in-browser fallback.
         function _showError(msg) {
             content.innerHTML = '';
             var wrap = document.createElement('div');
@@ -148,72 +168,102 @@
             var label = document.createElement('div');
             label.style.cssText = 'color:rgba(255,255,255,0.6);font-size:0.95rem;text-align:center;';
             label.textContent = msg;
+
+            var btnRow = document.createElement('div');
+            btnRow.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center;';
+
+            var retryBtn = document.createElement('button');
+            retryBtn.style.cssText = 'background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);border:1px solid rgba(255,255,255,0.12);padding:12px 20px;border-radius:10px;font-size:0.9rem;font-weight:500;cursor:pointer;';
+            retryBtn.textContent = 'Try again';
+            retryBtn.onclick = function () { _fetchArticle(); };
+
             var btn = document.createElement('button');
             btn.style.cssText = 'background:#7eb8ff;color:#000;border:none;padding:12px 24px;border-radius:10px;font-size:0.9rem;font-weight:600;cursor:pointer;';
             btn.textContent = 'Open in Browser \u2192';
             btn.onclick = function () { window.open(url, '_blank'); };
+
+            btnRow.appendChild(retryBtn);
+            btnRow.appendChild(btn);
             wrap.appendChild(icon);
             wrap.appendChild(label);
-            wrap.appendChild(btn);
+            wrap.appendChild(btnRow);
             content.appendChild(wrap);
         }
 
-        // Fetch content
-        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-        fetch('/reader', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfMeta ? csrfMeta.getAttribute('content') : ''
-            },
-            body: JSON.stringify({ url: url })
-        })
-        .then(function (r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
-        })
-        .then(function (data) {
-            if (data.error || !data.content) {
-                _showError("Couldn't load this article");
-                return;
-            }
+        // Loading state (re-usable so retry can restore it).
+        var loadingHtml = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;">'
+            + '<div style="width:36px;height:36px;border:2px solid rgba(255,255,255,0.1);border-top-color:rgba(255,255,255,0.6);border-radius:50%;animation:reader-spin 0.8s linear infinite;"></div>'
+            + '<span style="color:rgba(255,255,255,0.4);font-size:0.85rem;">Fetching article...</span>'
+            + '</div>';
 
-            // Strip markdown syntax for accurate word count
-            var plainText = data.content.replace(/[#*\[\]()>_`~!|-]/g, '');
-            var wordCount = plainText.split(/\s+/).filter(Boolean).length;
-            var readTime = Math.max(1, Math.ceil(wordCount / 200));
-            var articleHtml = '';
+        function _fetchArticle() {
+            content.innerHTML = loadingHtml;
+            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            fetch('/reader', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfMeta ? csrfMeta.getAttribute('content') : ''
+                },
+                body: JSON.stringify({ url: url })
+            })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                if (data.error || !data.content) {
+                    _showError(data.error || "Couldn't load this article");
+                    return;
+                }
 
-            // Hero image
-            if (data.image) {
-                articleHtml += '<div style="position:relative;width:100%;height:240px;overflow:hidden;flex-shrink:0;">'
-                    + '<img src="' + _escHtml(data.image) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">'
-                    + '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,#0d0d0d);"></div>'
+                var title = (data.title || '').trim();
+
+                // Strip markdown syntax for accurate word count
+                var plainText = data.content.replace(/[#*\[\]()>_`~!|-]/g, '');
+                var wordCount = plainText.split(/\s+/).filter(Boolean).length;
+                var readTime = Math.max(1, Math.ceil(wordCount / 200));
+                var articleHtml = '';
+
+                // Hero image
+                if (data.image) {
+                    articleHtml += '<div style="position:relative;width:100%;height:240px;overflow:hidden;flex-shrink:0;">'
+                        + '<img src="' + _escHtml(data.image) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentNode.style.display=\'none\'">'
+                        + '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,#0d0d0d);"></div>'
+                        + '</div>';
+                }
+
+                // Title + meta block
+                articleHtml += '<div style="padding:' + (data.image ? '4px' : '28px') + ' 20px 16px;max-width:680px;margin:0 auto;">';
+
+                // Article title (new — was missing before)
+                if (title) {
+                    articleHtml += '<h1 style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;font-size:1.55rem;font-weight:700;line-height:1.25;margin:0 0 14px;color:rgba(255,255,255,0.95);">' + _escHtml(title) + '</h1>';
+                }
+
+                articleHtml += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+                    + '<div style="display:flex;align-items:center;gap:6px;min-width:0;">'
+                    + '<img src="' + _escHtml(faviconUrl) + '" style="width:14px;height:14px;border-radius:3px;flex-shrink:0;" onerror="this.style.display=\'none\'" alt="">'
+                    + '<span style="font-size:0.78rem;color:rgba(255,255,255,0.45);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _escHtml(domain) + '</span>'
+                    + '</div>'
+                    + '<span style="font-size:0.75rem;color:rgba(255,255,255,0.35);flex-shrink:0;margin-left:12px;">' + readTime + ' min read</span>'
+                    + '</div>'
+                    + '<div style="height:1px;background:rgba(255,255,255,0.07);"></div>'
                     + '</div>';
-            }
 
-            // Meta block
-            articleHtml += '<div style="padding:20px 20px 16px;">'
-                + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
-                + '<div style="display:flex;align-items:center;gap:6px;">'
-                + '<img src="' + _escHtml(faviconUrl) + '" style="width:14px;height:14px;border-radius:3px;" onerror="this.style.display=\'none\'">'
-                + '<span style="font-size:0.78rem;color:rgba(255,255,255,0.45);font-weight:500;">' + _escHtml(domain) + '</span>'
-                + '</div>'
-                + '<span style="font-size:0.75rem;color:rgba(255,255,255,0.35);">' + readTime + ' min read</span>'
-                + '</div>'
-                + '<div style="height:1px;background:rgba(255,255,255,0.07);"></div>'
-                + '</div>';
+                // Article body. Padding bottom covers iOS home indicator.
+                articleHtml += '<div class="reader-body" style="font-size:' + fontSizes[sizeIndex] + ';padding-bottom:calc(80px + env(safe-area-inset-bottom, 0px));">'
+                    + _markdownToHtml(data.content) + '</div>';
 
-            // Article body
-            articleHtml += '<div class="reader-body" style="font-size:' + fontSizes[sizeIndex] + ';">'
-                + _markdownToHtml(data.content) + '</div>';
+                content.innerHTML = articleHtml;
+                readerBody = content.querySelector('.reader-body');
+            })
+            .catch(function () {
+                _showError('Failed to load article');
+            });
+        }
 
-            content.innerHTML = articleHtml;
-            readerBody = content.querySelector('.reader-body');
-        })
-        .catch(function () {
-            _showError('Failed to load article');
-        });
+        _fetchArticle();
     }
 
     function _escHtml(s) {
@@ -309,19 +359,43 @@
     }
 
     function _inlineMd(s) {
-        // Strip inline images first (before escaping)
-        s = s.replace(/!\[([^\]]*)\]\([^)]+\)/g, '');
-        // Escape HTML
+        // Extract inline images to placeholders before escaping so the
+        // URL isn't mangled by HTML escaping, then re-insert as <img>.
+        var imgs = [];
+        s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, function (m, alt, src) {
+            var safeSrc = _safeHref(src);
+            var i = imgs.length;
+            imgs.push({ alt: alt, src: safeSrc });
+            return '\0IMG' + i + '\0';
+        });
+
+        // Extract inline links to placeholders for the same reason.
+        var links = [];
+        s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, function (m, text, href) {
+            var i = links.length;
+            links.push({ text: text, href: _safeHref(href) });
+            return '\0LNK' + i + '\0';
+        });
+
+        // Escape HTML on the remaining text.
         s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        // Inline code
+
+        // Inline code, bold, italic, strikethrough.
         s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-        // Bold
         s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        // Italic
         s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        // Links
-        s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (m, text, href) {
-            return '<a href="' + href.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener">' + text + '</a>';
+        s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
+
+        // Re-insert placeholders as safe <a>/<img> tags. Text content
+        // of links is escaped; alt text of images is escaped.
+        s = s.replace(/\0LNK(\d+)\0/g, function (_, i) {
+            var l = links[+i];
+            var text = _escHtml(l.text);
+            return '<a href="' + _escHtml(l.href) + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+        });
+        s = s.replace(/\0IMG(\d+)\0/g, function (_, i) {
+            var im = imgs[+i];
+            return '<img src="' + _escHtml(im.src) + '" alt="' + _escHtml(im.alt) + '" loading="lazy" onerror="this.style.display=\'none\'">';
         });
         return s;
     }
