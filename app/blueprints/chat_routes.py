@@ -391,6 +391,7 @@ def create_image_from_surface():
 import concurrent.futures
 from app.services.scaffold_auditor import audit_response
 from app.services.scaffold_audit_writer import write_scaffold_audit
+from app.services.structured_generator import stream_structured_response
 
 
 # Thread pool for fire-and-forget audit writes. Bounded to 2 workers so
@@ -436,6 +437,75 @@ def _fire_audit_async(
         _AUDIT_EXECUTOR.submit(_task)
     except Exception as e:
         logger.warning(f"[v2 audit] submit failed (swallowed): {e}")
+
+
+def _render_mode_for_scaffold(scaffold) -> str:
+    """W-21 — the SSE render_mode value this scaffold implies.
+
+    'structured' when there are planned sections; 'markdown' otherwise
+    (including when scaffold is None / v2 disabled).
+    """
+    if not scaffold:
+        return "markdown"
+    sections = scaffold.get("sections") if isinstance(scaffold, dict) else getattr(scaffold, "sections", None)
+    return "structured" if sections else "markdown"
+
+
+def _try_structured_stream(*, scaffold, prompt: str, model: str,
+                            system_prompt_override):
+    """W-22 — pre-flight structured-output attempt.
+
+    If conditions allow (flag on, scaffold has sections, structured
+    generator succeeds), yield a self-contained event sequence:
+        scaffold → render_mode=structured → structured → done
+    and return. Caller skips the normal markdown stream.
+
+    On fallback / flag-off / no sections, yields nothing — caller
+    proceeds with the legacy markdown-streaming path.
+
+    Each yielded item is a dict: {"event": <name>, "data": <payload>}.
+    Caller serializes to SSE wire format.
+    """
+    if os.getenv("SCAFFOLD_V2_ENABLED", "false").strip().lower() != "true":
+        return
+    if not scaffold:
+        return
+    sections = scaffold.get("sections") if isinstance(scaffold, dict) else getattr(scaffold, "sections", None)
+    if not sections:
+        return
+
+    from app.services.chat_engine import Scaffold as _Scaffold
+    try:
+        scaffold_obj = _Scaffold.from_dict(scaffold) if isinstance(scaffold, dict) else scaffold
+    except Exception as e:
+        logger.debug(f"[v2] scaffold materialization failed in structured path: {e}")
+        return
+
+    chunks = list(stream_structured_response(
+        prompt=prompt, model=model, scaffold=scaffold_obj,
+        system_prompt_override=system_prompt_override,
+    ))
+    if not chunks or chunks[0].get("type") != "structured":
+        # fallback_markdown or empty — caller takes the normal path.
+        reason = chunks[0].get("reason") if chunks else "no_chunks"
+        logger.info(f"[v2] structured path fell back: reason={reason}")
+        return
+
+    data = chunks[0]["data"]
+    scaffold_dict = scaffold_obj.to_dict()
+    # Events follow the existing codeWindow.js SSE convention: the parser
+    # reads `data:` lines and dispatches on the `type` field. No `event:`
+    # lines — keeps wire compatibility with the v1 scaffold handler.
+    yield {"event": "scaffold",
+           "data": {"type": "scaffold", **scaffold_dict}}
+    yield {"event": "render_mode",
+           "data": {"type": "render_mode", "mode": "structured"}}
+    yield {"event": "structured",
+           "data": {"type": "structured", "data": data}}
+    yield {"event": "done",
+           "data": {"type": "done", "render_mode": "structured",
+                    "structured_data": data,
+                    "content": "", "chat_summary": "", "reasoning": None}}
 
 
 def _maybe_classify_and_inject_scaffold(*, base_system: str, user_prompt: str) -> dict:
@@ -1183,6 +1253,48 @@ def chat_stream():
         if voice_prefix in ('bf', 'bm'):
             tts_lang_code = 'b'
         yield f"data: {json.dumps({'type': 'tts_voice', 'voice': tts_voice, 'lang': tts_lang})}\n\n"
+
+        # W-21 + W-22 — Structure Intelligence v2 structured-output pre-flight.
+        # When the classifier chose a structured scaffold and the flag is on,
+        # attempt the JSON-schema-enforced generation path. On success, emit
+        # the full event sequence and return; on fallback/off, yield nothing
+        # and fall through to the normal streaming flow below.
+        _v2_system_prompt = None
+        try:
+            if built_context.messages and built_context.messages[0].get('role') == 'system':
+                _v2_system_prompt = built_context.messages[0]['content']
+        except Exception:
+            pass
+        _structured_events = list(_try_structured_stream(
+            scaffold=(_v2_result.get("scaffold") if _v2_result else None),
+            prompt=enhanced_prompt,
+            model=stream_model,
+            system_prompt_override=_v2_system_prompt,
+        ))
+        if _structured_events:
+            for _ev in _structured_events:
+                # Single-line SSE — matches codeWindow.js parser convention.
+                yield f"data: {json.dumps(_ev['data'])}\n\n"
+            # Fire audit on the structured path — uses the parsed JSON.
+            try:
+                _done_ev = next(e for e in _structured_events if e["event"] == "done")
+                _fire_audit_async(
+                    scaffold=(_v2_result.get("scaffold") if _v2_result else None),
+                    rendered_output="",  # structured path — auditor reads structured_data
+                    meta={"render_path": "structured",
+                          "structured_data": _done_ev["data"].get("structured_data")},
+                    user_id=user_id, session_id=session_id,
+                    model=stream_model,
+                    provider=MODEL_PROVIDERS.get(resolve_model_id(stream_model), ""),
+                )
+            except Exception as _audit_err:
+                logger.debug(f"[v2 audit] structured-path audit fire errored (swallowed): {_audit_err}")
+            return
+
+        # Markdown path — emit render_mode up front so the client knows
+        # which renderer to use. Silent no-op when v2 is off.
+        if os.getenv("SCAFFOLD_V2_ENABLED", "false").strip().lower() == "true":
+            yield f"data: {json.dumps({'type': 'render_mode', 'mode': 'markdown'})}\n\n"
 
         def _client_disconnected():
             """Check if the client has closed the connection."""

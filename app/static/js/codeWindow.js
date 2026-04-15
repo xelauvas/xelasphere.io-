@@ -2401,6 +2401,49 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     try {
                         const chunk = JSON.parse(jsonStr);
 
+                        // ───── Structure Intelligence v2 SSE handlers (W-24) ─────
+                        if (chunk.type === 'scaffold') {
+                            // v2 scaffold event carries the full Scaffold dict;
+                            // tag the active message wrapper so CSS can adapt.
+                            try {
+                                const wrapper = document.querySelector(
+                                    '.message.ai-message.streaming .text-message-container'
+                                ) || document.querySelector(
+                                    '.message.ai-message:last-of-type .text-message-container'
+                                );
+                                if (wrapper && chunk.layout) {
+                                    wrapper.dataset.ctx = chunk.layout;
+                                    wrapper.dataset.ctxSource = 'server';
+                                    const msgEl = wrapper.closest('.message, .ai-message');
+                                    if (msgEl) {
+                                        msgEl.dataset.ctx = chunk.layout;
+                                        msgEl.dataset.ctxSource = 'server';
+                                    }
+                                }
+                                console.log('[v2 scaffold] layout:', chunk.layout,
+                                            'sections:', (chunk.sections || []).length);
+                            } catch (e) {
+                                console.warn('[v2 scaffold] apply failed', e);
+                            }
+                            return;
+                        }
+                        if (chunk.type === 'render_mode') {
+                            // Which renderer to use for this stream:
+                            //  - 'structured' → scaffoldRenderer fills the bubble from JSON
+                            //  - 'markdown'   → existing streaming renderer handles tokens
+                            window._v2RenderMode = chunk.mode || 'markdown';
+                            console.log('[v2] render_mode:', window._v2RenderMode);
+                            return;
+                        }
+                        if (chunk.type === 'structured') {
+                            // Buffer the parsed JSON; rendered at 'done' event.
+                            window._v2StructuredPayload = chunk.data;
+                            console.log('[v2] structured payload buffered',
+                                        (chunk.data && chunk.data.sections || []).length,
+                                        'sections');
+                            return;
+                        }
+
                         if (chunk.type === 'reasoning') {
                             streamedReasoning += chunk.text || '';
                             // Buffer in BackgroundRequestManager
@@ -2761,6 +2804,34 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             }
                         } else if (chunk.type === 'done') {
                             console.log('Received done chunk:', chunk);
+
+                            // v2 structured-payload rendering (W-24). When the
+                            // server took the structured path, it sent a
+                            // `structured` event and set render_mode='structured'.
+                            // Render via scaffoldRenderer into the active bubble.
+                            if (window._v2RenderMode === 'structured'
+                                && window._v2StructuredPayload
+                                && window.scaffoldRenderer) {
+                                try {
+                                    const bubble = document.querySelector(
+                                        '.message.ai-message.streaming .text-message-container'
+                                    ) || document.querySelector(
+                                        '.message.ai-message:last-of-type .text-message-container'
+                                    );
+                                    if (bubble) {
+                                        window.scaffoldRenderer.renderStructuredResponse(
+                                            window._v2StructuredPayload, bubble
+                                        );
+                                        console.log('[v2] scaffoldRenderer applied');
+                                    }
+                                } catch (e) {
+                                    console.warn('[v2] scaffoldRenderer failed', e);
+                                }
+                                // Clean up buffered state:
+                                window._v2RenderMode = null;
+                                window._v2StructuredPayload = null;
+                            }
+
                             streamedReasoning = chunk.reasoning || streamedReasoning;
                             // Join accumulated chunks if not already joined
                             if (_contentChunks.length > _contentJoinedAt) {
