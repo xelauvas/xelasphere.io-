@@ -388,6 +388,56 @@ def create_image_from_surface():
     return handle_image_request(user_id, prompt, page_id=page_id)
 
 
+import concurrent.futures
+from app.services.scaffold_auditor import audit_response
+from app.services.scaffold_audit_writer import write_scaffold_audit
+
+
+# Thread pool for fire-and-forget audit writes. Bounded to 2 workers so
+# a Firestore outage can't monopolize capacity. Module-level singleton.
+_AUDIT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=2, thread_name_prefix="scaffold-audit",
+)
+
+
+def _fire_audit_async(
+    *,
+    scaffold,
+    rendered_output: str,
+    meta: dict,
+    user_id,
+    session_id,
+    model: str,
+    provider: str,
+) -> None:
+    """W-20 — schedule a scaffold-compliance audit to fire after the stream
+    has already yielded `done`. Never blocks the request thread and never
+    raises: audit infra can't break a completed response.
+
+    No-op when SCAFFOLD_V2_ENABLED is off, or when no scaffold was chosen.
+    """
+    if os.getenv("SCAFFOLD_V2_ENABLED", "false").strip().lower() != "true":
+        return
+    if not scaffold:
+        return
+
+    def _task():
+        try:
+            report = audit_response(scaffold, rendered_output, meta=meta or {})
+            write_scaffold_audit(
+                report,
+                user_id=user_id, session_id=session_id,
+                model=model, provider=provider,
+            )
+        except Exception as e:
+            logger.warning(f"[v2 audit] async task failed (swallowed): {e}")
+
+    try:
+        _AUDIT_EXECUTOR.submit(_task)
+    except Exception as e:
+        logger.warning(f"[v2 audit] submit failed (swallowed): {e}")
+
+
 def _maybe_classify_and_inject_scaffold(*, base_system: str, user_prompt: str) -> dict:
     """W-09 — single gate-point for Structure Intelligence v2 injection.
 
@@ -2175,6 +2225,20 @@ def chat_stream():
                         pass
 
                     yield f"data: {json.dumps(done_payload)}\n\n"
+
+                    # W-20 — fire scaffold compliance audit off-thread.
+                    # Pure observability; never blocks or mutates the stream.
+                    try:
+                        _fire_audit_async(
+                            scaffold=_v2_result.get("scaffold") if _v2_result else None,
+                            rendered_output=full_content or display_content or "",
+                            meta={"render_path": "markdown"},
+                            user_id=user_id, session_id=session_id,
+                            model=stream_model,
+                            provider=MODEL_PROVIDERS.get(_resolved_model, ""),
+                        )
+                    except Exception as _audit_err:
+                        logger.debug(f"[v2 audit] fire helper errored (swallowed): {_audit_err}")
 
                 elif chunk_type == 'error':
                     yield f"data: {json.dumps({'type': 'error', 'text': chunk.get('text', 'Unknown error')})}\n\n"
