@@ -976,16 +976,19 @@ h1 {
    BLOCKQUOTES & CALLOUTS - Premium Style
    ═══════════════════════════════════════════════════════════════ */
 
+/* ChatGPT-style blockquote: thick left rule, no background, generous
+   left padding, muted text. Flat corners, no tint, no reduced font
+   size — let the border + indentation do all the visual work. */
 .text-message blockquote {
     position: relative;
-    background: var(--bg-tertiary, rgba(255, 255, 255, 0.03));
-    border-left: 3px solid var(--border-primary, rgba(255, 255, 255, 0.2));
-    border-radius: 0 6px 6px 0;
-    padding: 0.75rem 1rem 0.75rem 1.1rem;
-    margin: 1rem 0;
-    color: var(--text-secondary, rgba(255, 255, 255, 0.85));
-    font-size: 0.95em;
-    line-height: 1.7;
+    background: transparent;
+    border-left: 3px solid var(--text-secondary, rgba(255, 255, 255, 0.35));
+    border-radius: 0;
+    padding: 0.1rem 0 0.1rem 1.1rem;
+    margin: 1.1em 0;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.82));
+    font-size: 1em;
+    line-height: 1.65;
 }
 
 .text-message blockquote > p:first-child {

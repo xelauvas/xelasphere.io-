@@ -159,10 +159,11 @@
 /* Blockquotes inside a stream-block (e.g. the auto-wrapped verbatim
    quote split into prose-before / blockquote / prose-after) need vertical
    separation from their siblings — the rule above zeros everything, so
-   restore rhythm around blockquotes specifically. */
+   restore rhythm around blockquotes specifically. Matches ChatGPT's
+   1em+ breathing room so the quote card reads as its own visual unit. */
 .text-message .stream-block > * + blockquote,
 .text-message .stream-block > blockquote + * {
-    margin-top: 0.75em;
+    margin-top: 1em;
 }
 
 /* Lists (when the stream-block itself IS the <ul>/<ol>) — keep bullet indent. */
