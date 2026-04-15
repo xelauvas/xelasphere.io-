@@ -14,9 +14,12 @@ from unittest.mock import MagicMock, patch
 os.environ['FLASK_ENV'] = 'testing'
 os.environ['FLASK_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['FIREBASE_CRED_PATH'] = '/tmp/fake-firebase-creds.json'
-os.environ['GROQ_API_KEY'] = 'test-groq-key'
-os.environ['OPENROUTER_API_KEY'] = 'test-openrouter-key'
-os.environ['BRAVE_SEARCH_API_KEY'] = 'test-brave-key'
+# Use setdefault so that real keys passed via the shell environment (e.g. when
+# the developer runs `source .env && pytest`) are preserved.  Plain `pytest`
+# without a sourced .env still gets safe fake values.
+os.environ.setdefault('GROQ_API_KEY', 'test-groq-key')
+os.environ.setdefault('OPENROUTER_API_KEY', 'test-openrouter-key')
+os.environ.setdefault('BRAVE_SEARCH_API_KEY', 'test-brave-key')
 os.environ['SESSION_TYPE'] = 'filesystem'
 
 # Mock os.path.exists to return True for Firebase creds path

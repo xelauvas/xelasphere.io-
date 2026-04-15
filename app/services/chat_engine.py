@@ -762,7 +762,7 @@ Only set has_crypto_mention=true if they're asking about crypto PRICES or MARKET
                 json={
                     "model": model,
                     "messages": [{"role": "user", "content": classification_prompt}],
-                    "max_tokens": 250,
+                    "max_tokens": 600,
                     "temperature": 0.1,
                 },
                 timeout=1.5,  # spec §3 hard cap
@@ -773,11 +773,16 @@ Only set has_crypto_mention=true if they're asking about crypto PRICES or MARKET
 
             content = response.json()["choices"][0]["message"]["content"].strip()
             # Handle both plain JSON and JSON inside a markdown code fence.
-            json_match = re.search(r"\{.*\}", content, re.DOTALL)
+            # Use raw_decode so trailing chars (e.g. extra '}' from LLM) are ignored.
+            json_match = re.search(r"\{", content, re.DOTALL)
             if not json_match:
                 last_err = Exception(f"{name} no JSON match")
                 continue
-            raw = json.loads(json_match.group())
+            try:
+                raw, _ = json.JSONDecoder().raw_decode(content, json_match.start())
+            except json.JSONDecodeError as exc:
+                last_err = Exception(f"{name} JSON decode error: {exc}")
+                continue
 
             scaffold_dict = raw.get("scaffold")
             scaffold_obj: Optional[Scaffold] = None
