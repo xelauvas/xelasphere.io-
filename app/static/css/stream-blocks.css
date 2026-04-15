@@ -156,6 +156,15 @@
     margin-bottom: 0;
 }
 
+/* Blockquotes inside a stream-block (e.g. the auto-wrapped verbatim
+   quote split into prose-before / blockquote / prose-after) need vertical
+   separation from their siblings — the rule above zeros everything, so
+   restore rhythm around blockquotes specifically. */
+.text-message .stream-block > * + blockquote,
+.text-message .stream-block > blockquote + * {
+    margin-top: 0.75em;
+}
+
 /* Lists (when the stream-block itself IS the <ul>/<ol>) — keep bullet indent. */
 .text-message ul.stream-block,
 .text-message ol.stream-block {
