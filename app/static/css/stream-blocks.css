@@ -256,12 +256,19 @@
    Fallback: if data-ctx is missing, base .text-message rules apply.
    --------------------------------------------------------------------------- */
 
-/* Context rules target .text-message-container (the wrapper with
-   data-ctx) so they can exceed the parent's --composer-max-width cap.
-   The inner .text-message is block-level and clipped by its container,
-   so targeting it for width has no effect. */
+/* Context rules override TWO intermediate width caps:
+   .message-content and .text-message-container. Both are bound to
+   var(--composer-max-width) which defaults to 880px — without
+   overriding both, any context trying to exceed 880 is clipped by the
+   outer wrapper. The renderer sets data-ctx on the outermost .message
+   element AND the inner .text-message-container, so one rule can win
+   over both.
 
-/* Conversational — short replies, greetings, one-line answers. */
+   Typography and block-rhythm rules still target the inner .text-message. */
+
+/* --- Conversational --- 580px */
+.message[data-ctx="conversational"] .message-content,
+.message[data-ctx="conversational"] .text-message-container,
 .text-message-container[data-ctx="conversational"] {
     max-width: min(100%, 580px);
 }
@@ -270,7 +277,9 @@
     line-height: 1.7;
 }
 
-/* Prose — default mid-length explanation, no structure. */
+/* --- Prose --- 640px */
+.message[data-ctx="prose"] .message-content,
+.message[data-ctx="prose"] .text-message-container,
 .text-message-container[data-ctx="prose"] {
     max-width: min(100%, 640px);
 }
@@ -278,7 +287,9 @@
     line-height: 1.85;
 }
 
-/* Long-prose — multi-paragraph essay-style content. */
+/* --- Long-prose --- 680px */
+.message[data-ctx="long-prose"] .message-content,
+.message[data-ctx="long-prose"] .text-message-container,
 .text-message-container[data-ctx="long-prose"] {
     max-width: min(100%, 680px);
 }
@@ -289,13 +300,16 @@
     margin-top: 1.2em;
 }
 
-/* Technical — prose mixed with code. */
+/* --- Technical --- 760px */
+.message[data-ctx="technical"] .message-content,
+.message[data-ctx="technical"] .text-message-container,
 .text-message-container[data-ctx="technical"] {
     max-width: min(100%, 760px);
 }
 
-/* Code-heavy — mostly or entirely code output. Wider than the default
-   composer cap so snippets don't wrap aggressively. */
+/* --- Code-heavy --- 920px (widest, exceeds default composer cap) */
+.message[data-ctx="code-heavy"] .message-content,
+.message[data-ctx="code-heavy"] .text-message-container,
 .text-message-container[data-ctx="code-heavy"] {
     max-width: min(100%, 920px);
 }
@@ -306,7 +320,9 @@
     margin-top: 0.6em;
 }
 
-/* List-heavy — 6+ items, reference/enumerated content. */
+/* --- List-heavy --- 680px */
+.message[data-ctx="list-heavy"] .message-content,
+.message[data-ctx="list-heavy"] .text-message-container,
 .text-message-container[data-ctx="list-heavy"] {
     max-width: min(100%, 680px);
 }
@@ -314,7 +330,9 @@
     margin-top: 0.4em;
 }
 
-/* Structured — multiple headings, document-like responses. */
+/* --- Structured --- 720px */
+.message[data-ctx="structured"] .message-content,
+.message[data-ctx="structured"] .text-message-container,
 .text-message-container[data-ctx="structured"] {
     max-width: min(100%, 720px);
 }

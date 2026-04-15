@@ -169,13 +169,18 @@ class StreamRenderer {
         this.sm.finalize();
         removeCursor(this.messageEl);
 
-        // Content profile → data-ctx on the wrapper. CSS contexts in
-        // stream-blocks.css pick up the attribute and adapt max-width,
-        // line-height, and stream-block spacing to what actually rendered.
+        // Content profile → data-ctx. CSS contexts in stream-blocks.css
+        // pick up the attribute and adapt max-width / line-height / block
+        // rhythm. We bubble the attribute up to the outermost .message
+        // element so it can override width caps on BOTH .message-content
+        // and .text-message-container — which are each bound to the
+        // composer's --composer-max-width token.
         try {
             const profile = buildMessageProfile(this.ast.blocks());
             const ctx = classifyContext(profile);
             if (this.wrapperEl) this.wrapperEl.dataset.ctx = ctx;
+            const messageEl = this.wrapperEl && this.wrapperEl.closest('.message, .ai-message');
+            if (messageEl) messageEl.dataset.ctx = ctx;
         } catch (_e) { /* non-critical */ }
     }
 
