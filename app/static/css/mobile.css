@@ -3312,9 +3312,9 @@ body.is-ios .arrow-down {
     }
 
     .message.user-message .text-message {
-        background: #2f2f2f;
+        background: #0a0908;
         color: #ececec;
-        border-radius: 20px 20px 4px 20px;
+        border-radius: 18px;
         padding: 10px 14px;
         font-size: 15px;
         line-height: 1.6;
@@ -3696,7 +3696,7 @@ body.is-ios .arrow-down {
     .message .text-message pre,
     .code-block-wrapper {
         margin: 0.5rem 0;
-        border-radius: 10px;
+        border-radius: 6px;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
     }
@@ -3759,18 +3759,19 @@ body.is-ios .arrow-down {
         white-space: nowrap;
     }
 
-    /* === Blockquotes === */
+    /* === Blockquotes === Match desktop ChatGPT-style: left rule only,
+       no background, compact vertical padding. */
     .message .text-message blockquote {
-        margin: 0.75rem 0;
-        padding: 0.65rem 0.85rem;
+        margin: 1em 0;
+        padding: 0.1rem 0 0.1rem 1rem;
         font-size: 14px;
     }
 
     /* === Inline Code === */
     .message .text-message code:not(pre code) {
         font-size: 13px;
-        padding: 0.2rem 0.4rem;
-        border-radius: 6px;
+        padding: 0.15em 0.4em;
+        border-radius: 5px;
     }
 
     /* === Links - Touch Targets === */
@@ -4021,7 +4022,7 @@ body.is-ios .arrow-down {
     .message.user-message .text-message {
         padding: 8px 12px !important;
         font-size: 14px !important;
-        border-radius: 18px 18px 4px 18px !important;
+        border-radius: 16px !important;
     }
 
     .message.ai-message .text-message {
