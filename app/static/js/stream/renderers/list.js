@@ -83,17 +83,33 @@ export function createListRenderer() {
                 }
             }
 
-            // Append any new items after the previous tail
+            // Append any new items after the previous tail. Two rules to avoid
+            // the "empty row appears, then fills" cascade during streaming:
+            //   1) Hold the currently-streaming tail item OUT of the DOM until
+            //      it has real content. A brand-new list-item opener like "5. "
+            //      arrives before any words; materialising an empty <li> now
+            //      just to morphdom content into it reads visually as a blank
+            //      row popping in then filling character-by-character.
+            //   2) Batch every materialization into a DocumentFragment so one
+            //      stream-chunk = one DOM mutation (mirrors prose's morphdom
+            //      atomicity).
+            const frag = document.createDocumentFragment();
+            let added = 0;
             for (let i = existing; i < items.length; i++) {
+                const text = items[i] || '';
+                const isTail = i === items.length - 1;
+                if (isTail && text.trim() === '') break; // hold empty tail
                 const li = document.createElement('li');
                 li.className = `block-list-item${liNoAnim}`;
                 li.style.setProperty('--i', String(i));
-                const html = renderMd(items[i]);
-                if (html == null) li.textContent = items[i] || '';
+                const html = renderMd(text);
+                if (html == null) li.textContent = text;
                 else li.innerHTML = html;
-                block.el.appendChild(li);
+                frag.appendChild(li);
+                added++;
             }
-            block.meta.renderedItemCount = items.length;
+            if (added) block.el.appendChild(frag);
+            block.meta.renderedItemCount = existing + added;
         },
         finalize(block) {
             this.update(block);
