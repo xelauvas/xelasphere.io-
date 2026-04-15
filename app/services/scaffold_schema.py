@@ -73,8 +73,37 @@ CLASSIFIER_RESPONSE_SCHEMA = {
 }
 
 
-# Placeholder — filled in W-14.
-STRUCTURED_RESPONSE_SCHEMA: dict = {}
+# ============================================================
+# W-14 — Structured response schema
+# ============================================================
+# Emitted by the generation model (not the classifier) for structured
+# layouts. Client renders to markdown via scaffoldRenderer.js (W-23).
+#
+# Strict mode compliance: every object has additionalProperties:false
+# and every property is required (OpenAI schema mode requirement).
+_RESPONSE_SECTION_SCHEMA = {
+    "type": "object",
+    "required": ["title", "emoji", "body", "style"],
+    "properties": {
+        "title": {"type": "string", "minLength": 1},
+        "emoji": {"type": "string"},
+        "body":  {"type": "string", "minLength": 1},
+        "style": {"enum": ["prose", "list", "steps"]},
+    },
+    "additionalProperties": False,
+}
+
+
+STRUCTURED_RESPONSE_SCHEMA: dict = {
+    "type": "object",
+    "required": ["opening", "sections", "closing"],
+    "properties": {
+        "opening":  {"type": "string"},
+        "sections": {"type": "array", "items": _RESPONSE_SECTION_SCHEMA, "maxItems": 10},
+        "closing":  {"type": "string"},
+    },
+    "additionalProperties": False,
+}
 
 
 # ============================================================

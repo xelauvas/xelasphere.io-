@@ -156,6 +156,70 @@ def test_get_json_mode_specific_overrides_wildcard():
     assert get_json_mode("openai", "gpt-4.1-mini") == "schema"
 
 
+# ---------- W-14 — structured response schema ----------
+
+
+from app.services.scaffold_schema import STRUCTURED_RESPONSE_SCHEMA
+
+
+def test_structured_schema_is_valid_jsonschema():
+    Draft7Validator.check_schema(STRUCTURED_RESPONSE_SCHEMA)
+
+
+def test_structured_schema_validates_well_formed():
+    good = {
+        "opening": "Here's a quick overview.",
+        "sections": [
+            {"title": "Setup", "emoji": "⚙️", "body": "First do X. Then Y.", "style": "prose"},
+            {"title": "Steps", "emoji": "", "body": "1. A\n2. B", "style": "steps"},
+        ],
+        "closing": "",
+    }
+    Draft7Validator(STRUCTURED_RESPONSE_SCHEMA).validate(good)
+
+
+def test_structured_schema_rejects_missing_sections():
+    bad = {"opening": "", "closing": ""}
+    with pytest.raises(ValidationError):
+        Draft7Validator(STRUCTURED_RESPONSE_SCHEMA).validate(bad)
+
+
+def test_structured_schema_rejects_extra_properties():
+    """Strict mode — no bonus keys."""
+    bad = {
+        "opening": "", "sections": [], "closing": "",
+        "bonus_field": "nope",
+    }
+    with pytest.raises(ValidationError):
+        Draft7Validator(STRUCTURED_RESPONSE_SCHEMA).validate(bad)
+
+
+def test_structured_schema_rejects_invalid_style_enum():
+    bad = {
+        "opening": "",
+        "sections": [{"title": "T", "emoji": "", "body": "b", "style": "bogus"}],
+        "closing": "",
+    }
+    with pytest.raises(ValidationError):
+        Draft7Validator(STRUCTURED_RESPONSE_SCHEMA).validate(bad)
+
+
+def test_structured_schema_accepts_empty_sections():
+    """Valid when scaffold had no sections (opening + closing only)."""
+    good = {"opening": "A single reply.", "sections": [], "closing": ""}
+    Draft7Validator(STRUCTURED_RESPONSE_SCHEMA).validate(good)
+
+
+def test_structured_schema_enforces_section_required_fields():
+    """Section without body must fail."""
+    bad = {
+        "opening": "", "closing": "",
+        "sections": [{"title": "T", "emoji": "", "style": "prose"}],  # no body
+    }
+    with pytest.raises(ValidationError):
+        Draft7Validator(STRUCTURED_RESPONSE_SCHEMA).validate(bad)
+
+
 def _valid_scaffold() -> dict:
     return {
         "layout": "conversational",

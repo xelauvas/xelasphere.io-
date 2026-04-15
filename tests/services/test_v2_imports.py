@@ -21,17 +21,7 @@ def test_scaffold_auditor_imports():
     assert hasattr(scaffold_auditor, "audit_response")
 
 
-def test_structured_generator_raises_notimplemented():
-    """Stub must raise so nothing wires it up before W-15."""
-    from app.services.structured_generator import stream_structured_response
-    import pytest
-    with pytest.raises(NotImplementedError):
-        next(iter(stream_structured_response("hi", "gpt-4.1", None)))
-
-
-def test_scaffold_auditor_raises_notimplemented():
-    """Stub must raise so nothing wires it up before W-17."""
-    from app.services.scaffold_auditor import audit_response
-    import pytest
-    with pytest.raises(NotImplementedError):
-        audit_response(None, "")
+# W-15 + W-17 landed: structured_generator and scaffold_auditor are
+# now implemented. Their original "stub raises NotImplementedError"
+# guards are retired. Behavior is covered by their dedicated test
+# files (test_structured_generator.py, test_scaffold_auditor.py).
