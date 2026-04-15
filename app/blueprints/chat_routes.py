@@ -1093,6 +1093,13 @@ def chat_stream():
     def generate():
         import json
 
+        # Spec §5: scaffold event emitted FIRST, before any other SSE event on
+        # any code path (happy path, search fast-path, action router, error
+        # handlers). If the scaffold failed to materialize, skip and let the
+        # client fall back to post-stream classifyContext().
+        if _scaffold_dict:
+            yield f"data: {json.dumps({'type': 'scaffold', **_scaffold_dict})}\n\n"
+
         # ── Emit voice selection before any content — frontend locks this for all TTS chunks ──
         from app.blueprints.media_routes import _pick_voice_for_content, _detect_language, KOKORO_VOICES, KOKORO_LANG_MAP
         tts_voice = _pick_voice_for_content(user_prompt_raw)
@@ -1103,12 +1110,6 @@ def chat_stream():
         voice_prefix = kokoro_voice_id.split('_')[0] if '_' in kokoro_voice_id else ''
         if voice_prefix in ('bf', 'bm'):
             tts_lang_code = 'b'
-        # Spec §5: scaffold event emitted FIRST, before any other SSE event on
-        # any code path (happy path, search fast-path, action router). If the
-        # scaffold failed to materialize, skip and let the client fall back to
-        # post-stream classifyContext().
-        if _scaffold_dict:
-            yield f"data: {json.dumps({'type': 'scaffold', **_scaffold_dict})}\n\n"
 
         yield f"data: {json.dumps({'type': 'tts_voice', 'voice': tts_voice, 'lang': tts_lang})}\n\n"
 
