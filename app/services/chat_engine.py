@@ -12,6 +12,7 @@ import re
 import time
 import uuid
 from datetime import datetime, timedelta
+from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -1667,3 +1668,73 @@ def _update_session_summary(user_id: str, session_id: str, session_data: Dict[st
     except Exception as e:
         logger.warning(f"Failed to update session summary for {session_id}: {e}")
 
+
+
+# ============================================
+# SCAFFOLD FOUNDATION (carried forward from v1)
+# v2 spec: docs/superpowers/specs/2026-04-15-structure-intelligence-v2-design.md
+# ============================================
+
+ALLOWED_LAYOUTS = (
+    "conversational", "prose", "long-prose", "technical",
+    "code-heavy", "list-heavy", "structured",
+)
+ALLOWED_OPENINGS = ("hook", "direct", "question", "none")
+ALLOWED_EMPHASIS = ("bold", "italic", "none")
+ALLOWED_WIDTHS = ("narrow", "medium", "wide")
+
+
+@dataclass
+class Scaffold:
+    """Pre-stream response scaffold. See v2 spec §2."""
+    layout: str
+    opening: str
+    separator: bool
+    sections: List[Dict]
+    emphasis: str
+    max_paragraph_sentences: int
+    list_threshold: int
+    width_hint: str
+
+    def __post_init__(self):
+        if self.layout not in ALLOWED_LAYOUTS:
+            raise ValueError(f"layout must be one of {ALLOWED_LAYOUTS}, got {self.layout!r}")
+        if self.opening not in ALLOWED_OPENINGS:
+            raise ValueError(f"opening must be one of {ALLOWED_OPENINGS}, got {self.opening!r}")
+        if self.emphasis not in ALLOWED_EMPHASIS:
+            raise ValueError(f"emphasis must be one of {ALLOWED_EMPHASIS}, got {self.emphasis!r}")
+        if self.width_hint not in ALLOWED_WIDTHS:
+            raise ValueError(f"width_hint must be one of {ALLOWED_WIDTHS}, got {self.width_hint!r}")
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Scaffold":
+        return cls(**d)
+
+
+_TASK_TYPE_SCAFFOLD_DEFAULTS: Dict[str, Dict] = {
+    "coding":       {"layout": "technical",      "opening": "direct", "width_hint": "wide"},
+    "reasoning":    {"layout": "prose",          "opening": "hook",   "width_hint": "medium"},
+    "image_gen":    {"layout": "conversational", "opening": "direct", "width_hint": "medium"},
+    "vision":       {"layout": "prose",          "opening": "direct", "width_hint": "medium"},
+    "uncensored":   {"layout": "prose",          "opening": "direct", "width_hint": "medium"},
+    "long_context": {"layout": "long-prose",     "opening": "direct", "width_hint": "narrow"},
+    "chat":         {"layout": "conversational", "opening": "direct", "width_hint": "medium"},
+}
+
+
+def _scaffold_from_task_type(task_type: str) -> Scaffold:
+    """Derive a sensible default Scaffold when LLM classification is unavailable."""
+    base = _TASK_TYPE_SCAFFOLD_DEFAULTS.get(task_type, _TASK_TYPE_SCAFFOLD_DEFAULTS["chat"])
+    return Scaffold(
+        layout=base["layout"],
+        opening=base["opening"],
+        separator=False,
+        sections=[],
+        emphasis="none",
+        max_paragraph_sentences=3,
+        list_threshold=3,
+        width_hint=base["width_hint"],
+    )
