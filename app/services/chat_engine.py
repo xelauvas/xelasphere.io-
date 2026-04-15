@@ -652,6 +652,33 @@ def scaffold_to_instruction(scaffold: Scaffold) -> str:
     return "RESPONSE FORMAT INSTRUCTIONS:\n" + "\n".join(parts)
 
 
+# Task-type → default Scaffold fallback. Spec §4.
+_TASK_TYPE_SCAFFOLD_DEFAULTS: Dict[str, Dict] = {
+    "coding":       {"layout": "technical",      "opening": "direct", "width_hint": "wide"},
+    "reasoning":    {"layout": "prose",          "opening": "hook",   "width_hint": "medium"},
+    "image_gen":    {"layout": "conversational", "opening": "direct", "width_hint": "medium"},
+    "vision":       {"layout": "prose",          "opening": "direct", "width_hint": "medium"},
+    "uncensored":   {"layout": "prose",          "opening": "direct", "width_hint": "medium"},
+    "long_context": {"layout": "long-prose",     "opening": "direct", "width_hint": "narrow"},
+    "chat":         {"layout": "conversational", "opening": "direct", "width_hint": "medium"},
+}
+
+
+def _scaffold_from_task_type(task_type: str) -> Scaffold:
+    """Derive a sensible default Scaffold when LLM classification is unavailable."""
+    base = _TASK_TYPE_SCAFFOLD_DEFAULTS.get(task_type, _TASK_TYPE_SCAFFOLD_DEFAULTS["chat"])
+    return Scaffold(
+        layout=base["layout"],
+        opening=base["opening"],
+        separator=False,
+        sections=[],
+        emphasis="none",
+        max_paragraph_sentences=3,
+        list_threshold=3,
+        width_hint=base["width_hint"],
+    )
+
+
 def classify_user_intent(prompt: str, use_cache: bool = True) -> dict:
     """
     Use AI to classify user intent. This is a general-purpose classifier

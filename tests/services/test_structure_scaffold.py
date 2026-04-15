@@ -124,3 +124,44 @@ def test_instruction_opening_none_produces_no_opening_directive():
     assert "Open with a single clarifying question" not in out
     # But other directives still emit:
     assert "Maximum 3 sentences per paragraph" in out
+
+
+from app.services.chat_engine import _scaffold_from_task_type
+
+
+def test_fallback_coding_task_maps_to_technical_wide():
+    s = _scaffold_from_task_type("coding")
+    assert s.layout == "technical"
+    assert s.width_hint == "wide"
+    assert s.opening == "direct"
+
+
+def test_fallback_reasoning_task_maps_to_prose_medium():
+    s = _scaffold_from_task_type("reasoning")
+    assert s.layout == "prose"
+    assert s.width_hint == "medium"
+    assert s.opening == "hook"
+
+
+def test_fallback_long_context_maps_to_long_prose_narrow():
+    s = _scaffold_from_task_type("long_context")
+    assert s.layout == "long-prose"
+    assert s.width_hint == "narrow"
+
+
+def test_fallback_unknown_task_returns_conversational_default():
+    s = _scaffold_from_task_type("definitely-not-a-real-task-type")
+    assert s.layout == "conversational"
+    assert s.opening == "direct"
+
+
+def test_fallback_never_returns_none_for_any_registered_task():
+    """Per spec §4: fallback must always return a fully populated Scaffold."""
+    for task in ("coding", "reasoning", "vision", "image_gen",
+                 "uncensored", "long_context", "chat"):
+        s = _scaffold_from_task_type(task)
+        assert s is not None
+        assert s.layout in {
+            "conversational", "prose", "long-prose", "technical",
+            "code-heavy", "list-heavy", "structured",
+        }
