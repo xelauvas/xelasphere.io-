@@ -19,6 +19,30 @@ function typewriteTitle(element, text, speed = 28) {
     tick();
 }
 
+// Apply an auto-generated session title: updates chatManager state,
+// locates the sidebar tab, animates the rename via typewriteTitle.
+// Safe across all three response-complete paths (streaming, non-streaming
+// text, image-only non-streaming). Works regardless of whether the tab
+// is the active one.
+function applySessionTitle(sessionId, newTitle) {
+    const mgr = window.chatManager;
+    if (!mgr || !sessionId || !newTitle) return;
+    const name = String(newTitle).trim();
+    if (!name || name.toLowerCase() === 'new chat') return;
+    const sess = mgr.chatHistory?.[sessionId];
+    if (!sess || sess.session_name === name) return;
+    sess.session_name = name;
+    sess.autoTitleEligible = false;
+    const tab = document.querySelector(
+        `.chat-tab[data-session-id="${sessionId}"] .tab-name`
+    );
+    if (tab) {
+        typewriteTitle(tab, name);
+    } else if (typeof mgr.renderChatTabs === 'function') {
+        mgr.renderChatTabs();
+    }
+}
+
 // Incremental JSON parser helpers for live patch streaming
 function scanClosingQuote(str, from) {
     for (let i = from; i < str.length; i++) {
@@ -2296,9 +2320,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 }]
                             });
                         }
-                        // Update session name if provided
+                        // Update session title with typewriter animation.
+                        // This path was previously calling an undefined
+                        // updateSessionName() — silently losing the rename.
                         if (data.session_name && manager?.activeSessionId) {
-                            manager.updateSessionName(manager.activeSessionId, data.session_name);
+                            applySessionTitle(manager.activeSessionId, data.session_name);
                         }
                         if (bgRequest) {
                             BackgroundRequestManager.completeRequest(requestSessionId);
@@ -2776,30 +2802,15 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 window._streamDoneImageUrl = chunk.image_url;
                                 window._streamDoneAttachments = chunk.attachments || [{ isImage: true, url: chunk.image_url, name: 'AI generated image' }];
                             }
-                            // Update session title in sidebar with typewriter animation
+                            // Update session title in sidebar. Defer slightly
+                            // so the tab DOM exists after session creation,
+                            // then delegate to the shared helper.
                             if (chunk.session_name) {
-                                const titleName = chunk.session_name.trim();
-                                if (titleName && titleName.toLowerCase() !== 'new chat') {
-                                    // Defer slightly so tab DOM exists after session creation
-                                    setTimeout(() => {
-                                        const mgr = window.chatManager;
-                                        // Use current activeSessionId if requestSessionId was null (new chat)
-                                        const titleSessionId = requestSessionId || mgr?.activeSessionId;
-                                        if (mgr && titleSessionId && mgr.chatHistory?.[titleSessionId]) {
-                                            const sess = mgr.chatHistory[titleSessionId];
-                                            if (sess.session_name !== titleName) {
-                                                sess.session_name = titleName;
-                                                sess.autoTitleEligible = false;
-                                                const tab = document.querySelector(`.chat-tab[data-session-id="${titleSessionId}"] .tab-name`);
-                                                if (tab) {
-                                                    typewriteTitle(tab, titleName);
-                                                } else if (typeof mgr.renderChatTabs === 'function') {
-                                                    mgr.renderChatTabs();
-                                                }
-                                            }
-                                        }
-                                    }, 100);
-                                }
+                                setTimeout(() => {
+                                    const mgr = window.chatManager;
+                                    const titleSessionId = requestSessionId || mgr?.activeSessionId;
+                                    applySessionTitle(titleSessionId, chunk.session_name);
+                                }, 100);
                             }
                         } else if (chunk.type === 'error') {
                             const errorText = chunk.text || 'Streaming error';
@@ -3727,17 +3738,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             if (sessionId && manager.chatHistory?.[sessionId]) {
                 const session = manager.chatHistory[sessionId];
                 if (data.session_name) {
-                    const newName = data.session_name.trim();
-                    if (newName && session.session_name !== newName) {
-                        session.session_name = newName;
-                        session.autoTitleEligible = false;
-                        const tab = document.querySelector(`.chat-tab[data-session-id="${sessionId}"] .tab-name`);
-                        if (tab) {
-                            typewriteTitle(tab, newName);
-                        } else if (typeof manager.renderChatTabs === 'function') {
-                            manager.renderChatTabs();
-                        }
-                    }
+                    applySessionTitle(sessionId, data.session_name);
                 }
                 if (data.active_page_id && session.activePageId !== data.active_page_id) {
                     session.activePageId = data.active_page_id;

@@ -1539,13 +1539,10 @@ body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-image {
     position: relative;
     color: var(--text-primary, #f3eee5);
     font-weight: 500;             /* slightly heavier when active */
-    animation: typeTitle 0.8s ease-out 1;
 }
 
-@keyframes typeTitle {
-    from { max-width: 0; overflow: hidden; }
-    to { max-width: 100%; }
-}
+/* Rename animation is JS-driven (see typewriteTitle in codeWindow.js).
+   Works for both active and inactive tabs; no CSS keyframes needed. */
 
 .title-fade {
     animation: titleFade 0.6s ease;
