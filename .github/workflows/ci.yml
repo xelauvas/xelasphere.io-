@@ -33,12 +33,24 @@ jobs:
           echo "✓ All Python files compile cleanly"
 
       # ── 2. JS syntax check ──────────────────────────────────
+      # Files are renamed to .mjs before `node --check` so ES-module syntax
+      # (import/export) is parsed as a module. The old `new Function()`
+      # approach forced script context and rejected every ES module file.
       - name: JS syntax check
         run: |
           echo "Checking all .js files..."
+          fail=0
           for f in $(find app/static/js -name '*.js' -not -path '*/vendor/*'); do
-            node -e "new Function(require('fs').readFileSync('$f','utf8'))" || exit 1
+            tmp="$(mktemp).mjs"
+            cp "$f" "$tmp"
+            if ! node --check "$tmp" 2>/dev/null; then
+              echo "Syntax error in $f:"
+              node --check "$tmp" || true
+              fail=1
+            fi
+            rm -f "$tmp"
           done
+          [ "$fail" -eq 0 ] || exit 1
           echo "✓ All JS files parse cleanly"
 
       # ── 3. Unit tests (action parser) ───────────────────────
