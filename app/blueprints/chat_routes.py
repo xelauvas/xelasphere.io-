@@ -1000,6 +1000,33 @@ def chat_stream():
     if system_addition:
         base_system = base_system + "\n\n" + system_addition
         logger.info(f"[Stream] system_addition applied ({len(system_addition)} chars)")
+
+    # --- Structure Intelligence (spec 2026-04-15) ---
+    # Classify + plan scaffold once; use for both system-prompt injection
+    # and the scaffold SSE event emitted below in generate().
+    from app.services.chat_engine import (
+        classify_user_intent as _classify_for_scaffold,
+        scaffold_to_instruction as _scaffold_to_instr,
+        Scaffold as _Scaffold,
+    )
+    try:
+        _intent_envelope = _classify_for_scaffold(user_prompt_raw)
+    except Exception as e:
+        logger.debug(f"[Stream] scaffold classification errored, continuing without: {e}")
+        _intent_envelope = {"scaffold": None}
+
+    _scaffold_dict = _intent_envelope.get("scaffold")
+    _scaffold_instruction = ""
+    if _scaffold_dict:
+        try:
+            _scaffold_obj = _Scaffold.from_dict(_scaffold_dict)
+            _scaffold_instruction = _scaffold_to_instr(_scaffold_obj)
+            base_system = base_system + "\n\n" + _scaffold_instruction
+            logger.info(f"[Stream] scaffold injected: layout={_scaffold_obj.layout}")
+        except Exception as e:
+            logger.debug(f"[Stream] scaffold materialization failed: {e}")
+            _scaffold_dict = None
+
     built_context = context_builder.build(
         system_prompt=base_system,
         full_history=previous_messages,
@@ -1076,6 +1103,13 @@ def chat_stream():
         voice_prefix = kokoro_voice_id.split('_')[0] if '_' in kokoro_voice_id else ''
         if voice_prefix in ('bf', 'bm'):
             tts_lang_code = 'b'
+        # Spec §5: scaffold event emitted FIRST, before any other SSE event on
+        # any code path (happy path, search fast-path, action router). If the
+        # scaffold failed to materialize, skip and let the client fall back to
+        # post-stream classifyContext().
+        if _scaffold_dict:
+            yield f"data: {json.dumps({'type': 'scaffold', **_scaffold_dict})}\n\n"
+
         yield f"data: {json.dumps({'type': 'tts_voice', 'voice': tts_voice, 'lang': tts_lang})}\n\n"
 
         def _client_disconnected():
