@@ -490,8 +490,21 @@ def _try_structured_stream(*, scaffold, prompt: str, model: str,
         return
     if not scaffold:
         return
-    sections = scaffold.get("sections") if isinstance(scaffold, dict) else getattr(scaffold, "sections", None)
-    if not sections:
+    layout = scaffold.get("layout") if isinstance(scaffold, dict) else getattr(scaffold, "layout", None)
+    sections = scaffold.get("sections") if isinstance(scaffold, dict) else getattr(scaffold, "sections", None) or []
+
+    # Strict gate — structured path only triggers when it genuinely helps:
+    #
+    #  - layout == 'structured': code-heavy, list-heavy, technical all
+    #    need markdown fences / native renderers. JSON mode strips them.
+    #  - sections >= 2: a single-section structured response is just
+    #    prose with a bonus header — not worth bypassing the legacy flow.
+    #
+    # Everything else falls through to the markdown path, which preserves
+    # full capability (code fences, artifacts, crypto charts, etc).
+    if layout != "structured":
+        return
+    if len(sections) < 2:
         return
 
     from app.services.chat_engine import Scaffold as _Scaffold

@@ -1,26 +1,26 @@
 {
   "summary": {
-    "ts": "2026-04-15T23:29:25.091225+00:00",
-    "sha": "cc2a347",
+    "ts": "2026-04-16T00:25:48.397871+00:00",
+    "sha": "148fa6a",
     "total": 122,
-    "hits": 72,
-    "accuracy": 0.5901639344262295,
+    "hits": 107,
+    "accuracy": 0.8770491803278688,
     "per_layout_accuracy": {
-      "conversational": 1.0,
+      "conversational": 0.8421052631578947,
       "prose|conversational": 1.0,
-      "prose|long-prose": 0.0,
+      "prose|long-prose": 1.0,
       "structured|list-heavy": 0.0,
       "technical|code-heavy": 1.0,
-      "structured": 0.5806451612903226,
-      "structured|prose|long-prose": 0.3333333333333333,
-      "technical": 0.2,
-      "prose": 0.2857142857142857,
+      "structured": 0.967741935483871,
+      "structured|prose|long-prose": 1.0,
+      "technical": 1.0,
+      "prose": 0.8571428571428571,
       "long-prose|structured": 0.0,
       "long-prose|prose": 1.0,
-      "technical|conversational": 0.8333333333333334,
+      "technical|conversational": 1.0,
       "technical|list-heavy": 1.0,
-      "code-heavy|technical|structured": 1.0,
-      "code-heavy|technical": 1.0,
+      "code-heavy|technical|structured": 0.8,
+      "code-heavy|technical": 0.5,
       "list-heavy": 1.0,
       "list-heavy|structured": 0.0,
       "conversational|prose": 1.0,
@@ -59,21 +59,21 @@
   "per_prompt": [
     {
       "id": "v1-btc-price",
-      "ok": true,
-      "got": "conversational",
+      "ok": false,
+      "got": "prose",
       "expected": "conversational",
-      "sections_got": 1,
-      "layout_match": true,
+      "sections_got": 0,
+      "layout_match": false,
       "sections_match": true,
       "intent": "financial_query"
     },
     {
       "id": "v1-eth-chart",
-      "ok": true,
-      "got": "conversational",
+      "ok": false,
+      "got": "prose",
       "expected": "conversational",
-      "sections_got": 1,
-      "layout_match": true,
+      "sections_got": 0,
+      "layout_match": false,
       "sections_match": true,
       "intent": "financial_query"
     },
@@ -105,27 +105,27 @@
     },
     {
       "id": "v1-sky-blue",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "v1-rag-eli5",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
-      "sections_got": 3,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -137,7 +137,7 @@
         "structured",
         "list-heavy"
       ],
-      "sections_got": 2,
+      "sections_got": 0,
       "layout_match": false,
       "sections_match": true,
       "intent": "recipe_request"
@@ -145,12 +145,12 @@
     {
       "id": "v1-pancakes",
       "ok": false,
-      "got": "conversational",
+      "got": "prose",
       "expected": [
         "structured",
         "list-heavy"
       ],
-      "sections_got": 2,
+      "sections_got": 0,
       "layout_match": false,
       "sections_match": true,
       "intent": "recipe_request"
@@ -158,7 +158,7 @@
     {
       "id": "v1-python-sort",
       "ok": true,
-      "got": "code-heavy",
+      "got": "technical",
       "expected": [
         "technical",
         "code-heavy"
@@ -171,7 +171,7 @@
     {
       "id": "v1-js-for-loop",
       "ok": true,
-      "got": "code-heavy",
+      "got": "technical",
       "expected": [
         "technical",
         "code-heavy"
@@ -186,7 +186,7 @@
       "ok": true,
       "got": "conversational",
       "expected": "conversational",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "creative_task"
@@ -196,7 +196,7 @@
       "ok": true,
       "got": "conversational",
       "expected": "conversational",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "image_request"
@@ -216,42 +216,42 @@
       "ok": true,
       "got": "conversational",
       "expected": "conversational",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "general_chat"
     },
     {
       "id": "regression-transformer-attention",
-      "ok": false,
-      "got": "technical",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
-      "sections_got": 5,
-      "layout_match": false,
+      "sections_got": 3,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "regression-tcp-vs-udp",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "structured",
       "expected": [
         "structured",
         "prose",
         "long-prose"
       ],
-      "sections_got": 1,
-      "layout_match": false,
+      "sections_got": 3,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "regression-bash-find-100mb",
-      "ok": false,
-      "got": "code-heavy",
+      "ok": true,
+      "got": "technical",
       "expected": "technical",
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
     },
@@ -277,11 +277,11 @@
     },
     {
       "id": "explainer-k8s-pod-lifecycle",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
-      "sections_got": 4,
-      "layout_match": false,
+      "sections_got": 3,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -297,11 +297,11 @@
     },
     {
       "id": "explainer-http2",
-      "ok": false,
-      "got": "technical",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
-      "sections_got": 4,
-      "layout_match": false,
+      "sections_got": 3,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -324,7 +324,7 @@
         "prose",
         "long-prose"
       ],
-      "sections_got": 4,
+      "sections_got": 3,
       "layout_match": true,
       "sections_match": true,
       "intent": "question"
@@ -332,23 +332,23 @@
     {
       "id": "short-entropy",
       "ok": true,
-      "got": "conversational",
+      "got": "prose",
       "expected": [
         "prose",
         "conversational"
       ],
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "short-capital-france",
-      "ok": true,
-      "got": "conversational",
+      "ok": false,
+      "got": "prose",
       "expected": "conversational",
-      "sections_got": 1,
-      "layout_match": true,
+      "sections_got": 0,
+      "layout_match": false,
       "sections_match": true,
       "intent": "question"
     },
@@ -357,7 +357,7 @@
       "ok": true,
       "got": "conversational",
       "expected": "conversational",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "question"
@@ -367,31 +367,31 @@
       "ok": true,
       "got": "prose",
       "expected": "prose",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "prose-email-decline",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": "prose",
-      "sections_got": 2,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "creative_task"
     },
     {
       "id": "prose-bedtime-story",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "creative_task"
     },
@@ -403,7 +403,7 @@
         "long-prose",
         "structured"
       ],
-      "sections_got": 3,
+      "sections_got": 0,
       "layout_match": false,
       "sections_match": true,
       "intent": "question"
@@ -416,25 +416,25 @@
         "long-prose",
         "prose"
       ],
-      "sections_got": 4,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
-      "intent": "creative_task"
+      "intent": "question"
     },
     {
       "id": "technical-reverse-string-rust",
-      "ok": false,
-      "got": "code-heavy",
+      "ok": true,
+      "got": "technical",
       "expected": "technical",
-      "sections_got": 2,
-      "layout_match": false,
+      "sections_got": 1,
+      "layout_match": true,
       "sections_match": true,
-      "intent": "code_request"
+      "intent": "question"
     },
     {
       "id": "technical-parse-csv-python",
       "ok": true,
-      "got": "code-heavy",
+      "got": "technical",
       "expected": [
         "technical",
         "code-heavy"
@@ -452,7 +452,7 @@
         "technical",
         "conversational"
       ],
-      "sections_got": 2,
+      "sections_got": 1,
       "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
@@ -468,18 +468,18 @@
       "sections_got": 1,
       "layout_match": true,
       "sections_match": true,
-      "intent": "code_request"
+      "intent": "question"
     },
     {
       "id": "code-heavy-flask-todo-app",
       "ok": true,
-      "got": "technical",
+      "got": "structured",
       "expected": [
         "code-heavy",
         "technical",
         "structured"
       ],
-      "sections_got": 5,
+      "sections_got": 4,
       "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
@@ -487,7 +487,7 @@
     {
       "id": "code-heavy-react-component",
       "ok": true,
-      "got": "code-heavy",
+      "got": "technical",
       "expected": [
         "code-heavy",
         "technical",
@@ -500,14 +500,14 @@
     },
     {
       "id": "code-heavy-sql-schema",
-      "ok": true,
-      "got": "technical",
+      "ok": false,
+      "got": "structured",
       "expected": [
         "code-heavy",
         "technical"
       ],
       "sections_got": 5,
-      "layout_match": true,
+      "layout_match": false,
       "sections_match": true,
       "intent": "code_request"
     },
@@ -524,7 +524,7 @@
     {
       "id": "list-node-memory-leaks",
       "ok": false,
-      "got": "structured",
+      "got": "list-heavy",
       "expected": [
         "list-heavy",
         "structured"
@@ -549,7 +549,7 @@
       "ok": true,
       "got": "list-heavy",
       "expected": "list-heavy",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "general_chat"
@@ -589,7 +589,7 @@
       "ok": true,
       "got": "conversational",
       "expected": "conversational",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "general_chat"
@@ -622,7 +622,7 @@
         "conversational",
         "prose"
       ],
-      "sections_got": 2,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "creative_task"
@@ -636,7 +636,7 @@
         "list-heavy",
         "structured"
       ],
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": false,
       "intent": "recipe_request"
@@ -644,7 +644,7 @@
     {
       "id": "adversarial-multi-intent",
       "ok": true,
-      "got": "technical",
+      "got": "structured",
       "expected": [
         "structured",
         "technical",
@@ -658,28 +658,28 @@
     {
       "id": "adversarial-long-question-one-angle",
       "ok": false,
-      "got": "technical",
+      "got": "long-prose",
       "expected": [
         "long-prose",
         "prose",
         "structured"
       ],
-      "sections_got": 5,
-      "layout_match": false,
-      "sections_match": true,
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": false,
       "intent": "question"
     },
     {
       "id": "adversarial-compare-two-only",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "structured",
       "expected": [
         "structured",
         "prose",
         "long-prose"
       ],
-      "sections_got": 2,
-      "layout_match": false,
+      "sections_got": 3,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -692,82 +692,82 @@
         "list-heavy",
         "technical"
       ],
-      "sections_got": 6,
+      "sections_got": 4,
       "layout_match": true,
       "sections_match": true,
-      "intent": "code_request"
+      "intent": "question"
     },
     {
       "id": "tutorial-setup-react-native",
       "ok": true,
-      "got": "list-heavy",
+      "got": "structured",
       "expected": [
         "structured",
         "list-heavy",
         "technical"
       ],
-      "sections_got": 3,
+      "sections_got": 4,
       "layout_match": true,
       "sections_match": true,
       "intent": "creative_task"
     },
     {
       "id": "prose-why-sky-red-sunset",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
-      "sections_got": 1,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "prose-explain-mortgage",
       "ok": false,
-      "got": "conversational",
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose",
         "structured"
       ],
-      "sections_got": 3,
-      "layout_match": false,
-      "sections_match": true,
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": false,
       "intent": "financial_query"
     },
     {
       "id": "prose-what-is-kubernetes",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
-      "sections_got": 2,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "prose-email-apology-late",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": "prose",
-      "sections_got": 1,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
-      "intent": "creative_task"
+      "intent": "general_chat"
     },
     {
       "id": "prose-email-intro-mentor",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": "prose",
-      "sections_got": 4,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "creative_task"
     },
@@ -776,124 +776,124 @@
       "ok": true,
       "got": "prose",
       "expected": "prose",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "creative_task"
     },
     {
       "id": "prose-summary-cold-war",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
-      "sections_got": 1,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "prose-opinion-remote-work",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
-      "sections_got": 1,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "prose-opinion-crypto-future",
-      "ok": false,
-      "got": "conversational",
-      "expected": [
-        "prose",
-        "long-prose"
-      ],
-      "sections_got": 3,
-      "layout_match": false,
-      "sections_match": true,
-      "intent": "financial_query"
-    },
-    {
-      "id": "prose-story-lost-dog",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "financial_query"
+    },
+    {
+      "id": "prose-story-lost-dog",
+      "ok": true,
+      "got": "prose",
+      "expected": [
+        "prose",
+        "long-prose"
+      ],
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "creative_task"
     },
     {
       "id": "prose-joke-explain",
       "ok": true,
-      "got": "conversational",
+      "got": "prose",
       "expected": [
         "prose",
         "conversational"
       ],
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "prose-how-plane-flies",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
-      "sections_got": 1,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "prose-eli5-blockchain",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
-      "sections_got": 3,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "prose-eli5-inflation",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
-      "sections_got": 1,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "prose-define-machine-learning",
       "ok": true,
-      "got": "conversational",
+      "got": "prose",
       "expected": [
         "prose",
         "conversational"
       ],
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "question"
@@ -901,15 +901,15 @@
     {
       "id": "prose-advice-burnout",
       "ok": false,
-      "got": "conversational",
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose",
         "structured"
       ],
-      "sections_got": 3,
-      "layout_match": false,
-      "sections_match": true,
+      "sections_got": 0,
+      "layout_match": true,
+      "sections_match": false,
       "intent": "general_chat"
     },
     {
@@ -917,31 +917,31 @@
       "ok": false,
       "got": "conversational",
       "expected": "prose",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": false,
       "sections_match": true,
       "intent": "general_chat"
     },
     {
       "id": "prose-pitch-one-para",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": "prose",
-      "sections_got": 1,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "creative_task"
     },
     {
       "id": "prose-why-meditate",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "prose",
       "expected": [
         "prose",
         "long-prose"
       ],
-      "sections_got": 1,
-      "layout_match": false,
+      "sections_got": 0,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -970,17 +970,17 @@
       "ok": true,
       "got": "conversational",
       "expected": "conversational",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
-      "intent": "question"
+      "intent": "general_chat"
     },
     {
       "id": "conv-greeting-friday",
       "ok": true,
       "got": "conversational",
       "expected": "conversational",
-      "sections_got": 1,
+      "sections_got": 0,
       "layout_match": true,
       "sections_match": true,
       "intent": "general_chat"
@@ -997,21 +997,21 @@
     },
     {
       "id": "explainer-oauth-flow-3-stages",
-      "ok": false,
-      "got": "technical",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
       "sections_got": 3,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "explainer-tcp-handshake-stages",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
-      "sections_got": 4,
-      "layout_match": false,
+      "sections_got": 3,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -1037,11 +1037,11 @@
     },
     {
       "id": "explainer-acid-properties",
-      "ok": false,
-      "got": "conversational",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
       "sections_got": 4,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -1050,18 +1050,18 @@
       "ok": true,
       "got": "structured",
       "expected": "structured",
-      "sections_got": 5,
+      "sections_got": 3,
       "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "explainer-gc-java",
-      "ok": false,
-      "got": "technical",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
-      "sections_got": 4,
-      "layout_match": false,
+      "sections_got": 3,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -1077,21 +1077,21 @@
     },
     {
       "id": "explainer-consistent-hashing",
-      "ok": false,
-      "got": "technical",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
-      "sections_got": 4,
-      "layout_match": false,
+      "sections_got": 3,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "explainer-docker-layers",
-      "ok": false,
-      "got": "technical",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
       "sections_got": 3,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -1137,11 +1137,11 @@
     },
     {
       "id": "explainer-ssl-handshake",
-      "ok": false,
-      "got": "technical",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
-      "sections_got": 4,
-      "layout_match": false,
+      "sections_got": 3,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -1157,16 +1157,6 @@
     },
     {
       "id": "explainer-http-methods",
-      "ok": false,
-      "got": "conversational",
-      "expected": "structured",
-      "sections_got": 1,
-      "layout_match": false,
-      "sections_match": true,
-      "intent": "question"
-    },
-    {
-      "id": "explainer-jwt-anatomy",
       "ok": true,
       "got": "structured",
       "expected": "structured",
@@ -1176,22 +1166,32 @@
       "intent": "question"
     },
     {
+      "id": "explainer-jwt-anatomy",
+      "ok": true,
+      "got": "structured",
+      "expected": "structured",
+      "sections_got": 4,
+      "layout_match": true,
+      "sections_match": true,
+      "intent": "question"
+    },
+    {
       "id": "explainer-event-loop-phases",
-      "ok": false,
-      "got": "technical",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
       "sections_got": 5,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
     {
       "id": "explainer-spring-di",
-      "ok": false,
-      "got": "technical",
+      "ok": true,
+      "got": "structured",
       "expected": "structured",
       "sections_got": 3,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "question"
     },
@@ -1217,13 +1217,13 @@
     },
     {
       "id": "explainer-sql-joins",
-      "ok": true,
-      "got": "structured",
+      "ok": false,
+      "got": "conversational",
       "expected": "structured",
-      "sections_got": 4,
-      "layout_match": true,
+      "sections_got": 0,
+      "layout_match": false,
       "sections_match": true,
-      "intent": "question"
+      "intent": "unknown"
     },
     {
       "id": "explainer-microservices-tradeoffs",
@@ -1270,21 +1270,21 @@
     },
     {
       "id": "technical-fn-fibonacci-py",
-      "ok": false,
-      "got": "code-heavy",
+      "ok": true,
+      "got": "technical",
       "expected": "technical",
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
     },
     {
       "id": "technical-fn-debounce-js",
-      "ok": false,
-      "got": "code-heavy",
+      "ok": true,
+      "got": "technical",
       "expected": "technical",
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
     },
@@ -1296,21 +1296,21 @@
         "technical",
         "conversational"
       ],
-      "sections_got": 3,
+      "sections_got": 1,
       "layout_match": true,
       "sections_match": true,
-      "intent": "code_request"
+      "intent": "question"
     },
     {
       "id": "technical-sql-group-by",
-      "ok": false,
-      "got": "code-heavy",
+      "ok": true,
+      "got": "technical",
       "expected": [
         "technical",
         "conversational"
       ],
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
     },
@@ -1322,7 +1322,7 @@
         "technical",
         "conversational"
       ],
-      "sections_got": 2,
+      "sections_got": 1,
       "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
@@ -1338,12 +1338,12 @@
       "sections_got": 1,
       "layout_match": true,
       "sections_match": true,
-      "intent": "code_request"
+      "intent": "question"
     },
     {
       "id": "code-heavy-full-auth-express",
       "ok": true,
-      "got": "technical",
+      "got": "structured",
       "expected": [
         "code-heavy",
         "technical",
@@ -1357,29 +1357,29 @@
     {
       "id": "code-heavy-react-dashboard",
       "ok": true,
-      "got": "technical",
+      "got": "structured",
       "expected": [
         "code-heavy",
         "technical",
         "structured"
       ],
-      "sections_got": 5,
+      "sections_got": 3,
       "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
     },
     {
       "id": "code-heavy-fastapi-crud",
-      "ok": true,
+      "ok": false,
       "got": "technical",
       "expected": [
         "code-heavy",
         "technical",
         "structured"
       ],
-      "sections_got": 5,
+      "sections_got": 1,
       "layout_match": true,
-      "sections_match": true,
+      "sections_match": false,
       "intent": "code_request"
     },
     {
@@ -1390,7 +1390,7 @@
         "code-heavy",
         "technical"
       ],
-      "sections_got": 4,
+      "sections_got": 1,
       "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
@@ -1398,7 +1398,7 @@
     {
       "id": "technical-class-linkedlist-py",
       "ok": true,
-      "got": "code-heavy",
+      "got": "technical",
       "expected": [
         "technical",
         "code-heavy"
@@ -1410,41 +1410,41 @@
     },
     {
       "id": "technical-algo-binary-search",
-      "ok": false,
-      "got": "code-heavy",
+      "ok": true,
+      "got": "technical",
       "expected": "technical",
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
     },
     {
       "id": "technical-ts-generic-fn",
-      "ok": false,
-      "got": "code-heavy",
+      "ok": true,
+      "got": "technical",
       "expected": "technical",
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
     },
     {
       "id": "technical-hook-useDebounce",
-      "ok": false,
-      "got": "code-heavy",
+      "ok": true,
+      "got": "technical",
       "expected": "technical",
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
     },
     {
       "id": "technical-middleware-express",
-      "ok": false,
-      "got": "code-heavy",
+      "ok": true,
+      "got": "technical",
       "expected": "technical",
       "sections_got": 1,
-      "layout_match": false,
+      "layout_match": true,
       "sections_match": true,
       "intent": "code_request"
     }

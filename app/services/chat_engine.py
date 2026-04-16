@@ -665,10 +665,37 @@ def _build_classifier_request_body(*, prompt: str, model: str, json_mode: str,
     system_lines = [
         "You classify user chat messages and plan the response structure.",
         "Return ONE JSON object matching the schema below. No preamble, no markdown.",
+        "",
+        "LAYOUT DECISION RULES (apply in order):",
+        "1. If the prompt names 2+ distinct angles to cover — patterns like",
+        "   'covering X and Y', 'including A, B, and C', 'explain X vs Y',",
+        "   'walk through X: A, B, C', 'X and Y and Z', 'compare A, B, and C' —",
+        "   ALWAYS pick layout='structured' with one section per named angle.",
+        "   Section titles must come from the angles named in the prompt,",
+        "   not generic labels. Separator=true, opening=hook.",
+        "   Examples that MUST be structured:",
+        "     - 'explain DNS covering recursive resolution, caching, and authoritative servers'",
+        "       → sections: [Recursive Resolution, Caching, Authoritative Servers]",
+        "     - 'explain TCP flow control covering windowing, congestion avoidance, and recovery'",
+        "       → sections: [Windowing, Congestion Avoidance, Recovery]",
+        "     - 'compare React, Vue, and Svelte across performance, ecosystem, learning curve'",
+        "       → sections: [React, Vue, Svelte] OR [Performance, Ecosystem, Learning Curve]",
+        "2. If the prompt is a short conversational exchange (greeting, thanks,",
+        "   one-liner chat), layout='conversational', sections=[].",
+        "3. If the prompt asks for code / functions / commands / scripts,",
+        "   layout='technical' (small) or 'code-heavy' (full multi-file app).",
+        "4. If the prompt asks for N items / top-N lists / ideas, layout='list-heavy'.",
+        "5. If the prompt asks for a single-angle explanation with no named",
+        "   sub-topics ('why is the sky blue', 'what is DNS'), layout='prose'",
+        "   or 'long-prose' depending on expected depth.",
+        "",
+        "NEVER pick 'conversational' for an explicit multi-angle explainer.",
+        "NEVER leave sections=[] when rule 1 applies.",
     ]
     if json_mode == "json_mode":
         # json_object providers don't enforce the schema — inject it so the
         # model sees the exact shape required.
+        system_lines.append("")
         system_lines.append("Schema:")
         system_lines.append(json.dumps(schema, separators=(",", ":")))
 
