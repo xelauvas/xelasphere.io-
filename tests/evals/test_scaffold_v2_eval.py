@@ -220,7 +220,9 @@ def test_runner_writes_results_file(monkeypatch, tmp_path):
         "tests.evals.test_scaffold_v2_eval.LATEST_PATH", tmp_path / "latest.json",
     )
     _write_results(fake_report)
-    dated_files = list(tmp_path.glob("2026-04-15-abc123.json"))
+    # Date prefix is today (not test-time); match by sha suffix for
+    # time-independence.
+    dated_files = list(tmp_path.glob("*-abc123.json"))
     assert len(dated_files) == 1
     assert (tmp_path / "latest.json").exists()
     assert (tmp_path / "history.jsonl").exists()

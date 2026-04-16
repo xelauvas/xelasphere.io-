@@ -5,6 +5,7 @@ Plan: docs/superpowers/plans/2026-04-15-structure-intelligence-v2-implementation
 """
 import importlib
 import os
+from unittest.mock import patch
 
 
 def _reload_config():
@@ -15,8 +16,16 @@ def _reload_config():
 
 
 def test_flag_defaults_false_when_unset(monkeypatch):
+    """When the env var is truly absent, the parsing default is False.
+
+    We patch dotenv.load_dotenv AT THE SOURCE (not on app.config) so
+    the Config module reload doesn't re-import the original and shadow
+    the 'unset' case. A live-QA .env that sets SCAFFOLD_V2_ENABLED=true
+    would otherwise pollute this test.
+    """
     monkeypatch.delenv("SCAFFOLD_V2_ENABLED", raising=False)
-    Config = _reload_config()
+    with patch("dotenv.load_dotenv", lambda *a, **kw: None):
+        Config = _reload_config()
     assert Config.SCAFFOLD_V2_ENABLED is False
 
 

@@ -11,6 +11,23 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 
+# Strip v2 env vars before every test so a live-QA .env can't pollute
+# unit tests that expect a pristine environment. Tests that need v2
+# enabled monkeypatch explicitly.
+_V2_ENV_VARS = ("SCAFFOLD_V2_ENABLED", "SCAFFOLD_V2_INTERNAL_EMAILS")
+
+
+@pytest.fixture(autouse=True)
+def _clear_v2_env():
+    saved = {k: os.environ.pop(k, None) for k in _V2_ENV_VARS}
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is not None:
+                os.environ[k] = v
+
+
 @pytest.fixture(scope="module")
 def app(mock_firestore):
     """

@@ -1311,9 +1311,13 @@ def chat_stream():
                 logger.debug(f"[v2 audit] structured-path audit fire errored (swallowed): {_audit_err}")
             return
 
-        # Markdown path — emit render_mode up front so the client knows
-        # which renderer to use. Silent no-op when v2 is off.
+        # Markdown path — emit scaffold + render_mode up front so the
+        # client can (a) set data-ctx on the bubble for CSS adaptation
+        # and (b) know which renderer to use. Silent no-op when v2 is off.
         if os.getenv("SCAFFOLD_V2_ENABLED", "false").strip().lower() == "true":
+            _v2_scaffold = _v2_result.get("scaffold") if _v2_result else None
+            if _v2_scaffold:
+                yield f"data: {json.dumps({'type': 'scaffold', **_v2_scaffold})}\n\n"
             yield f"data: {json.dumps({'type': 'render_mode', 'mode': 'markdown'})}\n\n"
 
         def _client_disconnected():
