@@ -173,14 +173,30 @@ class StreamRenderer {
         // pick up the attribute and adapt max-width / line-height / block
         // rhythm. We bubble the attribute up to the outermost .message
         // element so it can override width caps on BOTH .message-content
-        // and .text-message-container — which are each bound to the
-        // composer's --composer-max-width token.
+        // and .text-message-container.
+        //
+        // Authority order (highest wins, all three can set data-ctx):
+        //   1. server  — scaffold SSE event (v2). Pre-stream, authoritative.
+        //   2. prewarm — inferLayout() from first ~100 chars. Kills jumps.
+        //   3. finalize — this classifier. Only replaces prewarm, never server.
+        //
+        // Refinement at finalize only re-paints when the answer is genuinely
+        // different from what's on the element — a matching classification
+        // leaves data-ctx untouched and avoids a pointless CSS recompute.
         try {
             const profile = buildMessageProfile(this.ast.blocks());
             const ctx = classifyContext(profile);
-            if (this.wrapperEl) this.wrapperEl.dataset.ctx = ctx;
-            const messageEl = this.wrapperEl && this.wrapperEl.closest('.message, .ai-message');
-            if (messageEl) messageEl.dataset.ctx = ctx;
+            const targets = [
+                this.wrapperEl,
+                this.wrapperEl && this.wrapperEl.closest('.message, .ai-message'),
+            ];
+            for (const el of targets) {
+                if (!el) continue;
+                if (el.dataset.ctxSource === 'server') continue;  // #2
+                if (el.dataset.ctx === ctx) continue;              // #1 — no jump if stable
+                el.dataset.ctx = ctx;
+                el.dataset.ctxSource = 'finalize';
+            }
         } catch (_e) { /* non-critical */ }
     }
 
@@ -197,16 +213,20 @@ class StreamRenderer {
                     type: event.blockType,
                     meta: event.meta,
                 });
-                if (!this.replay) {
-                    // Retire the cursor from the previous block before the new
-                    // renderer paints. Renderers that want to own their cursor
-                    // will create it inside .create() and set ownsCursor=true.
-                    removeCursor(this.messageEl);
-                }
                 const r = rendererFor(block.type);
                 r.create(block, this.messageEl, { replay: this.replay });
+                // Cursor handoff is atomic — transferCursor() removes the
+                // old cursor and appends a fresh one to the new block in
+                // one DOM mutation. Doing an explicit removeCursor() first
+                // (the old code path) left a 1-frame gap where the cursor
+                // blinked out before reappearing. If the renderer claims
+                // ownsCursor the renderer will manage its own cursor.
                 if (!this.replay && !block.meta?.ownsCursor) {
                     transferCursor(this.messageEl, block.el);
+                } else if (!this.replay && block.meta?.ownsCursor) {
+                    // Renderer owns it: still retire the previous block's
+                    // cursor so we don't leave two on screen.
+                    removeCursor(this.messageEl);
                 }
                 break;
             }
