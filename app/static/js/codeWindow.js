@@ -2350,6 +2350,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let patchStreamBuffer = '';
                 let patchParsedPatches = [];
                 let artifactStreamActive = false;
+                let artifactMetaPending = false;
+                let artifactMetaIndex = -1;
                 let searchMsgId = null; // Track message element for search banner
                 let searchBannerDismissed = false; // Track if search banner was dismissed
                 _streamRenderer = null; window._activeStreamRenderer = null; // Phase 2: live SSE-to-DOM renderer (hoisted above try)
@@ -2544,7 +2546,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 // renders paint artifact code in the bubble before the
                                 // fence was caught.
                                 let _fenceJustTriggered = false;
-                                if (chunkText.includes('`')) {
+                                if (artifactMetaPending) _fenceJustTriggered = true;
+                                if (chunkText.includes('`') || artifactMetaPending) {
                                     // Rebuild streamedContent only when needed
                                     streamedContent = _contentChunks.join('');
                                     _contentJoinedAt = _contentChunks.length;
@@ -2566,14 +2569,17 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                         window.artifactPanel?.panel?.classList.contains('is-open');
 
                                     if (window.artifactPanel && !panelHasArtifact && !artifactStreamActive) {
-                                        // New format: artifact-meta signals start
-                                        // When we detect an artifact fence, StreamRenderer has already
-                                        // appended the chat-summary prose + the meta fence + the start
-                                        // of the code into the chat DOM. Re-seed the chat with just
-                                        // the prose portion before the fence; the code goes to the
-                                        // artifact panel from here on.
                                         const _reseedChatWithProse = (fenceIndex) => {
-                                            const proseOnly = streamedContent.slice(0, fenceIndex).trim();
+                                            let proseOnly = streamedContent.slice(0, fenceIndex).trim();
+                                            // Strip ACTION header to match what the backend
+                                            // sends as chat_summary (parity with refresh path).
+                                            proseOnly = proseOnly
+                                                .replace(/^\s*[-*]*\s*ACTION:\s*\w+[^\n]*\n(?:[ \t]*[a-zA-Z_][\w-]*\s*:[^\n]*\n)*\n*/i, '')
+                                                // Strip standalone artifact metadata JSON
+                                                // (model sometimes emits it before the fence)
+                                                .replace(/\n*\s*\{[^{}]*"title"\s*:[^{}]*"primaryLanguage"\s*:[^{}]*\}\s*$/i, '')
+                                                .replace(/\n*\s*\{[^{}]*"primaryLanguage"\s*:[^{}]*"title"\s*:[^{}]*\}\s*$/i, '')
+                                                .trim();
                                             if (_streamRenderer) {
                                                 _streamRenderer.destroy();
                                                 _streamRenderer = null; window._activeStreamRenderer = null;
@@ -2590,22 +2596,32 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                                         const metaMatch = streamedContent.match(/```artifact-meta\s*\n/i);
                                         if (metaMatch) {
-                                            // Check if meta block is closed and first file block started
+                                            // Phase 1: as soon as artifact-meta is seen,
+                                            // reseed the chat with prose-only and stop
+                                            // feeding StreamRenderer. This prevents code
+                                            // from flashing in the chat between read()
+                                            // calls while we wait for artifact-file:.
+                                            if (!artifactMetaPending) {
+                                                artifactMetaPending = true;
+                                                artifactMetaIndex = metaMatch.index;
+                                                _fenceJustTriggered = true;
+                                                _reseedChatWithProse(metaMatch.index);
+                                            }
+
+                                            // Phase 2: once artifact-file: arrives, fully
+                                            // activate artifact streaming.
                                             const fileMatch = streamedContent.match(/```artifact-file:([^:]+):(\w+)\s*\n/i);
                                             if (fileMatch) {
                                                 artifactStreamActive = true;
+                                                artifactMetaPending = false;
                                                 _fenceJustTriggered = true;
                                                 artifactFencePosition = metaMatch.index;
-                                                _reseedChatWithProse(metaMatch.index);
                                                 window.artifactPanel.openStreaming();
-                                                // Switch to first file
                                                 const firstPath = fileMatch[1].trim();
                                                 const firstLang = fileMatch[2].trim();
                                                 if (window.artifactPanel.switchStreamingFile) {
                                                     window.artifactPanel.switchStreamingFile(firstPath, firstLang);
                                                 }
-                                                // Seed the streaming buffer with all code after the first file fence
-                                                // The regular streaming path will handle file switches within it
                                                 const fileContentStart = streamedContent.indexOf('\n', fileMatch.index) + 1;
                                                 if (fileContentStart > 0) {
                                                     window._artifactStreamBuf = streamedContent.slice(fileContentStart);
@@ -2648,7 +2664,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 // Feed StreamRenderer AFTER fence detection, only when
                                 // no artifact fence was just triggered. This prevents
                                 // artifact code from leaking into the message bubble.
-                                if (!_fenceJustTriggered && !artifactStreamActive && _streamRenderer) {
+                                if (!_fenceJustTriggered && !artifactStreamActive && !artifactMetaPending && _streamRenderer) {
                                     const _cleanChunk = _stripActionFromChunk(chunkText);
                                     if (_cleanChunk) {
                                         _streamRenderer.append(_cleanChunk);
@@ -3013,7 +3029,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             Prism.highlightAllUnder(mc);
                         }
                     }
-                } else if (artifactStreamActive) {
+                } else if (artifactStreamActive || artifactMetaPending) {
                     // Artifact fence detection already reseeded the bubble with
                     // prose-only content via _reseedChatWithProse and nulled
                     // _streamRenderer. The bubble DOM is correct RIGHT NOW.
