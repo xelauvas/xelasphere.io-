@@ -108,9 +108,25 @@ export function createCodeRenderer() {
                 block.meta.codeEl.innerHTML = renderDiff(block.text);
                 return;
             }
+            // Always set the plain text — this wipes any prior highlighted
+            // HTML and lets the user see new tokens immediately.
             block.meta.codeEl.textContent = block.text;
-            if (window.Prism) {
+
+            if (!window.Prism) return;
+
+            // Throttle Prism to bound O(n²) cost on long blocks.
+            //  - Only re-highlight when the last char is a newline (natural
+            //    break — Prism's tokenizer needs whole lines for multi-line
+            //    constructs like template strings / triple-quoted blocks).
+            //  - AND at most once per 150ms — caps worst-case highlight
+            //    frequency when code streams in complete-line bursts.
+            // Finalize ignores this throttle and always re-highlights.
+            const now = performance.now();
+            const lastAt = block.meta.lastHighlightAt || 0;
+            const endsOnNewline = block.text.length > 0 && block.text.charCodeAt(block.text.length - 1) === 10;
+            if (endsOnNewline && (now - lastAt) >= 150) {
                 window.Prism.highlightElement(block.meta.codeEl);
+                block.meta.lastHighlightAt = now;
             }
         },
         finalize(block) {

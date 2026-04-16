@@ -20,6 +20,13 @@ import { transferCursor, removeCursor } from './stream/cursor.js';
 
 const PREWARM_THRESHOLD = 100; // chars before we fire layout inference
 
+// Backpressure safety valve (fix H). If the SSE source bursts faster
+// than RAF can drain, rawBuffer grows unbounded. At this many pending
+// chars we force a synchronous drain inline — accepting a paint hitch
+// rather than letting pending text balloon into a multi-frame stall
+// when the RAF finally runs.
+const MAX_PENDING_CHARS = 4096;
+
 /**
  * Content-profile classification — walks the finalized block list and
  * decides a context label ('code-heavy', 'list-heavy', 'conversational',
@@ -143,16 +150,31 @@ class StreamRenderer {
         this.ast = createBlockAST();
         this.sm = createBlockStateMachine(event => this._handleEvent(event));
         this.rafScheduled = false;
+        // Fix A+B: chunks buffer here and drain in one RAF pass, so
+        // multiple SSE tokens arriving between paint frames coalesce
+        // into a single SM-drain + renderer.update. Synchronous SM
+        // processing per chunk was burning frame budget even when the
+        // user sees no visual change per chunk.
+        this._pending = '';
     }
 
     append(text) {
         if (this.destroyed || this.finalized) return;
+        if (!text) return;
         this.rawBuffer += text;
+        this._pending += text;
         if (!this.prewarmDone && this.rawBuffer.length >= PREWARM_THRESHOLD) {
             applyLayout(this.messageEl, this.rawBuffer.slice(0, PREWARM_THRESHOLD));
             this.prewarmDone = true;
         }
-        this.sm.append(text);
+        // Fix H — backpressure safety valve. If pending grows past the
+        // threshold (pathological burst from upstream), drain now so the
+        // main thread doesn't stall on a huge SM+render pass when RAF
+        // eventually fires.
+        if (this._pending.length >= MAX_PENDING_CHARS) {
+            this._drainPending();
+            return;
+        }
         this._scheduleRender();
     }
 
@@ -162,6 +184,13 @@ class StreamRenderer {
         if (!this.prewarmDone) {
             applyLayout(this.messageEl, this.rawBuffer);
             this.prewarmDone = true;
+        }
+        // Drain anything that didn't hit RAF before finalize arrived, so
+        // the last few tokens make it to the AST before sm.finalize()
+        // emits BLOCK_END on them.
+        if (this._pending) {
+            this.sm.append(this._pending);
+            this._pending = '';
         }
         // sm.finalize() emits BLOCK_END for any still-live block, which runs
         // r.update() + r.finalize() through _handleEvent. Every block is finalized
@@ -231,17 +260,11 @@ class StreamRenderer {
                 break;
             }
             case 'BLOCK_APPEND': {
+                // AST text updates inline (cheap, ~1 pointer op). The
+                // renderer.update call used to run here AND again on RAF —
+                // double work per chunk. Now RAF is the single source of
+                // truth for mid-block rendering (fix A+B).
                 this.ast.appendToLive(event.text);
-                // Render inline so the live block grows token-by-token.
-                // RAF batching (via _scheduleRender) was leaving updates stuck
-                // at BLOCK_END boundaries; direct update keeps the stream visible.
-                if (!this.replay) {
-                    const live = this.ast.getLive();
-                    if (live) {
-                        const r = rendererFor(live.type);
-                        r.update(live);
-                    }
-                }
                 break;
             }
             case 'BLOCK_END': {
@@ -265,14 +288,30 @@ class StreamRenderer {
         requestAnimationFrame(() => {
             this.rafScheduled = false;
             if (this.destroyed) return;
-            const live = this.ast.getLive();
-            if (!live) return;
-            const r = rendererFor(live.type);
-            performance.mark('stream-render-start');
-            r.update(live);
-            performance.mark('stream-render-end');
-            performance.measure('stream-render', 'stream-render-start', 'stream-render-end');
+            this._drainPending();
         });
+    }
+
+    /**
+     * Single drain-and-render path. Used by both the RAF callback and
+     * the backpressure safety valve in append(). Processes all buffered
+     * text through the SM (emitting BLOCK_START/APPEND/END events which
+     * mutate the AST), then runs one renderer.update on the live block.
+     */
+    _drainPending() {
+        if (this.destroyed || this.finalized) return;
+        if (this._pending) {
+            const text = this._pending;
+            this._pending = '';
+            this.sm.append(text);  // fires events, mutates AST
+        }
+        const live = this.ast.getLive();
+        if (!live) return;
+        const r = rendererFor(live.type);
+        performance.mark('stream-render-start');
+        r.update(live);
+        performance.mark('stream-render-end');
+        performance.measure('stream-render', 'stream-render-start', 'stream-render-end');
     }
 }
 

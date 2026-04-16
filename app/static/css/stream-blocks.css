@@ -266,6 +266,27 @@
 
    Typography and block-rhythm rules still target the inner .text-message. */
 
+/* Animate max-width + padding transitions when the finalize classifier
+   refines the prewarm ctx. Scoping to data-ctx-source="finalize" means:
+     - Prewarm-set ctx takes effect instantly (no delayed slide-in).
+     - Server-set ctx (v2 scaffold) takes effect instantly.
+     - Only the finalize refinement (prewarm → classifier disagreement)
+       animates, turning what used to be a jarring snap at last token
+       into a 200ms ease.
+   Respects reduced-motion preference. */
+[data-ctx-source="finalize"].text-message-container,
+.message[data-ctx-source="finalize"],
+.ai-message[data-ctx-source="finalize"] {
+    transition: max-width 200ms ease, padding 200ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-ctx-source="finalize"].text-message-container,
+    .message[data-ctx-source="finalize"],
+    .ai-message[data-ctx-source="finalize"] {
+        transition: none;
+    }
+}
+
 /* --- Conversational --- 580px */
 .message[data-ctx="conversational"] .message-content,
 .message[data-ctx="conversational"] .text-message-container,
