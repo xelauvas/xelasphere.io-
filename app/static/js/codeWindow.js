@@ -2985,6 +2985,17 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     }
                 }
 
+                // Artifact fence detection already reseeded the bubble with
+                // prose-only content and set _streamRenderer = null. The done
+                // handler's fallback (displayMessage) would re-render the FULL
+                // displayContent (including artifact code) back into the bubble,
+                // undoing the reseed. Trim displayContent to prose when a fence
+                // was detected during streaming.
+                if (artifactStreamActive && typeof artifactFencePosition === 'number' && artifactFencePosition >= 0) {
+                    const proseContent = (streamedContent || '').slice(0, artifactFencePosition).trim();
+                    displayContent = proseContent || displayContent;
+                }
+
                 if (_streamRenderer) {
                     // Content was rendered live — flush remaining buffer
                     // (stream already has proper \n\n from backend normalization)
