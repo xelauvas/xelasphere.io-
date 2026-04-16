@@ -513,6 +513,10 @@ def _try_structured_stream(*, scaffold, prompt: str, model: str,
 
     data = chunks[0]["data"]
     scaffold_dict = scaffold_obj.to_dict()
+    # Also flatten to markdown so (a) history persists the real content
+    # and (b) if client-side scaffoldRenderer fails for any reason, the
+    # existing markdown pipeline still has something to render.
+    markdown_flat = _structured_data_to_markdown(data, scaffold_dict.get("separator"))
     # Events follow the existing codeWindow.js SSE convention: the parser
     # reads `data:` lines and dispatches on the `type` field. No `event:`
     # lines — keeps wire compatibility with the v1 scaffold handler.
@@ -525,7 +529,37 @@ def _try_structured_stream(*, scaffold, prompt: str, model: str,
     yield {"event": "done",
            "data": {"type": "done", "render_mode": "structured",
                     "structured_data": data,
-                    "content": "", "chat_summary": "", "reasoning": None}}
+                    "content": markdown_flat,
+                    "chat_summary": markdown_flat,
+                    "reasoning": None}}
+
+
+def _structured_data_to_markdown(data: dict, separator: bool = False) -> str:
+    """Render a structured_data JSON payload to flat markdown.
+
+    Used by history persistence and as a fallback when scaffoldRenderer
+    is unavailable on the client. Keeps semantic parity with the in-browser
+    renderer output.
+    """
+    parts = []
+    opening = (data.get("opening") or "").strip()
+    if opening:
+        parts.append(opening)
+    sections = data.get("sections") or []
+    if opening and separator and sections:
+        parts.append("---")
+    for s in sections:
+        title = (s.get("title") or "").strip()
+        emoji = (s.get("emoji") or "").strip()
+        header = f"## {emoji + ' ' if emoji else ''}{title}".rstrip()
+        parts.append(header)
+        body = (s.get("body") or "").strip()
+        if body:
+            parts.append(body)
+    closing = (data.get("closing") or "").strip()
+    if closing:
+        parts.append(closing)
+    return "\n\n".join(parts)
 
 
 def _maybe_classify_and_inject_scaffold(
