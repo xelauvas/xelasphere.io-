@@ -2985,24 +2985,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     }
                 }
 
-                // Artifact fence detection already reseeded the bubble with
-                // prose-only content and set _streamRenderer = null. The done
-                // handler's fallback (displayMessage) would re-render the FULL
-                // displayContent (including artifact code) back into the bubble,
-                // undoing the reseed. Trim displayContent to prose when a fence
-                // was detected during streaming.
-                if (artifactStreamActive && typeof artifactFencePosition === 'number' && artifactFencePosition >= 0) {
-                    const proseContent = (streamedContent || '').slice(0, artifactFencePosition).trim();
-                    displayContent = proseContent || displayContent;
-                }
-
                 if (_streamRenderer) {
                     // Content was rendered live — flush remaining buffer
-                    // (stream already has proper \n\n from backend normalization)
                     _streamRenderer.finalize();
                     _streamRenderer = null; window._activeStreamRenderer = null;
                     messageContainer = document.getElementById(aiMsgId);
-                    // Ensure the message div has correct metadata
                     if (messageContainer) {
                         messageContainer.dataset.originalPrompt = prompt;
                         messageContainer.dataset.sender = 'ai';
@@ -3013,12 +3000,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 window.addModelAttribution(messageContainer, streamModelMeta);
                             }
                         }
-                        // Add action buttons if not present
                         if (!messageContainer.querySelector('.action-buttons') && typeof appendActionButtons === 'function') {
                             appendActionButtons(messageContainer.querySelector('.message-content'), aiMsgId);
                         }
                     }
-                    // Run post-render transforms
                     if (messageContainer) {
                         var mc = messageContainer.querySelector('.message-content');
                         if (mc && typeof renderMathInMessage === 'function') {
@@ -3026,6 +3011,29 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         }
                         if (mc && typeof Prism !== 'undefined') {
                             Prism.highlightAllUnder(mc);
+                        }
+                    }
+                } else if (artifactStreamActive) {
+                    // Artifact fence detection already reseeded the bubble with
+                    // prose-only content via _reseedChatWithProse and nulled
+                    // _streamRenderer. The bubble DOM is correct RIGHT NOW.
+                    // Do NOT call displayMessage — it would re-render the full
+                    // displayContent (which includes artifact code from the
+                    // server's done chunk) back into the bubble, undoing the
+                    // reseed. Just grab the existing element.
+                    messageContainer = document.getElementById(_streamMsgId || aiMsgId);
+                    if (messageContainer) {
+                        messageContainer.dataset.originalPrompt = prompt;
+                        messageContainer.dataset.sender = 'ai';
+                        messageContainer.dataset.timestamp = new Date().toISOString();
+                        if (streamModelMeta) {
+                            messageContainer._modelMeta = streamModelMeta;
+                            if (typeof window.addModelAttribution === 'function') {
+                                window.addModelAttribution(messageContainer, streamModelMeta);
+                            }
+                        }
+                        if (!messageContainer.querySelector('.action-buttons') && typeof appendActionButtons === 'function') {
+                            appendActionButtons(messageContainer.querySelector('.message-content'), aiMsgId);
                         }
                     }
                 } else {
