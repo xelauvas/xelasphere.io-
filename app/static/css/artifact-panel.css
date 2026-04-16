@@ -1349,6 +1349,17 @@ body.artifact-panel-resizing .chat-container {
   line-height: 1.55;
   background: var(--bg-code, #13131a);
   color: var(--text-primary, #e8e8f0);
+  /* CodeMirror 5 attaches non-passive touch/wheel listeners it legitimately
+     needs for gesture handling. Declaring touch-action here tells the
+     browser the scroll direction up-front so it doesn't block scroll on
+     preventDefault — eliminates the jank-on-touch the console warnings
+     flag, without forcing CodeMirror's listeners passive (which would
+     break its selection gestures). */
+  touch-action: pan-x pan-y;
+}
+.artifact-editor__codemirror .CodeMirror-scroll,
+#artifact-edit-codemirror .CodeMirror-scroll {
+  touch-action: pan-x pan-y;
 }
 
 /* CodeMirror in Code tab — must fill entire code panel */
