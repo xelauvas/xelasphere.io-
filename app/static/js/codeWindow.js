@@ -2537,55 +2537,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                         }
                                     }
                                 }
-                                // Feed StreamRenderer with live tokens (after stripping
-                                // any leading ACTION: header leak).
-                                if (_streamRenderer) {
-                                    const _cleanChunk = _stripActionFromChunk(chunkText);
-                                    if (_cleanChunk) {
-                                        _streamRenderer.append(_cleanChunk);
-                                    }
-                                }
-                                // Keep the animated "Searching…" shimmer visible until
-                                // real answer content actually appears in the DOM. Then
-                                // fade it out. We poll for the first .stream-block so
-                                // the banner doesn't vanish before the user sees anything.
-                                if (searchMsgId && !searchBannerDismissed && window.SearchResults) {
-                                    searchBannerDismissed = true;
-                                    var _searchMsgIdSnapshot = searchMsgId;
-                                    // Dismiss the shimmer only once the user can actually
-                                    // READ the answer: a stream-block must exist AND hold
-                                    // >= ~80 chars of visible text. Without the length
-                                    // check, a paragraph block is created as soon as the
-                                    // first newline flushes, which fires the dismiss ~28ms
-                                    // after the first chunk — the user sees the banner
-                                    // vanish instantly and then waits for real content.
-                                    var _waitStart = performance.now();
-                                    var _MIN_TEXT = 80;
-                                    var _MAX_WAIT_MS = 30000; // hard ceiling in case stream stalls
-                                    var _waitForVisibleContent = function () {
-                                        var searchEl = document.getElementById(_searchMsgIdSnapshot);
-                                        var searchContent = searchEl?.querySelector('.message-content');
-                                        if (!searchContent) return;
-                                        var block = searchContent.querySelector(
-                                            '.stream-block:not(.block-mermaid):not(.block-math)'
-                                        );
-                                        var elapsed = performance.now() - _waitStart;
-                                        var textLen = block ? (block.textContent || '').trim().length : 0;
-                                        if ((block && textLen >= _MIN_TEXT) || elapsed > _MAX_WAIT_MS) {
-                                            console.log('[SEARCH-BANNER] dismissing after',
-                                                Math.round(elapsed), 'ms. textLen=', textLen);
-                                            window.SearchResults.dismissBanner(searchContent);
-                                        } else {
-                                            requestAnimationFrame(_waitForVisibleContent);
-                                        }
-                                    };
-                                    requestAnimationFrame(_waitForVisibleContent);
-                                }
-                                if (bgRequest) {
-                                    BackgroundRequestManager.appendContent(requestSessionId, chunkText);
-                                }
-
-                                // Only run fence detection if chunk contains backtick (cheap check)
+                                // --- Artifact fence detection BEFORE rendering ---
+                                // Must run before StreamRenderer.append() so artifact
+                                // content never enters the message bubble. Previous
+                                // order (append first, detect after) let batched RAF
+                                // renders paint artifact code in the bubble before the
+                                // fence was caught.
+                                let _fenceJustTriggered = false;
                                 if (chunkText.includes('`')) {
                                     // Rebuild streamedContent only when needed
                                     streamedContent = _contentChunks.join('');
@@ -2636,6 +2594,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             const fileMatch = streamedContent.match(/```artifact-file:([^:]+):(\w+)\s*\n/i);
                                             if (fileMatch) {
                                                 artifactStreamActive = true;
+                                                _fenceJustTriggered = true;
                                                 artifactFencePosition = metaMatch.index;
                                                 _reseedChatWithProse(metaMatch.index);
                                                 window.artifactPanel.openStreaming();
@@ -2659,6 +2618,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             const fenceMatch = streamedContent.match(/```artifact(?![-_])/i);
                                             if (fenceMatch) {
                                                 artifactStreamActive = true;
+                                                _fenceJustTriggered = true;
                                                 artifactFencePosition = fenceMatch.index;
                                                 _reseedChatWithProse(fenceMatch.index);
                                                 window.artifactPanel.openStreaming();
@@ -2683,6 +2643,45 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             window.artifactPanel.openPatchStreaming();
                                         }
                                     }
+                                }
+
+                                // Feed StreamRenderer AFTER fence detection, only when
+                                // no artifact fence was just triggered. This prevents
+                                // artifact code from leaking into the message bubble.
+                                if (!_fenceJustTriggered && !artifactStreamActive && _streamRenderer) {
+                                    const _cleanChunk = _stripActionFromChunk(chunkText);
+                                    if (_cleanChunk) {
+                                        _streamRenderer.append(_cleanChunk);
+                                    }
+                                }
+                                // Search banner dismiss logic
+                                if (searchMsgId && !searchBannerDismissed && window.SearchResults) {
+                                    searchBannerDismissed = true;
+                                    var _searchMsgIdSnapshot = searchMsgId;
+                                    var _waitStart = performance.now();
+                                    var _MIN_TEXT = 80;
+                                    var _MAX_WAIT_MS = 30000;
+                                    var _waitForVisibleContent = function () {
+                                        var searchEl = document.getElementById(_searchMsgIdSnapshot);
+                                        var searchContent = searchEl?.querySelector('.message-content');
+                                        if (!searchContent) return;
+                                        var block = searchContent.querySelector(
+                                            '.stream-block:not(.block-mermaid):not(.block-math)'
+                                        );
+                                        var elapsed = performance.now() - _waitStart;
+                                        var textLen = block ? (block.textContent || '').trim().length : 0;
+                                        if ((block && textLen >= _MIN_TEXT) || elapsed > _MAX_WAIT_MS) {
+                                            console.log('[SEARCH-BANNER] dismissing after',
+                                                Math.round(elapsed), 'ms. textLen=', textLen);
+                                            window.SearchResults.dismissBanner(searchContent);
+                                        } else {
+                                            requestAnimationFrame(_waitForVisibleContent);
+                                        }
+                                    };
+                                    requestAnimationFrame(_waitForVisibleContent);
+                                }
+                                if (bgRequest) {
+                                    BackgroundRequestManager.appendContent(requestSessionId, chunkText);
                                 }
                             }
                         } else if (chunk.type === 'image_generating') {
