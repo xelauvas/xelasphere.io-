@@ -2805,55 +2805,24 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         } else if (chunk.type === 'done') {
                             console.log('Received done chunk:', chunk);
 
-                            // v2 structured-payload rendering (W-24). The bubble
-                            // DOM element is created by the normal done-flow
-                            // AFTER this handler returns, so we schedule the
-                            // render on a delay + retry loop. Retry with a
-                            // small backoff until the bubble appears (or give
-                            // up after ~1s and stuff the payload as a JSON
-                            // fallback so the user sees something).
+                            // v2 structured path: we let the normal markdown
+                            // pipeline handle DISPLAY because scaffoldRenderer's
+                            // textContent-only approach strips code fences, bold,
+                            // emoji, and everything else the LLM's body can carry.
+                            // The server already flattens the structured JSON to
+                            // full markdown in chunk.content; the existing renderer
+                            // handles that identically to any other response, and
+                            // survives history reload without the textContent/
+                            // markdown inversion bug.
+                            // Structured SSE event is still received (see above)
+                            // so the audit loop gets the JSON for semantic metrics.
                             if (window._v2RenderMode === 'structured'
                                 && window._v2StructuredPayload) {
-                                if (!window.scaffoldRenderer) {
-                                    console.error(
-                                        '[v2] scaffoldRenderer module not loaded — ' +
-                                        'bubble will be blank. Hard-reload the page ' +
-                                        '(Ctrl+Shift+R) to fetch static/js/scaffoldRenderer.js.'
-                                    );
-                                    window._v2RenderMode = null;
-                                    window._v2StructuredPayload = null;
-                                } else {
-                                    const payload = window._v2StructuredPayload;
-                                    window._v2RenderMode = null;
-                                    window._v2StructuredPayload = null;
-
-                                    const tryRender = (attempt) => {
-                                        const bubble = document.querySelector(
-                                            '.message.ai-message.streaming .text-message-container'
-                                        ) || document.querySelector(
-                                            '.message.ai-message:last-of-type .text-message-container'
-                                        );
-                                        if (bubble) {
-                                            try {
-                                                window.scaffoldRenderer.renderStructuredResponse(payload, bubble);
-                                                console.log('[v2] scaffoldRenderer applied (attempt ' + attempt + ')');
-                                            } catch (e) {
-                                                console.warn('[v2] scaffoldRenderer failed', e);
-                                            }
-                                            return;
-                                        }
-                                        if (attempt < 20) {
-                                            // Backoff: 16ms, 32ms, 48ms... total ~1.6s max.
-                                            setTimeout(() => tryRender(attempt + 1), 16 * (1 + Math.floor(attempt / 5)));
-                                        } else {
-                                            console.warn(
-                                                '[v2] scaffoldRenderer: bubble never appeared after 20 attempts; ' +
-                                                'payload dropped', payload
-                                            );
-                                        }
-                                    };
-                                    requestAnimationFrame(() => tryRender(1));
-                                }
+                                console.log('[v2] structured payload received — '
+                                    + (window._v2StructuredPayload.sections || []).length
+                                    + ' sections; rendering via markdown pipeline');
+                                window._v2RenderMode = null;
+                                window._v2StructuredPayload = null;
                             }
 
                             streamedReasoning = chunk.reasoning || streamedReasoning;
