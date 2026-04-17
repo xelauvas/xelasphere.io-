@@ -103,7 +103,7 @@ FALLBACK_CHAINS = {
         ("openai",   "gpt-4.1-nano",                           "tier0"),
     ],
     "safety": [
-        ("groq",     "meta-llama/llama-guard-4-12b",           "tier1"),
+        ("groq",     "openai/gpt-oss-safeguard-20b",           "tier1"),
     ],
 }
 

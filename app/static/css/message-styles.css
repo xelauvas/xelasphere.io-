@@ -221,8 +221,6 @@
     transform: translateY(50px); /* Moves it slightly downwards */
 }
 
-/* message-logo removed */
-
 /* Base Layout */
 .message {
     position: relative;
@@ -391,7 +389,14 @@ h1 {
     align-self: stretch;
 }
 
-.message-content img:not(.emoji):not(.attachment-thumb) {
+/* Intentionally exclude `.chat-image` as well — generated images live
+   inside `.image-layer`, which handles radius + clipping at 48px. If we
+   also set a smaller radius on the img itself, it draws its own little
+   12-px curve INSIDE the outer 48-px clip, leaving a visible wedge of
+   background between the two shapes. The hover toolbar covered that
+   wedge at the bottom; the top had nothing covering it, which is why
+   only the top corners looked wrong. */
+.message-content img:not(.emoji):not(.attachment-thumb):not(.chat-image) {
     display: block;
     max-width: var(--image-max-width);
     border-radius: var(--image-radius);
@@ -1381,6 +1386,119 @@ h1 {
     flex-wrap: wrap;
     gap: var(--space-2);
     margin-top: var(--space-2);
+}
+
+/* Vision-routing badge — shown on AI replies that went through a vision
+   model. Pulls from messageDiv.dataset.taskType (set by chat_engine via
+   modelMeta.task_type). Kept subtle; mirrors ChatGPT's small model chip. */
+.message.ai-message[data-task-type="vision"] .message-content::before {
+    content: '👁  Analyzed image';
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    margin: 0 0 0.4rem 0;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(124, 106, 239, 0.14);
+    color: var(--accent-color, #7c6aef);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    width: max-content;
+}
+
+/* Progressive blur-up for markdown-rendered images in assistant responses. */
+.prose-image {
+    transition: filter 0.45s ease, opacity 0.45s ease, transform 0.45s ease;
+    filter: blur(0);
+    opacity: 1;
+}
+
+.prose-image.is-loading-blur {
+    filter: blur(14px);
+    opacity: 0.9;
+    transform: scale(1.01);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .prose-image { transition: none; }
+    .prose-image.is-loading-blur { filter: none; opacity: 1; transform: none; }
+}
+
+/* All-image attachment sets — ChatGPT-style grid. The constraining
+   max-width keeps multi-image messages from dominating the bubble, while
+   each tile fills its grid cell with object-fit: cover for clean edges. */
+.message-attachments--grid {
+    display: grid;
+    gap: var(--space-2);
+    max-width: min(100%, 520px);
+}
+
+.message-attachments--grid .attachment-card.image-attachment,
+.message-attachments--grid .file-preview-card {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+}
+
+.message-attachments--grid .attachment-thumb,
+.message-attachments--grid .file-preview-card__thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.message-attachments--grid[data-image-count="2"] {
+    grid-template-columns: 1fr 1fr;
+}
+
+.message-attachments--grid[data-image-count="3"] {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+}
+.message-attachments--grid[data-image-count="3"] > :first-child {
+    grid-row: span 2;
+    aspect-ratio: auto;
+}
+
+.message-attachments--grid[data-image-count="4"] {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+}
+
+/* Multi-image grid for the AI-reply `.image-message` container on history
+   replay (parallel to `.message-attachments--grid` for user bubbles). Lets
+   a reply that produced N generated images tile instead of stacking full-
+   width vertically. */
+.image-message--grid {
+    display: grid;
+    gap: var(--space-2);
+    max-width: min(100%, 520px);
+}
+
+.image-message--grid .image-layer {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+}
+
+.image-message--grid[data-image-count="2"] {
+    grid-template-columns: 1fr 1fr;
+}
+
+.image-message--grid[data-image-count="3"] {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+}
+.image-message--grid[data-image-count="3"] > :first-child {
+    grid-row: span 2;
+}
+
+.image-message--grid[data-image-count="4"] {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
 }
 
 .message-actions {

@@ -950,17 +950,7 @@ window.isGuestMode = isGuestMode;
 
 function isTypingAnimationActive() {
     if (typeof window === 'undefined') return false;
-
-    // Check if a live StreamRenderer is rendering this or any session
-    if (window._activeStreamRenderer) return true;
-
-    // Check old typewriter animator
-    const animator = window.activeAnimator;
-    if (animator && animator.state && !animator.state.isStopped) {
-        return true;
-    }
-
-    return false;
+    return !!window._activeStreamRenderer;
 }
 
 function resetSendButtonIfIdle() {
@@ -1480,6 +1470,13 @@ function renderLiveAttachments(container, attachmentsMeta) {
     const attachmentsWrapper = document.createElement('div');
     attachmentsWrapper.className = 'message-attachments';
 
+    // ChatGPT-style grid for all-image attachment sets. Delegates to the
+    // shared helper in script.js so the replay path (`renderAttachments` in
+    // startNewChatModule.js) stays in lockstep.
+    if (typeof applyAttachmentLayout === 'function') {
+        applyAttachmentLayout(attachmentsWrapper, attachmentsMeta);
+    }
+
     attachmentsMeta.forEach(att => {
         if (!att) return;
 
@@ -1838,10 +1835,20 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
 // Track placeholder timestamps to enforce minimum display time
 const placeholderTimestamps = new Map();
 
-function replacePlaceholderWithImage(placeholderId, imageUrl, promptText) {
+function replacePlaceholderWithImage(placeholderId, imageUrlOrList, promptText) {
+    // Accept either a single URL (legacy single-image generation) or an
+    // array of URLs (when the backend returns multiple images in one reply).
+    const imageUrls = Array.isArray(imageUrlOrList)
+        ? imageUrlOrList.filter(Boolean)
+        : (imageUrlOrList ? [imageUrlOrList] : []);
+    if (!imageUrls.length) return;
+
     const createdAt = placeholderTimestamps.get(placeholderId) || Date.now();
     const elapsed = Date.now() - createdAt;
-    const minDuration = 3000; // 3s minimum animation time
+    // Long enough for the fade to register, short enough to not feel like
+    // an artificial freeze. Fast providers (Pollinations sub-second) no
+    // longer look broken-but-waiting; slow ones still get their animation.
+    const minDuration = 400;
     const delay = Math.max(0, minDuration - elapsed);
 
     setTimeout(() => {
@@ -1849,106 +1856,85 @@ function replacePlaceholderWithImage(placeholderId, imageUrl, promptText) {
         if (!messageDiv) return;
         const messageContent = messageDiv.querySelector('.message-content');
         if (!messageContent) return;
-        let layer = messageContent.querySelector('.image-layer');
-        if (!layer) {
-            layer = document.createElement('div');
-            layer.className = 'image-layer';
 
-            // Create Grok-style placeholder
-            const placeholder = document.createElement('div');
-            placeholder.className = 'image-placeholder';
+        // Image responses render image-only. Strip any caption text the
+        // backend streamed into this bubble — before, during, or after the
+        // image arrived. We use an allowlist of known-safe children rather
+        // than a blocklist of text classes, because the streamed prose can
+        // land under several selectors (StreamRenderer's .stream-block,
+        // renderAiTextImmediate's .text-message-container, direct .text-
+        // message paragraphs, etc.). Anything not on the allowlist gets
+        // removed. Also re-runs twice to catch async renders that arrive
+        // after the initial swap (e.g. late chunks post-done).
+        const CAPTION_ALLOWED = new Set([
+            'image-message', 'image-layer', 'image-preview-card',
+            'message-attachments', 'thinking-indicator', 'reasoning-display',
+            'search-banner', 'search-results-wrapper', 'sources-btn',
+            'message-actions', 'message-footer',
+        ]);
+        const stripCaptionText = () => {
+            Array.from(messageContent.children).forEach((child) => {
+                const keep = Array.from(child.classList || []).some(
+                    (c) => CAPTION_ALLOWED.has(c)
+                );
+                if (!keep) child.remove();
+            });
+        };
+        stripCaptionText();
+        setTimeout(stripCaptionText, 150);
+        setTimeout(stripCaptionText, 600);
 
-            // Aurora background layers
-            const aurora = document.createElement('div');
-            aurora.className = 'image-placeholder__aurora';
-            const auroraSecondary = document.createElement('div');
-            auroraSecondary.className = 'image-placeholder__aurora-secondary';
+        const alt = typeof formatImageAlt === 'function'
+            ? formatImageAlt(promptText, { generated: true })
+            : (promptText || 'AI-generated image');
 
-            // Grid overlay
-            const grid = document.createElement('div');
-            grid.className = 'image-placeholder__grid';
+        // Single-image path: keep reusing the existing shimmer layer the
+        // placeholder stage already built. Multi-image path: replace the
+        // container with a grid of fresh layers (one per URL).
+        if (imageUrls.length === 1) {
+            let layer = messageContent.querySelector('.image-layer');
+            if (!layer) {
+                layer = document.createElement('div');
+                layer.className = 'image-layer';
 
-            // Floating particles
-            const particles = document.createElement('div');
-            particles.className = 'image-placeholder__particles';
-            for (let i = 0; i < 6; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'image-placeholder__particle';
-                particles.appendChild(particle);
+                const placeholder = document.createElement('div');
+                placeholder.className = 'image-placeholder image-placeholder--shimmer';
+                placeholder.setAttribute('role', 'status');
+                placeholder.setAttribute('aria-label', 'Generating image');
+
+                const shimmer = document.createElement('div');
+                shimmer.className = 'image-placeholder__shimmer';
+
+                const label = document.createElement('div');
+                label.className = 'image-placeholder__label';
+                label.textContent = 'Creating image…';
+
+                placeholder.appendChild(shimmer);
+                placeholder.appendChild(label);
+
+                const img = document.createElement('img');
+                img.className = 'chat-image chat-image--reveal';
+                img.style.setProperty('aspect-ratio', '2 / 3');
+                layer.appendChild(placeholder);
+                layer.appendChild(img);
+                messageContent.innerHTML = '';
+                messageContent.appendChild(layer);
             }
-
-            // Central orb
-            const orb = document.createElement('div');
-            orb.className = 'image-placeholder__orb';
-            orb.innerHTML = `
-                <div class="image-placeholder__orb-glow"></div>
-                <div class="image-placeholder__orb-ring"></div>
-                <div class="image-placeholder__orb-inner">
-                    <i class="fas fa-wand-magic-sparkles image-placeholder__orb-icon"></i>
-                </div>
-            `;
-
-            // Status text and progress
-            const status = document.createElement('div');
-            status.className = 'image-placeholder__status';
-            status.innerHTML = `
-                <span class="image-placeholder__text">Creating image...</span>
-                <div class="image-placeholder__progress">
-                    <div class="image-placeholder__progress-bar"></div>
-                </div>
-            `;
-
-            // Assemble placeholder
-            placeholder.appendChild(aurora);
-            placeholder.appendChild(auroraSecondary);
-            placeholder.appendChild(grid);
-            placeholder.appendChild(particles);
-            placeholder.appendChild(orb);
-            placeholder.appendChild(status);
-
-            const img = document.createElement('img');
-            img.className = 'chat-image chat-image--reveal';
-            img.style.setProperty('aspect-ratio', '1 / 1');
-            layer.appendChild(placeholder);
-            layer.appendChild(img);
+            finalizeSingleImage(layer, imageUrls[0], alt, promptText);
+        } else {
+            // Multi-image: drop the placeholder, render all images into a
+            // single .image-message grid container. buildImageLayer produces
+            // the same DOM shape the single-image path lands on after load.
             messageContent.innerHTML = '';
-            messageContent.appendChild(layer);
-        }
-
-        const img = layer.querySelector('.chat-image');
-        const placeholder = layer.querySelector('.image-placeholder');
-        if (img) {
-            img.src = imageUrl;
-            img.alt = promptText || 'Image';
-            img.style.cursor = 'pointer';
-            img.onload = () => {
-                layer.classList.add('revealed');
-                // Mobile blur-up effect
-                img.classList.add('loaded');
-                layer.classList.add('loaded');
-            };
-            img.onerror = () => {
-                messageContent.textContent = 'Image failed to load.';
-            };
-            // If already cached, trigger loaded immediately
-            if (img.complete && img.naturalHeight !== 0) {
-                img.classList.add('loaded');
-                layer.classList.add('loaded');
-            }
-            // Add click handler for lightbox
-            img.addEventListener('click', () => {
-                if (typeof openAttachmentLightbox === 'function') {
-                    openAttachmentLightbox({
-                        src: imageUrl,
-                        title: promptText || 'Generated image',
-                        isImage: true
-                    });
+            const container = document.createElement('div');
+            container.className = 'image-message image-message--grid';
+            container.dataset.imageCount = String(Math.min(imageUrls.length, 4));
+            imageUrls.forEach((u) => {
+                if (typeof buildImageLayer === 'function') {
+                    container.appendChild(buildImageLayer(u, alt));
                 }
             });
-        }
-        if (placeholder) {
-            // ensure placeholder stays until revealed class is added
-            placeholder.style.opacity = '1';
+            messageContent.appendChild(container);
         }
 
         placeholderTimestamps.delete(placeholderId);
@@ -1957,6 +1943,38 @@ function replacePlaceholderWithImage(placeholderId, imageUrl, promptText) {
             scrollToBottom(false);
         }
     }, delay);
+}
+
+// Finalize the single-image placeholder → loaded image transition.
+// Extracted so replacePlaceholderWithImage can branch cleanly between the
+// single-image (reuse existing layer) and multi-image (rebuild grid) paths.
+function finalizeSingleImage(layer, imageUrl, alt, promptText) {
+    const img = layer.querySelector('.chat-image');
+    const placeholder = layer.querySelector('.image-placeholder');
+    if (!img) return;
+
+    img.src = imageUrl;
+    img.alt = alt;
+    img.style.cursor = 'pointer';
+    img.onload = () => {
+        layer.classList.add('revealed', 'loaded');
+        img.classList.add('loaded');
+    };
+    if (typeof wireBrokenImageFallback === 'function') {
+        wireBrokenImageFallback(img, promptText || 'Generated image');
+    } else {
+        img.onerror = () => { layer.textContent = 'Image failed to load.'; };
+    }
+    if (img.complete && img.naturalHeight !== 0) {
+        layer.classList.add('revealed', 'loaded');
+        img.classList.add('loaded');
+    }
+    img.addEventListener('click', () => {
+        if (typeof openAttachmentLightbox === 'function') {
+            openAttachmentLightbox({ src: imageUrl, title: alt, isImage: true });
+        }
+    });
+    if (placeholder) placeholder.style.opacity = '1';
 }
 
 function isImagePrompt(prompt = '') {
@@ -2060,6 +2078,21 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             : [];
         const needsImagePlaceholder = prompt && isImagePrompt(prompt) && attachments.length === 0;
         const placeholderId = needsImagePlaceholder ? generateMessageId() : null;
+
+        // Reject bare /image (or /img) with no description — the backend
+        // would otherwise generate something meaningless. Show a toast and
+        // leave focus in the composer.
+        if (needsImagePlaceholder) {
+            const body = prompt.trim().replace(/^\/(image|img)\s*/i, '').trim();
+            if (!body) {
+                if (window.Toast && typeof window.Toast.warning === 'function') {
+                    window.Toast.warning('What should I draw? Add a description after /image.', 4000);
+                }
+                const promptEl = document.getElementById('prompt');
+                if (promptEl) promptEl.focus();
+                throw new Error('Empty image prompt');
+            }
+        }
 
         // Validate prompt or attachments
         if (!prompt && attachments.length === 0) {
@@ -2354,6 +2387,14 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let artifactMetaIndex = -1;
                 let searchMsgId = null; // Track message element for search banner
                 let searchBannerDismissed = false; // Track if search banner was dismissed
+
+                // Per-stream state for image generation. Previously stored on
+                // `window.*` which meant two concurrent `/image` calls would
+                // stomp each other's placeholder IDs. Localized here so each
+                // sendMessage invocation gets an isolated state bag.
+                let pendingImagePlaceholderId = null;
+                let streamDoneImageUrls = null;   // array of URLs (supports multi-image)
+                let streamDoneAttachments = null;
                 _streamRenderer = null; window._activeStreamRenderer = null; // Phase 2: live SSE-to-DOM renderer (hoisted above try)
                 _streamMsgId = null;    // Message ID for StreamRenderer container (hoisted above try)
                 let artifactFencePosition = -1;
@@ -2708,8 +2749,16 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 const imgPlaceholderId = generateMessageId();
                                 displayMessage('', 'ai', 'image-placeholder', chunk.description || prompt, true, imgPlaceholderId);
                                 placeholderTimestamps.set(imgPlaceholderId, Date.now());
-                                // Store for done handler to replace
-                                window._pendingImagePlaceholderId = imgPlaceholderId;
+                                // Store per-stream (local) so concurrent
+                                // /image requests don't clobber each other.
+                                pendingImagePlaceholderId = imgPlaceholderId;
+                                // Also stash in localStorage so a refresh
+                                // during generation can detect and recover.
+                                try {
+                                    if (typeof recordPendingImage === 'function') {
+                                        recordPendingImage(imgPlaceholderId, chunk.description || prompt, requestSessionId);
+                                    }
+                                } catch (e) { /* storage unavailable — skip */ }
                             }
                         } else if (chunk.type === 'image_confirm') {
                             // Inferred image request: show confirmation UI
@@ -2810,12 +2859,38 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     renderHint: chunk.render_hint || 'text_only',
                                 });
                             }
-                            // Handle image from generate_image ACTION path
-                            if (chunk.image_url && window._pendingImagePlaceholderId) {
-                                replacePlaceholderWithImage(window._pendingImagePlaceholderId, chunk.image_url, prompt);
-                                // Store for post-stream save (don't delete placeholder ID yet — needed by save)
-                                window._streamDoneImageUrl = chunk.image_url;
-                                window._streamDoneAttachments = chunk.attachments || [{ isImage: true, url: chunk.image_url, name: 'AI generated image' }];
+                            // Handle image from generate_image ACTION path.
+                            // Support multi-image: if chunk.attachments has
+                            // N image entries, pass the full URL list so
+                            // replacePlaceholderWithImage renders a grid.
+                            if ((chunk.image_url || (Array.isArray(chunk.attachments) && chunk.attachments.length))
+                                && pendingImagePlaceholderId) {
+                                const atts = Array.isArray(chunk.attachments) ? chunk.attachments : [];
+                                const urls = atts
+                                    .filter((a) => a && (a.isImage || (a.mime_type || '').startsWith('image/')))
+                                    .map((a) => a.url)
+                                    .filter(Boolean);
+                                const finalUrls = urls.length ? urls : (chunk.image_url ? [chunk.image_url] : []);
+                                if (finalUrls.length) {
+                                    replacePlaceholderWithImage(
+                                        pendingImagePlaceholderId,
+                                        finalUrls.length === 1 ? finalUrls[0] : finalUrls,
+                                        prompt
+                                    );
+                                    streamDoneImageUrls = finalUrls;
+                                    streamDoneAttachments = atts.length ? atts : [{
+                                        isImage: true,
+                                        url: finalUrls[0],
+                                        name: 'AI generated image'
+                                    }];
+                                    // Placeholder resolved — clear the
+                                    // pending-refresh-recovery marker.
+                                    try {
+                                        if (typeof clearPendingImage === 'function') {
+                                            clearPendingImage(pendingImagePlaceholderId);
+                                        }
+                                    } catch (e) { /* skip */ }
+                                }
                             }
                             // Update session title in sidebar. Defer slightly
                             // so the tab DOM exists after session creation,
@@ -2943,13 +3018,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 }
 
                 // generate_image done: placeholder already replaced, show chat text below image and save
-                if (window._streamDoneImageUrl) {
-                    const imgUrl = window._streamDoneImageUrl;
-                    const imgAttachments = window._streamDoneAttachments || [{ isImage: true, url: imgUrl, name: 'AI generated image' }];
-                    delete window._streamDoneImageUrl;
-                    delete window._streamDoneAttachments;
-                    const imgMsgId = window._pendingImagePlaceholderId || aiMsgId;
-                    delete window._pendingImagePlaceholderId;
+                if (streamDoneImageUrls && streamDoneImageUrls.length) {
+                    const imgUrl = streamDoneImageUrls[0]; // legacy single-URL hook
+                    const imgAttachments = streamDoneAttachments || [{ isImage: true, url: imgUrl, name: 'AI generated image' }];
+                    streamDoneImageUrls = null;
+                    streamDoneAttachments = null;
+                    const imgMsgId = pendingImagePlaceholderId || aiMsgId;
+                    pendingImagePlaceholderId = null;
 
                     // Append chat text below the image
                     if (displayContent && displayContent.trim()) {
@@ -3609,15 +3684,21 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 }
             }
         } else if (placeholderId) {
-            // Replace placeholder with a gentle failure message if no image returned
+            // Render a proper failure card with a retry affordance instead of
+            // a bare "Image unavailable" text bubble. Retry restores the
+            // prompt to the composer so the user can refine and resend.
             messageContainer = displayMessage(
-                'Image unavailable. Please try again.',
+                '',
                 'ai',
                 'text',
                 prompt,
                 true,
                 aiMsgId
             );
+            if (messageContainer) {
+                const content = messageContainer.querySelector('.message-content') || messageContainer;
+                renderImageFailureCard(content, prompt);
+            }
         }
 
         // Debug logging for artifact panel
@@ -3927,11 +4008,6 @@ function abortMessage() {
     isRequestInProgress = false;
     isTypingStopped = true;
 
-    // Also stop the old typewriter animator if active
-    if (window.activeAnimator) {
-        window.activeAnimator.stop();
-    }
-
     // Finalize active StreamRenderer if any (cancels RAF loop + removes cursor)
     if (window._activeStreamRenderer) {
         window._activeStreamRenderer.finalize();
@@ -3953,529 +4029,9 @@ function abortMessage() {
     resetSendButtonIfIdle();
 }
 
-// Expose abortMessage globally for other modules (e.g., typewriter stop)
 if (typeof window !== 'undefined') {
     window.abortMessage = abortMessage;
 }
-
-// Loader to indicate the debugging process with fading animation
-function showLoader(button) {
-    button.innerHTML = '<div class="spinner"></div> Debugging...';
-    button.disabled = true; // Disable the button during the process
-    button.classList.add('fading-text'); // Apply the CSS fading animation
-}
-
-
-// Remove loader and stop the animation when the debug process is done
-function removeLoader(button) {
-    // Reset the button content back to only the debug icon
-    button.innerHTML = '<i class="fas fa-bug"></i>';
-    button.disabled = false; // Re-enable the button
-    button.classList.remove('fading-text'); // Remove the CSS fading animation
-}
-
-
-// Function to handle the debugging process
-async function debugCodeWithLoader(text, debugButton) {
-    try {
-        // Call the actual debugCode function to send the code for debugging
-        await debugCode(text); // Wait until the debugging process is finished
-        // Remove loader after the debugging and the debug window is created
-        removeLoader(debugButton);
-    } catch (error) {
-        console.error('Error during debugging:', error);
-        removeLoader(debugButton);
-        alert('Error during debugging: ' + error.message);
-    }
-}
-
-// Function to send code to Flask API for debugging
-async function debugCode(text) {
-    console.log("Sending code to Flask API for debugging...");
-
-    try {
-        const csrfToken = getCSRFToken(); // Get the CSRF token
-
-        const response = await fetch('/debug', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken // Include the CSRF token in the headers
-            },
-            body: JSON.stringify({ code: text }),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Server error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        const debuggedCode = data.debugged_code;
-        if (!debuggedCode) {
-            throw new Error('No debugged code returned from the server.');
-        }
-
-        // Create and display the debug window with the debugged code
-        createDebugWindow(text, debuggedCode);
-    } catch (error) {
-        console.error('Error during the debugging process:', error);
-        createDebugWindow(`Error: ${error.message}`);
-    }
-}
-
-// Helper function to get CSRF token from meta tag
-function getCSRFToken() {
-    return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-}
-
-function createDebugWindow(originalCode, debuggedCode, logs = [], variables = {}, performanceMetrics = {}) {
-    // Utility function to create a button with an icon and title
-    function createIconButton(className, iconHtml, title, onClick) {
-        const button = document.createElement('button');
-        button.className = className;
-        button.innerHTML = iconHtml;
-        button.title = title;
-        button.onclick = onClick;
-        return button;
-    }
-
-    // Create the main debug window element
-    const debugWindow = document.createElement('div');
-    debugWindow.className = 'debug-window dark-theme fade-in focused'; // Dark theme, initial animation
-
-    // Create the header (draggable)
-    const header = document.createElement('div');
-    header.className = 'debug-header draggable'; // Draggable feature
-
-    // Title of the debug window
-    const title = document.createElement('span');
-    title.className = 'debug-title';
-    title.textContent = 'Debug Output';
-    header.appendChild(title);
-
-    // Close button
-    const closeButton = createIconButton(
-        'close-debug-window',
-        '<i class="fas fa-times"></i>', // Font Awesome close icon
-        'Close Debug Window',
-        () => {
-            debugWindow.classList.add('fade-out');
-            setTimeout(() => debugWindow.remove(), 1400); // Wait for fade-out animation
-        }
-    );
-    header.appendChild(closeButton);
-
-    debugWindow.appendChild(header); // Add header to debug window
-
-    // Create tab headers
-    const tabHeader = document.createElement('div');
-    tabHeader.className = 'debug-tab-header';
-
-    // Tab configurations: Logs, Variables, Performance
-    const tabs = [
-        { name: 'Logs', icon: '<i class="fas fa-file-alt"></i>' },        // Document icon
-        { name: 'Variables', icon: '<i class="fas fa-cogs"></i>' },       // Gears icon
-        { name: 'Performance', icon: '<i class="fas fa-chart-line"></i>' } // Chart icon
-    ];
-
-    // Create and append tab buttons
-    tabs.forEach((tab, index) => {
-        const tabButton = document.createElement('button');
-        tabButton.className = `debug-tab ${index === 0 ? 'active-tab' : ''}`; // Set first tab as active
-        tabButton.innerHTML = `${tab.icon} ${tab.name}`; // Icon and tab name
-        tabButton.onclick = () => switchTab(tab.name, debugWindow, tabContents); // Switch tab logic
-        tabHeader.appendChild(tabButton);
-    });
-
-    debugWindow.appendChild(tabHeader); // Add tab header to debug window
-
-    // Create content wrapper for tab contents
-    const contentWrapper = document.createElement('div');
-    contentWrapper.className = 'debug-content-wrapper';
-
-    // Create content sections for each tab (Logs, Variables, Performance)
-    const tabContents = {
-        Logs: document.createElement('div'),
-        Variables: document.createElement('div'),
-        Performance: document.createElement('div')
-    };
-
-    // Iterate over tabContents to set up each tab's content
-    Object.entries(tabContents).forEach(([key, contentDiv]) => {
-        contentDiv.className = `debug-content ${key.toLowerCase()} ${key === 'Logs' ? 'active-content' : ''}`; // Logs tab active by default
-        contentWrapper.appendChild(contentDiv);
-    });
-
-    debugWindow.appendChild(contentWrapper); // Add content wrapper to the debug window
-
-    // Append the debug window to the body and focus on it
-    document.body.appendChild(debugWindow);
-    debugWindow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(() => debugWindow.classList.remove('focused'), 2000);
-
-    // Make the debug window draggable and resizable
-    makeDraggable(debugWindow, header);
-    makeResizable(debugWindow);
-
-    // Extract code blocks from debugged code and format with line numbers
-    const codeBlockRegex = /```([\s\S]*?)```|<code>([\s\S]*?)<\/code>|~~~([\s\S]*?)~~~/g;
-    let extractedCode = [];
-    let match;
-
-    while ((match = codeBlockRegex.exec(debuggedCode)) !== null) {
-        extractedCode.push((match[1] || match[2] || match[3]).trim());
-    }
-
-    extractedCode = extractedCode.length > 0 ? extractedCode.join('\n\n') : 'No code available';
-    
-    // If code is available, format and display it in Variables tab
-    if (extractedCode !== 'No code available') {
-        const formattedCode = extractedCode.split('\n').map((line, index) => `${String(index + 1).padStart(4, ' ')} |   ${line}`).join('\n');
-        
-        const preElement = document.createElement('pre');
-        const codeElement = document.createElement('code');
-        codeElement.className = 'language-javascript'; // Assuming JavaScript for syntax highlighting
-        codeElement.textContent = formattedCode;
-        preElement.appendChild(codeElement);
-        
-        tabContents.Variables.innerHTML = ''; // Clear before inserting
-        tabContents.Variables.appendChild(preElement);
-
-        // Apply syntax highlighting after DOM insertion
-        requestAnimationFrame(() => {
-            if (typeof Prism !== 'undefined') {
-                Prism.highlightElement(codeElement); // Use Prism.js if available
-            } else if (typeof hljs !== 'undefined') {
-                hljs.highlightElement(codeElement); // Use Highlight.js if available
-            }
-        });
-    }
-
-    // Populate tab contents
-    populateTabContent(logs, { extractedCode }, performanceMetrics, tabContents);
-
-    // Animate the code correction display in the Logs tab
-    animateCodeCorrection(originalCode, debuggedCode, tabContents.Logs);
-}
-
-
-
-// Function to switch between tabs
-function switchTab(tabName, debugWindow, tabContents) {
-    // Remove active class from all tab buttons
-    const tabButtons = debugWindow.querySelectorAll('.debug-tab');
-    tabButtons.forEach(button => {
-        button.classList.remove('active-tab');
-    });
-
-    // Add active class to the clicked tab
-    const activeTabButton = Array.from(tabButtons).find(button => button.textContent === tabName);
-    if (activeTabButton) {
-        activeTabButton.classList.add('active-tab');
-    }
-
-    // Hide all tab contents
-    const contentDivs = debugWindow.querySelectorAll('.debug-content');
-    contentDivs.forEach(div => {
-        div.classList.remove('active-content');
-    });
-
-    // Show the selected tab content
-    if (tabContents[tabName]) {
-        tabContents[tabName].classList.add('active-content');
-    }
-}
-
-
-// Function to populate the tab content dynamically
-function populateTabContent(logs, variables, performanceMetrics, tabContents) {
-    // Populate logs
-    const logContent = tabContents.Logs;
-    logContent.innerHTML = '';
-    if (logs.length > 0) {
-        logs.forEach((log, index) => {
-            const logEntry = document.createElement('div');
-            logEntry.className = 'log-entry';
-            logEntry.textContent = `${index + 1}: ${log}`;
-            logContent.appendChild(logEntry);
-        });
-    } else {
-        logContent.textContent = 'No logs available';
-    }
-
-    // Populate variables
-    const variableContent = tabContents.Variables;
-    variableContent.innerHTML = '';
-    if (Object.keys(variables).length > 0) {
-        for (const [varName, varValue] of Object.entries(variables)) {
-            const variableEntry = document.createElement('div');
-            variableEntry.className = 'variable-entry';
-            variableEntry.textContent = `${varName}:
-${varValue}`;
-            variableContent.appendChild(variableEntry);
-        }
-    } else {
-        variableContent.textContent = 'No variables available';
-    }
-
-    // Populate performance metrics
-    const performanceContent = tabContents.Performance;
-    performanceContent.innerHTML = '';
-    if (Object.keys(performanceMetrics).length > 0) {
-        for (const [metricName, metricValue] of Object.entries(performanceMetrics)) {
-            const performanceEntry = document.createElement('div');
-            performanceEntry.className = 'performance-entry';
-            performanceEntry.textContent = `${metricName}: ${metricValue}`;
-            performanceContent.appendChild(performanceEntry);
-        }
-    } else {
-        performanceContent.textContent = 'No performance metrics available';
-    }
-}
-
-function makeResizable(el) {
-    let isResizing = false;
-
-    // Create the resizer handle
-    const resizer = document.createElement('div');
-    resizer.style.width = '35px';
-    resizer.style.height = '35px';
-    resizer.style.position = 'absolute';
-    resizer.style.right = '0';
-    resizer.style.bottom = '0';
-    resizer.style.cursor = 'se-resize';
-    resizer.style.zIndex = '100';
-    resizer.style.display = 'flex';
-    resizer.style.alignItems = 'center';
-    resizer.style.justifyContent = 'center';
-    resizer.style.background = 'transparent'; // Set background to transparent
-    resizer.style.borderRadius = '0 0 6px 0';
-    resizer.style.boxShadow = '0px 0px 5px rgba(0, 0, 0, 0.5)';
-    resizer.textContent = '↘'; // Add a Unicode arrow symbol for resize
-
-    resizer.style.color = 'var(--text-primary, #e8e8f0)'; // Make sure the symbol stands out
-
-    // Ensure the element has relative or absolute positioning for resizing to work correctly
-    const computedStyle = window.getComputedStyle(el);
-    if (computedStyle.position === 'static') {
-        el.style.position = 'relative';
-    }
-
-    // Append resizer handle to the element
-    el.appendChild(resizer);
-
-    // Add event listeners for the resizer handle
-    resizer.addEventListener('mousedown', resizeMouseDown);
-    resizer.addEventListener('touchstart', resizeMouseDown, { passive: false });
-
-    function resizeMouseDown(e) {
-        e.preventDefault();
-        isResizing = true;
-
-        document.addEventListener('mousemove', resizeElement);
-        document.addEventListener('mouseup', stopResizing);
-        document.addEventListener('touchmove', resizeElement, { passive: false });
-        document.addEventListener('touchend', stopResizing);
-    }
-
-    function resizeElement(e) {
-        if (!isResizing) return;
-
-        e.preventDefault();
-        let currentX, currentY;
-
-        if (e.type === 'touchmove') {
-            currentX = e.touches[0].clientX;
-            currentY = e.touches[0].clientY;
-        } else {
-            currentX = e.clientX;
-            currentY = e.clientY;
-        }
-
-        // Calculate new dimensions
-        const newWidth = Math.max(50, currentX - el.getBoundingClientRect().left);
-        const newHeight = Math.max(50, currentY - el.getBoundingClientRect().top);
-
-        // Apply new width and height to the element
-        el.style.width = `${newWidth}px`;
-        el.style.height = `${newHeight}px`;
-    }
-
-    function stopResizing() {
-        isResizing = false;
-
-        document.removeEventListener('mousemove', resizeElement);
-        document.removeEventListener('mouseup', stopResizing);
-        document.removeEventListener('touchmove', resizeElement);
-        document.removeEventListener('touchend', stopResizing);
-    }
-}
-
-
-// Function to make the element draggable
-function makeDraggable(el, handle) {
-    let offsetX = 0, offsetY = 0, mouseX = 0, mouseY = 0;
-
-    handle.addEventListener('mousedown', dragMouseDown);
-    handle.addEventListener('touchstart', dragMouseDown, { passive: false });
-
-    function dragMouseDown(e) {
-        e.preventDefault();
-        handle.style.cursor = 'grabbing';
-
-        if (e.type === 'touchstart') {
-            mouseX = e.touches[0].clientX;
-            mouseY = e.touches[0].clientY;
-        } else {
-            mouseX = e.clientX;
-            mouseY = e.clientY;
-        }
-
-        document.addEventListener('mousemove', dragElement);
-        document.addEventListener('mouseup', stopDragging);
-        document.addEventListener('touchmove', dragElement, { passive: false });
-        document.addEventListener('touchend', stopDragging);
-    }
-
-    function dragElement(e) {
-        e.preventDefault();
-
-        let currentX, currentY;
-
-        if (e.type === 'touchmove') {
-            currentX = e.touches[0].clientX;
-            currentY = e.touches[0].clientY;
-        } else {
-            currentX = e.clientX;
-            currentY = e.clientY;
-        }
-
-        offsetX = mouseX - currentX;
-        offsetY = mouseY - currentY;
-        mouseX = currentX;
-        mouseY = currentY;
-
-        el.style.top = (el.offsetTop - offsetY) + "px";
-        el.style.left = (el.offsetLeft - offsetX) + "px";
-    }
-
-    function stopDragging() {
-        handle.style.cursor = 'grab';
-        document.removeEventListener('mousemove', dragElement);
-        document.removeEventListener('mouseup', stopDragging);
-        document.removeEventListener('touchmove', dragElement);
-        document.removeEventListener('touchend', stopDragging);
-    }
-}
-
-
-function animateCodeCorrection(originalCode, debuggedCode, codeWrapper, options = {}) {
-    // Extract lines from original and debugged code
-    const originalLines = originalCode.split('\n');
-    const debuggedLines = debuggedCode.split('\n');
-    const maxLines = Math.max(originalLines.length, debuggedLines.length);
-
-    // Set up customizable options with defaults
-    const {
-        animationSpeed = 200,
-        highlightClass = 'highlight-line',
-        addedClass = 'added-line',
-        removedClass = 'removed-line',
-        modifiedClass = 'modified-line',
-        lineNumberClass = 'line-number',
-        lineWrapperClass = 'code-line-wrapper',
-        codeLineClass = 'code-line',
-        pauseOnClick = true,
-    } = options;
-
-    // Prepare code lines data and create fragment for DOM manipulation
-    const codeLines = [];
-    const fragment = document.createDocumentFragment();
-
-    for (let i = 0; i < maxLines; i++) {
-        const lineWrapper = document.createElement('div');
-        lineWrapper.className = lineWrapperClass;
-
-        const lineNumber = document.createElement('div');
-        lineNumber.className = lineNumberClass;
-        lineNumber.textContent = i + 1;
-        lineWrapper.appendChild(lineNumber);
-
-        const lineElement = document.createElement('div');
-        lineElement.className = codeLineClass;
-        lineElement.textContent = originalLines[i] || '';
-        lineWrapper.appendChild(lineElement);
-
-        fragment.appendChild(lineWrapper);
-
-        codeLines.push({
-            lineWrapper,
-            lineElement,
-            originalLine: originalLines[i] || '',
-            debuggedLine: debuggedLines[i] || '',
-        });
-    }
-
-    // Append all elements at once to avoid multiple reflows
-    codeWrapper.innerHTML = '';
-    codeWrapper.appendChild(fragment);
-
-    let currentLine = 0;
-    let isPaused = false;
-
-    // Function to animate correction of lines one by one
-    function updateLineSequentially() {
-        if (isPaused || currentLine >= maxLines) return;
-
-        const { lineElement, originalLine, debuggedLine } = codeLines[currentLine];
-
-        // Highlight the current line
-        lineElement.classList.add(highlightClass);
-
-        // Animate the correction after a delay
-        setTimeout(() => {
-            if (originalLine !== debuggedLine) {
-                lineElement.textContent = debuggedLine;
-
-                // Apply appropriate class based on type of change
-                if (!originalLine) {
-                    lineElement.classList.add(addedClass);
-                } else if (!debuggedLine) {
-                    lineElement.classList.add(removedClass);
-                } else {
-                    lineElement.classList.add(modifiedClass);
-                }
-            }
-
-            // Remove highlight and move to the next line
-            lineElement.classList.remove(highlightClass);
-            currentLine++;
-            requestAnimationFrame(updateLineSequentially); // Use requestAnimationFrame for smoother animations
-        }, animationSpeed);
-    }
-
-    // Start the sequential animation with initial delay
-    setTimeout(() => {
-        requestAnimationFrame(updateLineSequentially);
-    }, animationSpeed);
-
-    // Add event listener for pausing/resuming animation if enabled
-    if (pauseOnClick) {
-        codeWrapper.addEventListener('click', () => {
-            isPaused = !isPaused;
-            if (!isPaused) {
-                requestAnimationFrame(updateLineSequentially);
-            }
-        });
-    }
-}
-
-
 
 /**
  * Render a user message: markdown-it inline → DOMPurify → innerHTML.
@@ -4565,32 +4121,10 @@ function renderAiTextImmediate(container, text, messageId, showButtons) {
         delete msgDiv._modelMeta;
     }
 
-    // typing-complete event — matches legacy appendTextMessage dispatch
-    // (consumed by citation/search-results post-processing)
-    if (msgDiv) {
-        msgDiv.dispatchEvent(new CustomEvent('typing-complete', { bubbles: false }));
-    }
-
     if (showButtons && typeof appendActionButtons === 'function') {
         appendActionButtons(container, messageId);
     }
 }
-
-function resetAndFocusInput() {
-    const promptInput = document.getElementById('prompt');
-    if (promptInput) {
-        promptInput.value = '';
-        // Don't refocus on mobile - keeps keyboard dismissed after send
-        const isMobile = document.body.classList.contains('device-phone') ||
-                        document.body.classList.contains('is-mobile') ||
-                        document.body.classList.contains('is-ios') ||
-                        document.body.classList.contains('device-tablet');
-        if (!isMobile) {
-            promptInput.focus();
-        }
-    }
-}
-
 function copyCode(codeText, button) {
     if (!navigator.clipboard) {
         console.error('Clipboard API not available');
@@ -4611,24 +4145,3 @@ function copyCode(codeText, button) {
         });
 }
 
-function debounce(func, delay) {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), delay);
-    };
-}
-
-const debouncedInputHandler = debounce((input) => {
-    // Process input here
-}, 300);
-
-
-function switchHighlighter(library) {
-    if (library === 'prism') {
-        import('https://cdn.jsdelivr.net/npm/prismjs/prism.js');
-        import('https://cdn.jsdelivr.net/npm/prismjs/components/prism-javascript.min.js');
-    } else if (library === 'highlight') {
-        import('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.4.0/highlight.min.js');
-    }
-}

@@ -1417,6 +1417,30 @@ async loadChatHistory(pageToken = null, limit = 10) {
 
             // Ensure the chat display is scrolled to the bottom.
             this.scrollChatToLatest();
+
+            // Recover from a refresh-during-image-generation. If localStorage
+            // has pending markers for this session (set at placeholder
+            // creation in codeWindow.js's stream loop), the backend may have
+            // finished the image while the page was reloading. Schedule one
+            // delayed re-fetch to pick up the persisted image from Firestore.
+            try {
+                if (typeof listRecoverablePendingImages === 'function') {
+                    const pending = listRecoverablePendingImages(sessionId);
+                    if (pending.length) {
+                        setTimeout(() => {
+                            if (this.activeSessionId !== sessionId) return;
+                            // Re-fetch this session and re-render if the
+                            // pending images have landed on the server.
+                            if (typeof this.fetchSession === 'function') {
+                                this.fetchSession(sessionId, { silent: true })
+                                    .then(() => this.renderActivePage(sessionId))
+                                    .catch(() => { /* best-effort */ });
+                            }
+                        }, 15000);
+                    }
+                }
+            } catch (e) { /* recovery is best-effort */ }
+
             const hasMessages = Array.isArray(sessionData.messages) && sessionData.messages.length > 0;
             this.updateFirstMessageFlag(hasMessages);
             if (typeof window !== 'undefined') {
@@ -4197,17 +4221,21 @@ async loadChatHistory(pageToken = null, limit = 10) {
             console.log('[Chart History] Message has crypto_chart:', !!message.crypto_chart, message.crypto_chart);
 
             if (hasAiImages) {
-                const imageCaption = message.response || message.content || '';
+                // Match live-stream behavior (codeWindow.js:3499): image
+                // responses render the image only, not the accompanying
+                // `response` text. Without this, the stored AI narration
+                // ("Here's a retro-style Nokia…") reappears as a text
+                // block on refresh even though it was never visible during
+                // the live stream.
                 this.renderMessage({
                     id: `ai-${messageId}`,
                     sender: 'ai',
-                    content: imageCaption,
+                    content: '',
                     timestamp: message.timestamp || null,
                     isCode: false,
                     isHistory: true,
-                    timestamp: message.timestamp,
                     attachments: aiAttachments,
-                    suppressText: !imageCaption,
+                    suppressText: true,
                     forceButtons: true,
                     originalPrompt: userPromptSource,
                     sources,
@@ -4616,48 +4644,69 @@ async loadChatHistory(pageToken = null, limit = 10) {
     }
 
     /**
-     * Render AI-generated images full-size, matching the initial display style.
+     * Render AI-generated images full-size on history replay, producing the
+     * same DOM shape as the live stream path (`appendImageMessage`). All
+     * figures share one `.image-message` container so the grid CSS applies
+     * when there are 2+ images, matching live behavior.
      */
     _renderFullSizeImages(container, images, promptText) {
-        images.forEach(att => {
-            const url = (typeof FilePreview !== 'undefined' && FilePreview.resolveUrl)
-                ? FilePreview.resolveUrl(att)
-                : att.url || att.dataUrl;
-            if (!url) return;
+        if (!images || !images.length) return;
 
-            const layer = document.createElement('div');
-            layer.className = 'image-layer';
-
-            const img = document.createElement('img');
-            img.className = 'chat-image chat-image--reveal';
-            img.src = url;
-            img.alt = promptText || att.original_filename || 'Generated image';
-            img.style.cursor = 'pointer';
-            img.loading = 'lazy';
-            img.onload = () => {
-                img.classList.add('loaded');
-                layer.classList.add('loaded', 'revealed');
-            };
-            img.onerror = () => {
-                layer.textContent = 'Image failed to load.';
-            };
-            if (img.complete && img.naturalHeight !== 0) {
-                img.classList.add('loaded');
-                layer.classList.add('loaded', 'revealed');
+        // Prefer the locally-hosted copy over any remote URL the generator
+        // handed us — provider CDN URLs (Pollinations, OpenRouter) have TTLs
+        // and stale ones 404 on old sessions. The backend already rewrites
+        // `url` to the /uploads/ path at save time, but belt-and-braces:
+        // derive it again from `local_path` if we see one.
+        const resolveUrl = (att) => {
+            if (!att) return '';
+            if (att.local_path && typeof att.local_path === 'string' && att.local_path.length) {
+                return '/uploads/' + att.local_path.replace(/^\/+/, '');
             }
-            img.addEventListener('click', () => {
-                if (typeof openAttachmentLightbox === 'function') {
-                    openAttachmentLightbox({
-                        src: url,
-                        title: promptText || 'Generated image',
-                        isImage: true
-                    });
-                }
-            });
+            if (typeof FilePreview !== 'undefined' && FilePreview.resolveUrl) {
+                return FilePreview.resolveUrl(att);
+            }
+            return att.url || att.dataUrl || '';
+        };
 
-            layer.appendChild(img);
-            container.appendChild(layer);
+        const rendered = [];
+        const imageContainer = document.createElement('div');
+        imageContainer.className = 'image-message';
+
+        // script.js loads before this module (see index.html script order),
+        // so buildImageLayer is always defined by the time any replay hits
+        // this path. If it ever isn't, skip loudly rather than silently
+        // render a shape-divergent fallback — we just spent a patch killing
+        // that exact divergence and don't want it sneaking back.
+        if (typeof buildImageLayer !== 'function') {
+            console.error(
+                '[history replay] buildImageLayer missing — script.js load order broke. ' +
+                'Skipping image render to avoid DOM drift.'
+            );
+            return;
+        }
+
+        images.forEach((att) => {
+            const url = resolveUrl(att);
+            if (!url) return;
+            const altSource = promptText || att.original_filename || att.name || '';
+            const alt = typeof formatImageAlt === 'function'
+                ? formatImageAlt(altSource, { generated: true })
+                : (altSource || 'AI-generated image');
+            imageContainer.appendChild(buildImageLayer(url, alt));
+            rendered.push(url);
         });
+
+        if (!rendered.length) return;
+
+        // If multiple images landed in this container, apply the same grid
+        // treatment the user-attachment path uses so the bubble doesn't
+        // stack figures full-width vertically.
+        if (rendered.length >= 2) {
+            imageContainer.classList.add('image-message--grid');
+            imageContainer.dataset.imageCount = String(Math.min(rendered.length, 4));
+        }
+
+        container.appendChild(imageContainer);
     }
 
     renderAttachments(container, attachments = []) {
@@ -4665,6 +4714,11 @@ async loadChatHistory(pageToken = null, limit = 10) {
 
         const attachmentsWrapper = document.createElement('div');
         attachmentsWrapper.className = 'message-attachments';
+        // Mirror the live-render path: apply grid for 2+ all-image sets.
+        // Shared helper so stream and replay can't drift.
+        if (typeof applyAttachmentLayout === 'function') {
+            applyAttachmentLayout(attachmentsWrapper, attachments);
+        }
         let hasRenderableAttachment = false;
 
         attachments.forEach(attachment => {
@@ -4803,21 +4857,6 @@ async loadChatHistory(pageToken = null, limit = 10) {
             this.markSessionDirty(this.activeSessionId);
             // Re-render tabs immediately so session moves to top
             this.renderChatTabs();
-        }
-    }
-
-    /**
-     * Update the content of an existing message.
-     * @param {string} messageId - The ID of the message to update.
-     * @param {string} responseText - The new content for the message.
-     */
-    updateMessageContent(messageId, responseText) {
-        const messageElement = document.getElementById(messageId);
-        if (messageElement) {
-            const contentDiv = messageElement.querySelector('.message-content');
-            if (contentDiv) {
-                contentDiv.textContent = responseText;
-            }
         }
     }
 

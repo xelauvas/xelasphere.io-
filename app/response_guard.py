@@ -504,6 +504,17 @@ def get_response_guard(user_id: str, session_id: str) -> ResponseGuard:
     return _guard_cache[cache_key]
 
 
+def clear_response_guard(user_id: str = None, session_id: str = None) -> None:
+    """Clear cached response guards."""
+    global _guard_cache
+    if user_id and session_id:
+        cache_key = f"{user_id}:{session_id}"
+        if cache_key in _guard_cache:
+            del _guard_cache[cache_key]
+    else:
+        _guard_cache = {}
+
+
 def check_input_ambiguity(
     user_id: str,
     session_id: str,

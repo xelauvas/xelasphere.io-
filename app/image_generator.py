@@ -118,7 +118,8 @@ def pollinations_url(prompt: str, seed: int) -> str:
     suffix = "without watermark"
     full_prompt = f"{prompt}, {suffix}" if prompt else suffix
     encoded_prompt = requests.utils.quote(full_prompt)
-    return f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed={seed}&width=1024&height=1024"
+    # Default portrait (1024×1536) to match ChatGPT's default tall format.
+    return f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed={seed}&width=1024&height=1536"
 
 
 def save_pollinations_image(prompt: str, seed: int, user_id: str) -> Optional[str]:
@@ -187,7 +188,7 @@ def generate_image_with_openrouter(prompt: str, user_id: str, seed: int) -> Opti
     url = getattr(Config, 'OPENROUTER_IMAGE_URL', 'https://openrouter.ai/api/v1/chat/completions')
     model = getattr(Config, 'OPENROUTER_IMAGE_MODEL', 'google/gemini-2.5-flash-image')
     model_label = getattr(Config, 'OPENROUTER_IMAGE_MODEL_LABEL', model)
-    size = getattr(Config, 'OPENROUTER_IMAGE_SIZE', '1024x1024')
+    size = getattr(Config, 'OPENROUTER_IMAGE_SIZE', '1024x1536')
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -280,7 +281,8 @@ def generate_image_with_openai(prompt: str, user_id: str, seed: int) -> Optional
                 "model": "gpt-image-1",
                 "prompt": prompt,
                 "n": 1,
-                "size": "1024x1024",
+                # Portrait default matches ChatGPT's behavior.
+                "size": "1024x1536",
                 "quality": "low",
             },
             timeout=60,
@@ -343,15 +345,42 @@ def generate_pollinations_image(prompt: str, user_id: str, seed: int) -> Optiona
     }
 
 
+def _record_image_usage(result: Optional[Dict[str, Any]]) -> None:
+    """Decrement the provider's quota for a successful image generation.
+
+    Uses the orchestrator accountant so the same per-provider bucket that
+    tracks chat / search usage also counts images. Without this, a user
+    could exhaust every provider's image quota without ever affecting the
+    orchestrator's routing decisions.
+    """
+    if not result or not isinstance(result, dict):
+        return
+    model_id = result.get('model')
+    if not model_id:
+        return
+    try:
+        from app.orchestrator import record_usage
+        # Image API calls don't expose token counts — charge a nominal
+        # 1-output-token to count the request in daily quotas. Individual
+        # providers' cost/1M numbers handle the actual $ bookkeeping.
+        record_usage(model_id, input_tokens=0, output_tokens=1)
+    except Exception as exc:  # pragma: no cover — non-fatal
+        logger.debug(f"record_usage skipped for image model {model_id}: {exc}")
+
+
 def generate_image_result(user_id: str, prompt: str) -> Optional[Dict[str, Any]]:
     seed = abs(hash(f"{user_id}:{prompt}")) % (2**31)
     # Chain: OpenRouter → Pollinations (free) → OpenAI gpt-image-1 (paid, last resort)
     result = generate_image_with_openrouter(prompt, user_id, seed)
     if result:
+        _record_image_usage(result)
         return result
     logger.info("OpenRouter failed, trying Pollinations.")
     result = generate_pollinations_image(prompt, user_id, seed)
     if result and result.get('local_path'):
+        _record_image_usage(result)
         return result
     logger.info("Pollinations failed, falling back to OpenAI gpt-image-1.")
-    return generate_image_with_openai(prompt, user_id, seed) or result
+    final = generate_image_with_openai(prompt, user_id, seed) or result
+    _record_image_usage(final)
+    return final

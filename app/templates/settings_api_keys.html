@@ -537,11 +537,25 @@
                     }
 
                     const message = payload.message || 'All chats deleted.';
-                    if (deleteAllBtn) {
-                        deleteAllBtn.textContent = message;
+                    const partial = Boolean(payload.partial);
+
+                    if (partial) {
+                        // Keep modal open, re-enable buttons, and show the
+                        // backend's message (truncated / stalled / partial_failure)
+                        // so the user can hit Delete all again to continue.
+                        confirmDeleteBtn.textContent = originalConfirmLabel;
+                        confirmDeleteBtn.disabled = false;
+                        if (deleteAllBtn) {
+                            deleteAllBtn.textContent = message;
+                            deleteAllBtn.disabled = false;
+                        }
+                    } else {
+                        if (deleteAllBtn) {
+                            deleteAllBtn.textContent = message;
+                        }
+                        closeDeleteModal();
+                        window.setTimeout(() => window.location.reload(), 1000);
                     }
-                    closeDeleteModal();
-                    window.setTimeout(() => window.location.reload(), 1000);
                 } catch (error) {
                     console.error(error);
                     if (deleteAllBtn) {

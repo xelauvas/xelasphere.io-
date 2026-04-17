@@ -4161,22 +4161,6 @@ body.is-ios .arrow-down {
 
 /* chatgpt-pulse keyframe defined in debug.css — no duplicate needed here */
 
-/* === Mobile Streaming Text - ChatGPT Style Clean Fade === */
-body.device-phone .stream-fade-in,
-body.is-ios .stream-fade-in,
-body.is-mobile .stream-fade-in {
-    animation: streamFadeInMobile 0.2s ease-out forwards;
-}
-
-@keyframes streamFadeInMobile {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
 /* ============================================
    TEXT SELECTION QUOTE - Mobile Enhancements
    ============================================ */
@@ -5011,10 +4995,12 @@ body.viewport-mobile *:hover > .toggle-tooltip {
         padding-bottom: 0.3rem;
     }
 
-    /* Loading placeholder pulse */
+    /* Loading placeholder pulse — radius inherited from the outer
+       .image-layer via overflow:hidden, don't re-declare it here
+       (used to set 0.5rem, making mobile corners much tighter than
+       desktop). */
     .image-placeholder {
         min-height: 200px;
-        border-radius: 0.5rem;
     }
 
     /* Live-generated AI images (.chat-image) */
@@ -5028,7 +5014,13 @@ body.viewport-mobile *:hover > .toggle-tooltip {
             transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         will-change: opacity, filter, transform;
         width: 100%;
-        border-radius: 0.5rem;
+        /* Inherit the 48px radius from the outer .image-layer via
+           overflow:hidden. Previously 0.5rem here was the real cause
+           of "top corners look sharp, bottom corners look fine" on
+           mobile — the outer layer was 48px but the child image was
+           only 8px, so the image's own edge showed through at the
+           top where no hover toolbar was covering. */
+        border-radius: 0;
     }
 
     .image-layer .chat-image.loaded {
@@ -5037,10 +5029,10 @@ body.viewport-mobile *:hover > .toggle-tooltip {
         transform: scale(1);
     }
 
-    /* Image layer container */
+    /* Image layer container — keep the desktop radius on mobile too
+       so the shape is consistent across viewports. */
     .image-layer {
         width: 100%;
-        border-radius: 0.75rem;
         overflow: hidden;
     }
 

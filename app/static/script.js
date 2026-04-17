@@ -651,120 +651,657 @@ function setupDownArrow() {
 }
 
 
-// Append an image message to the chat
-function appendImageMessage(messageDiv, imageUrl) {
-    const layer = document.createElement('div');
-    layer.className = 'image-layer revealed';
+// ─── Pending image-generation recovery (refresh-during-generation) ───
+// When a user kicks off a /image and refreshes before the stream returns,
+// the client-side placeholder ID is lost. These helpers persist a minimal
+// "pending" marker to localStorage so the session loader can detect the
+// situation on reload and do one delayed re-fetch to pick up the completed
+// image the backend wrote to Firestore in the meantime.
+const _PENDING_IMG_KEY = 'xs:pendingImage:';
+const _PENDING_IMG_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
 
+function recordPendingImage(placeholderId, prompt, sessionId) {
+    if (!placeholderId || typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(
+            _PENDING_IMG_KEY + placeholderId,
+            JSON.stringify({
+                placeholderId,
+                prompt: (prompt || '').slice(0, 500),
+                sessionId: sessionId || null,
+                createdAt: Date.now(),
+            })
+        );
+    } catch (e) { /* quota / private mode — skip */ }
+}
+
+function clearPendingImage(placeholderId) {
+    if (!placeholderId || typeof localStorage === 'undefined') return;
+    try { localStorage.removeItem(_PENDING_IMG_KEY + placeholderId); } catch (e) { /* skip */ }
+}
+
+// Return all pending entries for `sessionId` that are still within the
+// recovery window. Stale entries are garbage-collected in the same scan.
+function listRecoverablePendingImages(sessionId) {
+    if (typeof localStorage === 'undefined') return [];
+    const out = [];
+    const now = Date.now();
+    const dropKeys = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith(_PENDING_IMG_KEY)) continue;
+        try {
+            const entry = JSON.parse(localStorage.getItem(key) || 'null');
+            if (!entry || !entry.createdAt) { dropKeys.push(key); continue; }
+            if (now - entry.createdAt > _PENDING_IMG_MAX_AGE_MS) {
+                dropKeys.push(key);
+                continue;
+            }
+            if (sessionId && entry.sessionId && entry.sessionId !== sessionId) continue;
+            out.push(entry);
+        } catch (e) {
+            dropKeys.push(key);
+        }
+    }
+    dropKeys.forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
+    return out;
+}
+
+// ─── ChatGPT-style copy toast ────────────────────────────────────────
+// A small pill-shaped confirmation that slides up from the bottom of the
+// viewport, holds for ~1.8 s, then fades away. One singleton element,
+// reused across calls so rapid consecutive copies just refresh the timer.
+let _copyToastEl = null;
+let _copyToastTimer = null;
+
+function showCopyToast(message) {
+    if (!_copyToastEl) {
+        _copyToastEl = document.createElement('div');
+        _copyToastEl.className = 'copy-toast';
+        _copyToastEl.setAttribute('role', 'status');
+        _copyToastEl.setAttribute('aria-live', 'polite');
+        _copyToastEl.innerHTML = `
+            <i class="fas fa-check copy-toast__icon" aria-hidden="true"></i>
+            <span class="copy-toast__text"></span>
+        `;
+        document.body.appendChild(_copyToastEl);
+    }
+    const textEl = _copyToastEl.querySelector('.copy-toast__text');
+    if (textEl) textEl.textContent = message || 'Copied';
+
+    // Restart the show-animation cleanly if already visible.
+    _copyToastEl.classList.remove('is-visible');
+    // Force a reflow so the next class add retriggers the transition.
+    // eslint-disable-next-line no-unused-expressions
+    _copyToastEl.offsetWidth;
+    _copyToastEl.classList.add('is-visible');
+
+    if (_copyToastTimer) clearTimeout(_copyToastTimer);
+    _copyToastTimer = setTimeout(() => {
+        _copyToastEl?.classList.remove('is-visible');
+    }, 1800);
+}
+
+// ─── Share modal ──────────────────────────────────────────────────────
+// Vanilla-JS equivalent of the ChatGPT-style share sheet. Opens a centered
+// dialog with a preview of the image and a row of channel buttons:
+// Copy link / X / LinkedIn / Reddit / Download. Supports ESC to close,
+// backdrop click to close, focus trap while open, and navigator.share
+// on mobile as a progressive enhancement.
+//
+// Security notes:
+//  - All window.open calls for third-party intents use noopener,noreferrer.
+//    Without noopener, the opened tab could navigate us via window.opener.
+//  - navigator.clipboard.writeText wrapped in try/catch — fails silently
+//    in insecure contexts (non-HTTPS) and in the rare case that the page
+//    isn't focused.
+let _shareModalEl = null;
+let _shareModalFocusRestoreEl = null;
+let _shareModalState = { imageUrl: '', title: '', downloadName: 'image' };
+
+function _ensureShareModal() {
+    if (_shareModalEl) return _shareModalEl;
+
+    const root = document.createElement('div');
+    root.className = 'share-modal';
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+    root.setAttribute('aria-labelledby', 'share-modal-title');
+    root.setAttribute('aria-hidden', 'true');
+    root.innerHTML = `
+        <div class="share-modal__scrim" data-role="scrim"></div>
+        <div class="share-modal__dialog" tabindex="-1" role="document">
+            <div class="share-modal__header">
+                <h2 class="share-modal__title" id="share-modal-title"></h2>
+                <button type="button" class="share-modal__close" aria-label="Close share dialog" data-role="close">
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="share-modal__divider"></div>
+            <div class="share-modal__preview">
+                <img class="share-modal__image" alt="" />
+            </div>
+            <ul class="share-modal__channels">
+                <li class="share-modal__channel">
+                    <button type="button" class="share-modal__btn" data-action="copy" data-brand="copy" aria-label="Copy link">
+                        <i class="fas fa-link" aria-hidden="true"></i>
+                    </button>
+                    <span class="share-modal__label">Copy link</span>
+                </li>
+                <li class="share-modal__channel">
+                    <button type="button" class="share-modal__btn" data-action="twitter" data-brand="twitter" aria-label="Share on X">
+                        <svg viewBox="0 0 24 24" class="share-modal__brand" aria-hidden="true">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                    </button>
+                    <span class="share-modal__label">X</span>
+                </li>
+                <li class="share-modal__channel">
+                    <button type="button" class="share-modal__btn" data-action="linkedin" data-brand="linkedin" aria-label="Share on LinkedIn">
+                        <svg viewBox="0 0 24 24" class="share-modal__brand" aria-hidden="true">
+                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.852 3.37-1.852 3.601 0 4.267 2.37 4.267 5.455v6.288zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452z"/>
+                        </svg>
+                    </button>
+                    <span class="share-modal__label">LinkedIn</span>
+                </li>
+                <li class="share-modal__channel">
+                    <button type="button" class="share-modal__btn" data-action="reddit" data-brand="reddit" aria-label="Share on Reddit">
+                        <svg viewBox="0 0 24 24" class="share-modal__brand" aria-hidden="true">
+                            <path d="M12 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 01-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 01.042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 014.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 01.14-.197.35.35 0 01.238-.042l2.906.617a1.214 1.214 0 011.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 00-.231.094.33.33 0 000 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 00.029-.463.33.33 0 00-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 00-.232-.095z"/>
+                        </svg>
+                    </button>
+                    <span class="share-modal__label">Reddit</span>
+                </li>
+                <li class="share-modal__channel">
+                    <button type="button" class="share-modal__btn" data-action="download" data-brand="download" aria-label="Download image">
+                        <i class="fas fa-download" aria-hidden="true"></i>
+                    </button>
+                    <span class="share-modal__label">Download</span>
+                </li>
+            </ul>
+        </div>
+    `;
+    document.body.appendChild(root);
+
+    const dialog = root.querySelector('.share-modal__dialog');
+    const scrim = root.querySelector('[data-role="scrim"]');
+    const closeBtn = root.querySelector('[data-role="close"]');
+    const imgEl = root.querySelector('.share-modal__image');
+    const titleEl = root.querySelector('.share-modal__title');
+    const buttons = root.querySelectorAll('.share-modal__btn');
+
+    // Close handlers
+    scrim.addEventListener('click', closeShareModal);
+    closeBtn.addEventListener('click', closeShareModal);
+    document.addEventListener('keydown', _handleShareModalKey);
+
+    // Action handlers
+    const openIntent = (url) => {
+        window.open(url, '_blank', 'noopener,noreferrer,width=600,height=600');
+    };
+
+    const toastOrLog = (msg) => {
+        if (typeof showCopyToast === 'function') {
+            showCopyToast(msg);
+        } else if (window.Toast && typeof window.Toast.info === 'function') {
+            window.Toast.info(msg, 2000);
+        } else {
+            console.log('[share]', msg);
+        }
+    };
+
+    // Resolve a URL that might be relative (e.g. "/uploads/...") into a
+    // fully-qualified absolute URL. Required for third-party share targets
+    // (Reddit, X, LinkedIn) which need a real http(s):// link — a relative
+    // path would fail their URL parser or silently attach to their own
+    // domain. Also used for clipboard copy so the copied link actually
+    // works when pasted elsewhere.
+    const absolutizeUrl = (url) => {
+        if (!url) return '';
+        // Already absolute — return as-is (covers http://, https://, data:, blob:).
+        if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(url)) return url;
+        try {
+            return new URL(url, window.location.origin).href;
+        } catch {
+            return url;
+        }
+    };
+
+    const actions = {
+        copy: async () => {
+            const url = absolutizeUrl(_shareModalState.imageUrl);
+            if (!url) return;
+            try {
+                if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(url);
+                } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = url;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                }
+                toastOrLog('Link copied');
+            } catch (err) {
+                toastOrLog('Copy failed');
+            }
+        },
+        twitter: () => {
+            const u = encodeURIComponent(absolutizeUrl(_shareModalState.imageUrl));
+            const t = encodeURIComponent(_shareModalState.title || '');
+            openIntent(`https://twitter.com/intent/tweet?url=${u}&text=${t}`);
+        },
+        linkedin: () => {
+            const u = encodeURIComponent(absolutizeUrl(_shareModalState.imageUrl));
+            openIntent(`https://www.linkedin.com/sharing/share-offsite/?url=${u}`);
+        },
+        reddit: () => {
+            const u = encodeURIComponent(absolutizeUrl(_shareModalState.imageUrl));
+            const t = encodeURIComponent(_shareModalState.title || '');
+            openIntent(`https://www.reddit.com/submit?url=${u}&title=${t}`);
+        },
+        download: () => {
+            // Download can keep the relative URL since it's same-origin —
+            // but normalizing here too means if the caller ever passes a
+            // CDN URL we don't silently misroute it.
+            const a = document.createElement('a');
+            a.href = absolutizeUrl(_shareModalState.imageUrl);
+            a.download = _shareModalState.downloadName || 'image';
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        },
+    };
+
+    buttons.forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const action = btn.getAttribute('data-action');
+            if (actions[action]) actions[action]();
+        });
+    });
+
+    _shareModalEl = { root, dialog, imgEl, titleEl };
+    return _shareModalEl;
+}
+
+function _handleShareModalKey(e) {
+    if (!_shareModalEl) return;
+    const { root, dialog } = _shareModalEl;
+    if (root.getAttribute('aria-hidden') === 'true') return;
+
+    if (e.key === 'Escape') {
+        closeShareModal();
+        return;
+    }
+    // Light focus trap: keep Tab inside the dialog.
+    if (e.key === 'Tab') {
+        const focusables = dialog.querySelectorAll(
+            'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+        );
+        const list = Array.from(focusables);
+        if (!list.length) return;
+        const first = list[0];
+        const last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+}
+
+function openShareModal({ imageUrl, title, downloadName } = {}) {
+    if (!imageUrl) return;
+    const { root, dialog, imgEl, titleEl } = _ensureShareModal();
+    _shareModalState = {
+        imageUrl,
+        title: title || 'Untitled image',
+        downloadName: downloadName || 'image',
+    };
+    titleEl.textContent = _shareModalState.title;
+    imgEl.src = imageUrl;
+    imgEl.alt = _shareModalState.title;
+
+    _shareModalFocusRestoreEl = document.activeElement;
+    root.setAttribute('aria-hidden', 'false');
+    root.classList.add('open');
+    // Lock body scroll so the scrim doesn't leak.
+    document.body.classList.add('share-modal-open');
+    requestAnimationFrame(() => {
+        dialog.focus({ preventScroll: true });
+    });
+}
+
+function closeShareModal() {
+    if (!_shareModalEl) return;
+    const { root } = _shareModalEl;
+    root.classList.remove('open');
+    root.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('share-modal-open');
+    if (_shareModalFocusRestoreEl && typeof _shareModalFocusRestoreEl.focus === 'function') {
+        try { _shareModalFocusRestoreEl.focus(); } catch { /* node gone */ }
+    }
+    _shareModalFocusRestoreEl = null;
+}
+
+// Render a ChatGPT-style failure card when an image generation request
+// comes back empty. `errorType` (when the backend eventually sends one)
+// maps to a specific title/hint so users get actionable guidance instead
+// of "something went wrong". Clicking "Try again" repopulates the composer.
+const _IMAGE_ERROR_COPY = {
+    rate_limit: {
+        title: 'Rate limit hit',
+        hint: 'The image provider is throttling requests. Wait a moment and try again.',
+    },
+    quota_exhausted: {
+        title: 'Daily image limit reached',
+        hint: "You've hit today's image generation quota. Try again tomorrow, or add your own API key in Settings.",
+    },
+    missing_key: {
+        title: 'No image provider configured',
+        hint: 'Add an OpenRouter or OpenAI API key in Settings to generate images.',
+    },
+    network: {
+        title: 'Connection issue',
+        hint: 'The image provider is unreachable. Check your connection and retry.',
+    },
+    content_policy: {
+        title: 'Prompt blocked',
+        hint: 'The provider refused this prompt for content-policy reasons. Try rephrasing.',
+    },
+    generation_failed: {
+        title: "Couldn't generate image",
+        hint: 'The provider returned no image. Try a different prompt or retry.',
+    },
+};
+
+function renderImageFailureCard(container, prompt, errorType) {
+    if (!container) return;
+    const copy = _IMAGE_ERROR_COPY[errorType] || _IMAGE_ERROR_COPY.generation_failed;
+    const card = document.createElement('div');
+    card.className = 'image-failure-card';
+    card.dataset.errorType = errorType || 'generation_failed';
+    card.setAttribute('role', 'alert');
+    card.innerHTML = `
+        <div class="image-failure-card__icon" aria-hidden="true">
+            <i class="fas fa-image"></i>
+        </div>
+        <div class="image-failure-card__body">
+            <div class="image-failure-card__title"></div>
+            <div class="image-failure-card__hint"></div>
+        </div>
+        <div class="image-failure-card__actions">
+            <button type="button" class="image-failure-card__btn image-failure-card__btn--primary" data-action="retry">
+                <i class="fas fa-rotate-right" aria-hidden="true"></i> Try again
+            </button>
+        </div>
+    `;
+    card.querySelector('.image-failure-card__title').textContent = copy.title;
+    card.querySelector('.image-failure-card__hint').textContent = copy.hint;
+    const retryBtn = card.querySelector('[data-action="retry"]');
+    if (retryBtn) {
+        retryBtn.addEventListener('click', () => {
+            const promptEl = document.getElementById('prompt');
+            if (promptEl && prompt) {
+                promptEl.value = prompt;
+                promptEl.dispatchEvent(new Event('input'));
+                promptEl.focus();
+            }
+        });
+    }
+    container.appendChild(card);
+}
+
+// Wire a loaded <img> so if it fails mid-session (404, CDN hiccup, etc.) we
+// swap to a compact broken-image card instead of a blank rectangle. Also
+// reveals any ancestor `.image-layer` so its shimmer placeholder stops
+// animating — without this, a 404'd image would leave the generation
+// shimmer running forever beneath the error card.
+function wireBrokenImageFallback(img, name) {
+    if (!img) return;
+    img.addEventListener('error', () => {
+        const parent = img.parentElement;
+        if (!parent) return;
+
+        const card = document.createElement('div');
+        card.className = 'broken-image-card';
+        card.setAttribute('role', 'img');
+        card.setAttribute('aria-label', `Image failed to load${name ? ': ' + name : ''}`);
+        card.innerHTML = `
+            <i class="fas fa-image-slash" aria-hidden="true"></i>
+            <div class="broken-image-card__label">
+                <div class="broken-image-card__title">Image failed to load</div>
+                ${name ? `<div class="broken-image-card__name">${String(name).replace(/[<>&"']/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]))}</div>` : ''}
+            </div>
+        `;
+        parent.replaceChild(card, img);
+
+        // Climb to the enclosing .image-layer and kill the shimmer. Without
+        // this the `.image-placeholder` keeps its animation even though the
+        // image slot is now showing an error card.
+        const layer = parent.closest('.image-layer');
+        if (layer) {
+            layer.classList.add('revealed', 'loaded', 'failed');
+            const placeholder = layer.querySelector('.image-placeholder');
+            if (placeholder) placeholder.style.opacity = '0';
+        }
+    }, { once: true });
+}
+
+// Format an alt-text string for a generated image. Prefixes with
+// "AI-generated image: " so screen readers announce context, and caps the
+// prompt at a readable length so multi-paragraph prompts don't get read
+// verbatim. Non-generated images (user uploads) use a shorter pattern.
+function formatImageAlt(text, { generated = true } = {}) {
+    const raw = (text || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return generated ? 'AI-generated image' : 'Image attachment';
+    const cap = 140;
+    const trimmed = raw.length > cap ? raw.slice(0, cap).trimEnd() + '…' : raw;
+    return generated ? `AI-generated image: ${trimmed}` : trimmed;
+}
+
+// Build one `.image-layer` containing a faded-out placeholder and the
+// loaded image. Pure — does not append anywhere. Matches the DOM shape
+// that the live stream (`replacePlaceholderWithImage`) produces so replay
+// and stream render identically. No badge, no "Tap to enlarge" caption
+// (ChatGPT-clean: image speaks for itself).
+function buildImageLayer(imageUrl, altText) {
+    const alt = altText || 'Image attachment';
+
+    const layer = document.createElement('div');
+    layer.className = 'image-layer revealed loaded';
+
+    // Keep the placeholder in the DOM but faded out; the CSS transition
+    // between .image-placeholder and .chat-image depends on it being there.
     const placeholder = document.createElement('div');
     placeholder.className = 'image-placeholder';
     placeholder.style.opacity = '0';
-    const shimmer = document.createElement('div');
-    shimmer.className = 'image-placeholder__shimmer';
-    const glyph = document.createElement('div');
-    glyph.className = 'image-placeholder__glyph';
-    placeholder.appendChild(shimmer);
-    placeholder.appendChild(glyph);
+    layer.appendChild(placeholder);
 
     const img = document.createElement('img');
     img.src = imageUrl;
-    img.alt = "Image attachment";
-    img.classList.add('chat-image');
-    img.style.setProperty('aspect-ratio', '1 / 1');
+    img.alt = alt;
+    img.classList.add('chat-image', 'loaded');
+    img.style.setProperty('aspect-ratio', '2 / 3');
+    img.style.cursor = 'pointer';
     img.loading = 'lazy';
     img.addEventListener('click', () => {
         if (typeof openAttachmentLightbox === 'function') {
-            openAttachmentLightbox({ src: imageUrl, name: 'Image attachment', type: 'image', isImage: true });
+            openAttachmentLightbox({ src: imageUrl, name: alt, type: 'image', isImage: true });
         }
     });
-    img.onerror = function() {
-        console.error("Failed to load image:", imageUrl);
-        layer.textContent = "Image failed to load.";
-    };
-
-    layer.appendChild(placeholder);
+    wireBrokenImageFallback(img, alt);
     layer.appendChild(img);
 
-    const badge = document.createElement('div');
-    badge.className = 'image-preview-card__badge';
-    badge.innerHTML = '<i class="fas fa-image"></i><span>Image attachment</span>';
+    // Hover-reveal toolbar (download / copy / regenerate / edit). Matches
+    // ChatGPT's image hover controls. Visibility + transition handled in CSS.
+    const toolbar = buildImageHoverToolbar(imageUrl, alt);
+    if (toolbar) layer.appendChild(toolbar);
 
-    const caption = document.createElement('div');
-    caption.className = 'image-preview-card__caption';
-    caption.textContent = 'Tap to enlarge';
+    return layer;
+}
 
-    const card = document.createElement('figure');
-    card.className = 'image-preview-card';
-    card.appendChild(badge);
-    card.appendChild(layer);
-    card.appendChild(caption);
+// Build the bottom action-bar shown over a generated image, ChatGPT-style:
+// Edit pill on the left (opens the prompt in the composer), Download icon
+// on the right. Both sit on translucent-dark-glass chips.
+function buildImageHoverToolbar(imageUrl, altText) {
+    if (!imageUrl) return null;
 
+    const stripAltPrefix = (s) => (s || '').replace(/^AI-generated image:\s*/i, '').trim();
+    const promptBody = stripAltPrefix(altText);
+
+    const bar = document.createElement('div');
+    bar.className = 'image-layer__actions';
+    bar.setAttribute('role', 'toolbar');
+    bar.setAttribute('aria-label', 'Image actions');
+
+    // Edit pill — left side. Drops the original prompt into the composer
+    // so the user can tweak it and resend. Does not auto-send.
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'image-layer__btn image-layer__btn--pill';
+    edit.setAttribute('aria-label', 'Edit prompt');
+    edit.innerHTML = '<span>Edit</span>';
+    edit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const promptEl = document.getElementById('prompt');
+        if (!promptEl) return;
+        promptEl.value = '/image ' + (promptBody || '');
+        promptEl.dispatchEvent(new Event('input'));
+        promptEl.focus();
+        promptEl.setSelectionRange(promptEl.value.length, promptEl.value.length);
+    });
+    bar.appendChild(edit);
+
+    // Share icon-circle — right side. Opens the share modal (Copy link /
+    // X / LinkedIn / Reddit / Download). The glyph is the iOS-style
+    // "arrow out of a tray" share icon (matches ChatGPT).
+    const share = document.createElement('button');
+    share.type = 'button';
+    share.className = 'image-layer__btn image-layer__btn--circle';
+    share.setAttribute('aria-label', 'Share image');
+    share.innerHTML = '<i class="fas fa-arrow-up-from-bracket" aria-hidden="true"></i>';
+    share.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof openShareModal !== 'function') return;
+
+        share.classList.add('is-loading');
+        const openModalNow = () => {
+            openShareModal({
+                imageUrl,
+                title: promptBody ? promptBody.slice(0, 80) : 'Untitled image',
+                downloadName: (promptBody || 'image').slice(0, 80) || 'image',
+            });
+            // Stop spinning once the slide-up animation ends so the icon
+            // reappears with the settled modal.
+            setTimeout(() => share.classList.remove('is-loading'), 380);
+        };
+
+        // Preload the image (or hit cache) before opening. Prevents the
+        // modal from popping up with an empty preview slot — the spinner
+        // keeps running until the image is actually ready to paint.
+        const preload = new Image();
+        preload.src = imageUrl;
+        const startIfReady = () => {
+            // Minimum dwell so even cache-hits feel intentional.
+            const MIN_SPIN_MS = 350;
+            const started = Date.now();
+            const go = () => {
+                const elapsed = Date.now() - started;
+                const wait = Math.max(0, MIN_SPIN_MS - elapsed);
+                setTimeout(openModalNow, wait);
+            };
+            if (typeof preload.decode === 'function') {
+                preload.decode().then(go).catch(go);
+            } else if (preload.complete) {
+                go();
+            } else {
+                preload.addEventListener('load', go, { once: true });
+                preload.addEventListener('error', go, { once: true });
+            }
+        };
+        startIfReady();
+    });
+    bar.appendChild(share);
+
+    return bar;
+}
+
+// Back-compat alias. Older call sites use `buildImageFigure`; redirect to
+// the new name so they keep working without edits. Safe to delete once no
+// external references remain.
+const buildImageFigure = buildImageLayer;
+
+// Append a single image message to the chat (live + replay). Wraps one
+// `buildImageLayer` in an `.image-message` container.
+function appendImageMessage(messageDiv, imageUrl, altText) {
+    const layer = buildImageLayer(imageUrl, altText);
     const imageContainer = document.createElement('div');
     imageContainer.classList.add('image-message');
-    imageContainer.appendChild(card);
+    imageContainer.appendChild(layer);
     messageDiv.appendChild(imageContainer);
 }
 
-// Append an animated placeholder for image generation (Grok-style)
+// Shared layout decision for a chat-message attachments wrapper.
+// Applies the `.message-attachments--grid` + `data-image-count` treatment
+// only when the attachment set is 2+ and exclusively images. 1-image sets
+// stay flex-wrap (a single image doesn't need a grid). Mixed image+file
+// sets also stay flex-wrap so file chips read naturally alongside tiles.
+// Called from both `renderLiveAttachments` (live) and `renderAttachments`
+// (history replay) so the two paths can't drift.
+function applyAttachmentLayout(wrapperEl, attachments) {
+    if (!wrapperEl || !attachments || !attachments.length) return;
+    if (attachments.length < 2) return;
+
+    const isImageAttachment = (a) => {
+        if (!a) return false;
+        if (a.isImage === true) return true;
+        const nameCandidate = a.original_filename || a.name || a.filename;
+        if (typeof FilePreview !== 'undefined' &&
+            typeof FilePreview.isImage === 'function') {
+            return FilePreview.isImage(nameCandidate, a.mime_type || a.type);
+        }
+        const mime = a.mime_type || a.type || '';
+        return typeof mime === 'string' && mime.startsWith('image/');
+    };
+
+    const images = attachments.filter(isImageAttachment);
+    if (images.length < 2 || images.length !== attachments.length) return;
+
+    wrapperEl.classList.add('message-attachments--grid');
+    wrapperEl.dataset.imageCount = String(Math.min(images.length, 4));
+}
+
+// Append a clean shimmer placeholder for image generation.
+// ChatGPT uses a calm, content-shaped skeleton rather than flashy animation.
+// Keep it to: a shimmering gradient + subtle "Creating image…" label.
 function appendImagePlaceholder(messageDiv) {
     const layer = document.createElement('div');
     layer.className = 'image-layer';
 
-    // Create Grok-style placeholder
     const placeholder = document.createElement('div');
-    placeholder.className = 'image-placeholder';
+    placeholder.className = 'image-placeholder image-placeholder--shimmer';
+    placeholder.setAttribute('role', 'status');
+    placeholder.setAttribute('aria-label', 'Generating image');
 
-    // Aurora background layers
-    const aurora = document.createElement('div');
-    aurora.className = 'image-placeholder__aurora';
-    const auroraSecondary = document.createElement('div');
-    auroraSecondary.className = 'image-placeholder__aurora-secondary';
+    const shimmer = document.createElement('div');
+    shimmer.className = 'image-placeholder__shimmer';
 
-    // Grid overlay
-    const grid = document.createElement('div');
-    grid.className = 'image-placeholder__grid';
+    const label = document.createElement('div');
+    label.className = 'image-placeholder__label';
+    label.textContent = 'Creating image…';
 
-    // Floating particles
-    const particles = document.createElement('div');
-    particles.className = 'image-placeholder__particles';
-    for (let i = 0; i < 6; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'image-placeholder__particle';
-        particles.appendChild(particle);
-    }
-
-    // Central orb
-    const orb = document.createElement('div');
-    orb.className = 'image-placeholder__orb';
-    orb.innerHTML = `
-        <div class="image-placeholder__orb-glow"></div>
-        <div class="image-placeholder__orb-ring"></div>
-        <div class="image-placeholder__orb-inner">
-            <i class="fas fa-wand-magic-sparkles image-placeholder__orb-icon"></i>
-        </div>
-    `;
-
-    // Status text and progress
-    const status = document.createElement('div');
-    status.className = 'image-placeholder__status';
-    status.innerHTML = `
-        <span class="image-placeholder__text">Creating image...</span>
-        <div class="image-placeholder__progress">
-            <div class="image-placeholder__progress-bar"></div>
-        </div>
-    `;
-
-    // Assemble placeholder
-    placeholder.appendChild(aurora);
-    placeholder.appendChild(auroraSecondary);
-    placeholder.appendChild(grid);
-    placeholder.appendChild(particles);
-    placeholder.appendChild(orb);
-    placeholder.appendChild(status);
+    placeholder.appendChild(shimmer);
+    placeholder.appendChild(label);
 
     const img = document.createElement('img');
     img.className = 'chat-image';
-    img.style.setProperty('aspect-ratio', '1 / 1');
+    img.style.setProperty('aspect-ratio', '2 / 3');
 
     layer.appendChild(placeholder);
     layer.appendChild(img);
@@ -1423,42 +1960,6 @@ if (promptInput && sendButton) {
 
 
 
-function updateMessageContent(messageId, responseText) {
-    const messageElement = document.getElementById(messageId);
-    if (messageElement) {
-        messageElement.textContent = responseText;
-        scrollManager.scrollToBottom();
-    }
-}
-
-// NOTE: handleMessageError is defined earlier (~line 1156) with proper AbortError handling.
-// Duplicate removed to prevent silent overwrite.
-
-
-
-
-
-// Adjust the text size within a container to fit
-function adjustTextSize(container, maxFontSize = 18, minFontSize = 12, step = 0.5) {
-    let fontSize = maxFontSize;
-    container.style.fontSize = `${fontSize}px`;
-
-    while (container.scrollHeight > container.clientHeight && fontSize > minFontSize) {
-        fontSize -= step;
-        container.style.fontSize = `${fontSize}px`;
-    }
-    
-    while (container.scrollHeight < container.clientHeight && fontSize < maxFontSize) {
-        fontSize += step;
-        container.style.fontSize = `${fontSize}px`;
-        if (container.scrollHeight > container.clientHeight) {
-            fontSize -= step;
-            container.style.fontSize = `${fontSize}px`;
-            break;
-        }
-    }
-}
-
 
 // Clear the chat box
 function clearChat(options = {}) {
@@ -1502,11 +2003,6 @@ function clearChat(options = {}) {
 
     // Dispatch event to notify other components (greeting, home footer, etc.)
     document.dispatchEvent(new CustomEvent('chat-cleared'));
-}
-
-function autoResize() {
-    this.style.height = 'auto';  // Reset height to recalculate
-    this.style.height = this.scrollHeight + 'px';  // Set height based on content
 }
 
 // Hide the starter options once real messages exist; show them again when empty.
@@ -1661,14 +2157,6 @@ function hideTooltip(element) {
 
 // no mutation observer needed; updateSendButton calls updateSendButtonState
 
-// Set up textarea auto resize
-document.addEventListener('DOMContentLoaded', function() {
-    const textarea = document.querySelector('.edit-textarea');
-    if (textarea) {
-        textarea.addEventListener('input', autoResize, false);
-    }
-});
-
 document.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.getElementById('file-upload');
     const form = document.getElementById('upload-form');
@@ -1687,6 +2175,98 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (fileInput) fileInput.addEventListener('change', handleFileChange);
+
+    // ─── Drag-and-drop + paste-from-clipboard ───
+    // Feeds dropped/pasted files through the same pipeline as the file picker,
+    // so one `handleFileChange` path drives previews + upload + send.
+    (function wireDropAndPaste() {
+        if (!fileInput) return;
+
+        const forwardFilesToPipeline = (files) => {
+            const incoming = Array.from(files || []).filter(Boolean);
+            if (!incoming.length) return;
+            const dt = new DataTransfer();
+            incoming.forEach((f) => dt.items.add(f));
+            fileInput.files = dt.files;
+            fileInput.dispatchEvent(new Event('change'));
+        };
+
+        // Drop zone overlay — lazily created the first time the user drags in.
+        let dropOverlay = null;
+        const ensureDropOverlay = () => {
+            if (dropOverlay) return dropOverlay;
+            dropOverlay = document.createElement('div');
+            dropOverlay.className = 'drop-zone-overlay';
+            dropOverlay.setAttribute('aria-hidden', 'true');
+            dropOverlay.innerHTML = `
+                <div class="drop-zone-overlay__panel">
+                    <i class="fas fa-cloud-arrow-up drop-zone-overlay__icon" aria-hidden="true"></i>
+                    <div class="drop-zone-overlay__title">Drop to attach</div>
+                    <div class="drop-zone-overlay__hint">Images, PDFs, and documents</div>
+                </div>
+            `;
+            document.body.appendChild(dropOverlay);
+            return dropOverlay;
+        };
+
+        // Use a counter to track nested dragenter/dragleave events — otherwise
+        // dragging over a child element fires dragleave on the parent.
+        let dragDepth = 0;
+        const isFileDrag = (e) => {
+            const dt = e.dataTransfer;
+            if (!dt) return false;
+            // Some browsers expose `types` but not items during dragover.
+            return Array.from(dt.types || []).includes('Files');
+        };
+
+        document.addEventListener('dragenter', (e) => {
+            if (!isFileDrag(e)) return;
+            dragDepth += 1;
+            ensureDropOverlay().classList.add('open');
+        });
+
+        document.addEventListener('dragover', (e) => {
+            if (!isFileDrag(e)) return;
+            e.preventDefault();  // required for `drop` to fire
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        });
+
+        document.addEventListener('dragleave', (e) => {
+            if (!isFileDrag(e)) return;
+            dragDepth = Math.max(0, dragDepth - 1);
+            if (dragDepth === 0 && dropOverlay) dropOverlay.classList.remove('open');
+        });
+
+        document.addEventListener('drop', (e) => {
+            if (!isFileDrag(e)) return;
+            e.preventDefault();
+            dragDepth = 0;
+            if (dropOverlay) dropOverlay.classList.remove('open');
+            forwardFilesToPipeline(e.dataTransfer?.files);
+        });
+
+        // Paste from clipboard — screenshots, copied-image-from-browser, etc.
+        document.addEventListener('paste', (e) => {
+            // Don't hijack pastes into text editors / inputs unless the
+            // clipboard actually carries files. If the user is pasting text
+            // into the prompt, fall through to the native text paste.
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            const files = [];
+            for (const item of items) {
+                if (item.kind === 'file') {
+                    const f = item.getAsFile();
+                    if (f) files.push(f);
+                }
+            }
+            if (!files.length) return;
+            // Only intercept if the focused target isn't one that needs the
+            // file as text (e.g. file inputs — none currently expect paste).
+            e.preventDefault();
+            forwardFilesToPipeline(files);
+        });
+    })();
+
     sendButton.addEventListener('click', () => {
         // If voice mode is active, clicking end button exits voice mode
         if (sendButton.classList.contains('voice-end')) {
@@ -2175,11 +2755,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let lightbox = null;
+    let lightboxState = {
+        items: [],     // [{src, name, type, isImage}]
+        index: 0,
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+    };
 
     function ensureLightbox() {
         if (lightbox) return lightbox;
         const overlay = document.createElement('div');
         overlay.className = 'image-lightbox';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-label', 'Image preview');
 
         const content = document.createElement('div');
         content.className = 'image-lightbox__content';
@@ -2202,61 +2792,336 @@ document.addEventListener('DOMContentLoaded', () => {
         const caption = document.createElement('div');
         caption.className = 'image-lightbox__caption';
 
+        const counter = document.createElement('div');
+        counter.className = 'image-lightbox__counter';
+        counter.hidden = true;
+
         const close = document.createElement('button');
         close.type = 'button';
         close.className = 'image-lightbox__close';
+        close.setAttribute('aria-label', 'Close preview');
         close.innerHTML = '&times;';
+
+        // Toolbar (download + open-in-new-tab)
+        const toolbar = document.createElement('div');
+        toolbar.className = 'image-lightbox__toolbar';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'image-lightbox__btn image-lightbox__copy';
+        copyBtn.setAttribute('aria-label', 'Copy image URL');
+        copyBtn.innerHTML = '<i class="fas fa-link" aria-hidden="true"></i>';
+        copyBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const item = lightboxState.items[lightboxState.index];
+            const src = item && item.src;
+            if (!src) return;
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(src);
+                } else {
+                    // Fallback for non-secure contexts.
+                    const ta = document.createElement('textarea');
+                    ta.value = src;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'absolute';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                }
+                copyBtn.classList.add('is-copied');
+                copyBtn.setAttribute('aria-label', 'URL copied');
+                setTimeout(() => {
+                    copyBtn.classList.remove('is-copied');
+                    copyBtn.setAttribute('aria-label', 'Copy image URL');
+                }, 1400);
+            } catch (err) {
+                console.warn('Copy URL failed:', err);
+            }
+        });
+
+        const downloadBtn = document.createElement('a');
+        downloadBtn.className = 'image-lightbox__btn image-lightbox__download';
+        downloadBtn.setAttribute('aria-label', 'Download image');
+        downloadBtn.setAttribute('download', '');
+        downloadBtn.innerHTML = '<i class="fas fa-download" aria-hidden="true"></i>';
+
+        const openTabBtn = document.createElement('a');
+        openTabBtn.className = 'image-lightbox__btn image-lightbox__open-tab';
+        openTabBtn.setAttribute('aria-label', 'Open in new tab');
+        openTabBtn.target = '_blank';
+        openTabBtn.rel = 'noopener';
+        openTabBtn.innerHTML = '<i class="fas fa-up-right-from-square" aria-hidden="true"></i>';
+
+        toolbar.appendChild(copyBtn);
+        toolbar.appendChild(downloadBtn);
+        toolbar.appendChild(openTabBtn);
+
+        // Prev / next navigation for multi-image messages
+        const prevBtn = document.createElement('button');
+        prevBtn.type = 'button';
+        prevBtn.className = 'image-lightbox__nav image-lightbox__nav--prev';
+        prevBtn.setAttribute('aria-label', 'Previous image');
+        prevBtn.innerHTML = '<i class="fas fa-chevron-left" aria-hidden="true"></i>';
+
+        const nextBtn = document.createElement('button');
+        nextBtn.type = 'button';
+        nextBtn.className = 'image-lightbox__nav image-lightbox__nav--next';
+        nextBtn.setAttribute('aria-label', 'Next image');
+        nextBtn.innerHTML = '<i class="fas fa-chevron-right" aria-hidden="true"></i>';
 
         content.appendChild(img);
         content.appendChild(fallback);
         content.appendChild(caption);
+        content.appendChild(counter);
         content.appendChild(close);
+        content.appendChild(toolbar);
+        content.appendChild(prevBtn);
+        content.appendChild(nextBtn);
         overlay.appendChild(content);
         document.body.appendChild(overlay);
+
+        const resetZoom = () => {
+            lightboxState.zoom = 1;
+            lightboxState.panX = 0;
+            lightboxState.panY = 0;
+            applyZoomTransform();
+        };
+
+        const applyZoomTransform = () => {
+            const { zoom, panX, panY } = lightboxState;
+            img.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+            img.classList.toggle('is-zoomed', zoom > 1.001);
+        };
+
+        const setZoom = (nextZoom, originX, originY) => {
+            const clamped = Math.max(1, Math.min(5, nextZoom));
+            // Scale pan so zoom-to-cursor feels natural: keep the pointer
+            // over the same pixel of the image after the zoom change.
+            if (originX != null && originY != null && clamped > 1) {
+                const rect = img.getBoundingClientRect();
+                const cx = originX - (rect.left + rect.width / 2);
+                const cy = originY - (rect.top + rect.height / 2);
+                const ratio = clamped / lightboxState.zoom - 1;
+                lightboxState.panX -= cx * ratio;
+                lightboxState.panY -= cy * ratio;
+            }
+            if (clamped === 1) {
+                lightboxState.panX = 0;
+                lightboxState.panY = 0;
+            }
+            lightboxState.zoom = clamped;
+            applyZoomTransform();
+        };
+
+        const renderCurrent = () => {
+            const items = lightboxState.items || [];
+            if (!items.length) return;
+            const item = items[lightboxState.index] || items[0];
+            if (!item) return;
+
+            img.style.display = 'none';
+            fallback.style.display = 'none';
+
+            caption.textContent = item.name || '';
+
+            const multi = items.length > 1;
+            counter.hidden = !multi;
+            prevBtn.hidden = !multi;
+            nextBtn.hidden = !multi;
+            counter.textContent = multi
+                ? `${lightboxState.index + 1} / ${items.length}`
+                : '';
+
+            resetZoom();
+
+            if (item.isImage && item.src) {
+                img.src = item.src;
+                img.alt = item.name || 'Image preview';
+                img.style.display = 'block';
+                downloadBtn.href = item.src;
+                downloadBtn.setAttribute(
+                    'download',
+                    item.name || 'image'
+                );
+                openTabBtn.href = item.src;
+                toolbar.style.display = 'flex';
+            } else {
+                fallback.style.display = 'block';
+                fallbackLink.href = item.src || '#';
+                toolbar.style.display = 'none';
+            }
+        };
+
+        const step = (delta) => {
+            const items = lightboxState.items || [];
+            if (items.length < 2) return;
+            const n = items.length;
+            lightboxState.index = (lightboxState.index + delta + n) % n;
+            renderCurrent();
+        };
+
+        let restoreFocusEl = null;
+        const focusableSelector =
+            'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+        const trapFocus = (e) => {
+            if (!overlay.classList.contains('open')) return;
+            if (e.key !== 'Tab') return;
+            const focusable = Array.from(
+                overlay.querySelectorAll(focusableSelector)
+            ).filter((n) => !n.hidden && n.offsetParent !== null);
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        };
 
         const closeLightbox = () => {
             overlay.classList.remove('open');
             img.src = '';
+            resetZoom();
+            document.removeEventListener('keydown', trapFocus, true);
+            if (restoreFocusEl && typeof restoreFocusEl.focus === 'function') {
+                try { restoreFocusEl.focus(); } catch { /* node gone */ }
+            }
+            restoreFocusEl = null;
+        };
+
+        const openLightboxA11y = () => {
+            restoreFocusEl = document.activeElement;
+            document.addEventListener('keydown', trapFocus, true);
+            // Defer focus until the overlay is painted so the focus ring
+            // lands on a visible element.
+            requestAnimationFrame(() => {
+                close.focus({ preventScroll: true });
+            });
         };
 
         overlay.addEventListener('click', (e) => {
-            if (e.target === overlay || e.target.closest('.image-lightbox__close')) {
-                closeLightbox();
-            }
+            if (e.target === overlay) closeLightbox();
         });
+        close.addEventListener('click', closeLightbox);
+        prevBtn.addEventListener('click', (e) => { e.stopPropagation(); step(-1); });
+        nextBtn.addEventListener('click', (e) => { e.stopPropagation(); step(1); });
 
+        // Keyboard controls (ESC / arrows / +/- / 0)
         document.addEventListener('keydown', (e) => {
-            if (overlay.classList.contains('open') && e.key === 'Escape') {
-                closeLightbox();
+            if (!overlay.classList.contains('open')) return;
+            if (e.key === 'Escape') { closeLightbox(); return; }
+            if (e.key === 'ArrowLeft')  { e.preventDefault(); step(-1); return; }
+            if (e.key === 'ArrowRight') { e.preventDefault(); step(1); return; }
+            if (e.key === '+' || e.key === '=') {
+                e.preventDefault();
+                setZoom(lightboxState.zoom * 1.25);
+                return;
+            }
+            if (e.key === '-' || e.key === '_') {
+                e.preventDefault();
+                setZoom(lightboxState.zoom / 1.25);
+                return;
+            }
+            if (e.key === '0') {
+                e.preventDefault();
+                resetZoom();
+                return;
             }
         });
 
-        lightbox = { overlay, img, fallback, fallbackLink, caption, closeLightbox };
+        // Click image to zoom in (toggle between 1x and 2x); wheel to zoom fine.
+        img.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (lightboxState.zoom > 1.001) {
+                resetZoom();
+            } else {
+                setZoom(2, e.clientX, e.clientY);
+            }
+        });
+
+        img.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = -Math.sign(e.deltaY) * 0.18;
+            setZoom(lightboxState.zoom * (1 + delta), e.clientX, e.clientY);
+        }, { passive: false });
+
+        // Drag-to-pan when zoomed.
+        let dragging = null;
+        img.addEventListener('pointerdown', (e) => {
+            if (lightboxState.zoom <= 1.001) return;
+            dragging = { x: e.clientX, y: e.clientY,
+                         startPanX: lightboxState.panX, startPanY: lightboxState.panY };
+            img.setPointerCapture(e.pointerId);
+            img.classList.add('is-grabbing');
+        });
+        img.addEventListener('pointermove', (e) => {
+            if (!dragging) return;
+            lightboxState.panX = dragging.startPanX + (e.clientX - dragging.x);
+            lightboxState.panY = dragging.startPanY + (e.clientY - dragging.y);
+            applyZoomTransform();
+        });
+        const endDrag = (e) => {
+            if (!dragging) return;
+            dragging = null;
+            try { img.releasePointerCapture(e.pointerId); } catch {}
+            img.classList.remove('is-grabbing');
+        };
+        img.addEventListener('pointerup', endDrag);
+        img.addEventListener('pointercancel', endDrag);
+
+        lightbox = {
+            overlay, img, fallback, fallbackLink, caption, counter,
+            downloadBtn, openTabBtn, prevBtn, nextBtn,
+            closeLightbox, renderCurrent, step, openLightboxA11y,
+        };
         return lightbox;
     }
 
-    function openAttachmentLightbox({ src, name, type, isImage }) {
-        if (!src) return;
-        const { overlay, img, fallback, fallbackLink, caption } = ensureLightbox();
-
-        // Reset visibility
-        img.style.display = 'none';
-        fallback.style.display = 'none';
-
-        caption.textContent = name || '';
-
-        if (isImage) {
-            img.src = src;
-            img.alt = name || 'Attachment preview';
-            img.style.display = 'block';
+    function openAttachmentLightbox(arg1, arg2) {
+        // Accepts either:
+        //   openAttachmentLightbox({ src, name|title, type, isImage })
+        //   openAttachmentLightbox([{...}, {...}], startIndex)
+        // The list form powers multi-image navigation. `title` is accepted as
+        // an alias for `name` for backward-compat with older callers.
+        const normalize = (it) => {
+            if (!it || !it.src) return null;
+            return {
+                src: it.src,
+                name: it.name || it.title || it.downloadName || '',
+                type: it.type || 'image',
+                isImage: it.isImage !== false,
+            };
+        };
+        let items, index;
+        if (Array.isArray(arg1)) {
+            items = arg1.map(normalize).filter(Boolean);
+            index = Math.max(0, Math.min(items.length - 1, arg2 || 0));
         } else {
-            // Avoid CSP issues with blob/data by using an explicit download/open link
-            fallback.style.display = 'block';
-            fallbackLink.href = src;
+            const single = normalize(arg1);
+            if (!single) return;
+            items = [single];
+            index = 0;
         }
+        if (!items.length) return;
 
-        overlay.classList.add('open');
+        const lb = ensureLightbox();
+        lightboxState.items = items;
+        lightboxState.index = index;
+        lb.renderCurrent();
+        lb.overlay.classList.add('open');
+        lb.openLightboxA11y();
     }
+
+    // Expose to modules (e.g. prose.js) that render images outside this
+    // DOMContentLoaded closure but still want the same lightbox.
+    window.__xelasphereOpenLightbox = openAttachmentLightbox;
 
     function enableFileOpen(container, attachment) {
         if (!container || !attachment) return;
@@ -2394,15 +3259,6 @@ document.addEventListener('DOMContentLoaded', () => {
         xhr.send(formData);
     }
 
-    // Auto-expand text area function
-    function autoExpandTextArea(element) {
-        // Reset the height
-        element.style.height = 'auto';
-    
-        // Set the new height
-        element.style.height = element.scrollHeight + 'px';
-    }
-    
 });
 
 

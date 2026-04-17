@@ -78,6 +78,70 @@ function wrapInlineQuotesAsBlockquotes(text) {
         .join('\n\n');
 }
 
+// Wires markdown-rendered <img> tags inside a prose block to the shared
+// attachment lightbox. Each image becomes clickable with a zoom-in cursor;
+// the whole set in the block is passed together so prev/next navigation
+// works across sibling images. Emoji and attachment thumbs are skipped.
+function wireMarkdownImagesToLightbox(el) {
+    if (!el || typeof el.querySelectorAll !== 'function') return;
+    const openLightbox = typeof window !== 'undefined' && window.__xelasphereOpenLightbox;
+    if (typeof openLightbox !== 'function') return;
+
+    const imgs = Array.from(el.querySelectorAll(
+        'img:not(.emoji):not(.attachment-thumb):not(.chat-image):not(.composer-attachment-thumb)'
+    ));
+    if (!imgs.length) return;
+
+    const items = imgs.map((img) => ({
+        src: img.currentSrc || img.src,
+        name: img.getAttribute('alt') || '',
+        type: 'image',
+        isImage: true,
+    }));
+
+    imgs.forEach((img, idx) => {
+        if (img.dataset.lightboxWired === '1') return;
+        img.dataset.lightboxWired = '1';
+        img.classList.add('prose-image');
+        if (!img.hasAttribute('alt') || img.getAttribute('alt') === '') {
+            img.setAttribute('alt', 'Image');
+        }
+        img.style.cursor = 'zoom-in';
+
+        // Progressive blur-up. Start in the "loading" state; flip to loaded
+        // once the browser has decoded the image so the transition runs.
+        if (!img.classList.contains('is-loaded')) {
+            img.classList.add('is-loading-blur');
+            const markLoaded = () => {
+                img.classList.remove('is-loading-blur');
+                img.classList.add('is-loaded');
+            };
+            if (img.complete && img.naturalHeight > 0) {
+                markLoaded();
+            } else if (typeof img.decode === 'function') {
+                img.decode().then(markLoaded).catch(markLoaded);
+            } else {
+                img.addEventListener('load', markLoaded, { once: true });
+                img.addEventListener('error', markLoaded, { once: true });
+            }
+        }
+
+        img.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Rebuild src list at click time so late-loaded images use their
+            // final URL rather than a stale reference from first paint.
+            const fresh = imgs.map((i) => ({
+                src: i.currentSrc || i.src,
+                name: i.getAttribute('alt') || '',
+                type: 'image',
+                isImage: true,
+            }));
+            openLightbox(fresh, idx);
+        });
+    });
+}
+
 export function createProseRenderer() {
     return {
         create(block, messageContainer, opts = {}) {
@@ -127,6 +191,7 @@ export function createProseRenderer() {
             } else {
                 block.el.innerHTML = safeHTML;
             }
+            wireMarkdownImagesToLightbox(block.el);
         },
         finalize(block) {
             // Strip the AI-preamble closer if present.

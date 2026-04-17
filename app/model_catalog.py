@@ -35,14 +35,6 @@ MODEL_CATALOG = {
         "context": 32000,
         "reasoning": True,
     },
-    "moonshotai/kimi-k2-instruct-0905": {
-        "label": "Kimi K2 (Long Context)",
-        "provider": "groq",
-        "selectable": False,  # Replaced by Moonshot-direct Kimi models
-        "speed": "medium",
-        "context": 262000,
-        "long_context": True,
-    },
     "openai/gpt-oss-120b": {
         "label": "GPT-OSS 120B",
         "provider": "groq",
@@ -52,13 +44,6 @@ MODEL_CATALOG = {
     },
 
     # Vision models - Groq (internal use)
-    "meta-llama/llama-4-maverick-17b-128e-instruct": {
-        "label": "Llama 4 Maverick (Deprecated)",
-        "provider": "groq",
-        "selectable": False,
-        "vision": True,
-        "context": 128000,
-    },
     "meta-llama/llama-4-scout-17b-16e-instruct": {
         "label": "Llama 4 Scout (Vision)",
         "provider": "groq",
@@ -68,12 +53,6 @@ MODEL_CATALOG = {
     },
 
     # Safety models - Groq (internal use)
-    "meta-llama/llama-guard-4-12b": {
-        "label": "Llama Guard 4",
-        "provider": "groq",
-        "selectable": False,
-        "safety": True,
-    },
     "openai/gpt-oss-safeguard-20b": {
         "label": "GPT-OSS Safeguard",
         "provider": "groq",
@@ -286,7 +265,7 @@ TASK_ROUTES = {
     "reflection": "qwen/qwen3-32b",
 
     # Safety tasks
-    "safety": "meta-llama/llama-guard-4-12b",
+    "safety": "openai/gpt-oss-safeguard-20b",
     "prompt_guard": "meta-llama/llama-prompt-guard-2-86m",
 
     # Specialized tasks
@@ -359,9 +338,91 @@ def resolve_model_id(model: str) -> str:
     return canonical
 
 
+def resolve_live_model_id(model: str, task: str = None) -> str:
+    """Resolve `model` to a live, non-deprecated equivalent.
+
+    The orchestrator registry records `is_deprecated` / `replacement_id` on
+    any model the watcher has detected as disappeared from its provider's
+    /models endpoint. This helper follows that chain so callers reading
+    static config (TASK_ROUTES, hard-coded fallback lists, etc.) transparently
+    hop to the live successor without needing a code change.
+
+    Unlike ``resolve_model_id``, this function does **not** coerce unknown
+    IDs to ``DEFAULT_MODEL`` up-front — that would mask the registry's
+    knowledge of a deprecated ID we've since purged from the catalog.
+    Instead we walk the registry first and only fall back to DEFAULT_MODEL
+    if nothing in the registry or fallback chain can serve the request.
+
+    Resolution order:
+      1. Normalize aliases (MODEL_ALIASES).
+      2. Walk the registry's deprecation chain (cycle-safe) until a healthy
+         model is reached.
+      3. If the chain dead-ends on a deprecated model, walk
+         ``FALLBACK_CHAINS[task]`` (when a task is given) for the first live,
+         non-deprecated candidate.
+      4. Otherwise return the catalog-resolved ID (or DEFAULT_MODEL if the
+         input is truly unknown).
+    """
+    if not model or model == "auto":
+        return DEFAULT_MODEL
+
+    canonical = MODEL_ALIASES.get(model, model)
+
+    try:
+        from app.orchestrator import registry
+    except Exception:
+        # Orchestrator not importable yet (e.g. at module-load time) —
+        # degrade to the catalog-only behavior.
+        return canonical if canonical in MODEL_CATALOG else DEFAULT_MODEL
+
+    visited = set()
+    current = canonical
+    terminal = None  # last model we examined (for fall-through return)
+    while current and current not in visited:
+        visited.add(current)
+        m = registry.get(current)
+        terminal = current
+        if m is None:
+            # Unknown to registry — if the catalog knows it, trust it;
+            # otherwise break and let the fallback chain / DEFAULT_MODEL
+            # kick in below.
+            if current in MODEL_CATALOG:
+                return current
+            break
+        if not m.is_deprecated and m.status != "down":
+            return current
+        if m.replacement_id and m.replacement_id not in visited:
+            current = m.replacement_id
+            continue
+        break
+
+    # Dead-ended on a deprecated / unknown model. Try the task-level chain.
+    if task:
+        try:
+            from app.orchestrator.config import FALLBACK_CHAINS
+        except Exception:
+            FALLBACK_CHAINS = {}
+        for _prov, chain_model, _tier in FALLBACK_CHAINS.get(task, []):
+            fm = registry.get(chain_model)
+            if fm and fm.is_available():
+                return chain_model
+
+    # Final fallback: the catalog-resolved ID if valid, else DEFAULT_MODEL.
+    if terminal and terminal in MODEL_CATALOG:
+        return terminal
+    if canonical in MODEL_CATALOG:
+        return canonical
+    return DEFAULT_MODEL
+
+
 def get_model_for_task(task: str) -> str:
-    """Get the optimal model for a specific task type."""
-    return TASK_ROUTES.get(task, DEFAULT_MODEL)
+    """Get the optimal *live* model for a specific task type.
+
+    Resolves through the orchestrator registry so deprecated TASK_ROUTES
+    entries auto-heal to their replacement_id (or the next live candidate in
+    FALLBACK_CHAINS[task]).
+    """
+    return resolve_live_model_id(TASK_ROUTES.get(task, DEFAULT_MODEL), task=task)
 
 
 def get_fallback_model(model: str) -> str:

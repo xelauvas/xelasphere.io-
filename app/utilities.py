@@ -718,7 +718,7 @@ def send_prompt_with_images(prompt: str, images: List[Dict[str, str]], model: st
     Args:
         prompt: Text prompt
         images: List of image dicts with 'url' (data URL or http URL) and optional 'detail' ('low'/'high'/'auto')
-        model: Vision-capable model ID (default: meta-llama/llama-4-maverick-17b-128e-instruct)
+        model: Vision-capable model ID (default: meta-llama/llama-4-scout-17b-16e-instruct)
 
     Returns:
         Tuple of (response_text, is_code_response)
@@ -727,13 +727,16 @@ def send_prompt_with_images(prompt: str, images: List[Dict[str, str]], model: st
         # No images, fall back to text-only
         return send_prompt(prompt, model)
 
-    # Pick vision model via orchestrator if none specified
+    # Pick vision model via orchestrator if none specified; fall back to the
+    # catalog resolver (which follows watcher-detected deprecations) so a
+    # dead Groq vision model auto-heals to the live successor.
     if not model:
         try:
             from app.orchestrator import get_model as _orch_get
             model, _, _ = _orch_get("vision", {})
         except Exception:
-            model = "meta-llama/llama-4-scout-17b-16e-instruct"
+            from app.model_catalog import get_model_for_task
+            model = get_model_for_task("vision")
     resolved_model = model
     provider = MODEL_PROVIDERS.get(resolved_model, "groq")
 

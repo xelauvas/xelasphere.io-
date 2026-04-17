@@ -168,7 +168,6 @@ ARTIFACT_CAPABLE_MODELS = {
     "qwen/qwen3-32b", "qwen/qwq-32b",
     "kimi-k2.5", "kimi-latest",
     "llama-3.3-70b-versatile",
-    "meta-llama/llama-4-maverick-17b-128e-instruct",
     "openai/gpt-oss-120b",
 }
 
@@ -1134,11 +1133,20 @@ def get_ai_response(full_prompt: str, model: str, images: Optional[List[Dict[str
     reasoning_content = None
 
     if images:
-        # Vision model fallback chain
+        # Vision model fallback chain — resolves through the orchestrator
+        # registry so a deprecated vision model auto-heals to its watcher-
+        # supplied replacement (or the next live entry in FALLBACK_CHAINS).
+        from app.model_catalog import resolve_live_model_id, get_model_for_task
         vision_models = [
-            "meta-llama/llama-4-maverick-17b-128e-instruct",
-            "meta-llama/llama-4-scout-17b-16e-instruct",
+            get_model_for_task("vision"),
+            resolve_live_model_id(
+                "meta-llama/llama-4-scout-17b-16e-instruct", task="vision"
+            ),
         ]
+        # Drop duplicates while preserving order (resolver may return the
+        # same live model for both entries).
+        seen = set()
+        vision_models = [m for m in vision_models if m and not (m in seen or seen.add(m))]
         response = None
         is_code_response = False
 

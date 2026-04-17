@@ -240,6 +240,11 @@ def clear_tracker_cache() -> None:
     _SESSION_STATES.clear()
 
 
+def clear_tracker_for_session(session_id: str) -> None:
+    """Remove a single session's tracker from the cache."""
+    _SESSION_STATES.pop(session_id, None)
+
+
 def _evict_stale() -> None:
     """Remove trackers not accessed within the timeout."""
     now = time.time()

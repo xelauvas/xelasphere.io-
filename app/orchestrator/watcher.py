@@ -24,8 +24,45 @@ IGNORED_MODEL_PATTERNS = frozenset({
     'canopylabs/', 'allam-', 'moonshot-v1-',
 })
 
+# Strength tags inferred from naming conventions. Mirrors the catalog's
+# strength flags so we can score replacement candidates by capability overlap
+# even when a live model hasn't been classified into the registry yet.
+_STRENGTH_NAME_PATTERNS = (
+    ("vision",     ("vision", " vl", "-vl", "/vl", "maverick", "scout", "visual")),
+    ("safety",     ("guard", "safeguard", "moderation")),
+    ("coding",     ("coder", "code")),
+    ("reasoning",  ("r1", "reasoner", "thinking", "reasoning")),
+    ("fast_chat",  ("8b", "instant", "flash", "nano", "mini", "scout", "lite")),
+    ("uncensored", ("dolphin", "uncensored", "venice")),
+    ("long_context", ("kimi", "256k", "128k", "1m-context")),
+)
+
+# "Generic" strengths that match almost any chat model — exclude from overlap
+# scoring so a deprecated vision model doesn't accidentally match a generic
+# chat model just because both have "general_chat".
+_GENERIC_STRENGTHS = frozenset({"general_chat", "fast_chat"})
+
+# Per-provider set of model IDs we've already warned about this process-lifetime.
+# Prevents the same DEPRECATED log line firing every 60s of the watcher cycle.
+_prev_disappeared: Dict[str, Set[str]] = {}
+
 _running = False
 _thread: Optional[threading.Thread] = None
+
+
+def _infer_strengths_from_name(model_id: str) -> Set[str]:
+    """Derive capability tags from a bare model ID via name patterns.
+
+    Used for scoring live-but-unclassified models as replacement candidates.
+    Returns an empty set for names that don't match anything, which the
+    scorer treats as a "general chat" candidate.
+    """
+    name = model_id.lower()
+    tags = set()
+    for tag, patterns in _STRENGTH_NAME_PATTERNS:
+        if any(p in name for p in patterns):
+            tags.add(tag)
+    return tags
 
 
 def start():
@@ -118,6 +155,10 @@ def _check_provider(provider: str, api_key: str):
     disappeared = known_ids - live_ids
     model_overrides = {}
 
+    # Only log entries we haven't already warned about this process lifetime.
+    already_warned = _prev_disappeared.setdefault(provider, set())
+    newly_disappeared = disappeared - already_warned
+
     for model_id in disappeared:
         model = registry.get(model_id)
         if not model:
@@ -131,10 +172,14 @@ def _check_provider(provider: str, api_key: str):
         if replacement:
             model_overrides[model_id] = replacement
 
-        logger.warning(
-            f"⚠️ DEPRECATED [{provider}]: {model_id} "
-            f"→ replacement: {replacement or 'none found'}"
-        )
+        if model_id in newly_disappeared:
+            logger.warning(
+                f"⚠️ DEPRECATED [{provider}]: {model_id} "
+                f"→ replacement: {replacement or 'none found'}"
+            )
+
+    # Track everything we've seen so next cycle only logs genuinely-new ones.
+    already_warned |= disappeared
 
     # New model discovery
     new_ids = live_ids - known_ids
@@ -223,30 +268,85 @@ def _handle_provider_down(provider: str, health_ref, health_doc):
 
 
 def _find_replacement(model: Model, live_ids: Set[str], provider: str) -> Optional[str]:
-    """Find best replacement for a deprecated model."""
-    name = model.id.lower()
+    """Find the best replacement for a deprecated model.
 
-    # Strategy 1: Same family, different version on same provider
-    for family, patterns in MODEL_FAMILIES.items():
-        if any(p in name for p in patterns):
-            same_family = [
-                mid for mid in live_ids
-                if any(p in mid.lower() for p in patterns)
-                and mid != model.id
-            ]
-            if same_family:
-                return sorted(same_family)[-1]
+    Strategy (in order, highest-confidence first):
 
-    # Strategy 2: Cross-provider from fallback chain
+    1. **Same-provider, strength-matched** — score live models by overlap of
+       *specific* capability tags (vision, safety, coding, reasoning, etc.),
+       plus a family-name bonus. Generic tags like ``general_chat`` are
+       ignored so a vision model can't accidentally match a chat model.
+    2. **Cross-provider via fallback chain** — walk ``FALLBACK_CHAINS`` for
+       each of the deprecated model's jobs and pick the first live, healthy,
+       non-deprecated candidate on a *different* provider. Tier is informative
+       only; tier0 paid models are acceptable backstops.
+    3. **Give up (return None)** — the model is dead and has no safe swap.
+       Callers should fall through to their own fallback chain or fail loudly
+       rather than route to an unrelated model.
+    """
+    from app.orchestrator import registry
+
+    dep_id = model.id
+    dep_strengths = set(model.strengths) - _GENERIC_STRENGTHS
+
+    # --- Strategy 1: same-provider, strength-matched ------------------------
+    if dep_strengths:
+        candidates = []  # (score, live_id)
+        dep_name = dep_id.lower()
+        dep_families = [
+            family for family, patterns in MODEL_FAMILIES.items()
+            if any(p in dep_name for p in patterns)
+        ]
+
+        for live_id in live_ids:
+            if live_id == dep_id:
+                continue
+
+            live_model = registry.get(live_id)
+            if live_model is not None:
+                if live_model.is_deprecated or live_model.status == "down":
+                    continue
+                live_strengths = set(live_model.strengths) - _GENERIC_STRENGTHS
+            else:
+                # Live but unregistered model — infer tags from name so newly
+                # appeared replacements (e.g. Groq rolls out a new vision
+                # model) can still be picked up.
+                live_strengths = _infer_strengths_from_name(live_id)
+
+            overlap = dep_strengths & live_strengths
+            if not overlap:
+                continue
+
+            score = len(overlap) * 10
+            # Family-name bonus: prefer llama→llama, qwen→qwen, etc.
+            live_lower = live_id.lower()
+            for family in dep_families:
+                patterns = MODEL_FAMILIES.get(family, ())
+                if any(p in live_lower for p in patterns):
+                    score += 3
+                    break
+            # Tiny tiebreaker toward classified models so we prefer a known
+            # catalog entry over a just-discovered one.
+            if live_model is not None:
+                score += 1
+
+            candidates.append((score, live_id))
+
+        if candidates:
+            candidates.sort(reverse=True)
+            return candidates[0][1]
+
+    # --- Strategy 2: cross-provider via fallback chain ----------------------
     for job in model.strengths:
         chain = FALLBACK_CHAINS.get(job, [])
-        for chain_provider, chain_model, tier in chain:
-            if chain_provider != provider and tier == "tier1":
-                from app.orchestrator import registry
-                replacement = registry.get(chain_model)
-                if replacement and replacement.is_available():
-                    return chain_model
+        for chain_provider, chain_model, _tier in chain:
+            if chain_provider == provider:
+                continue
+            replacement = registry.get(chain_model)
+            if replacement and replacement.is_available():
+                return chain_model
 
+    # --- Strategy 3: no confident replacement — fail closed ----------------
     return None
 
 

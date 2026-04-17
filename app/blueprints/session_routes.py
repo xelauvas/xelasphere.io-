@@ -15,6 +15,7 @@ import logging
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request, session
+from google.cloud import firestore as gc_firestore
 
 from app.config import db
 from app.limiter import limiter, csrf_required
@@ -22,6 +23,16 @@ from app.blueprints.shared import (
     login_required, guest_allowed, error_handler, make_etag_response,
     is_guest, chat_session
 )
+
+# FieldFilter is the modern query syntax (Firestore SDK >=2.11.0). Fall back to
+# legacy positional `where()` if the import fails, so RAG purge keeps working
+# instead of silently skipping on older SDKs.
+try:
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    _HAS_FIELD_FILTER = True
+except Exception:  # pragma: no cover - depends on SDK version
+    FieldFilter = None
+    _HAS_FIELD_FILTER = False
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +89,11 @@ def categorize_sessions(chat_history):
 
 
 def delete_local_attachments(messages):
-    """Delete local attachment files for a session's messages.
+    """Delete local attachment files referenced by a session's messages.
 
-    This helper cleans up uploaded files when a session is deleted.
+    Checks `local_path` (the canonical field used by chat_routes/image generator)
+    first, falling back to legacy `path`. Each resolved path is joined against
+    UPLOAD_FOLDER and verified to stay inside it before any removal.
     """
     import os
     from flask import current_app
@@ -88,32 +101,230 @@ def delete_local_attachments(messages):
     if not messages:
         return
 
+    upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+    base_abs = os.path.abspath(upload_folder)
+
     for msg in messages:
-        attachments = msg.get('attachments', [])
-        for attachment in attachments:
-            file_path = attachment.get('path')
-            if file_path and file_path.startswith('/uploads/'):
-                # Convert URL path to filesystem path
-                upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
-                filename = os.path.basename(file_path)
-                full_path = os.path.join(upload_folder, filename)
-                try:
-                    if os.path.exists(full_path):
-                        os.remove(full_path)
-                        logger.debug(f"Deleted attachment: {full_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to delete attachment {full_path}: {e}")
+        for attachment in msg.get('attachments', []) or []:
+            rel = attachment.get('local_path')
+            if not rel:
+                legacy = attachment.get('path')
+                if isinstance(legacy, str) and legacy.startswith('/uploads/'):
+                    rel = legacy[len('/uploads/'):]
+                elif isinstance(legacy, str) and not legacy.startswith('/'):
+                    rel = legacy
+            if not rel or not isinstance(rel, str):
+                continue
+
+            full_path = os.path.abspath(os.path.join(upload_folder, rel))
+            if full_path != base_abs and not full_path.startswith(base_abs + os.sep):
+                logger.warning("Skipping out-of-bounds attachment path: %s", rel)
+                continue
+            try:
+                if os.path.isfile(full_path):
+                    os.remove(full_path)
+                    logger.debug("Deleted attachment: %s", full_path)
+            except Exception as e:
+                logger.warning("Failed to delete attachment %s: %s", full_path, e)
+
+
+_BATCH_CHUNK_SIZE = 400  # Firestore hard limit is 500; leave headroom.
+
+
+def _commit_refs_batched(refs):
+    """Delete every DocumentReference via chunked WriteBatch commits."""
+    if not refs:
+        return
+    batch = db.batch()
+    ops = 0
+    for ref in refs:
+        batch.delete(ref)
+        ops += 1
+        if ops >= _BATCH_CHUNK_SIZE:
+            try:
+                batch.commit()
+            except Exception as commit_err:
+                logger.warning("Batch commit failed: %s", commit_err)
+            batch = db.batch()
+            ops = 0
+    if ops > 0:
+        try:
+            batch.commit()
+        except Exception as commit_err:
+            logger.warning("Final batch commit failed: %s", commit_err)
+
+
+def _delete_session_subcollections(session_ref):
+    """Delete artifacts/versions/files under a chat session doc.
+
+    Firestore does not cascade-delete subcollections when the parent document
+    is deleted, so without this walk the artifact data would be orphaned.
+    Deletes bottom-up (files → versions → artifacts) via batched writes.
+    """
+    file_refs = []
+    version_refs = []
+    artifact_refs = []
+    try:
+        for artifact_doc in session_ref.collection('artifacts').stream():
+            artifact_ref = artifact_doc.reference
+            artifact_refs.append(artifact_ref)
+            try:
+                for version_doc in artifact_ref.collection('versions').stream():
+                    version_ref = version_doc.reference
+                    version_refs.append(version_ref)
+                    try:
+                        for file_doc in version_ref.collection('files').stream():
+                            file_refs.append(file_doc.reference)
+                    except Exception as files_err:
+                        logger.warning(
+                            "Failed to list files under version %s: %s",
+                            version_ref.id, files_err
+                        )
+            except Exception as versions_err:
+                logger.warning(
+                    "Failed to list versions for artifact %s: %s",
+                    artifact_ref.id, versions_err
+                )
+    except Exception as e:
+        logger.warning("Failed to walk artifacts subcollection: %s", e)
+        return
+
+    _commit_refs_batched(file_refs)
+    _commit_refs_batched(version_refs)
+    _commit_refs_batched(artifact_refs)
+
+
+def _remove_disk_file(rel_path, base_abs):
+    """Safely remove an upload file, enforcing containment inside base_abs."""
+    import os
+    if not rel_path or not isinstance(rel_path, str):
+        return
+    full_path = os.path.abspath(os.path.join(base_abs, rel_path))
+    if full_path != base_abs and not full_path.startswith(base_abs + os.sep):
+        logger.warning("Skipping out-of-bounds upload path: %s", rel_path)
+        return
+    try:
+        if os.path.isfile(full_path):
+            os.remove(full_path)
+            logger.debug("Deleted upload: %s", full_path)
+    except Exception as e:
+        logger.warning("Failed to delete upload %s: %s", full_path, e)
+
+
+def _where_conversation(collection_ref, session_id):
+    """Build a `conversation_id == session_id` query across SDK versions."""
+    if _HAS_FIELD_FILTER:
+        return collection_ref.where(
+            filter=FieldFilter('conversation_id', '==', session_id)
+        )
+    return collection_ref.where('conversation_id', '==', session_id)
+
+
+def _delete_session_files_and_chunks(user_id, session_id):
+    """Purge RAG file metadata, embeddings, and physical upload files.
+
+    Users upload docs that get indexed into `users/{uid}/files` and
+    `users/{uid}/file_chunks`, both keyed by `conversation_id`. The files
+    collection carries a `file_path` field (relative to UPLOAD_FOLDER) which
+    points to the actual bytes on disk; those must be removed too.
+    """
+    import os
+    from flask import current_app
+
+    user_ref = db.collection('users').document(user_id)
+
+    chunk_refs = []
+    try:
+        chunks_query = _where_conversation(
+            user_ref.collection('file_chunks'), session_id
+        )
+        for chunk_doc in chunks_query.stream():
+            chunk_refs.append(chunk_doc.reference)
+    except Exception as e:
+        logger.warning(
+            "Failed to list file_chunks for session %s: %s", session_id, e
+        )
+
+    file_refs = []
+    disk_paths = []
+    try:
+        files_query = _where_conversation(
+            user_ref.collection('files'), session_id
+        )
+        for file_doc in files_query.stream():
+            file_refs.append(file_doc.reference)
+            data = file_doc.to_dict() or {}
+            fp = data.get('file_path')
+            if fp:
+                disk_paths.append(fp)
+    except Exception as e:
+        logger.warning(
+            "Failed to list files for session %s: %s", session_id, e
+        )
+
+    if disk_paths:
+        upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+        base_abs = os.path.abspath(upload_folder)
+        for rel in disk_paths:
+            _remove_disk_file(rel, base_abs)
+
+    _commit_refs_batched(chunk_refs)
+    _commit_refs_batched(file_refs)
+    if chunk_refs or file_refs or disk_paths:
+        logger.info(
+            "Purged RAG data for session %s: %s chunks, %s files, %s disk files",
+            session_id, len(chunk_refs), len(file_refs), len(disk_paths)
+        )
+
+
+def _clear_session_caches(user_id, session_id):
+    """Evict every in-memory cache keyed by this chat session."""
+    try:
+        from app.conversation_context import clear_conversation_context
+        clear_conversation_context(session_id)
+    except Exception as e:
+        logger.debug("clear_conversation_context failed for %s: %s", session_id, e)
+    try:
+        from app.list_registry import clear_registry_cache
+        clear_registry_cache(user_id=user_id, session_id=session_id)
+    except Exception as e:
+        logger.debug("clear_registry_cache failed for %s: %s", session_id, e)
+    try:
+        from app.canonical_store import clear_store_cache
+        clear_store_cache(user_id=user_id, session_id=session_id)
+    except Exception as e:
+        logger.debug("clear_store_cache failed for %s: %s", session_id, e)
+    try:
+        from app.response_guard import clear_response_guard
+        clear_response_guard(user_id=user_id, session_id=session_id)
+    except Exception as e:
+        logger.debug("clear_response_guard failed for %s: %s", session_id, e)
+    try:
+        from app.smart_guard import clear_smart_guard
+        clear_smart_guard(user_id=user_id, session_id=session_id)
+    except Exception as e:
+        logger.debug("clear_smart_guard failed for %s: %s", session_id, e)
+    try:
+        from app.context.artifact_state_tracker import clear_tracker_for_session
+        clear_tracker_for_session(session_id)
+    except Exception as e:
+        logger.debug("clear_tracker_for_session failed for %s: %s", session_id, e)
 
 
 def _adjust_user_session_total(user_id, delta):
-    """Adjust the user's total session count by delta."""
+    """Atomically adjust the user's total session count by `delta`.
+
+    Uses Firestore's `Increment` so concurrent delete operations (e.g.
+    single-delete racing delete-all, or two open tabs) can't lose decrements
+    the way a read-modify-write would. Matches the helper in chat_session.py.
+    """
+    if not user_id or delta == 0:
+        return
     try:
-        user_ref = db.collection('users').document(user_id)
-        user_doc = user_ref.get()
-        if user_doc.exists:
-            current_total = user_doc.to_dict().get('total_sessions', 0)
-            new_total = max(0, current_total + delta)
-            user_ref.update({'total_sessions': new_total})
+        db.collection('users').document(user_id).set(
+            {'total_sessions': gc_firestore.Increment(delta)},
+            merge=True
+        )
     except Exception as e:
         logger.warning(f"Failed to adjust session total for user {user_id}: {e}")
 
@@ -282,13 +493,43 @@ def delete_chat_session():
             return jsonify({'error': 'Chat session not found.'}), 404
 
         session_data = session_doc.to_dict() or {}
-        delete_local_attachments(session_data.get('messages', []))
-        session_ref.delete()
         status = session_data.get('status', 'active')
+        messages = session_data.get('messages', [])
+
+        # Delete the session doc FIRST so the user-visible state flips to
+        # "deleted" atomically. If the supporting-data cleanup below fails,
+        # orphaned subcollection/RAG/attachment data is left behind (invisible
+        # to the user) rather than a zombie session doc with missing content.
+        session_ref.delete()
+        _clear_session_caches(user_id, session_id)
         if status != 'temporary':
             _adjust_user_session_total(user_id, -1)
         if session.get('current_session_id') == session_id:
             session.pop('current_session_id', None)
+
+        # Best-effort cleanup of supporting data — never raises past here.
+        try:
+            delete_local_attachments(messages)
+        except Exception as attachment_err:
+            logger.warning(
+                "Failed to clean up attachments for chat %s (user %s): %s",
+                session_id, user_id, attachment_err
+            )
+        try:
+            _delete_session_subcollections(session_ref)
+        except Exception as sub_err:
+            logger.warning(
+                "Failed to purge subcollections for chat %s (user %s): %s",
+                session_id, user_id, sub_err
+            )
+        try:
+            _delete_session_files_and_chunks(user_id, session_id)
+        except Exception as rag_err:
+            logger.warning(
+                "Failed to purge RAG data for chat %s (user %s): %s",
+                session_id, user_id, rag_err
+            )
+
         logger.info(f"Chat session {session_id} deleted successfully for user {user_id}")
         return jsonify({'message': 'Chat session deleted successfully.'}), 200
     except Exception as e:
@@ -307,43 +548,113 @@ def delete_all_chat_sessions():
     try:
         sessions_ref = db.collection('users').document(user_id).collection('chat_sessions')
 
-        # Process in batches to avoid loading all sessions into memory at once
+        # Process in batches to avoid loading all sessions into memory at once.
+        # MAX_ITERATIONS caps runaway loops if deletes keep failing and the same
+        # docs reappear in each query (rare, but possible under transient
+        # Firestore errors or rule changes mid-request).
         BATCH_SIZE = 50
-        deleted_count = 0
+        MAX_ITERATIONS = 200  # Ceiling: 10_000 sessions per request.
+        deleted_count = 0      # Non-temporary sessions (drives total_sessions).
+        deleted_total = 0      # Every physical session removed (user-facing).
+        failed_ids = set()     # Unique session IDs whose delete() call raised.
         has_more = True
+        iterations = 0
+        prev_batch_ids = None
+        truncated = False
+        stalled = False
 
         while has_more:
+            iterations += 1
+            if iterations > MAX_ITERATIONS:
+                logger.warning(
+                    "delete_all_chat_sessions hit MAX_ITERATIONS=%s for user %s "
+                    "(deleted_total=%s); aborting to avoid infinite loop",
+                    MAX_ITERATIONS, user_id, deleted_total
+                )
+                truncated = True
+                break
+
             batch_query = sessions_ref.limit(BATCH_SIZE)
             batch_docs = list(batch_query.stream())
 
             if not batch_docs:
-                if deleted_count == 0:
+                if deleted_total == 0:
                     session.pop('current_session_id', None)
-                    return jsonify({'message': 'No chats to delete.'}), 200
+                    return jsonify({
+                        'message': 'No chats to delete.',
+                        'deleted_count': 0,
+                        'deleted_total': 0,
+                    }), 200
                 has_more = False
                 break
 
+            # Abort if the same batch is returned twice in a row — means we
+            # made no progress (all deletes failed or were rejected).
+            current_batch_ids = frozenset(d.id for d in batch_docs)
+            if prev_batch_ids is not None and current_batch_ids == prev_batch_ids:
+                logger.warning(
+                    "delete_all_chat_sessions stalled for user %s: same %s docs "
+                    "returned twice; aborting",
+                    user_id, len(current_batch_ids)
+                )
+                stalled = True
+                break
+            prev_batch_ids = current_batch_ids
+
             for session_doc in batch_docs:
                 session_data = session_doc.to_dict() or {}
+                session_ref = session_doc.reference
+                session_id = session_doc.id
+                status = session_data.get('status')
+                messages = session_data.get('messages', [])
+
+                # Delete the session doc FIRST. If this call raises, we skip
+                # the rest of the cleanup so the session stays intact rather
+                # than becoming a zombie with missing attachments/artifacts.
                 try:
-                    delete_local_attachments(session_data.get('messages', []))
+                    session_ref.delete()
+                except Exception as delete_err:
+                    # Log once per unique ID; stall-detection will break us out
+                    # if the same failing docs keep reappearing.
+                    if session_id not in failed_ids:
+                        logger.error(
+                            "Failed to delete chat session %s for user %s: %s",
+                            session_id, user_id, delete_err
+                        )
+                    failed_ids.add(session_id)
+                    continue
+
+                deleted_total += 1
+                if status != 'temporary':
+                    deleted_count += 1
+
+                try:
+                    _clear_session_caches(user_id, session_id)
+                except Exception as cache_err:
+                    logger.debug(
+                        "Cache clear failed for chat %s (user %s): %s",
+                        session_id, user_id, cache_err
+                    )
+                try:
+                    delete_local_attachments(messages)
                 except Exception as attachment_err:
                     logger.warning(
                         "Failed to clean up attachments for chat %s (user %s): %s",
-                        session_doc.id,
-                        user_id,
-                        attachment_err
+                        session_id, user_id, attachment_err
                     )
                 try:
-                    session_doc.reference.delete()
-                    if session_data.get('status') != 'temporary':
-                        deleted_count += 1
-                except Exception as delete_err:
-                    logger.error(
-                        "Failed to delete chat session %s for user %s: %s",
-                        session_doc.id,
-                        user_id,
-                        delete_err
+                    _delete_session_subcollections(session_ref)
+                except Exception as sub_err:
+                    logger.warning(
+                        "Failed to purge subcollections for chat %s (user %s): %s",
+                        session_id, user_id, sub_err
+                    )
+                try:
+                    _delete_session_files_and_chunks(user_id, session_id)
+                except Exception as rag_err:
+                    logger.warning(
+                        "Failed to purge RAG data for chat %s (user %s): %s",
+                        session_id, user_id, rag_err
                     )
 
             if len(batch_docs) < BATCH_SIZE:
@@ -352,8 +663,48 @@ def delete_all_chat_sessions():
         if deleted_count:
             _adjust_user_session_total(user_id, -deleted_count)
         session.pop('current_session_id', None)
-        logger.info("Deleted %s chat sessions for user %s", deleted_count, user_id)
-        return jsonify({'message': f'Deleted {deleted_count} chat(s).'}), 200
+
+        failed_count = len(failed_ids)
+        partial = truncated or stalled or failed_count > 0
+        if truncated:
+            reason = 'truncated'
+            message = (
+                f'Deleted {deleted_total} chat(s). More chats remain — '
+                'run Delete all again to continue.'
+            )
+        elif stalled:
+            reason = 'stalled'
+            message = (
+                f'Deleted {deleted_total} chat(s). Some chats could not be '
+                'removed — please retry.'
+            )
+        elif failed_count:
+            reason = 'partial_failure'
+            message = (
+                f'Deleted {deleted_total} chat(s); {failed_count} could not '
+                'be removed — please retry.'
+            )
+        else:
+            reason = None
+            message = f'Deleted {deleted_total} chat(s).'
+
+        logger.info(
+            "Deleted %s chat sessions for user %s (countable=%s, failed=%s, "
+            "truncated=%s, stalled=%s)",
+            deleted_total, user_id, deleted_count, failed_count,
+            truncated, stalled
+        )
+
+        payload = {
+            'message': message,
+            'deleted_count': deleted_count,
+            'deleted_total': deleted_total,
+            'failed_count': failed_count,
+            'partial': partial,
+        }
+        if reason:
+            payload['reason'] = reason
+        return jsonify(payload), 200
     except Exception as e:
         logger.error(f"Error deleting all chat sessions for user {user_id}: {e}")
         return jsonify({'error': 'Failed to delete all chat sessions.'}), 500

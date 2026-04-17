@@ -1569,10 +1569,10 @@
     }
 
     /* -------------------------------------------------------
-       _onTypingComplete — run callback when typing animation
-       finishes. Listens for 'typing-complete' custom event
-       dispatched by the rendering pipeline, with a timeout
-       fallback in case the event never fires.
+       _processCitationsWhenReady — poll until streamed message
+       text stabilizes, then wire citations and the sources
+       button. Polling avoids coupling to any render-complete
+       event, so it survives changes to the streaming pipeline.
     ------------------------------------------------------- */
     function _processCitationsWhenReady(messageEl, sources, attempt, lastLen) {
         attempt = attempt || 0;
