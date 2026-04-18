@@ -10,7 +10,8 @@ import mimetypes
 import os
 import re
 import uuid
-from typing import Any, Dict, Optional
+from functools import lru_cache
+from typing import Any, Dict, Optional, Tuple
 
 import requests
 from PIL import Image
@@ -18,6 +19,88 @@ from PIL import Image
 from .config import Config
 
 logger = logging.getLogger(__name__)
+
+
+ASPECT_SIZES: Dict[str, Tuple[int, int]] = {
+    "square": (1024, 1024),
+    "portrait": (1024, 1536),
+    "landscape": (1536, 1024),
+}
+
+_PORTRAIT_RE = re.compile(
+    r"\b(portrait|selfie|full[- ]?body|headshot|mugshot|tall|vertical|"
+    r"standing|person standing|phone wallpaper|story|reel|tiktok|9:16|2:3|3:4)\b",
+    re.IGNORECASE,
+)
+_LANDSCAPE_RE = re.compile(
+    r"\b(landscape|panorama|panoramic|wide[- ]?shot|banner|cinematic|"
+    r"cityscape|skyline|horizon|wallpaper|desktop wallpaper|scenery|"
+    r"vista|16:9|21:9|3:2|4:3)\b",
+    re.IGNORECASE,
+)
+_SQUARE_RE = re.compile(
+    r"\b(square|icon|avatar|profile picture|album cover|logo|sticker|"
+    r"emoji|thumbnail|1:1)\b",
+    re.IGNORECASE,
+)
+
+
+def _classify_aspect_by_keywords(prompt: str) -> Optional[str]:
+    """Cheap keyword pass. Returns 'square'|'portrait'|'landscape' or None if ambiguous."""
+    if not prompt:
+        return None
+    hits = {
+        "square": bool(_SQUARE_RE.search(prompt)),
+        "portrait": bool(_PORTRAIT_RE.search(prompt)),
+        "landscape": bool(_LANDSCAPE_RE.search(prompt)),
+    }
+    matched = [name for name, hit in hits.items() if hit]
+    if len(matched) == 1:
+        return matched[0]
+    return None
+
+
+@lru_cache(maxsize=512)
+def _classify_aspect_with_llm(prompt: str) -> str:
+    """Ask a small metadata model to pick an aspect. Returns 'square' on any failure."""
+    try:
+        from app.utilities import send_prompt
+        classifier_prompt = (
+            "Pick the best image aspect ratio for this prompt. "
+            "Reply with exactly one lowercase word: square, portrait, or landscape. "
+            "Rules: people/characters -> portrait; landscapes/scenery/cities/wide scenes -> landscape; "
+            "single objects/food/animals/abstract -> square.\n\n"
+            f"Prompt: {prompt}\n\nAnswer:"
+        )
+        model = getattr(Config, 'METADATA_MODEL_PRIMARY', 'gemini-2.5-flash')
+        response, _ = send_prompt(classifier_prompt, model=model)
+        if not response:
+            return "square"
+        word = response.strip().lower().split()[0] if response.strip() else ""
+        word = re.sub(r'[^a-z]', '', word)
+        if word in ASPECT_SIZES:
+            return word
+        return "square"
+    except Exception as exc:
+        logger.debug(f"Aspect LLM classifier failed, defaulting to square: {exc}")
+        return "square"
+
+
+def resolve_aspect(prompt: str, override: Optional[str] = None) -> Tuple[str, int, int]:
+    """Resolve (aspect_name, width, height) for a prompt.
+
+    override can be 'square'|'portrait'|'landscape' to skip inference.
+    Keyword pass runs first; ambiguous prompts fall through to the LLM classifier.
+    """
+    aspect: Optional[str] = None
+    if override and override.lower() in ASPECT_SIZES:
+        aspect = override.lower()
+    if aspect is None:
+        aspect = _classify_aspect_by_keywords(prompt)
+    if aspect is None:
+        aspect = _classify_aspect_with_llm(prompt)
+    width, height = ASPECT_SIZES[aspect]
+    return aspect, width, height
 
 
 def _generated_image_dir(user_id: str) -> str:
@@ -114,24 +197,23 @@ def _save_data_url_image(data_url: str, user_id: str, prefix: str, seed: Optiona
     return save_image_bytes_to_user_dir(image_bytes, user_id, prefix, seed, extension=extension)
 
 
-def pollinations_url(prompt: str, seed: int) -> str:
+def pollinations_url(prompt: str, seed: int, width: int = 1024, height: int = 1024) -> str:
     suffix = "without watermark"
     full_prompt = f"{prompt}, {suffix}" if prompt else suffix
     encoded_prompt = requests.utils.quote(full_prompt)
-    # Default portrait (1024×1536) to match ChatGPT's default tall format.
-    return f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed={seed}&width=1024&height=1536"
+    return f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed={seed}&width={width}&height={height}"
 
 
-def save_pollinations_image(prompt: str, seed: int, user_id: str) -> Optional[str]:
+def save_pollinations_image(prompt: str, seed: int, user_id: str, width: int = 1024, height: int = 1024) -> Optional[str]:
     """Download and save a Pollinations image to the uploads folder; return relative path on success."""
-    url = pollinations_url(prompt, seed)
+    url = pollinations_url(prompt, seed, width, height)
     try:
         output_dir = _generated_image_dir(user_id)
         filename = f"pollinations_{seed}.png"
         file_path = os.path.join(output_dir, filename)
         if os.path.exists(file_path):
             return os.path.relpath(file_path, Config.UPLOAD_FOLDER)
-        response = requests.get(url, timeout=20, stream=True)
+        response = requests.get(url, timeout=30, stream=True)
         response.raise_for_status()
         max_bytes = 10 * 1024 * 1024  # 10 MB cap
         total = 0
@@ -180,7 +262,7 @@ def _infer_aspect_ratio(size_value: str) -> Optional[str]:
     return mapping.get(size_value)
 
 
-def generate_image_with_openrouter(prompt: str, user_id: str, seed: int) -> Optional[Dict[str, Any]]:
+def generate_image_with_openrouter(prompt: str, user_id: str, seed: int, size: Optional[str] = None) -> Optional[Dict[str, Any]]:
     api_key = getattr(Config, 'OPENROUTER_API_KEY', None)
     if not api_key:
         logger.error("OpenRouter API key is not configured.")
@@ -188,7 +270,8 @@ def generate_image_with_openrouter(prompt: str, user_id: str, seed: int) -> Opti
     url = getattr(Config, 'OPENROUTER_IMAGE_URL', 'https://openrouter.ai/api/v1/chat/completions')
     model = getattr(Config, 'OPENROUTER_IMAGE_MODEL', 'google/gemini-2.5-flash-image')
     model_label = getattr(Config, 'OPENROUTER_IMAGE_MODEL_LABEL', model)
-    size = getattr(Config, 'OPENROUTER_IMAGE_SIZE', '1024x1536')
+    if not size:
+        size = getattr(Config, 'OPENROUTER_IMAGE_SIZE', '1024x1024')
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -215,7 +298,7 @@ def generate_image_with_openrouter(prompt: str, user_id: str, seed: int) -> Opti
         payload["image_config"] = {"aspect_ratio": aspect_ratio}
 
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=60)
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
         response.raise_for_status()
         try:
             data = response.json()
@@ -263,7 +346,7 @@ def generate_image_with_openrouter(prompt: str, user_id: str, seed: int) -> Opti
     }
 
 
-def generate_image_with_openai(prompt: str, user_id: str, seed: int) -> Optional[Dict[str, Any]]:
+def generate_image_with_openai(prompt: str, user_id: str, seed: int, size: str = "1024x1024") -> Optional[Dict[str, Any]]:
     """Generate image using OpenAI gpt-image-1 API."""
     api_key = getattr(Config, 'OPENAI_API_KEY', None)
     if not api_key:
@@ -281,11 +364,10 @@ def generate_image_with_openai(prompt: str, user_id: str, seed: int) -> Optional
                 "model": "gpt-image-1",
                 "prompt": prompt,
                 "n": 1,
-                # Portrait default matches ChatGPT's behavior.
-                "size": "1024x1536",
+                "size": size,
                 "quality": "low",
             },
-            timeout=60,
+            timeout=45,
         )
         response.raise_for_status()
         data = response.json()
@@ -331,9 +413,9 @@ def generate_image_with_openai(prompt: str, user_id: str, seed: int) -> Optional
     }
 
 
-def generate_pollinations_image(prompt: str, user_id: str, seed: int) -> Optional[Dict[str, Any]]:
-    image_url = pollinations_url(prompt, seed)
-    local_path = save_pollinations_image(prompt, seed, user_id)
+def generate_pollinations_image(prompt: str, user_id: str, seed: int, width: int = 1024, height: int = 1024) -> Optional[Dict[str, Any]]:
+    image_url = pollinations_url(prompt, seed, width, height)
+    local_path = save_pollinations_image(prompt, seed, user_id, width, height)
     return {
         'image_url': image_url,
         'local_path': local_path,
@@ -368,19 +450,26 @@ def _record_image_usage(result: Optional[Dict[str, Any]]) -> None:
         logger.debug(f"record_usage skipped for image model {model_id}: {exc}")
 
 
-def generate_image_result(user_id: str, prompt: str) -> Optional[Dict[str, Any]]:
+def generate_image_result(user_id: str, prompt: str, aspect_override: Optional[str] = None) -> Optional[Dict[str, Any]]:
     seed = abs(hash(f"{user_id}:{prompt}")) % (2**31)
+    aspect, width, height = resolve_aspect(prompt, override=aspect_override)
+    size_str = f"{width}x{height}"
+    logger.info(f"Image aspect resolved to {aspect} ({size_str}) for prompt: {prompt[:60]!r}")
     # Chain: OpenRouter → Pollinations (free) → OpenAI gpt-image-1 (paid, last resort)
-    result = generate_image_with_openrouter(prompt, user_id, seed)
+    result = generate_image_with_openrouter(prompt, user_id, seed, size=size_str)
     if result:
+        result['aspect'] = aspect
         _record_image_usage(result)
         return result
     logger.info("OpenRouter failed, trying Pollinations.")
-    result = generate_pollinations_image(prompt, user_id, seed)
+    result = generate_pollinations_image(prompt, user_id, seed, width=width, height=height)
     if result and result.get('local_path'):
+        result['aspect'] = aspect
         _record_image_usage(result)
         return result
     logger.info("Pollinations failed, falling back to OpenAI gpt-image-1.")
-    final = generate_image_with_openai(prompt, user_id, seed) or result
+    final = generate_image_with_openai(prompt, user_id, seed, size=size_str) or result
+    if final:
+        final['aspect'] = aspect
     _record_image_usage(final)
     return final

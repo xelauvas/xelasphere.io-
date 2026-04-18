@@ -179,6 +179,14 @@ export function createProseRenderer() {
                 delete block.el.dataset.proseFallback;
             }
 
+            // Preserve the stream cursor across morphdom updates. It's
+            // seeded by transferCursor() on BLOCK_START and lives as the
+            // tail child of block.el — morphdom would otherwise strip it
+            // on every text update (cursor only visible for 1 frame per
+            // block before disappearing). Pop it off, diff, re-append.
+            const detachedCursor = block.el.querySelector(':scope > .stream-cursor');
+            if (detachedCursor) detachedCursor.remove();
+
             if (window.morphdom) {
                 window.morphdom(block.el, wrapper, {
                     childrenOnly: true,
@@ -191,6 +199,8 @@ export function createProseRenderer() {
             } else {
                 block.el.innerHTML = safeHTML;
             }
+
+            if (detachedCursor) block.el.appendChild(detachedCursor);
             wireMarkdownImagesToLightbox(block.el);
         },
         finalize(block) {

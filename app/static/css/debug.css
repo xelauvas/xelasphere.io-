@@ -44,22 +44,18 @@ button:active {
     transform: translateY(1px);
 }
 
-/* --- Streaming cursor (thinking dot + text cursor) --- */
-.streaming-cursor {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    background: rgba(255, 255, 255, 0.85);
-    margin-left: 6px;
-    vertical-align: middle;
-    border-radius: 50%;
-    animation: chatgpt-pulse 1.5s ease-in-out infinite;
-    /* Keep cursor visible above fixed composer */
+/* Streaming cursor visuals live in stream-blocks.css (shared rule
+   for both .streaming-cursor and .stream-cursor so the pre-stream dot
+   and the in-stream cursor are literally the same element style). We
+   keep only scroll-margin-bottom here — that's layout, not visual. */
+.streaming-cursor,
+.stream-cursor {
     scroll-margin-bottom: calc(var(--composer-reserved-height, 150px) + 40px);
 }
 
 @media (max-width: 768px) {
-    .streaming-cursor {
+    .streaming-cursor,
+    .stream-cursor {
         scroll-margin-bottom: calc(var(--composer-reserved-height, 120px) + 60px + env(safe-area-inset-bottom, 0px));
     }
 }

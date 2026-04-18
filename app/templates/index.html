@@ -61,7 +61,11 @@
         const md = window.markdownit({
             html: false,          // Disable raw HTML for security
             linkify: true,        // Auto-convert URLs to links
-            typographer: true,    // Smart quotes, dashes
+            typographer: false,   // OFF — was silently converting CLI flags
+                                  // like `--verbose` into em-dash and breaking
+                                  // code snippets that lacked backticks. The
+                                  // cost of losing smart quotes is worth the
+                                  // correctness of command-line content.
             breaks: false         // \n\n → <p>, single \n ignored (standard markdown)
         }).use(window.markdownitTaskLists, {
             enabled: true,

@@ -16,7 +16,7 @@ import { createListRenderer } from './stream/renderers/list.js';
 import { createMathRenderer } from './stream/renderers/math.js';
 import { createMermaidRenderer } from './stream/renderers/mermaid.js';
 import { applyLayout } from './stream/preWarm.js';
-import { transferCursor, removeCursor } from './stream/cursor.js';
+import { transferCursor, removeCursor, createCursorElement } from './stream/cursor.js';
 
 const PREWARM_THRESHOLD = 100; // chars before we fire layout inference
 
@@ -24,8 +24,21 @@ const PREWARM_THRESHOLD = 100; // chars before we fire layout inference
 // than RAF can drain, rawBuffer grows unbounded. At this many pending
 // chars we force a synchronous drain inline — accepting a paint hitch
 // rather than letting pending text balloon into a multi-frame stall
-// when the RAF finally runs.
+// when the RAF finally runs. Applies to replay mode only; live mode
+// uses the paced drain below.
 const MAX_PENDING_CHARS = 4096;
+
+// Fill-rate governor — decouples paint rate from network arrival so
+// bursty SSE deliveries (ACTION-header flush, cached responses, fast
+// providers like Groq) render as smooth streaming, not as a wall of
+// text appearing at once. Formula:
+//   charsThisFrame = max(floor, ceil(queueLen / catchupFrames))
+// At 60fps this gives a smooth natural read pace when the queue is
+// short (PACE_FLOOR) and smooth acceleration up to "drain everything
+// within CATCHUP_FRAMES frames" when the queue builds up.
+const PACE_FLOOR_CHARS_PER_FRAME = 3;     // ~180 cps — natural read speed
+const PACE_CATCHUP_FRAMES = 30;           // clear backlog in ~500ms
+const PACE_FINALIZE_CHARS_PER_FRAME = 40; // accelerate after network ends
 
 /**
  * Content-profile classification — walks the finalized block list and
@@ -147,6 +160,17 @@ class StreamRenderer {
         this.messageEl = inner;
         this.wrapperEl = wrapper;
 
+        // Seed a cursor immediately so there's never a visible gap between
+        // "thinking indicator hid" and "first block gets its cursor". The
+        // block state machine only emits BLOCK_START on the first \n, which
+        // can be several governor frames after content chunks start arriving
+        // — leaving the bubble blank until then. The cursor telegraphs
+        // "yes, I'm typing" from t=0. transferCursor() finds this node on
+        // the first BLOCK_START and moves it to the block atomically.
+        if (!replay) {
+            inner.appendChild(createCursorElement());
+        }
+
         this.ast = createBlockAST();
         this.sm = createBlockStateMachine(event => this._handleEvent(event));
         this.rafScheduled = false;
@@ -156,38 +180,111 @@ class StreamRenderer {
         // processing per chunk was burning frame budget even when the
         // user sees no visual change per chunk.
         this._pending = '';
+        // Paced drain (live mode only) — chars arrive here from append()
+        // and release to _pending at a governed rate so bursty network
+        // deliveries look like smooth streaming.
+        this._paintQueue = '';
+        this._pacedRafScheduled = false;
+        this._finalizing = false;
     }
 
     append(text) {
         if (this.destroyed || this.finalized) return;
         if (!text) return;
         this.rawBuffer += text;
-        this._pending += text;
         if (!this.prewarmDone && this.rawBuffer.length >= PREWARM_THRESHOLD) {
             applyLayout(this.messageEl, this.rawBuffer.slice(0, PREWARM_THRESHOLD));
             this.prewarmDone = true;
         }
-        // Fix H — backpressure safety valve. If pending grows past the
-        // threshold (pathological burst from upstream), drain now so the
-        // main thread doesn't stall on a huge SM+render pass when RAF
-        // eventually fires.
-        if (this._pending.length >= MAX_PENDING_CHARS) {
-            this._drainPending();
+
+        if (this.replay) {
+            // Replay mode: render the whole message in one pass, no pacing.
+            // History/refresh wants instant DOM, not a re-animated stream.
+            this._pending += text;
+            if (this._pending.length >= MAX_PENDING_CHARS) {
+                this._drainPending();
+                return;
+            }
+            this._scheduleRender();
             return;
         }
-        this._scheduleRender();
+
+        // Live mode: push into paint queue, governor decides release rate.
+        this._paintQueue += text;
+        this._schedulePacedRender();
     }
 
-    finalize() {
-        if (this.destroyed || this.finalized) return;
+    _schedulePacedRender() {
+        if (this._pacedRafScheduled) return;
+        this._pacedRafScheduled = true;
+        requestAnimationFrame(() => {
+            this._pacedRafScheduled = false;
+            if (this.destroyed) return;
+            this._drainPaced();
+            // Keep draining until queue empty (or we're torn down).
+            if (this._paintQueue.length > 0 && !this.destroyed) {
+                this._schedulePacedRender();
+            }
+        });
+    }
+
+    _drainPaced() {
+        if (!this._paintQueue) return;
+        const qlen = this._paintQueue.length;
+        const floor = this._finalizing
+            ? PACE_FINALIZE_CHARS_PER_FRAME
+            : PACE_FLOOR_CHARS_PER_FRAME;
+        const catchup = Math.ceil(qlen / PACE_CATCHUP_FRAMES);
+        const charsThisFrame = Math.max(floor, catchup);
+        const slice = this._paintQueue.slice(0, charsThisFrame);
+        this._paintQueue = this._paintQueue.slice(charsThisFrame);
+        this.sm.append(slice);
+        const live = this.ast.getLive();
+        if (live) {
+            const r = rendererFor(live.type);
+            r.update(live);
+        }
+    }
+
+    finalize(onComplete) {
+        if (this.destroyed || this.finalized) {
+            if (typeof onComplete === 'function') onComplete();
+            return;
+        }
         this.finalized = true;
+        this._finalizing = true;
+        this._onCompleteCallback = typeof onComplete === 'function' ? onComplete : null;
         if (!this.prewarmDone) {
             applyLayout(this.messageEl, this.rawBuffer);
             this.prewarmDone = true;
         }
-        // Drain anything that didn't hit RAF before finalize arrived, so
-        // the last few tokens make it to the AST before sm.finalize()
-        // emits BLOCK_END on them.
+        // If the paced governor still holds chars, drain them at the
+        // finalize-accelerated rate asynchronously. _completeFinalize()
+        // runs the real close-out (sm.finalize, cursor removal, context
+        // classification) once the queue is empty. Caller can pass a
+        // callback to run post-drain (e.g. release the stop button).
+        if (this._paintQueue) {
+            this._schedulePacedFinalize();
+            return;
+        }
+        this._completeFinalize();
+    }
+
+    _schedulePacedFinalize() {
+        requestAnimationFrame(() => {
+            if (this.destroyed) return;
+            this._drainPaced();
+            if (this._paintQueue.length > 0) {
+                this._schedulePacedFinalize();
+            } else {
+                this._completeFinalize();
+            }
+        });
+    }
+
+    _completeFinalize() {
+        if (this.destroyed) return;
+        // Drain anything sync-pending (replay path or if sm was sync-fed).
         if (this._pending) {
             this.sm.append(this._pending);
             this._pending = '';
@@ -289,6 +386,17 @@ class StreamRenderer {
                 };
             }
         } catch (_e) { /* instrumentation must never break the stream */ }
+
+        // Fire any callback the caller passed to finalize(). This is how
+        // codeWindow.js knows "the paced drain has finished, it's safe to
+        // release the stop button and null the _activeStreamRenderer
+        // reference" — without waiting, the button would flip to send
+        // while chars are still visibly filling in.
+        if (this._onCompleteCallback) {
+            const cb = this._onCompleteCallback;
+            this._onCompleteCallback = null;
+            try { cb(); } catch (_e) { /* caller errors must not break finalize */ }
+        }
     }
 
     destroy() {
@@ -315,9 +423,15 @@ class StreamRenderer {
                 if (!this.replay && !block.meta?.ownsCursor) {
                     transferCursor(this.messageEl, block.el);
                 } else if (!this.replay && block.meta?.ownsCursor) {
-                    // Renderer owns it: still retire the previous block's
-                    // cursor so we don't leave two on screen.
-                    removeCursor(this.messageEl);
+                    // Renderer owns its own cursor inside block.el (code
+                    // block creates one inside its <pre>). Retire any
+                    // cursor from the PREVIOUS block — but don't touch
+                    // the one we just created. removeCursor() used to
+                    // nuke everything including the fresh one.
+                    const allCursors = this.messageEl.querySelectorAll('.stream-cursor');
+                    allCursors.forEach((c) => {
+                        if (!block.el.contains(c)) c.remove();
+                    });
                 }
                 break;
             }

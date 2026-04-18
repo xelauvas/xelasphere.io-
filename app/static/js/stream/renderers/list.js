@@ -8,6 +8,13 @@
 
 const UL_ITEM_RE = /^[-+*] (.*)$/;
 const OL_ITEM_RE = /^\d+\. (.*)$/;
+// Task-list prefixes that the markdown-it-task-lists plugin would normally
+// emit as <input type="checkbox"> elements — but our per-item rendering
+// strips the list bullet before calling md.render, which makes the plugin
+// inert (it needs the full `- [ ] ...` syntax to fire). Detect the prefix
+// here and render the checkbox manually so the CSS at message-styles.css
+// .task-list-item kicks in.
+const TASK_PREFIX_RE = /^\[([ xX])\]\s+(.*)$/;
 
 function parseItems(block) {
     const lines = block.text.split('\n');
@@ -67,14 +74,47 @@ export function createListRenderer() {
                 const li = document.createElement('li');
                 li.className = `block-list-item${liNoAnim}`;
                 li.style.setProperty('--i', String(i));
-                const html = renderMd(text);
-                if (html == null) li.textContent = text;
-                else li.innerHTML = html;
+
+                // Task-list item? Detect [ ] or [x] prefix and build the
+                // checkbox + label DOM manually — md.render on just "[ ] text"
+                // produces literal bracket characters because the task-lists
+                // plugin can only activate from the full `- [ ] ...` syntax.
+                const taskMatch = text.match(TASK_PREFIX_RE);
+                if (taskMatch) {
+                    li.classList.add('task-list-item');
+                    const checked = /[xX]/.test(taskMatch[1]);
+                    if (checked) li.classList.add('checked');
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.disabled = true;
+                    checkbox.checked = checked;
+                    li.appendChild(checkbox);
+                    // Wrap remaining markdown in a label so CSS can strike-through
+                    // the text when :has(input:checked) — matches the GFM convention.
+                    const label = document.createElement('label');
+                    const html = renderMd(taskMatch[2]);
+                    if (html == null) label.textContent = taskMatch[2];
+                    else label.innerHTML = html;
+                    li.appendChild(label);
+                } else {
+                    const html = renderMd(text);
+                    if (html == null) li.textContent = text;
+                    else li.innerHTML = html;
+                }
+
                 frag.appendChild(li);
                 added++;
             }
             if (added) {
+                // Preserve the trailing cursor across list growth. Without
+                // this, transferCursor() seeded the cursor as the only
+                // child of block.el; appending items after would leave
+                // the cursor at the TOP of the list instead of after the
+                // last <li>. Pop, append items, re-attach at the end.
+                const trailingCursor = block.el.querySelector(':scope > .stream-cursor');
+                if (trailingCursor) trailingCursor.remove();
                 block.el.appendChild(frag);
+                if (trailingCursor) block.el.appendChild(trailingCursor);
                 block.meta.renderedItemCount = existing + added;
             }
         },

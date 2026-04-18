@@ -703,8 +703,19 @@ function hideSimplePulsingDot() {
         const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
         const keepAtTop = window._keepMessageAtTop;
 
-        simplePulsingDotElement.remove();
+        // Quick fade before removing so the handoff from pre-stream dot
+        // to in-stream cursor is a fade-through, not a hard cut. The
+        // new StreamRenderer bubble underneath is also fading in via
+        // contentFadeIn 0.3s — overlapping fades = smooth crossfade.
+        const dotToRemove = simplePulsingDotElement;
         simplePulsingDotElement = null;
+        dotToRemove.style.transition = 'opacity 120ms ease-out';
+        dotToRemove.style.opacity = '0';
+        setTimeout(() => {
+            if (dotToRemove && dotToRemove.parentNode) {
+                dotToRemove.remove();
+            }
+        }, 130);
 
         // Restore scroll position if keeping message at top
         if (keepAtTop && scrollContainer) {
@@ -1975,6 +1986,14 @@ function finalizeSingleImage(layer, imageUrl, alt, promptText) {
         }
     });
     if (placeholder) placeholder.style.opacity = '1';
+
+    // Hover-reveal Edit/Share toolbar — refresh path gets this via buildImageLayer()
+    // in script.js, live single-image was reusing the placeholder's pre-built layer
+    // and never attaching it. Skip if already present (defensive against re-render).
+    if (!layer.querySelector('.image-layer__actions') && typeof buildImageHoverToolbar === 'function') {
+        const toolbar = buildImageHoverToolbar(imageUrl, alt);
+        if (toolbar) layer.appendChild(toolbar);
+    }
 }
 
 function isImagePrompt(prompt = '') {
@@ -2205,6 +2224,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         // Prepare request data
         const formData = new FormData();
         formData.append('prompt', prompt);
+        if (_styleDisplayPrompt !== null) {
+            formData.append('display_prompt', _styleDisplayPrompt);
+        }
 
         // Request mode: single source of truth for UI intent overrides.
         //   'auto'     → model picks ACTION: itself (default)
@@ -2331,12 +2353,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         console.log('[Stream] Image response intercepted:', data.image_url);
                         // Replace placeholder with image or display image
                         const aiMsgId = placeholderId || generateMessageId();
+                        const altPrompt = _styleDisplayPrompt !== null ? _styleDisplayPrompt : prompt;
                         if (placeholderId && document.getElementById(placeholderId)) {
-                            replacePlaceholderWithImage(placeholderId, data.image_url, prompt);
+                            replacePlaceholderWithImage(placeholderId, data.image_url, altPrompt);
                         } else {
-                            displayMessage('', 'ai', 'image-placeholder', prompt, true, aiMsgId);
+                            displayMessage('', 'ai', 'image-placeholder', altPrompt, true, aiMsgId);
                             placeholderTimestamps.set(aiMsgId, Date.now());
-                            replacePlaceholderWithImage(aiMsgId, data.image_url, prompt);
+                            replacePlaceholderWithImage(aiMsgId, data.image_url, altPrompt);
                         }
                         // Save to chat history
                         if (manager?.addOrUpdateAiMessage) {
@@ -2535,7 +2558,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     ThinkingIndicator.hide(); hideSimplePulsingDot();
 
                                     // Phase 2: Create StreamRenderer on first content chunk
-                                    if (isSessionActive() && typeof StreamRenderer !== 'undefined') {
+                                    // Skip when an image placeholder is already pending:
+                                    // the narration that follows an ACTION: generate_image
+                                    // header would otherwise render into its own bubble
+                                    // alongside the image, diverging from the refresh path.
+                                    if (isSessionActive() && typeof StreamRenderer !== 'undefined' && !pendingImagePlaceholderId) {
                                         _streamMsgId = searchMsgId || placeholderId || generateMessageId();
                                         var targetEl = document.getElementById(_streamMsgId);
                                         if (!targetEl) {
@@ -2705,7 +2732,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 // Feed StreamRenderer AFTER fence detection, only when
                                 // no artifact fence was just triggered. This prevents
                                 // artifact code from leaking into the message bubble.
-                                if (!_fenceJustTriggered && !artifactStreamActive && !artifactMetaPending && _streamRenderer) {
+                                // Also skip when an image placeholder is active — the
+                                // narration streaming after an ACTION: generate_image
+                                // header must not render into a chat bubble.
+                                if (!_fenceJustTriggered && !artifactStreamActive && !artifactMetaPending && !pendingImagePlaceholderId && _streamRenderer) {
                                     const _cleanChunk = _stripActionFromChunk(chunkText);
                                     if (_cleanChunk) {
                                         _streamRenderer.append(_cleanChunk);
@@ -2746,6 +2776,21 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             console.log('[Stream] image_generating:', chunk.description);
                             if (isSessionActive()) {
                                 ThinkingIndicator.hide(); hideSimplePulsingDot();
+                                // Tear down any narration StreamRenderer that already
+                                // raced ahead of us. Image responses are image-only on
+                                // refresh (suppressText:true), so live must match —
+                                // otherwise the narration bubble stays visible beside
+                                // the image.
+                                if (_streamRenderer) {
+                                    _streamRenderer.destroy();
+                                    _streamRenderer = null;
+                                    window._activeStreamRenderer = null;
+                                }
+                                if (_streamMsgId) {
+                                    const staleEl = document.getElementById(_streamMsgId);
+                                    if (staleEl) staleEl.remove();
+                                    _streamMsgId = null;
+                                }
                                 const imgPlaceholderId = generateMessageId();
                                 displayMessage('', 'ai', 'image-placeholder', chunk.description || prompt, true, imgPlaceholderId);
                                 placeholderTimestamps.set(imgPlaceholderId, Date.now());
@@ -2875,7 +2920,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     replacePlaceholderWithImage(
                                         pendingImagePlaceholderId,
                                         finalUrls.length === 1 ? finalUrls[0] : finalUrls,
-                                        prompt
+                                        _styleDisplayPrompt !== null ? _styleDisplayPrompt : prompt
                                     );
                                     streamDoneImageUrls = finalUrls;
                                     streamDoneAttachments = atts.length ? atts : [{
@@ -3019,28 +3064,25 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                 // generate_image done: placeholder already replaced, show chat text below image and save
                 if (streamDoneImageUrls && streamDoneImageUrls.length) {
+                    // Image branch takes over the bubble — tear down the StreamRenderer
+                    // the same way the artifact/text branches below do, otherwise
+                    // window._activeStreamRenderer lingers and resetSendButtonIfIdle()
+                    // refuses to hide the stop button ("Generating response…" stuck).
+                    if (_streamRenderer) {
+                        _streamRenderer.destroy();
+                        _streamRenderer = null;
+                        window._activeStreamRenderer = null;
+                    }
                     const imgUrl = streamDoneImageUrls[0]; // legacy single-URL hook
                     const imgAttachments = streamDoneAttachments || [{ isImage: true, url: imgUrl, name: 'AI generated image' }];
                     streamDoneImageUrls = null;
                     streamDoneAttachments = null;
                     const imgMsgId = pendingImagePlaceholderId || aiMsgId;
                     pendingImagePlaceholderId = null;
-
-                    // Append chat text below the image
-                    if (displayContent && displayContent.trim()) {
-                        const imgMsgDiv = document.getElementById(imgMsgId);
-                        if (imgMsgDiv) {
-                            const msgContent = imgMsgDiv.querySelector('.message-content');
-                            if (msgContent) {
-                                const captionEl = document.createElement('div');
-                                captionEl.className = 'image-caption';
-                                captionEl.innerHTML = typeof marked !== 'undefined'
-                                    ? DOMPurify.sanitize(marked.parse(displayContent))
-                                    : displayContent;
-                                msgContent.appendChild(captionEl);
-                            }
-                        }
-                    }
+                    // Image responses render image-only — the refresh path strips the
+                    // narration via suppressText:true, so live must match. Keeping the
+                    // chat_summary in memory (displayContent) for persistence but not
+                    // rendering it below the image.
 
                     const imgManager = window.chatManager;
                     if (imgManager?.addOrUpdateAiMessage) {
@@ -3061,6 +3103,39 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             messageType: 'image'
                         });
                     }
+
+                    // Canonical AI-message post-processing that the non-image branches
+                    // at line ~3115 do. Image branch early-returns so everything below
+                    // — dataset fields, model attribution, action buttons
+                    // (Edit/Share/Copy) — must be applied here explicitly or refresh
+                    // renders differently than live.
+                    const imgContainer = document.getElementById(imgMsgId);
+                    if (imgContainer) {
+                        imgContainer.dataset.originalPrompt = prompt;
+                        imgContainer.dataset.sender = 'ai';
+                        imgContainer.dataset.timestamp = new Date().toISOString();
+                        if (streamModelMeta) {
+                            imgContainer._modelMeta = streamModelMeta;
+                            if (typeof window.addModelAttribution === 'function') {
+                                window.addModelAttribution(imgContainer, streamModelMeta);
+                            }
+                        }
+                        const imgContent = imgContainer.querySelector('.message-content');
+                        if (imgContent && !imgContainer.querySelector('.action-buttons')
+                            && typeof appendActionButtons === 'function') {
+                            appendActionButtons(imgContent, imgMsgId);
+                        }
+                    }
+
+                    // Background request cleanup — non-image branches reach the
+                    // shared cleanup at line ~3485 via the fall-through, this branch
+                    // must do it manually before the early return or the manager
+                    // keeps the session status as "streaming" and re-shows the
+                    // ThinkingIndicator on the next switchSession() round-trip.
+                    if (bgRequest) {
+                        BackgroundRequestManager.updateSessionProcessingIndicator(requestSessionId, false);
+                        BackgroundRequestManager.clearRequest(requestSessionId);
+                    }
                     return aiMsgId;
                 }
 
@@ -3077,10 +3152,49 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 }
 
                 if (_streamRenderer) {
-                    // Content was rendered live — flush remaining buffer
-                    _streamRenderer.finalize();
-                    _streamRenderer = null; window._activeStreamRenderer = null;
-                    messageContainer = document.getElementById(aiMsgId);
+                    // Safety net: server parsed an artifact but live fence
+                    // detection never fired (e.g. model emitted artifact-file
+                    // without artifact-meta, or fence straddled chunk
+                    // boundaries awkwardly). In that case the bubble has
+                    // unfenced metadata JSON ({"title":"...","primaryLanguage":
+                    // "..."}) that server chat_summary has already stripped.
+                    // Rebuild the bubble from chat_summary so live matches
+                    // refresh byte-for-byte.
+                    const needsArtifactReseed = streamArtifact && streamArtifact.artifactId
+                        && !artifactStreamActive && !artifactMetaPending;
+                    if (needsArtifactReseed) {
+                        _streamRenderer.destroy();
+                        _streamRenderer = null; window._activeStreamRenderer = null;
+                        messageContainer = document.getElementById(aiMsgId);
+                        if (messageContainer) {
+                            const mc = messageContainer.querySelector('.message-content');
+                            if (mc) {
+                                mc.innerHTML = '';
+                                if (streamChatSummary && typeof StreamRenderer !== 'undefined') {
+                                    const reseedRenderer = new StreamRenderer(mc, { replay: true });
+                                    reseedRenderer.append(streamChatSummary);
+                                    reseedRenderer.finalize();
+                                }
+                            }
+                        }
+                    } else {
+                        // Content was rendered live — flush remaining buffer.
+                        // Keep _activeStreamRenderer set until the paced
+                        // drain actually finishes (governor may still have
+                        // chars queued) so the stop button doesn't flip
+                        // back to send while text is still filling in.
+                        const pendingRenderer = _streamRenderer;
+                        pendingRenderer.finalize(() => {
+                            if (window._activeStreamRenderer === pendingRenderer) {
+                                window._activeStreamRenderer = null;
+                            }
+                            if (typeof resetSendButtonIfIdle === 'function') {
+                                resetSendButtonIfIdle();
+                            }
+                        });
+                        _streamRenderer = null;
+                        messageContainer = document.getElementById(aiMsgId);
+                    }
                     if (messageContainer) {
                         messageContainer.dataset.originalPrompt = prompt;
                         messageContainer.dataset.sender = 'ai';
@@ -3167,7 +3281,15 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     if (messageContent) {
                         messageContent.dataset.emailComposer = 'true';
                         messageContent.innerHTML = '';
-                        window.EmailComposer.createCard(streamEmailData, messageContent);
+                        // Pass streaming=false — the email body arrived in the done
+                        // payload already complete, so the character-by-character
+                        // animation just adds a pointless 1-2s delay. Refresh path
+                        // (startNewChatModule.js:4495) already passes false.
+                        window.EmailComposer.createCard(streamEmailData, messageContent, false);
+                        if (typeof appendActionButtons === 'function'
+                            && !messageContainer.querySelector('.action-buttons')) {
+                            appendActionButtons(messageContent, aiMsgId);
+                        }
                         console.log('Email composer card created for streamed response');
                     }
                 }
@@ -3222,7 +3344,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     hasReasoning: !!streamedReasoning,
                     reasoningLength: streamedReasoning?.length || 0
                 });
-                // Build artifact reference for local cache if artifact exists
+                // Build artifact reference for local cache if artifact exists.
+                // Must mirror the shape used by the refresh path
+                // (startNewChatModule.js:4290+) so the pill renders identically —
+                // pending/isActive drive CSS state, versionId/entrypoint drive
+                // the file-open behavior.
                 let streamArtifactRef = null;
                 if (streamArtifact && streamArtifact.artifactId) {
                     streamArtifactRef = {
@@ -3231,6 +3357,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         type: streamArtifact.type,
                         primaryLanguage: streamArtifact.primaryLanguage,
                         versionNumber: streamArtifact.activeVersion?.versionNumber || streamArtifact.versionCount || 1,
+                        versionId: streamArtifact.activeVersion?.versionId,
+                        entrypoint: streamArtifact.activeVersion?.entrypointPath,
+                        isActive: streamArtifact.isActive,
+                        pending: streamArtifact.pending,
                         summary: displayContent
                     };
                 }
@@ -3422,7 +3552,15 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         primaryLanguage: streamArtifact.primaryLanguage,
                         summary: displayContent
                     };
+                    // Register the streamed payload as a session-scoped draft so
+                    // clicking the pill opens instantly from local cache instead of
+                    // triggering a server fetch. Refresh path does this at
+                    // startNewChatModule.js:4319 — live was skipping it.
+                    if (typeof window.artifactPanel.registerDraft === 'function') {
+                        window.artifactPanel.registerDraft(artifactRef, streamArtifact, requestSessionId);
+                    }
                     window.artifactPanel.attachPreview(messageContainer, artifactRef, {
+                        sessionId: requestSessionId,
                         payload: streamArtifact
                     });
                 }
@@ -3594,13 +3732,14 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         const reuseIdForResponse = reuseMessageIdForResponse !== false && !!messageId;
         const aiMsgId = reuseIdForResponse ? messageId : (placeholderId || generateMessageId());
         if (data.image_url) {
+            const altPrompt = _styleDisplayPrompt !== null ? _styleDisplayPrompt : prompt;
             if (placeholderId && document.getElementById(placeholderId)) {
-                replacePlaceholderWithImage(placeholderId, data.image_url, prompt);
+                replacePlaceholderWithImage(placeholderId, data.image_url, altPrompt);
                 messageContainer = document.getElementById(placeholderId);
             } else {
-                displayMessage('', 'ai', 'image-placeholder', prompt, true, aiMsgId);
+                displayMessage('', 'ai', 'image-placeholder', altPrompt, true, aiMsgId);
                 placeholderTimestamps.set(aiMsgId, Date.now());
-                replacePlaceholderWithImage(aiMsgId, data.image_url, prompt);
+                replacePlaceholderWithImage(aiMsgId, data.image_url, altPrompt);
                 messageContainer = document.getElementById(aiMsgId);
             }
             if (manager?.updateLastAiMessage) {
@@ -3763,7 +3902,14 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 messageContent.dataset.emailComposer = 'true';
                 // Clear the duplicate text, show only the composer card
                 messageContent.innerHTML = '';
-                window.EmailComposer.createCard(data.email, messageContent);
+                // streaming=false — full body is already in data.email. Without
+                // this the composer runs its char-by-char replay animation on
+                // complete data, which is pure UX dead weight.
+                window.EmailComposer.createCard(data.email, messageContent, false);
+                if (typeof appendActionButtons === 'function'
+                    && !messageContainer.querySelector('.action-buttons')) {
+                    appendActionButtons(messageContent, aiMsgId);
+                }
                 console.log('Email composer card created');
             }
         }

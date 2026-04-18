@@ -531,6 +531,11 @@ def chat_stream():
         user_id = session.get('guest', {}).get('id')
 
     prompt = request.form.get('prompt', '').strip()
+    # Style-clean prompt for display/persistence. Client-side styleManager
+    # prepends an instruction (e.g. "Respond with thorough explanation: …")
+    # to `prompt` before sending; `display_prompt` carries the original
+    # user-visible text so refresh shows the same bubble content as live.
+    display_prompt = request.form.get('display_prompt', '').strip() or prompt
     user_prompt_raw = prompt  # Keep raw user text for intent detection (before file content injection)
     # Request mode — single UI intent override. Valid values: auto, search,
     # research, chat, artifact. Unknown values fall back to auto.
@@ -846,7 +851,7 @@ def chat_stream():
                 messages_in_session=len(previous_messages)
             )
             memory_orchestrator_stream = MemoryOrchestrator(user_id, memory_session_ctx)
-            memory_context = memory_orchestrator_stream.get_context(prompt, conv_state)
+            memory_context = memory_orchestrator_stream.get_context(display_prompt, conv_state)
 
             if not memory_context.memory_disabled:
                 long_term_memory_stream = memory_context.context_block
@@ -2027,7 +2032,7 @@ def chat_stream():
                             save_interaction(
                                 user_id=user_id,
                                 session_id=session_id,
-                                user_prompt=prompt,
+                                user_prompt=display_prompt,
                                 response_text=chat_summary,
                                 sentiment='neutral',
                                 is_code_response=(render_mode in ['artifact', 'code_window']),
@@ -2060,7 +2065,7 @@ def chat_stream():
                                         messages_in_session=len(previous_messages)
                                     )
                                     memory_write_result = memory_orchestrator_stream.post_turn(
-                                        prompt,
+                                        display_prompt,
                                         full_content,
                                         conv_state_for_write,
                                         memory_eval_metadata_stream
@@ -2205,6 +2210,8 @@ def chat():
             user_id = session['user']['uid']
 
         user_prompt = request.form.get('prompt', '').strip()
+        # Style-clean prompt for display/persistence (see /chat/stream for rationale).
+        display_prompt = request.form.get('display_prompt', '').strip() or user_prompt
 
         # For guests: force default model and disable certain features
         if guest_mode:
@@ -2491,7 +2498,7 @@ def chat():
                 chat_data, persisted = save_interaction(
                     user_id=user_id,
                     session_id=session_id,
-                    user_prompt=user_prompt,
+                    user_prompt=display_prompt,
                     response_text=clarification_response,
                     sentiment='neutral',
                     is_code_response=False,
@@ -2542,7 +2549,7 @@ def chat():
 
             # Create orchestrator and get context
             memory_orchestrator = MemoryOrchestrator(user_id, memory_session_ctx)
-            memory_context = memory_orchestrator.get_context(user_prompt, conv_state)
+            memory_context = memory_orchestrator.get_context(display_prompt, conv_state)
 
             # Use context_block as long_term_memory
             if memory_context.memory_disabled:
@@ -3387,7 +3394,7 @@ def chat():
             chat_data, persisted = save_interaction(
                 user_id=user_id,
                 session_id=session_id,
-                user_prompt=user_prompt,
+                user_prompt=display_prompt,
                 response_text=response_text,
                 sentiment=sentiment,
                 is_code_response=is_code_response,
@@ -3494,7 +3501,7 @@ def chat():
                     )
                     memory_future = executor.submit(
                         memory_orchestrator.post_turn,
-                        user_prompt,
+                        display_prompt,
                         response_text,
                         conv_state_for_write,
                         memory_eval_metadata

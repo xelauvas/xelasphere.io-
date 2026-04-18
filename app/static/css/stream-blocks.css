@@ -1,7 +1,10 @@
-/* Block containers — layout + entrance animations */
+/* Block containers — layout only. Entrance animations removed: they
+   ran 80–120ms per block during live streaming (replay was already
+   exempt via .stream-no-anim) and caused visible stagger when combined
+   with the paced governor in streamRenderer.js. Refresh always rendered
+   instant; live now matches. */
 
 .stream-block {
-    animation: streamBlockIn 120ms ease-out;
     /* Explicit sizing: parents up the chain are flex columns, where a
        block-level child without min-width:0 collapses to its smallest
        intrinsic width — one character per line. The old appendTextMessage
@@ -22,24 +25,11 @@
     min-width: 0;
 }
 
-.block-code        { animation: streamBlockIn  80ms ease-out; }
-.block-math        { animation: streamBlockIn 100ms ease-out; }
-.block-mermaid     { animation: streamBlockIn 100ms ease-out; }
-/* List items appear as tokens stream in — no per-item entry animation
-   (the stagger read as a visual cascade on multi-item lists). The parent
-   .stream-block wrapper still animates once on list open. */
-
-@keyframes streamBlockIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
+/* No per-block entrance animations — paced char-by-char reveal from the
+   governor is the only streaming cue the user needs. Keeps live and
+   replay byte-identical at the CSS layer. */
 
 @media (prefers-reduced-motion: reduce) {
-    .stream-block,
-    .block-code,
-    .block-math,
-    .block-mermaid,
-    .block-list-item,
     .stream-cursor {
         animation: none;
     }
@@ -79,22 +69,25 @@
     50%      { opacity: 1; }
 }
 
-/* Cursor — ChatGPT-style pulsing dot. */
+/* Cursor — ChatGPT-style pulsing dot. Must match .streaming-cursor
+   (debug.css) exactly so the pre-stream dot and the in-stream cursor
+   look like the SAME cursor — no visible swap when streaming starts. */
 
-.stream-cursor {
+.stream-cursor,
+.streaming-cursor {
     display: inline-block;
-    width: 0.65em;
-    height: 0.65em;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    background: var(--text-primary, #e2e8f0);
-    margin-left: 0.3em;
+    background: rgba(255, 255, 255, 0.85);
+    margin-left: 6px;
     vertical-align: middle;
-    animation: streamCursorPulse 1.1s ease-in-out infinite;
+    animation: chatgpt-pulse 1.5s ease-in-out infinite;
 }
 
-@keyframes streamCursorPulse {
-    0%, 100% { opacity: 1;   transform: scale(1); }
-    50%      { opacity: 0.35; transform: scale(0.7); }
+@keyframes chatgpt-pulse {
+    0%, 100% { transform: scale(1);   opacity: 0.4; }
+    50%      { transform: scale(1.3); opacity: 1;   }
 }
 
 /* Pre-warm layout variants */

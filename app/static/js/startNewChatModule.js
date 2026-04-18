@@ -4247,6 +4247,17 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 }
                 // Still render chart even for image messages
                 this._renderCryptoChartFromHistory(message, messageId);
+                // Reasoning: live stream attaches ReasoningDisplay to image
+                // messages when the reasoning model emitted one (codeWindow.js
+                // ~line 3210, not gated on hasAiImages). Refresh used to early-
+                // return here and drop it on the floor — reasoning pill missing
+                // after reload despite being visible during live.
+                if (message.reasoning && window.ReasoningDisplay) {
+                    const imgTargetEl = document.getElementById(`ai-${messageId}`);
+                    if (imgTargetEl) {
+                        window.ReasoningDisplay.create(message.reasoning, imgTargetEl);
+                    }
+                }
                 return;
             }
 

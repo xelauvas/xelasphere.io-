@@ -21,7 +21,7 @@ from ..utilities import send_metadata_prompt
 logger = logging.getLogger(__name__)
 
 # System prompt for memory extraction - keep it concise for better results
-EXTRACTION_SYSTEM_PROMPT = """You are a memory extraction assistant. Extract personal facts from user messages.
+EXTRACTION_SYSTEM_PROMPT = """You are a memory extraction assistant. Extract ONLY durable personal facts about the USER. Be extremely conservative — when in doubt, extract NOTHING.
 
 Categories:
 - profile: name, location, job/role, timezone, language
@@ -32,47 +32,65 @@ Categories:
 Return JSON: {"memories": [{"type": "...", "key": "...", "value": "...", "confidence": 0.9, "quote": "..."}]}
 If nothing to remember: {"memories": []}
 
-Rules:
-1. Only extract EXPLICIT statements, not assumptions
-2. Works in ANY language
-3. QUESTIONS are NOT facts - skip ALL questions ("what should I...", "how do I...", "can you...")
-4. NEGATIONS are NOT facts - if user says "not X", "I'm not X", "not ada price", do NOT extract X as a fact. Only extract what the user IS, not what they deny being
-5. CORRECTIONS: "I am X not Y" or "my name is X not Y" → extract ONLY X. The negated part (Y) is what they are rejecting
-4. OPT-OUT: If user says "dont remember", "off the record", "forget this", "between us", "private" - return EMPTY {"memories": []}
-5. CONSTRAINT KEY FORMAT: Use "no_[thing]" as key, context as value. Each constraint needs a UNIQUE key!
+HARD REJECTION RULES (return empty memories if ANY apply):
+
+1. TASK INSTRUCTIONS ARE NOT PREFERENCES. If the user is giving a one-shot instruction for THIS response ("Show X", "Make Y", "Write Z", "Give me A", "Explain B", "Build C", "Fix D"), extract NOTHING. An instruction without a durability signal is a task, not a preference.
+
+2. DURABILITY SIGNAL REQUIRED for preference/constraint. Only extract a preference or constraint when the user explicitly marks it as persistent. Required signals:
+   - "I prefer", "I like", "I hate", "I always", "I never", "I usually"
+   - "from now on", "going forward", "always", "never"
+   - "remember", "keep in mind", "note that", "don't forget"
+   - "my preferred", "my style is", "I want you to [always/keep]"
+   WITHOUT one of these signals, a one-line directive is a task, NOT a preference.
+
+3. TEST / DEMO / EXAMPLE CONTENT. If the message looks like a test prompt, demo request, or example ("show real checkboxes", "display this", "render that as", "format X as Y"), extract NOTHING. These are testing the UI, not user preferences.
+
+4. QUESTIONS. "what should I...", "how do I...", "can you..." → NOTHING.
+
+5. NEGATIONS. "not X", "I'm not X" → extract only the positive claim if paired ("I am X not Y" → X only). A lone negation is NOTHING.
+
+6. OPT-OUT. "dont remember", "off the record", "forget this", "between us", "private" → NOTHING.
+
+7. CODE / TECHNICAL EXPLANATIONS. If the message is explaining code, debugging, or describing how something works → NOTHING. The user asking about --verbose is not a preference for --verbose.
+
+CONSTRAINT KEY FORMAT: Use "no_[thing]" as key, context as value. Unique keys per constraint.
    - "never use var" → key=no_var, value=javascript
    - "avoid any" → key=no_any, value=typescript
-   - Different things = different keys (so they don't overwrite each other)
 
-6. EXPLICIT MEMORY REQUESTS: When user says "remember", "from now on", "keep in mind", "note that" — extract ALL facts listed, even if multi-line
-7. WRITING/RESPONSE preferences: "Write in UK English" → preference: writing_language=UK English; "Keep responses short" → preference: response_length=short; "Use bullet points" → preference: response_format=bullet points
-8. BACKGROUND/BIO: "My background: X" → profile: background=X; "transitioning into Y" → profile: career_transition=Y
+WRITING/RESPONSE preferences (REQUIRE durability signal):
+   - "always write in UK English" → preference: writing_language=UK English
+   - "from now on keep responses short" → preference: response_length=short
+   WITHOUT "always"/"from now on", treat as a one-off task, NOT a preference.
 
-Examples:
+BACKGROUND/BIO: "My background: X", "I'm transitioning into Y" → profile entries (these are statements about the user, OK).
+
+Examples — EXTRACT:
 - "im alex from berlin" → profile: name=Alex, location=Berlin
 - "im a backend developer" → profile: role=backend developer
-- "je m'appelle marie" → profile: name=Marie (French)
-- "never use tabs" → constraint: no_tabs=use spaces instead
+- "je m'appelle marie" → profile: name=Marie
+- "i always use tabs" → preference: indentation=tabs
 - "never use var in javascript" → constraint: no_var=javascript
-- "avoid using any in typescript" → constraint: no_any=typescript
-- "dont use jQuery" → constraint: no_jquery=use vanilla JS or modern frameworks
-- "dont use !important in css" → constraint: no_important=css
-- "avoid inline styles" → constraint: no_inline_styles=use CSS classes
-- "im building a saas with flask" → project: current_project=SaaS with Flask
 - "i prefer typescript over javascript" → preference: language_preference=TypeScript
-- "i work as a data scientist at google" → profile: role=data scientist, company=Google
-- "from now on remember: write in UK English, keep responses short" → preference: writing_language=UK English, response_length=short
+- "from now on write in UK English" → preference: writing_language=UK English
 - "my background: hotel GM transitioning into software" → profile: background=hotel GM transitioning into software
-- "dont remember this but my salary is 100k" → nothing (opt-out)
-- "off the record, i hate my job" → nothing (opt-out)
-- "what's the weather" → nothing (question)
-- "help me debug this" → nothing (question)
-- "what tools should I use for my project?" → nothing (question, not a fact)
-- "can you recommend a framework?" → nothing (question)
-- "i am xela not ada" → profile: name=Xela (NOT Ada — "not ada" is a negation)
-- "my name is alex not alice" → profile: name=Alex (NOT Alice)
-- "i'm not a designer" → nothing (negation, not an affirmation)
-- "that's not my timezone" → nothing (negation)"""
+- "im building a saas with flask" → project: current_project=SaaS with Flask
+- "i am xela not ada" → profile: name=Xela
+
+Examples — EXTRACT NOTHING (task instructions, tests, questions):
+- "Show real checkboxes" → NOTHING (one-off task)
+- "Show --verbose and --dry-run as literal dashes, not em-dashes" → NOTHING (UI test instruction, not a preference)
+- "Give me a todo list with 3 unchecked items" → NOTHING (task)
+- "Explain the --verbose flag" → NOTHING (question/task)
+- "Write me a React app" → NOTHING (task)
+- "Fix this bug" → NOTHING (task)
+- "Make it blue" → NOTHING (one-off task)
+- "Use bullet points" → NOTHING (one-off; no durability signal)
+- "Avoid inline styles" → NOTHING (one-off; no durability signal — BUT "I always avoid inline styles" → constraint)
+- "what's the weather" → NOTHING (question)
+- "can you recommend a framework?" → NOTHING (question)
+- "i'm not a designer" → NOTHING (lone negation)
+- "dont remember this but my salary is 100k" → NOTHING (opt-out)
+- "help me debug this" → NOTHING (task)"""
 
 
 @dataclass
