@@ -298,3 +298,31 @@ async def test_concurrent_ingest_same_user_serialises(
         f"drawer_id collision detected: {unique_drawers} distinct vs "
         f"{total} rows — writer_lock discipline broken"
     )
+
+
+async def test_ingest_during_shutdown_returns_503(client, auth):
+    """Spec review-fix (quality review Important #3): when the registry is
+    in shutdown, ``registry.open`` raises ``RuntimeError`` with the
+    shutdown message. The route maps this to HTTP 503, not 500, so
+    health-checkers and load balancers correctly classify the sidecar
+    as unavailable rather than broken.
+    """
+    # Flip the shutdown flag on the live registry without actually
+    # closing handles — we just want to exercise the route's branch.
+    registry = client._transport.app.state.registry  # type: ignore[attr-defined]
+    registry._shutting_down = True
+    try:
+        body = {
+            "turn_id": "018f1bce-9ab7-7bca-baaa-ffffffffffff",
+            "session_id": "shutdown-s",
+            "pair_id": "018f1bce-9ab7-7bca-bbbb-ffffffffffff",
+            "role": "user",
+            "text": "too late",
+            "ts": 1_700_000_999.0,
+        }
+        r = await client.post("/palace/eve/ingest", json=body, headers=auth)
+        assert r.status_code == 503, (
+            f"expected 503 during shutdown; got {r.status_code}: {r.text}"
+        )
+    finally:
+        registry._shutting_down = False

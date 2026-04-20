@@ -127,7 +127,7 @@ class PalaceRegistry:
     # Lock bookkeeping
     # ------------------------------------------------------------------
 
-    def _lock_for(self, user_id: str) -> RWLock:
+    def lock_for(self, user_id: str) -> RWLock:
         """Lazy-create the per-user RWLock — race-free via dict.setdefault.
 
         Called from route handlers that need quick access to the per-user
@@ -195,7 +195,7 @@ class PalaceRegistry:
                 # it (otherwise we'd need to create it after release,
                 # and a concurrent reader could beat us to creating a
                 # different instance).
-                self._lock_for(user_id)
+                self.lock_for(user_id)
                 to_close_after = self._evict_to_fit_unlocked()
 
         # Phase 2: registry lock released. For each evicted user, grab
@@ -348,7 +348,7 @@ class PalaceRegistry:
             # reader reference on this palace, so close directly.
             # This happens in test paths where ``_construct_entry`` is
             # mocked and ``open`` short-circuits before
-            # ``_lock_for``; production paths always register the lock.
+            # ``lock_for``; production paths always register the lock.
             self._close_handle_safely(handle)
             return
 

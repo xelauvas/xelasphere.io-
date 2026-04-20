@@ -132,7 +132,7 @@ async def test_eviction_blocks_on_held_reader_lock(
     monkeypatch.setattr(registry, "_construct_entry", fake_construct)
 
     e1 = await registry.open("u1")
-    u1_lock = registry._lock_for("u1")
+    u1_lock = registry.lock_for("u1")
 
     # Hold u1's reader lock while opening u2 in a background task. The
     # eviction Phase 2 will attempt to acquire u1's writer_lock, which

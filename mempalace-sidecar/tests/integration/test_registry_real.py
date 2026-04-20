@@ -136,7 +136,7 @@ async def test_eviction_drains_readers(tmp_path: Path) -> None:
         reader_errors: list[BaseException] = []
 
         async def slow_reader() -> None:
-            lock = r._lock_for("alice")
+            lock = r.lock_for("alice")
             async with lock.reader_lock:
                 reader_started.set()
                 try:

@@ -20,6 +20,7 @@ PalaceHandle caller.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
@@ -27,6 +28,16 @@ from fastapi import APIRouter, HTTPException, Request
 from mempalace_sidecar.schemas import IngestRequest, IngestResponse
 
 log = logging.getLogger(__name__)
+
+
+def _hash_uid(user_id: str, salt: str) -> str:
+    """Spec §8.4 pseudonymous-logging contract: logs MUST carry
+    ``sha256(user_id + salt)[:12]``, never the raw user_id. M0.11 will
+    lift this helper into a shared ``logging_utils`` module once the
+    structured-logging middleware lands; until then each route hashes
+    inline to honor the contract without shipping raw PII to journald.
+    """
+    return hashlib.sha256(f"{user_id}{salt}".encode()).hexdigest()[:12]
 
 router = APIRouter(prefix="/palace", tags=["palace"])
 
@@ -79,6 +90,8 @@ async def ingest(
          the turn_id was already present. No 3rd status exists.
     """
     registry = _registry(request)
+    settings = request.app.state.settings
+    uid_hash = _hash_uid(user_id, settings.user_id_hash_salt)
 
     # Idempotency-Key header — advisory only (plan M0.4 critical rule 1).
     # We log it either way; we gate 400 only on mismatch.
@@ -89,7 +102,7 @@ async def ingest(
             extra={
                 "idempotency_key": idempotency_key,
                 "turn_id": body.turn_id,
-                "user_id": user_id,
+                "user_id": uid_hash,
             },
         )
         raise HTTPException(
@@ -102,18 +115,27 @@ async def ingest(
     # Structured log on every ingest — the header value (or None) goes
     # into the request context so an operator correlating a retried
     # turn across Flask-outbox and sidecar-ingest can match them up.
+    # user_id is hashed per spec §8.4 pseudonymous-logging contract.
     log.info(
         "ingest",
         extra={
-            "user_id": user_id,
+            "user_id": uid_hash,
             "turn_id": body.turn_id,
             "session_id": body.session_id,
             "idempotency_key": idempotency_key,
         },
     )
 
-    entry = await registry.open(user_id)
-    lock = registry._lock_for(user_id)
+    # registry.open has its own _registry_lock + two-phase eviction
+    # discipline; no need to take the per-user writer_lock around it.
+    # The writer_lock only gates the write step (add_drawer) itself.
+    try:
+        entry = await registry.open(user_id)
+    except RuntimeError as exc:
+        if "shutting down" in str(exc).lower():
+            raise HTTPException(status_code=503, detail="sidecar shutting down") from exc
+        raise  # surface as 500; other RuntimeErrors are unexpected
+    lock = registry.lock_for(user_id)
     async with lock.writer_lock:
         # handle.add_drawer is synchronous (spec §5.3 "Concurrency
         # model"). Wrap in to_thread so the event loop stays responsive
