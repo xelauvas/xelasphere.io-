@@ -14,7 +14,6 @@ explicit warmup-style opener.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import json
 import sqlite3
 from pathlib import Path
