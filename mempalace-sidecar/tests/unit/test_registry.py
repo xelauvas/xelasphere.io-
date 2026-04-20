@@ -284,12 +284,15 @@ async def test_total_bytes_accurate(
             if entry is not None:
                 entry.size_bytes = size
         elif kind == "evict":
-            # Explicit eviction via the public LRU path. No-op if not
-            # resident.
+            # Explicit eviction via the two-phase pattern. Same
+            # discipline as open/sweep_idle: Phase 1 pops under the
+            # registry lock, Phase 2 closes after release.
+            popped: list[tuple[str, PalaceEntry]] = []
             async with r._registry_lock:
                 if uid in r._cache:
-                    e = r._cache.pop(uid)
-                    await r._close_evicted(uid, e)
+                    popped.append((uid, r._cache.pop(uid)))
+            for evicted_uid, evicted_entry in popped:
+                await r._close_evicted(evicted_uid, evicted_entry)
 
         expected = sum(e.size_bytes for e in r._cache.values())
         assert r._total_bytes() == expected, (

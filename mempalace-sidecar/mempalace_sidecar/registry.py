@@ -116,6 +116,12 @@ class PalaceRegistry:
         self._cache: "OrderedDict[str, PalaceEntry]" = OrderedDict()
         self._locks: dict[str, RWLock] = {}
         self._registry_lock: asyncio.Lock = asyncio.Lock()
+        # One-line shutdown hedge: close_all() sets this True and any
+        # subsequent open() raises instead of racing into an empty cache.
+        # Today close_all is only called at shutdown and test-teardown,
+        # and route-traffic draining is implicit — but "implicit" is how
+        # shutdown bugs get shipped. Explicit flag removes the race.
+        self._shutting_down: bool = False
 
     # ------------------------------------------------------------------
     # Lock bookkeeping
@@ -159,7 +165,15 @@ class PalaceRegistry:
         Two-phase eviction: Phase 1 runs under ``_registry_lock`` and
         populates ``to_close_after``. Phase 2 runs after the lock is
         released — that's the whole point.
+
+        Raises ``RuntimeError`` if ``close_all`` has been called —
+        shutdown hedge prevents a new open from racing into a freshly-
+        cleared cache while existing handles are still being closed.
         """
+        if self._shutting_down:
+            raise RuntimeError(
+                f"PalaceRegistry is shutting down; cannot open {user_id!r}"
+            )
         to_close_after: list[tuple[str, PalaceEntry]] = []
         async with self._registry_lock:
             if user_id in self._cache:
@@ -220,11 +234,16 @@ class PalaceRegistry:
         and test teardown — the latter wants deterministic handle
         release so Chroma file locks don't survive ``tmp_path`` rmtree.
 
+        Sets ``self._shutting_down = True`` inside the registry lock.
+        Any ``open`` call that observes the flag raises rather than
+        racing into the freshly-cleared cache.
+
         Not guarded by the registry lock across the close loop; we
         snapshot the entries, clear the cache, then close outside the
         lock. Same two-phase discipline as ``open`` and ``sweep_idle``.
         """
         async with self._registry_lock:
+            self._shutting_down = True
             entries = list(self._cache.items())
             self._cache.clear()
 
@@ -308,6 +327,17 @@ class PalaceRegistry:
         integration tests — a loud failure mode once M0.11 adds the
         cache-size metric.
         """
+        # INVARIANT R1: _registry_lock MUST NOT be held here — the
+        # two-phase eviction contract (§5.4) mandates Phase 2 runs
+        # AFTER the registry lock is released so the writer_lock
+        # acquire below can't deadlock against a concurrent reader
+        # waiting on _registry_lock. Mechanised via assert rather
+        # than docstring-only so CI catches any refactor that moves
+        # this call back inside the lock.
+        assert not self._registry_lock.locked(), (
+            "two-phase eviction violated: _close_evicted called while "
+            "_registry_lock is held (see spec §5.4)"
+        )
         handle = getattr(evicted_entry, "handle", None)
         if handle is None:
             return

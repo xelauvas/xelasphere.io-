@@ -2877,6 +2877,12 @@ Test uses `asyncio.wait_for` with a mock in-flight handler and asserts shutdown 
 
 Prometheus multiprocess is already in the env (`PROMETHEUS_MULTIPROC_DIR`). Register every metric listed in spec §8.1.
 
+> **Benchmark task added during M0.3.1-5 sign-off (2026-04-20):** M0.3's `PalaceRegistry._construct_entry` runs inside `_registry_lock`, which serialises all cold palace opens across the whole sidecar. Per-open cost is 50-200ms (Chroma init + KG sqlite + dir walk); 10 concurrent first-touch opens queue for 0.5-2s total. This shows up as a latency tail at warm startup (post-restart / post-deploy) and during traffic bursts to cold users.
+>
+> **M0.11 adds a synthetic load test** that deliberately triggers the bottleneck — N concurrent `open()` calls for distinct cold user_ids — and measures queueing delay. Output: a documented threshold at which the sentinel-pattern fix (release the registry lock across `_construct_entry` using a per-user "open-in-progress" event) becomes warranted. If the measured p95 at realistic N stays under the wake-up budget, defer the fix. If it blows the budget, the fix lands under M0.11 rather than as an emergency under P1 traffic.
+>
+> Add `test_benchmark_concurrent_cold_opens` to the M0.11 task list.
+
 **Files:**
 - Create: `mempalace-sidecar/mempalace_sidecar/metrics.py`
 - Modify: `mempalace-sidecar/mempalace_sidecar/routes/ops.py`
