@@ -2352,12 +2352,34 @@ async def test_wakeup_concurrent_faster_than_sum_of_parts(app, auth):
     # Lower bound on the "sum of parts": L0+L3 (the two we measured).
     # Wake-up also does L1 (cheap sqlite+get) and L2 (same cost as L3);
     # a serial implementation would total ≥ l0_like + l3_like + l3_like.
-    # Conservative threshold: total < 0.7 * (l0_like + 2 * l3_like).
+    #
+    # Coefficient choice — 0.7 is load-bearing, not arbitrary.
+    # Ideal parallelism over four equal-cost layers is ratio ≈ 0.33
+    # (max(l0, l1, l2, l3) / sum). Real parallelism lands higher because:
+    #   - thread-pool scheduling has ~1-5 ms overhead per dispatch
+    #   - GIL contention on the sync bodies (each Python-heavy) caps speedup
+    #   - 2-core CI boxes hit true-parallelism ceiling fast
+    # Setting threshold at 0.7 catches "pure serial" (ratio ~1.0) with wide
+    # margin, while tolerating the overhead envelope of real thread-pool
+    # parallelism on modest hardware. If this test flakes on CI, read the
+    # logged layer times below and investigate; DO NOT loosen the coefficient
+    # without matching evidence that the overhead has fundamentally changed.
     serial_bound = l0_like + 2 * l3_like
+    ratio = total / serial_bound if serial_bound else 1.0
+    # Log component times on every run so a flake comes with diagnosis, not
+    # just "assertion failed". Use pytest -s (or read captured stderr) to see.
+    import sys
+    print(
+        f"[wakeup-parallelism] l0={l0_like*1000:.1f}ms l3={l3_like*1000:.1f}ms "
+        f"total={total*1000:.1f}ms serial_bound={serial_bound*1000:.1f}ms "
+        f"ratio={ratio:.2f} (threshold 0.70)",
+        file=sys.stderr,
+    )
     assert total < 0.7 * serial_bound, (
         f"Wake-up took {total*1000:.0f} ms; serial bound {serial_bound*1000:.0f} ms. "
-        f"Ratio {total/serial_bound:.2f} ≥ 0.7 — layers may be running sequentially. "
-        f"Ensure build_wakeup wraps each layer in asyncio.to_thread."
+        f"Ratio {ratio:.2f} ≥ 0.7 — layers may be running sequentially. "
+        f"Ensure build_wakeup wraps each layer in asyncio.to_thread. "
+        f"Component times: l0={l0_like*1000:.1f}ms l3={l3_like*1000:.1f}ms."
     )
 ```
 

@@ -411,6 +411,7 @@ The integration test `test_cold_palace_open_reuses_embedding_model` asserts this
 - **Warmup:** process-level warmup via `prime_embedding_function` at sidecar startup (M0.5.1). No per-palace warmup needed.
 - **Eviction:** two-phase (§5.4). Phase 1 removes from registry cache inside `_registry_lock`; Phase 2 acquires the evicted user's write lock, then calls `handle.close()` which pops the library backend cache.
 - **Close order:** KG sqlite → `turns.sqlite` → `_DEFAULT_BACKEND._clients.pop`. The library's PersistentClient has no explicit `close()` that we must call; removing it from the dict plus letting GC finish is the library's documented lifecycle (verified by reading `chromadb` source once during M0.3 implementation).
+- **`close()` is idempotent by contract.** Second and subsequent calls are no-ops — checked via a `self._closed: bool` guard set on the first successful close. Reason: eviction-during-eviction is a real race (size-driven eviction and idle-sweep can target the same user concurrently across two async tasks). The library's `_DEFAULT_BACKEND._clients.pop(..., None)` is idempotent, but `KnowledgeGraph.close()` on an already-closed sqlite connection may raise. Test `test_close_is_idempotent` (M0.3.0) asserts two sequential `close()` calls don't raise.
 
 ### 5.4 PalaceRegistry — dispatch and caching
 
