@@ -17,4 +17,7 @@ async def test_healthz_ok(app):
     assert body["ok"] is True
     assert isinstance(body["version"], str)
     assert isinstance(body["uptime_s"], (int, float))
-    assert body["schema_version"] == 1
+    # schema_version bumped to 2 in M0.4.2 when /palace/{uid}/ingest landed
+    # (plan M0.4.2 "Schema bump required"). M0.12's OpenAPI snapshot test
+    # will CI-enforce future bumps.
+    assert body["schema_version"] == 2
