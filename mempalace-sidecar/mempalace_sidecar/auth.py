@@ -1,8 +1,14 @@
+import hmac
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-EXEMPT_PREFIXES = ("/healthz", "/readyz", "/metrics")
+EXEMPT_PATHS = ("/healthz", "/readyz", "/metrics")
+
+
+def _is_exempt(path: str) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in EXEMPT_PATHS)
 
 
 class TokenAuthMiddleware(BaseHTTPMiddleware):
@@ -11,9 +17,9 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
         self._expected = expected_token
 
     async def dispatch(self, request: Request, call_next):
-        if any(request.url.path.startswith(p) for p in EXEMPT_PREFIXES):
+        if _is_exempt(request.url.path):
             return await call_next(request)
         token = request.headers.get("X-Sidecar-Token")
-        if not token or token != self._expected:
+        if not token or not hmac.compare_digest(token, self._expected):
             return JSONResponse({"detail": "unauthorized"}, status_code=401)
         return await call_next(request)

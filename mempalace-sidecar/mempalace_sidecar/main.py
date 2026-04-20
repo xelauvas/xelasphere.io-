@@ -6,20 +6,23 @@ from mempalace_sidecar.config import Settings
 from mempalace_sidecar.routes import ops
 
 
-def _sd_notify_ready() -> None:
+def _sd_notify(message: str) -> None:
     try:
         import systemd.daemon as sd  # type: ignore
-        sd.notify("READY=1")
-    except Exception:  # systemd not available (tests, dev)
+    except ImportError:
+        return
+    try:
+        sd.notify(message)
+    except OSError:  # NOTIFY_SOCKET missing or dead
         pass
+
+
+def _sd_notify_ready() -> None:
+    _sd_notify("READY=1")
 
 
 def _sd_notify_stopping() -> None:
-    try:
-        import systemd.daemon as sd  # type: ignore
-        sd.notify("STOPPING=1")
-    except Exception:
-        pass
+    _sd_notify("STOPPING=1")
 
 
 @asynccontextmanager

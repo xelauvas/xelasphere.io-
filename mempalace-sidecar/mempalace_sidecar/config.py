@@ -1,4 +1,6 @@
+import os
 from pathlib import Path
+
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -30,7 +32,9 @@ class Settings(BaseSettings):
 
     @field_validator("data_dir")
     @classmethod
-    def _must_exist(cls, v: Path) -> Path:
+    def _must_be_writable(cls, v: Path) -> Path:
         v = Path(v)
         v.mkdir(parents=True, exist_ok=True)
+        if not os.access(v, os.W_OK):
+            raise ValueError(f"data_dir {v} exists but is not writable by this process")
         return v
