@@ -105,14 +105,23 @@ async def test_registry_evicts_by_size(
     e1.handle.close.assert_called_once()
 
 
-async def test_registry_eviction_calls_close_under_writer_lock(
+async def test_eviction_blocks_on_held_reader_lock(
     monkeypatch: pytest.MonkeyPatch, registry: PalaceRegistry
 ) -> None:
-    """Phase 2 acquires the evicted user's writer_lock before
-    handle.close() — so a reader holding the reader_lock would delay
-    close() until release. This test asserts the writer_lock was touched
-    during eviction by monkeypatching its acquire/release."""
-    writer_acquire_hits = {"count": 0}
+    """Phase 2 acquires the evicted user's writer_lock before closing,
+    so a concurrently-held reader_lock blocks ``handle.close()`` until
+    the reader releases.
+
+    This is the unit-level proxy for spec §5.4 two-phase eviction;
+    ``tests/integration/test_registry_real.py::test_eviction_drains_readers``
+    is the teeth-bearing assertion against the real library.
+
+    Setup: u1 is hot and a reader holds u1's reader_lock. We trigger
+    eviction by opening u2 (size cap trips). Phase 2 must block on
+    the reader_lock — verified by observing that handle.close() has
+    NOT yet been called while we still hold the reader, and IS called
+    once we release.
+    """
 
     async def fake_construct(uid: str) -> PalaceEntry:
         path = registry._palaces_dir / uid
@@ -122,22 +131,30 @@ async def test_registry_eviction_calls_close_under_writer_lock(
 
     monkeypatch.setattr(registry, "_construct_entry", fake_construct)
 
-    # Open u1 so a lock exists for u1 before eviction fires.
-    await registry.open("u1")
-    lock_u1 = registry._lock_for("u1")
+    e1 = await registry.open("u1")
+    u1_lock = registry._lock_for("u1")
 
-    real_acquire = lock_u1.writer_lock.acquire
+    # Hold u1's reader lock while opening u2 in a background task. The
+    # eviction Phase 2 will attempt to acquire u1's writer_lock, which
+    # an aiorwlock RWLock makes wait for all readers.
+    async with u1_lock.reader_lock:
+        evict_task = asyncio.create_task(registry.open("u2"))
+        # Give the evict task a chance to complete Phase 1 and block
+        # on Phase 2's writer_lock acquisition.
+        for _ in range(10):
+            await asyncio.sleep(0)
+        # At this point Phase 1 is done (u1 should be gone from cache)
+        # but Phase 2's handle.close() should NOT have fired yet.
+        assert "u1" not in registry._cache
+        assert e1.handle.close.call_count == 0, (
+            "handle.close() fired while reader_lock was held — "
+            "Phase 2 did not acquire writer_lock as required"
+        )
 
-    async def counting_acquire() -> None:
-        writer_acquire_hits["count"] += 1
-        await real_acquire()
-
-    monkeypatch.setattr(lock_u1.writer_lock, "acquire", counting_acquire)
-
-    # Open u2 — triggers LRU eviction of u1; Phase 2 must acquire u1's
-    # writer_lock at least once before handle.close() runs.
-    await registry.open("u2")
-    assert writer_acquire_hits["count"] >= 1
+    # Reader released; Phase 2 can now proceed. Await the evict task.
+    await evict_task
+    # handle.close() MUST have fired exactly once by now.
+    e1.handle.close.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
