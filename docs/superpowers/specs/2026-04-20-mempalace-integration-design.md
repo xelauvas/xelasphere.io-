@@ -104,7 +104,7 @@ app/mempalace/
 
 ```python
 class MempalaceAdapter:
-    def wake_up(user_id, query) -> WakeupContext | None
+    def wake_up(user_id, query, session_id=None) -> WakeupContext | None
     def search(user_id, query, k=5) -> list[Drawer]
     def record_turn(user_id, session_id, turn_id, pair_id, role, text,
                     attachments=None, request_id=None)

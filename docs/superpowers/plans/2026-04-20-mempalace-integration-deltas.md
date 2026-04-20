@@ -14,6 +14,16 @@
 
 ---
 
+## Deferred to M0.11 (metrics + /readyz dispatch)
+
+Items surfaced in earlier-milestone reviews that are correct to defer but easy to forget when M0.11 gets scoped as "just add the Prometheus metrics." Read this list at M0.11 dispatch time and expand the scope if anything is still outstanding.
+
+- **Concurrent cold-palace open benchmark** (from M0.3.1-5 sign-off 2026-04-20). `PalaceRegistry._construct_entry` runs inside `_registry_lock`, serialising all cold opens at ~50-200ms each. Add `test_benchmark_concurrent_cold_opens` that fires N simultaneous first-touch opens, measures p95 queueing delay, and documents the threshold at which the sentinel-pattern fix is warranted. Gates the fix on measured evidence, not premature optimisation.
+- **Full structured-logging middleware** (from M0.4 quality review 2026-04-20). Spec §8.4 prescribes `ts, service, level, event, user_id, turn_id, route, latency_ms, err, request_id`. Ingest route currently hashes `user_id` inline via `_hash_uid`, but `latency_ms`, `route`, and `request_id` are still missing. M0.11 lifts the hash helper into a shared `logging_utils` module and adds a per-request middleware that captures the missing fields.
+- **`mempalace_ingest_total{status=error}` label** (from M0.4 quality review 2026-04-20). Spec §8.1 lists `status={accepted,duplicate,error}` as the intended labels. Ingest route currently only emits `accepted` / `duplicate` (via `AddDrawerResult.status`); `error` requires the route to catch + classify library exceptions and emit a metric with the `error` label before re-raising. M0.11 adds the wrapper.
+
+---
+
 ## Deltas
 
 - `2026-04-20 M0.1.1` — Python 3.12.3 used for the sidecar venv instead of the 3.11 the plan presumed. `requires-python = ">=3.11"` is satisfied. Commits `78161f8`, `e43c2a4`, `b5bba4e`. Reason: host only has 3.12 installed; satisfies the floor. Watch for 3.12-specific behavior differences in later milestones (esp. `asyncio` task-group semantics and `sentence-transformers` / `torch` CPU wheels).
