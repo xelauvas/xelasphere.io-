@@ -162,22 +162,26 @@ orchestrator.handle_turn()
                           SELECT WHERE status='pending' ORDER BY id LIMIT batch
                                    │
                           POST /palace/{uid}/ingest
-                          Idempotency-Key: <turn_id>
+                          Idempotency-Key: <turn_id>      (advisory; see below)
                           X-Sidecar-Token: ...
                           X-Request-ID: ...
-                          body: {session_id, pair_id, role, text, ts, attachments}
+                          body: {turn_id, session_id, pair_id, role, text, ts, attachments}
                                                                                     ─▶ acquire per-user write lock
-                                                                                       SELECT 1 FROM ingest_log
-                                                                                         WHERE turn_id=?
-                                                                                       INSERT (unique on turn_id)
-                                                                                       append drawer
-                                                                                       update wing/room index
+                                                                                       handle.add_drawer(turn_id=..., …)
+                                                                                         ├─ SELECT drawer_id FROM turns
+                                                                                         │    WHERE turn_id=? (§5.3 turns.sqlite)
+                                                                                         ├─ if present → status="duplicate"
+                                                                                         ├─ miner.add_drawer(collection, …,
+                                                                                         │    source_file=f"turn:{turn_id}")
+                                                                                         ├─ INSERT OR IGNORE INTO turns (...)
+                                                                                         └─ return status="accepted"
                                                                                        enqueue KG extraction
                                                                                        200 {status: accepted|duplicate}
                           UPDATE outbox SET status='sent' WHERE id=?
 ```
 
-- **At-least-once delivery + idempotency key → effectively exactly-once drawer.** The sidecar's `ingest_log` table is disk-backed with `UNIQUE(turn_id)`. In-memory idempotency would fail the named crash-recovery test in §5.
+- **Idempotency authority — `turns.sqlite`, period.** `turn_id` appears in two places on the wire: the `Idempotency-Key` HTTP header and the request body. **`turns.sqlite` (spec §5.3) is the single authoritative deduplication store.** The header is advisory — the sidecar logs it for request correlation (X-Request-ID cross-reference) and MAY assert header-vs-body equality on parse, but dedup decisions are always made by `PRIMARY KEY(turn_id)` on the handle-owned `turns.sqlite` table. A single source of truth forces the library's internal drawer-ID derivation (currently `sha256(source_file + chunk_index)[:24]`) to be a downstream implementation detail rather than a parallel idempotency mechanism that could silently disagree with ours after a library upgrade.
+- **At-least-once delivery + `turns.sqlite` PK → effectively exactly-once drawer.** The handle's `turns.sqlite` is disk-backed with `PRIMARY KEY(turn_id)`. In-memory idempotency would fail the named crash-recovery test in §6.
 - **Ordering guarantee**: single flusher thread in v1. If sharded later, shard key is `hash(user_id)`. Never round-robin.
 - **Retries**: exponential backoff 1s, 4s, 15s, 60s, 300s. Row stays `pending` between attempts.
 - **Sent-row retention**: 7 days. Forensics only — the app DB is the system of record, not the outbox.
@@ -187,7 +191,7 @@ orchestrator.handle_turn()
 
 ### 4.2 Read path A — pre-model wake-up (every turn)
 
-Query construction: `{latest_user_message}\n{preceding_assistant_message}`, embedded once, reused across L2 and L3 inside the sidecar.
+Query construction: `{latest_user_message}\n{preceding_assistant_message}`, passed as a `str` to the sidecar. Embedding is handled inside ChromaDB's default embedding function at `col.query` time (L3 only; L0/L1/L2 don't embed). See §5.3 "Concurrency model inside PalaceHandle" for how the four layer calls are composed.
 
 ```
 adapter.wake_up(uid, query)
@@ -196,7 +200,12 @@ adapter.wake_up(uid, query)
   1 retry; circuit-breaker open → None
        │
        ▼
-  sidecar: asyncio.gather(L0, L1, L2, L3) — parallel, single embedding shared
+  sidecar: asyncio.gather(
+       asyncio.to_thread(L0),  -- metadata scan, sorted by filed_at
+       asyncio.to_thread(L1),  -- turns.sqlite SELECT + col.get(ids=...)
+       asyncio.to_thread(L2),  -- searcher.search_memories
+       asyncio.to_thread(L3),  -- searcher.search_memories
+  )  -- real thread-pool parallelism (measurement-gated in M0.5.3)
        │
        ▼
   WakeupContext { l0_recent, l1_session, l2_topic, l3_semantic, meta }
@@ -289,7 +298,7 @@ mempalace-sidecar/                 (subdir within xelasphere.io-; see §8 for sp
 
 | Method | Path | Body | Returns | Notes |
 |---|---|---|---|---|
-| POST | `/palace/{uid}/ingest` | `{turn_id, session_id, pair_id, role, text, ts, attachments?}` | `{status: accepted\|duplicate}` | `Idempotency-Key` = turn_id. Write lock. |
+| POST | `/palace/{uid}/ingest` | `{turn_id, session_id, pair_id, role, text, ts, attachments?}` | `{status: accepted\|duplicate}` | `Idempotency-Key` header ADVISORY (correlation only); authoritative dedup is `turns.sqlite` PK (§4.1, §5.3). Write lock. |
 | POST | `/palace/{uid}/wake-up?warmup=0\|1` | `{query, k?, layers?}` | `WakeupContext` | Read lock. 500ms hot / 2s cold. |
 | POST | `/palace/{uid}/search` | `{query, wing?, k=5}` | `[Drawer]` | Read lock. Tool calls. |
 | GET  | `/palace/{uid}/drawers?wing=&limit=&offset=` | — | `{drawers, total, next_offset}` | Admin + GDPR access. Offset-based (ChromaDB has no cursor). |
@@ -306,7 +315,7 @@ OpenAPI spec is auto-generated by FastAPI from Pydantic models; CI snapshots it 
 
 **Purpose.** PalaceHandle is the sidecar-owned OOP wrapper around the `mempalace` 3.3.1 functional API. Every route (`ingest`, `wake-up`, `search`, `drawers`, `kg/*`, `rebuild`, `DELETE`) goes through a PalaceHandle. The library is referenced from exactly one file (`palace_handle.py`) and nowhere else. Swapping to a future version, a fork, or a rewrite is an edit contained to this boundary.
 
-**Why not bridge to `mempalace.mcp_server`.** The library ships 29 MCP tool handlers (`TOOLS` dict, `handle_request` dispatcher) that cover every drawer/KG/tunnel operation. Not used. Every handler calls `_get_collection(create=False)` which reads a module-level `_config: MempalaceConfig` and a module-level `_collection_cache` (see `mcp_server.py:214` in `mempalace==3.3.1`). Every `tool_*` operates on a single global palace bound at process start. Invoking two handlers for two users from the same process targets whichever palace was configured last — a race, not a bug. In a multi-tenant sidecar the first such race is a cross-user data leak, and in shadow-mode logs it turns a P1 rollout phase into a security incident. We bridge to the path-threaded primitives (`searcher.search_memories(query, palace_path, ...)`, `miner.add_drawer(collection, ...)`, `layers.Layer0/1/2/3(palace_path=...)`, `knowledge_graph.KnowledgeGraph(db_path=...)`) instead. Upstream issue to file: [TBD — github.com/MemPalace/mempalace/issues]. Until that issue lands, `mcp_server.*` is strictly forbidden in the sidecar; a unit test greps the package and fails if an import appears.
+**Why not bridge to `mempalace.mcp_server`.** The library ships 29 MCP tool handlers (`TOOLS` dict, `handle_request` dispatcher) that cover every drawer/KG/tunnel operation. Not used. Every handler calls `_get_collection(create=False)` which reads a module-level `_config: MempalaceConfig` and a module-level `_collection_cache` (see `mcp_server.py:214` in `mempalace==3.3.1`). Every `tool_*` operates on a single global palace bound at process start. Invoking two handlers for two users from the same process targets whichever palace was configured last — a race, not a bug. In a multi-tenant sidecar the first such race is a cross-user data leak, and in shadow-mode logs it turns a P1 rollout phase into a security incident. We bridge to the path-threaded primitives (`searcher.search_memories(query, palace_path, ...)`, `miner.add_drawer(collection, ...)`, `layers.Layer0/1/2/3(palace_path=...)`, `knowledge_graph.KnowledgeGraph(db_path=...)`) instead. Upstream issue to file: [upstream issue not yet filed — target: before P0 entry]. Until that issue lands, `mcp_server.*` is strictly forbidden in the sidecar; a unit test greps the package and fails if an import appears.
 
 **Naming collision, semantically distinct.** The library also has `mempalace.layers.MemoryStack.wake_up()`, `Layer0/Layer1/Layer2/Layer3`, and the letters "L0-L3" — but its semantics are not ours.
 
@@ -377,7 +386,7 @@ Therefore:
 1. **Every `PalaceHandle.close()` MUST call `mempalace.palace._DEFAULT_BACKEND._clients.pop(self.palace_path, None)` as the final step, AFTER closing our own state.** This is the boundary between our LRU's view of "evicted" and reality.
 2. **A unit test (`test_palace_handle_close_pops_backend_cache`) MUST assert `palace_path not in mempalace.palace._DEFAULT_BACKEND._clients` after `close()`.** This is the test that fails if a future well-meaning refactor "simplifies" the close path and silently reintroduces the leak.
 3. **An integration test (`test_registry_eviction_bounds_backend_cache`) MUST open N palaces exceeding the registry's size cap, force evictions, and assert `len(_DEFAULT_BACKEND._clients) <= registry_cache_cap` throughout.** This is the test that fails if the registry evicts the PalaceHandle but the backend cache grows anyway.
-4. **Upstream issue to file: [TBD — github.com/MemPalace/mempalace/issues]** requesting `mempalace.palace.close_backend(palace_path)` as a proper public API. When that lands, we swap our `._clients.pop(...)` for the public call and remove the `_`-prefix access in palace_handle.py. This keeps the library-isolation-boundary story intact.
+4. **Upstream issue to file: [upstream issue not yet filed — target: before P0 entry]** requesting `mempalace.palace.close_backend(palace_path)` as a proper public API. When that lands, we swap our `._clients.pop(...)` for the public call and remove the `_`-prefix access in palace_handle.py. This keeps the library-isolation-boundary story intact.
 
 **Per-`turn_id` idempotency: the source_file encoding trick.** `miner.add_drawer` generates drawer IDs as `f"drawer_{wing}_{room}_{sha256(source_file + str(chunk_index))[:24]}"` and does not accept arbitrary metadata. We encode our `turn_id` into `source_file` as `f"turn:{turn_id}"` with `chunk_index=0`, which produces a deterministic drawer ID per turn. Same idempotency guarantee as "turn_id-as-primary-key" via a different mechanism.
 
@@ -392,11 +401,15 @@ Two consequences that must be written into the tests, not just the prose:
 - **Whether we need concurrency is a measurement question, not a spec one.** On modest palaces (≤1 k drawers) four sync layer calls might total <100 ms serial, and the thread-pool plumbing is overhead we'd pay for nothing. On larger palaces (L0 `recent_drawers` is O(N) in drawer count for Python-side sort; L3 is an embedding + Chroma query ~30-100 ms) we may need real concurrency to hold p95.
 - **M0.5 treats concurrency as an implementation detail deferred to integration-test measurement.** The spec requires `wakeup` to produce a structured `WakeupContext` within §4.2's latency budget; how the four layer calls are composed is not prescribed. If serial is fast enough, ship serial. If not, wrap in `asyncio.to_thread` and gather. The integration test measures both and the plan records which shipped.
 
+**Embedding-model scope — process-global, warmed once (review fix #6, 2026-04-20).** ChromaDB's default embedding function (`chromadb.utils.embedding_functions.DefaultEmbeddingFunction`) wraps `sentence-transformers` for the `all-MiniLM-L6-v2` model. `sentence-transformers` caches loaded model weights by model name in module-level state — a second `SentenceTransformer("all-MiniLM-L6-v2")` in the same process reuses the already-loaded weights. Consequence: **the model is process-global, not per-palace.** Calling `prime_embedding_function(warmup_palace_path)` at sidecar startup (M0.5.1) loads the weights once; every subsequent palace open (including cold opens after LRU eviction) reuses the same in-memory weights and does NOT pay the ~2-5 s cold-model-load tax. Per-palace cold opens pay only the Chroma PersistentClient init cost (~50-200 ms), not the embedding-model load.
+
+The integration test `test_cold_palace_open_reuses_embedding_model` asserts this: open a fresh palace after startup-warmup, time a `col.query` against it, assert the query completes within ~500 ms. If the test fails, either the warmup didn't fire or the weights aren't process-cached — both are regressions against this spec.
+
 **Lifecycle.**
 
-- **Construct:** `PalaceHandle.open(palace_path)` creates the palace directory, writes `meta.json` if absent, opens Chroma via `get_collection`, opens KG sqlite, opens `turns.sqlite`, constructs per-user `MempalaceConfig`. Cheap for a warm Chroma client (~1-5 ms); first-ever open for a new palace pays the Chroma init cost (~50-200 ms) once.
-- **Warmup:** none explicitly. Chroma's persistent client lazy-loads the HNSW index on first `query`; pre-warming by issuing a no-op query at open is optional and deferred to M0.5 integration measurement.
-- **Eviction:** `PalaceRegistry` (§5.4) calls `handle.close()` while holding the user's write lock. `close()` is idempotent: safe to call twice.
+- **Construct:** `PalaceHandle.open(palace_path)` creates the palace directory, writes `meta.json` if absent, opens Chroma via `get_collection`, opens KG sqlite, opens `turns.sqlite`, constructs per-user `MempalaceConfig`. Cheap for a warm Chroma client (~1-5 ms); first-ever open for a new palace pays the Chroma init cost (~50-200 ms) once. Embedding model weights are process-global (see above); cold palace opens do NOT re-load them.
+- **Warmup:** process-level warmup via `prime_embedding_function` at sidecar startup (M0.5.1). No per-palace warmup needed.
+- **Eviction:** two-phase (§5.4). Phase 1 removes from registry cache inside `_registry_lock`; Phase 2 acquires the evicted user's write lock, then calls `handle.close()` which pops the library backend cache.
 - **Close order:** KG sqlite → `turns.sqlite` → `_DEFAULT_BACKEND._clients.pop`. The library's PersistentClient has no explicit `close()` that we must call; removing it from the dict plus letting GC finish is the library's documented lifecycle (verified by reading `chromadb` source once during M0.3 implementation).
 
 ### 5.4 PalaceRegistry — dispatch and caching
@@ -408,7 +421,11 @@ Two consequences that must be written into the tests, not just the prose:
 - `_locks: dict[user_id, aiorwlock.RWLock]` — per-user RWLock. Reads parallel, writes exclusive.
 - Registry-level dict mutations guarded by a single `asyncio.Lock`.
 
-**Eviction** is async and acquires the user's write-lock first (drains in-flight ops). Idle TTL 4h — longer than typical chat gaps, deliberately, to mitigate cold wake-ups. Every eviction calls `handle.close()`, which MUST pop the library's backend cache per §5.3's cache-eviction contract. The integration test `test_registry_eviction_bounds_backend_cache` verifies this invariant holds across forced LRU + TTL evictions.
+**Eviction is two-phase** (review-fix 2026-04-20):
+- **Phase 1** runs inside `_registry_lock`: select eviction candidates (by LRU order for size-driven eviction, by `last_used_at` for idle TTL) and remove them from `self._cache` so no new requests find them.
+- **Phase 2** runs AFTER `_registry_lock` is released: for each evicted user, acquire their per-user `writer_lock`, then call `handle.close()` (which pops the library backend cache per §5.3). The write-lock acquire blocks until any in-flight readers drain, so the close() never races against a handle method whose stack frame still holds a reference to `handle._collection` or `handle.kg`.
+
+Splitting the phases is load-bearing. If `close()` ran inside `_registry_lock`, a concurrent reader that acquired its per-user reader_lock before the evicting request grabbed `_registry_lock` would still be mid-call when `_DEFAULT_BACKEND._clients.pop(...)` fires. The Chroma collection in the reader's stack frame would reference a client that got garbage-collected underneath it. Idle TTL 4h — longer than typical chat gaps, deliberately, to mitigate cold wake-ups. Integration tests `test_registry_eviction_bounds_backend_cache` (backend-cache pop) and `test_eviction_drains_readers` (concurrency hole) together verify the contract.
 
 **Layered locks.** The sidecar holds two independent lock scopes. The per-user RWLock in this registry serializes writes and lets reads run parallel at the palace level. Inside `miner.add_drawer` (and any library code that enters `mempalace.palace.mine_lock(source_file)`), the library acquires an fcntl file lock on `~/.mempalace/locks/<sha>.lock` keyed by `source_file`. The two lock scopes compose — our registry lock is per-palace, the library lock is per-source_file across palaces. For turn-ingest with `source_file=f"turn:{turn_id}"` the library lock is effectively per-turn and benign.
 
@@ -514,7 +531,7 @@ Coverage target: 90% on `app/mempalace/`.
 
 **Layer 2 — Sidecar unit** (`mempalace-sidecar/tests/unit/`)
 
-- `test_auth.py`, `test_registry.py` (Hypothesis property test on byte accounting), `test_migrations.py` (crash-mid-migration via `pytest-forked`), `test_kg_queue.py`, `test_shutdown.py`, `test_wakeup_concurrency.py` (asserts single `gather` + shared embedding).
+- `test_auth.py`, `test_registry.py` (Hypothesis property test on byte accounting; plus concurrency-hole test `test_eviction_drains_readers`), `test_migrations.py` (crash-mid-migration via `pytest-forked`), `test_kg_queue.py`, `test_shutdown.py`, `test_wakeup_concurrency.py` (asserts `build_wakeup` populates all four layers; the parallelism claim is tested in `test_wakeup_concurrent_faster_than_sum_of_parts` — see §6 measurement gates).
 
 **Layer 3 — Integration** (`@pytest.mark.integration`, ≤5min)
 
@@ -528,7 +545,7 @@ Scenarios: ingest→search round-trip (with cross-user isolation assertion), pai
 
 Full Flask + live sidecar + stubbed LLM. Scenarios:
 - Cold-user first turn: no injection, background write succeeds, next turn injects.
-- **`test_flusher_crash_idempotency_persistence`**: send 10 turns, SIGKILL sidecar between ACK of row 8 and ACK of row 9, restart, Flask retries, assert palace contains exactly 10 distinct `turn_id`s. Disk-backed `ingest_log` with `UNIQUE(turn_id)` is the invariant; in-memory idempotency fails this test.
+- **`test_flusher_crash_idempotency_persistence`**: send 10 turns, SIGKILL sidecar between ACK of row 8 and ACK of row 9, restart, Flask retries, assert palace contains exactly 10 distinct `turn_id`s (queried via `turns.sqlite`). Disk-backed `turns.sqlite` with `PRIMARY KEY(turn_id)` is the invariant; in-memory idempotency fails this test.
 - Disk-full on sidecar: 507s, Flask continues, alerts fire.
 - Shadow parity: 1000 synthetic turns, request latency delta with shadow on vs off ≤ 2ms.
 - GDPR delete: admin panel → sidecar DELETE → audit row → `list_drawers` returns empty.
@@ -672,7 +689,7 @@ DR hierarchy — derived from §1's "palace is a derived index, conversations ar
 | `mempalace_ingest_total` | counter | `status={accepted,duplicate,error}` | Write throughput, idempotency hit rate |
 | `mempalace_wakeup_seconds` | histogram | `layer={l0,l1,l2,l3,total}`, `hot={0,1}` | Hot vs cold budget tracking |
 | `mempalace_search_seconds` | histogram | `hot={0,1}` | Tool-call search latency |
-| `mempalace_embedding_seconds` | histogram | — | Embedding cost |
+| `mempalace_chroma_query_seconds` | histogram | `layer={l2,l3}` | ChromaDB embed+search time (library-internal). Embedding and vector search are fused inside `col.query(query_texts=...)`; separating them requires switching to `col.query(query_embeddings=[vec])` which is a measurement-driven follow-up, not v1. |
 | `mempalace_palace_cache_size` | gauge | — | Number of hot palaces |
 | `mempalace_palace_cache_bytes` | gauge | — | Resident bytes vs cap |
 | `mempalace_palace_cache_hits_total` | counter | — | Hot-hit (ratio computed at query time, not exported as gauge) |

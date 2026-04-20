@@ -859,6 +859,11 @@ git commit -m "docs(sidecar): clarify shadow logs are Flask-side"
   - **`test_close_pops_backend_cache`** — after `handle.close()`, assert `palace_path not in mempalace.palace._DEFAULT_BACKEND._clients`. This is the teeth-bearing cache-contract test required by spec §5.3.
   - `test_close_is_idempotent` — calling `close()` twice must not raise.
   - `test_no_mcp_server_import` — grep the package source for `mempalace.mcp_server`; fails if any import surfaces (spec §5.3 "upstream issue" rule).
+  - **`test_turns_authoritative_when_library_id_derivation_changes`** — the failure mode we most fear: a future `mempalace` release changes how `miner.add_drawer` derives `drawer_id` from `source_file`. If `turns.sqlite` is authoritative (spec §4.1), the test passes. If we'd relied on library-derived ID uniqueness, duplicates appear silently. Simulate by monkey-patching `mempalace.miner.add_drawer` to prefix the drawer_id with a salt string, thereby producing a DIFFERENT drawer_id for the same `turn_id`. Call `handle.add_drawer(turn_id="T1", ...)`, then under the monkey-patch call it again with the same `turn_id="T1"`. Assert:
+    1. Second call returns `status="duplicate"` (blocked by `turns.sqlite` PK, not library dedup).
+    2. `collection.count() == 1` (library did not file a second drawer, because `handle.add_drawer` short-circuited before calling the library).
+
+    This test is the empirical proof that `turns.sqlite` — not the library — is the authority.
 
 - [ ] **Step 3: Implement `palace_handle.py`.** Roughly:
 
@@ -1086,6 +1091,8 @@ git commit -m "feat(sidecar): PalaceHandle — library isolation boundary for me
 
 **Dispatch review gate:** spec + quality review here, BEFORE M0.3.1 dispatches. The PalaceHandle surface is load-bearing for every downstream milestone; review catches any method-mapping miss before it compounds.
 
+**Dispatch prompt MUST ask for a deviations-from-spec-§5.3 note.** Writing the class almost always reveals gaps in the spec that only surface under implementation: exact error types for missing-palace/corrupt-meta cases, default argument values that weren't specified, library return shapes that differ slightly from the spec's description, method signatures the spec left open. The implementer should produce a short "Deviations from spec §5.3" section at the end of its report listing each such decision. During the review gate we fold them back into §5.3 (amending the spec so reality matches the document) before M0.3.1 begins — otherwise the spec lags reality and subsequent milestones implement against the stale version.
+
 #### Task M0.3.1: `PalaceEntry` dataclass
 
 **Files:**
@@ -1243,35 +1250,91 @@ class PalaceRegistry:
         )
 
     async def open(self, user_id: str) -> "PalaceEntry":
+        # Two-phase eviction (see _evict_to_fit_unlocked below). Phase 1 runs
+        # inside _registry_lock and returns the list of entries to close.
+        # Phase 2 runs after lock release, under each user's write lock, so
+        # in-flight readers drain before handle.close() touches their state.
+        to_close_after = []
         async with self._registry_lock:
             if user_id in self._cache:
                 self._cache.move_to_end(user_id)
                 entry = self._cache[user_id]
                 import time
                 entry.last_used_at = time.monotonic()
-                return entry
-            entry = await self._construct_entry(user_id)
-            self._cache[user_id] = entry
-            await self._evict_to_fit_unlocked()
-            return entry
+            else:
+                entry = await self._construct_entry(user_id)
+                self._cache[user_id] = entry
+                to_close_after = await self._evict_to_fit_unlocked()
+        for evicted_uid, evicted_entry in to_close_after:
+            await self._close_evicted(evicted_uid, evicted_entry)
+        return entry
 
     def _total_bytes(self) -> int:
         return sum(e.size_bytes for e in self._cache.values())
 
-    async def _evict_to_fit_unlocked(self) -> None:
-        # Invariant: every eviction pops the library's backend cache via handle.close()
-        # (spec §5.3 cache-eviction contract). A future refactor that drops the close()
-        # call silently reintroduces the ChromaDB PersistentClient leak — the integration
-        # test test_registry_eviction_bounds_backend_cache fails in that case.
+    async def _evict_to_fit_unlocked(self) -> list:
+        # Two-phase eviction (review-fix #7, 2026-04-20):
+        # Phase 1 (inside _registry_lock): select candidates and remove them
+        # from self._cache so no new requests can find them.
+        # Phase 2 (OUTSIDE the registry lock, in the caller): acquire each
+        # evicted user's WRITE lock (draining in-flight readers), then call
+        # handle.close().
+        #
+        # Why split phases: if close() ran while we still held _registry_lock,
+        # a concurrent reader that acquired its per-user reader_lock BEFORE
+        # we grabbed _registry_lock could still be mid-call with the handle's
+        # collection in its stack frame. Closing underneath it hits a
+        # garbage-collected Chroma client. See test_eviction_drains_readers.
+        #
+        # Invariant: every evicted entry still has handle.close() called on it
+        # eventually (spec §5.3 cache-eviction contract). Phase 2 guarantees
+        # this; the returned list is what Phase 2 iterates.
+        to_close = []
         while self._total_bytes() > self._max_bytes and len(self._cache) > 1:
             uid, evicted = next(iter(self._cache.items()))
             self._cache.pop(uid)
-            handle = getattr(evicted, "handle", None)
-            if handle is not None and hasattr(handle, "close"):
-                try:
-                    handle.close()
-                except Exception:
-                    pass
+            to_close.append((uid, evicted))
+        return to_close
+```
+
+Callers of `_evict_to_fit_unlocked` must do Phase 2 themselves. The pattern (used by both `open` and `sweep_idle`):
+
+```python
+async def open(self, user_id: str, *, track_cold: bool = False):
+    to_close_after = []
+    async with self._registry_lock:
+        was_cold = user_id not in self._cache
+        if was_cold:
+            entry = await self._construct_entry(user_id)
+            self._cache[user_id] = entry
+            to_close_after = await self._evict_to_fit_unlocked()
+        else:
+            self._cache.move_to_end(user_id)
+            entry = self._cache[user_id]
+            import time
+            entry.last_used_at = time.monotonic()
+    # Phase 2 — registry lock released. Close evicted handles under each
+    # user's write lock so in-flight readers drain first.
+    for evicted_uid, evicted_entry in to_close_after:
+        await self._close_evicted(evicted_uid, evicted_entry)
+    return (entry, was_cold) if track_cold else entry
+
+
+async def _close_evicted(self, uid: str, evicted_entry) -> None:
+    lock = self._locks.get(uid)
+    handle = getattr(evicted_entry, "handle", None)
+    if handle is None:
+        return
+    async def _do_close():
+        try:
+            handle.close()
+        except Exception:
+            pass
+    if lock is None:
+        await _do_close()
+        return
+    async with lock.writer_lock:
+        await _do_close()
 ```
 
 - [ ] **Step 4: Run → passes**
@@ -1377,6 +1440,63 @@ async def test_registry_eviction_bounds_backend_cache(tmp_path):
     # Registry should have evicted alice — assert her client was popped
     assert str(e1.path) not in _DEFAULT_BACKEND._clients
     assert str(e2.path) in _DEFAULT_BACKEND._clients
+
+
+async def test_eviction_drains_readers(tmp_path):
+    """Review-fix #7 (2026-04-20): two-phase eviction must acquire the
+    evicted user's writer_lock before calling handle.close(), so concurrent
+    readers finish cleanly without seeing a closed Chroma client.
+
+    Setup: user A is hot. Reader on A enters its method body (holds
+    reader_lock, has self._collection in its frame). In parallel, user B
+    arrives and forces eviction of A. The test asserts:
+      1. Reader's col.get() completes without exception.
+      2. After reader releases, A is no longer in registry._cache AND
+         A's palace_path is no longer in _DEFAULT_BACKEND._clients.
+
+    If a future refactor moves handle.close() back inside _registry_lock
+    (single-phase eviction), this test fails because the reader's
+    col.get() races against client GC.
+    """
+    import asyncio
+    from mempalace_sidecar.registry import PalaceRegistry
+    from mempalace.palace import _DEFAULT_BACKEND
+
+    r = PalaceRegistry(data_dir=tmp_path, max_bytes=1024, idle_ttl_sec=3600)
+    a = await r.open("alice")
+    a.size_bytes = 800
+    alice_path = str(a.path)
+    assert alice_path in _DEFAULT_BACKEND._clients
+
+    reader_started = asyncio.Event()
+    reader_may_finish = asyncio.Event()
+    reader_exc = []
+
+    async def slow_reader():
+        lock = r._lock_for("alice")
+        async with lock.reader_lock:
+            reader_started.set()
+            try:
+                # simulate an in-flight col.get while eviction is attempted
+                _ = a.handle.list_drawers(limit=1)
+                await reader_may_finish.wait()
+                _ = a.handle.list_drawers(limit=1)
+            except Exception as e:
+                reader_exc.append(e)
+
+    async def evicter():
+        await reader_started.wait()
+        # force eviction: open bob, size_bytes trips cap, alice gets evicted
+        b = await r.open("bob")
+        b.size_bytes = 800
+        # Let reader finish its second library call BEFORE we check invariants
+        reader_may_finish.set()
+
+    await asyncio.gather(slow_reader(), evicter())
+    assert reader_exc == [], f"Reader raised: {reader_exc}"
+    # Eviction must have completed Phase 2 by now (evicter awaited it).
+    assert "alice" not in r._cache
+    assert alice_path not in _DEFAULT_BACKEND._clients
 ```
 
 - [ ] **Step 2: Run → fails (stub `_construct_entry` sets `handle=None`)**
@@ -1470,26 +1590,30 @@ Add to `PalaceRegistry`:
 async def sweep_idle(self) -> int:
     """Close palaces idle longer than idle_ttl_sec. Returns count evicted.
 
+    Two-phase eviction (see _evict_to_fit_unlocked):
+      Phase 1 (inside _registry_lock): pop idle entries so no new requests find them.
+      Phase 2 (after lock release): under each user's write lock, close the handle
+      so any in-flight reader drains before the close touches handle state.
+
     Spec §5.3 cache-eviction contract: handle.close() MUST run on every
     eviction path so the library's ChromaBackend._clients dict doesn't
-    grow unbounded. The same invariant is enforced in _evict_to_fit_unlocked.
+    grow unbounded. Both phases together preserve that invariant.
     """
     import time
     now = time.monotonic()
+    evicted = []
     async with self._registry_lock:
-        to_evict = [
+        idle = [
             uid for uid, e in self._cache.items()
             if (now - e.last_used_at) > self._idle_ttl_sec
         ]
-        for uid in to_evict:
+        for uid in idle:
             entry = self._cache.pop(uid)
-            # PalaceHandle.close() pops the library backend cache as its final step.
-            if entry.handle is not None and hasattr(entry.handle, "close"):
-                try:
-                    entry.handle.close()
-                except Exception:
-                    pass
-        return len(to_evict)
+            evicted.append((uid, entry))
+    # Phase 2
+    for uid, entry in evicted:
+        await self._close_evicted(uid, entry)
+    return len(evicted)
 ```
 
 - [ ] **Step 4: Run → passes**
@@ -1625,6 +1749,8 @@ git commit -m "feat(sidecar): request/response schemas"
 #### Task M0.4.2: Ingest route + idempotency via `PalaceHandle.turns.sqlite`
 
 > **Design consolidation (2026-04-20).** The original draft created a separate `ingest_log.py` module with its own `ingest_log.sqlite` table keyed on `turn_id`. After the PalaceHandle rewrite (spec §5.3), `PalaceHandle.add_drawer` already owns a handle-local `turns.sqlite` with `PRIMARY KEY(turn_id)` for exactly this purpose — duplicate prevention, pair/session lookup, and drawer-id reverse mapping in one table. Two tables with overlapping purpose would be strictly worse. The route now delegates idempotency to `handle.add_drawer` and checks the returned `AddDrawerResult.status`.
+
+> **Schema bump required (2026-04-20 review fix #3).** This task lands the first new route beyond the M0.2 scaffolding (`/healthz`), which changes the FastAPI-generated OpenAPI output. Per spec §5.2 "schema change without `schema_version` bump = PR failure." **Bump `SCHEMA_VERSION = 1` → `SCHEMA_VERSION = 2` in `mempalace_sidecar/routes/ops.py` as part of this task's commit.** `/healthz` will report `{"schema_version": 2, ...}` after deploy. The OpenAPI snapshot test that enforces this invariant ships in M0.12; until then, the bump is a documentation/honesty discipline rather than CI-enforced. M0.12's first snapshot will be taken at v2.
 
 **Files:**
 - Create: `mempalace-sidecar/mempalace_sidecar/routes/palace.py`
@@ -2061,10 +2187,11 @@ async def wake_up(user_id: str, body: WakeupRequest, request: Request, warmup: b
         )
 ```
 
-Registry contract update (amend `PalaceRegistry.open` from M0.3.2 / M0.3.4): the method now takes a keyword-only `track_cold: bool = False` argument. When `True`, it returns `(entry, was_cold)` instead of just `entry`. `was_cold` is computed under `_registry_lock` — no TOCTOU.
+Registry contract update (amend `PalaceRegistry.open` from M0.3.2 / M0.3.4): the method now takes a keyword-only `track_cold: bool = False` argument. When `True`, it returns `(entry, was_cold)` instead of just `entry`. `was_cold` is computed under `_registry_lock` — no TOCTOU. The two-phase eviction pattern introduced in M0.3.2 is preserved (see the "two-phase eviction" note in M0.3.2 Step 3): Phase 1 selects candidates inside the registry lock, Phase 2 closes them outside the lock under each user's write lock so in-flight readers drain first.
 
 ```python
 async def open(self, user_id: str, *, track_cold: bool = False):
+    to_close_after = []
     async with self._registry_lock:
         was_cold = user_id not in self._cache
         if not was_cold:
@@ -2075,8 +2202,11 @@ async def open(self, user_id: str, *, track_cold: bool = False):
         else:
             entry = await self._construct_entry(user_id)
             self._cache[user_id] = entry
-            await self._evict_to_fit_unlocked()
-        return (entry, was_cold) if track_cold else entry
+            to_close_after = await self._evict_to_fit_unlocked()
+    # Phase 2: close evicted handles with reader-drain discipline (see M0.3.2).
+    for evicted_uid, evicted_entry in to_close_after:
+        await self._close_evicted(evicted_uid, evicted_entry)
+    return (entry, was_cold) if track_cold else entry
 ```
 
 Update any existing callers in `routes/palace.py` and tests accordingly — they continue working because `track_cold=False` returns the same shape as before.
@@ -2161,6 +2291,74 @@ async def test_wakeup_composition_within_latency_budget(app, auth):
         times_ms.sort()
         p95 = times_ms[int(len(times_ms) * 0.95)]
         assert p95 < 500, f"p95={p95:.1f}ms exceeds 500ms hot budget — see spec §4.2"
+
+
+async def test_wakeup_concurrent_faster_than_sum_of_parts(app, auth):
+    """Review-fix #4 (2026-04-20) — mechanical enforcement of the
+    parallelism architectural decision. The plan specifies asyncio.to_thread
+    wrapping so the four layer calls run concurrently in the default thread
+    pool (spec §5.3). A subagent that implements M0.5.2 with a naked
+    asyncio.gather over sync bodies would silently get sequential execution
+    — tests like test_layers_run and test_p95_latency pass on tiny seed
+    data, and the budget blows in production on 10k-drawer palaces.
+
+    Assertion: wake-up wall time is strictly less than the sum of each
+    layer's wall time when called standalone. A 0.7× threshold gives slack
+    for thread-pool overhead. If the test fails, the implementation is
+    running layers serially — fix by wrapping each call in asyncio.to_thread.
+    """
+    import time
+    import asyncio
+    from httpx import ASGITransport, AsyncClient
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        # Seed: a non-trivial palace so each layer has real work to do.
+        for i in range(300):
+            await c.post("/palace/par/ingest", headers=auth, json={
+                "turn_id": f"par{i:040d}",
+                "session_id": "s1",
+                "pair_id": f"par_p{i:040d}",
+                "role": "user" if i % 2 == 0 else "assistant",
+                "text": f"content turn {i} with a variety of retrievable words and phrases",
+                "ts": 1_700_000_000.0 + i,
+            })
+
+        # Warm up palace cache and Chroma query-path.
+        await c.post("/palace/par/wake-up", headers=auth, json={
+            "query": "content", "k": 5, "session_id": "s1",
+        })
+
+        # Exercise the route directly to get individual layer timings.
+        # The wakeup_seconds histogram labels record per-layer t; here we
+        # approximate by calling the build_wakeup helper with all-but-one
+        # layers stubbed in a separate test. For integration granularity,
+        # rely on the fact that total_ms < sum(component routes) is a strong
+        # signal of parallelism. Component calls:
+        t0 = time.monotonic()
+        _ = await c.get("/palace/par/drawers", headers=auth, params={"limit": 5})
+        l0_like = time.monotonic() - t0
+
+        t0 = time.monotonic()
+        _ = await c.post("/palace/par/search", headers=auth, json={"query": "content", "k": 5})
+        l3_like = time.monotonic() - t0
+
+        t0 = time.monotonic()
+        r = await c.post("/palace/par/wake-up", headers=auth, json={
+            "query": "content", "k": 5, "session_id": "s1",
+        })
+        total = time.monotonic() - t0
+        assert r.status_code == 200
+
+    # Lower bound on the "sum of parts": L0+L3 (the two we measured).
+    # Wake-up also does L1 (cheap sqlite+get) and L2 (same cost as L3);
+    # a serial implementation would total ≥ l0_like + l3_like + l3_like.
+    # Conservative threshold: total < 0.7 * (l0_like + 2 * l3_like).
+    serial_bound = l0_like + 2 * l3_like
+    assert total < 0.7 * serial_bound, (
+        f"Wake-up took {total*1000:.0f} ms; serial bound {serial_bound*1000:.0f} ms. "
+        f"Ratio {total/serial_bound:.2f} ≥ 0.7 — layers may be running sequentially. "
+        f"Ensure build_wakeup wraps each layer in asyncio.to_thread."
+    )
 ```
 
 - [ ] **Step 2: Reuse `app` and `auth` fixtures from conftest.py** — add to `tests/integration/conftest.py`:
@@ -2658,7 +2856,7 @@ from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry, mult
 ingest_total = Counter("mempalace_ingest_total", "Ingest outcomes", ["status"])
 wakeup_seconds = Histogram("mempalace_wakeup_seconds", "Wake-up layer latency", ["layer", "hot"])
 search_seconds = Histogram("mempalace_search_seconds", "Search latency", ["hot"])
-embedding_seconds = Histogram("mempalace_embedding_seconds", "Embedding call latency")
+chroma_query_seconds = Histogram("mempalace_chroma_query_seconds", "Chroma embed+search (library-internal)", ["layer"])
 palace_cache_size = Gauge("mempalace_palace_cache_size", "Hot palace count", multiprocess_mode="livesum")
 palace_cache_bytes = Gauge("mempalace_palace_cache_bytes", "Total resident bytes", multiprocess_mode="livesum")
 palace_cache_hits_total = Counter("mempalace_palace_cache_hits_total", "Hot palace hits")
@@ -2719,7 +2917,7 @@ async def readyz(request: Request):
 import time as _time
 from mempalace_sidecar.metrics import (
     ingest_total, wakeup_seconds, search_seconds,
-    embedding_seconds, palace_cache_hits_total, palace_cache_misses_total,
+    chroma_query_seconds, palace_cache_hits_total, palace_cache_misses_total,
 )
 
 
