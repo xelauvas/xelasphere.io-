@@ -114,6 +114,23 @@ class PalaceHandle:
     bodies are synchronous Python — the sidecar's async routes wrap calls
     in ``asyncio.to_thread`` when real parallelism is required (spec §5.3
     "Concurrency model").
+
+    **Concurrency invariant — caller holds the per-user write lock for
+    mutating methods.** ``add_drawer`` (and future M0.7 KG writes via
+    ``self.kg.add_triple``) must be invoked under the registry's
+    per-user ``aiorwlock.writer_lock`` (spec §5.4). Read-only methods
+    (``recent_drawers``, ``session_drawers``, ``semantic_search``,
+    ``topic_search``, ``search``, ``list_drawers``, and future M0.7
+    ``self.kg.query_entity`` / ``self.kg.timeline`` reads) may run
+    under the reader lock. This class does NOT
+    serialise concurrent writes itself — `self.turns` is opened with
+    ``check_same_thread=False`` so it can be touched from asyncio thread
+    pool workers, but sqlite3 connection-level serialisation only
+    prevents SQLite corruption, not logical transaction interleaving.
+    A future registry edit that allowed overlapping writes on one palace
+    would produce ``sqlite3.OperationalError: cannot start a transaction
+    within a transaction`` and a corrupt ``turns`` table. This is the
+    single most important cross-module invariant in the sidecar.
     """
 
     def __init__(
@@ -217,14 +234,25 @@ class PalaceHandle:
         """Close all owned state and pop the library backend cache.
 
         Idempotent by contract — second and subsequent calls are no-ops.
-        The ``self._closed`` guard is load-bearing: eviction-during-
-        eviction (size eviction + idle-sweep targeting the same user
-        concurrently) is a real race, and ``KnowledgeGraph.close()`` on
-        an already-closed connection would raise without the guard.
+        The ``self._closed`` guard is load-bearing for two reasons:
+
+        1. ``self.turns.close()`` on an already-closed sqlite3 connection
+           raises ``sqlite3.ProgrammingError: Cannot operate on a closed
+           database.`` The guard prevents the second-close path from
+           hitting it.
+        2. Eviction-during-eviction (size eviction + idle-sweep targeting
+           the same user concurrently) is a real race. The registry's
+           two-phase pattern (spec §5.4) narrows the window, but the
+           guard is the last line of defense.
+
+        ``KnowledgeGraph.close()`` is separately idempotent in the library
+        (verified: ``mempalace.knowledge_graph.KnowledgeGraph.close``
+        guards on ``self._connection is not None``), so the guard doesn't
+        strictly protect step 1, only step 2. We keep it for the race.
 
         Close order (spec §5.3):
-            1. KG sqlite  (library-owned)
-            2. turns.sqlite  (sidecar-owned)
+            1. KG sqlite  (library-owned; self-idempotent)
+            2. turns.sqlite  (sidecar-owned; NOT idempotent without guard)
             3. _DEFAULT_BACKEND._clients.pop  (library's Chroma cache)
 
         The Chroma PersistentClient has no explicit close(); removing it
@@ -233,17 +261,19 @@ class PalaceHandle:
         if self._closed:
             return
 
-        # Step 1: KG sqlite. Wrap in a try because a partially-opened
-        # handle (ctor raised mid-way) still needs the other steps to run.
+        # Step 1: KG sqlite. Narrow catch — sqlite3.Error covers every
+        # operational/programming failure; AttributeError covers the
+        # partially-constructed-handle case (ctor raised before self.kg
+        # was assigned).
         try:
             self.kg.close()
-        except Exception as e:  # pragma: no cover - defensive
+        except (sqlite3.Error, AttributeError) as e:  # pragma: no cover - defensive
             log.warning("kg.close() raised during PalaceHandle.close: %s", e)
 
         # Step 2: turns.sqlite.
         try:
             self.turns.close()
-        except Exception as e:  # pragma: no cover - defensive
+        except (sqlite3.Error, AttributeError) as e:  # pragma: no cover - defensive
             log.warning("turns.close() raised during PalaceHandle.close: %s", e)
 
         # Step 3: library backend cache pop. MUST run last — if it ran
@@ -327,6 +357,15 @@ class PalaceHandle:
             (turn_id, drawer_id, session_id, pair_id, role, ts, time.time()),
         )
         self.turns.commit()
+        # Crash-safety note: if this line (commit) or the INSERT above had
+        # raised BEFORE returning, Chroma would hold the drawer but turns
+        # would have no row. An outer retry with the same turn_id would
+        # pass the step-1 SELECT guard and re-call _library_add_drawer,
+        # which upserts on the DETERMINISTIC drawer_id derived in step 2.
+        # Same drawer_id → Chroma upsert overwrites the identical row
+        # with identical content. Safe by coincidence of the ID-derivation
+        # contract, not by explicit transaction semantics. If that contract
+        # ever weakens, this path needs a WAL or 2PC scheme.
 
         return AddDrawerResult(status="accepted", drawer_id=drawer_id)
 
@@ -468,15 +507,16 @@ class PalaceHandle:
     # ------------------------------------------------------------------
     # Knowledge graph (M0.7)
     # ------------------------------------------------------------------
-
-    def kg_add_triple(self, *args: Any, **kwargs: Any) -> Any:
-        return self.kg.add_triple(*args, **kwargs)
-
-    def kg_query_entity(self, *args: Any, **kwargs: Any) -> Any:
-        return self.kg.query_entity(*args, **kwargs)
-
-    def kg_timeline(self, *args: Any, **kwargs: Any) -> Any:
-        return self.kg.timeline(*args, **kwargs)
+    # Deferred: kg_add_triple / kg_query_entity / kg_timeline were removed
+    # from M0.3.0 and will land in M0.7 with EXPLICIT typed signatures.
+    # Reason: `*args, **kwargs` passthroughs occupy the library-isolation
+    # namespace without providing isolation — if the upstream library
+    # renames a KnowledgeGraph parameter, downstream callers break just
+    # as hard as if they imported KnowledgeGraph directly. M0.7 will
+    # introduce methods that mirror the current library API explicitly,
+    # so a rename shows up HERE first and can be absorbed by updating
+    # one file. Callers between now and M0.7 use `self.kg` directly;
+    # that's permitted because M0.3-M0.6 don't touch KG.
 
     # ------------------------------------------------------------------
     # Escape hatch — raw Chroma collection access
