@@ -490,14 +490,29 @@ class PalaceHandle:
             )
         ]
 
-        # Total count — required for the next_offset calculation. If the
-        # caller passed a wing/room filter, total should reflect the
-        # filtered count; collection.count() is unfiltered. Document the
-        # v1 shortcut: we return the unfiltered total because the M0.4.1
-        # response shape doesn't differentiate, and the filtered-count
-        # cost (another Chroma call) isn't worth it for v1. M0.6 revisits.
-        total = self._collection.count()
-        next_offset = offset + limit if offset + limit < total else None
+        # Honest totals — when a wing/room filter is applied we CANNOT
+        # return a correct total without a second Chroma call (col.count()
+        # has no filter argument). Rather than returning a wrong number
+        # (unfiltered total) that the Flask adapter would render as
+        # "showing 10 of 2843" when the filtered set is actually 47 rows,
+        # we return total=None for filtered queries and let the Flask
+        # adapter render "showing 10 of many" or omit the count. The
+        # unfiltered path returns the real count. M0.6 may revisit if a
+        # filtered-count matters enough to pay the extra library call.
+        if where:
+            total: int | None = None
+        else:
+            total = self._collection.count()
+
+        # next_offset semantics: None means "no more pages." When we know
+        # total, compute precisely. When total is unknown (filtered case),
+        # signal "more may exist" if we returned a full page — the caller
+        # keeps paging until they get a short page, which signals end.
+        if total is not None:
+            next_offset = offset + limit if offset + limit < total else None
+        else:
+            next_offset = offset + limit if len(drawers) == limit else None
+
         return {
             "drawers": drawers,
             "total": total,

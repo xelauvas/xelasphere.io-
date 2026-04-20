@@ -60,15 +60,21 @@ def _expected_drawer_id(turn_id: str, wing: str = "conversations", room: str = "
 
 
 def _add(handle, *, turn_id: str, session_id: str = "sess", pair_id: str = "p", role: str = "user",
-         text: str = "hello world", ts: float = 1_700_000_000.0) -> AddDrawerResult:
-    return handle.add_drawer(
-        turn_id=turn_id,
-        session_id=session_id,
-        pair_id=pair_id,
-        role=role,
-        text=text,
-        ts=ts,
-    )
+         text: str = "hello world", ts: float = 1_700_000_000.0,
+         wing: str | None = None, room: str | None = None) -> AddDrawerResult:
+    kwargs = {
+        "turn_id": turn_id,
+        "session_id": session_id,
+        "pair_id": pair_id,
+        "role": role,
+        "text": text,
+        "ts": ts,
+    }
+    if wing is not None:
+        kwargs["wing"] = wing
+    if room is not None:
+        kwargs["room"] = room
+    return handle.add_drawer(**kwargs)
 
 
 # -----------------------------------------------------------------------------
@@ -240,6 +246,42 @@ def test_list_drawers_offset_pagination(handle):
     assert page1["next_offset"] == 10
     assert page2["next_offset"] == 20
     assert page3["next_offset"] is None
+
+
+def test_list_drawers_total_is_none_when_filtered(handle):
+    """Honesty contract: total is filtered-inaccurate, so for any filtered
+    query we return total=None rather than an unfiltered wrong count. The
+    Flask adapter renders "showing N of many" rather than a lie.
+
+    next_offset still works: when the returned page is full, more may
+    exist; when short, we're at the end.
+    """
+    # Insert 10 drawers in wing A and 5 in wing B.
+    for i in range(10):
+        _add(handle, turn_id=f"A{i:02d}", session_id="S", pair_id=f"a{i}",
+              role="user", text=f"A-body {i}", ts=float(i), wing="wingA", room="r")
+    for i in range(5):
+        _add(handle, turn_id=f"B{i:02d}", session_id="S", pair_id=f"b{i}",
+              role="user", text=f"B-body {i}", ts=float(100 + i), wing="wingB", room="r")
+    assert handle.col.count() == 15
+
+    # Filtered: total must be None (honest).
+    filtered = handle.list_drawers(wing="wingA", limit=10, offset=0)
+    assert filtered["total"] is None
+    assert len(filtered["drawers"]) == 10
+    # Full page → more may exist → next_offset is offset+limit.
+    assert filtered["next_offset"] == 10
+
+    # Short page → end of pagination → next_offset is None.
+    short_page = handle.list_drawers(wing="wingB", limit=10, offset=0)
+    assert short_page["total"] is None
+    assert len(short_page["drawers"]) == 5
+    assert short_page["next_offset"] is None
+
+    # Unfiltered path still returns the real total.
+    unfiltered = handle.list_drawers(limit=10, offset=0)
+    assert unfiltered["total"] == 15
+    assert unfiltered["next_offset"] == 10
 
 
 def test_close_pops_backend_cache(palace_path: Path):
