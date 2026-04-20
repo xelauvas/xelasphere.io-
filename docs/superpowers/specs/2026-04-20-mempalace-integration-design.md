@@ -417,12 +417,13 @@ The integration test `test_cold_palace_open_reuses_embedding_model` asserts this
 
 ### 5.4 PalaceRegistry — dispatch and caching
 
-- `_cache: dict[user_id, PalaceEntry]` — hot palaces; each entry holds a `PalaceHandle` (§5.3) plus bookkeeping.
-- `_lru_keys: OrderedDict` — access-order.
-- `_total_bytes: int` — sum of resident palace sizes. Size sampled on open + on-write.
+- `_cache: OrderedDict[user_id, PalaceEntry]` — hot palaces with access-order semantics. `OrderedDict` is load-bearing: `move_to_end(user_id)` on every hit makes Phase 1 of size eviction pop from the front (LRU victim). An earlier draft listed a separate `_lru_keys: OrderedDict` — consolidated into `_cache` itself since the dict already preserves insertion/access order as of Python 3.7.
 - `_max_bytes: int` = `MEMPALACE_CACHE_MAX_BYTES` (default 2 GB).
-- `_locks: dict[user_id, aiorwlock.RWLock]` — per-user RWLock. Reads parallel, writes exclusive.
-- Registry-level dict mutations guarded by a single `asyncio.Lock`.
+- `_locks: dict[user_id, aiorwlock.RWLock]` — per-user RWLock. Reads parallel, writes exclusive. **Never cleaned up on eviction in v1**: one RWLock per user_id ever seen persists for the lifetime of the process. This is a deliberate trade for simplicity — a mutex is ~100 bytes and the alternative (cleanup on Phase 2) introduces a race where an in-flight writer's lock could be deleted mid-operation. Accepted grow-forever at scale (10k users × 100 bytes ≈ 1 MB); revisit if a sidecar-per-process ever runs for months with millions of unique users.
+- `_registry_lock: asyncio.Lock` — guards all mutations of `_cache` (NOT `_locks`; see `_lock_for` note below).
+- `_lock_for(user_id) -> RWLock` — lazy-creates the per-user lock via `dict.setdefault(user_id, RWLock())`, which is GIL-atomic on CPython. Two racing callers each construct their own RWLock, but `setdefault` ensures only one wins the install and both receive the same reference back. No `_registry_lock` acquire needed on this path — important because route handlers call `_lock_for` on every request and wrapping it in the registry lock would serialise all ingest/search/wake-up.
+
+**`_total_bytes() -> int` is a method, not a cached field** (spec-to-implementation alignment 2026-04-20). Sum-on-demand over `_cache.values()` is O(n) where n is resident palace count (dozens at most). The alternative — caching a running sum and updating on every write path — requires every caller that mutates `PalaceEntry.size_bytes` to remember to update the cache, and silently drifts the day someone forgets. The Hypothesis property test `test_total_bytes_accurate` asserts the invariant after every op; with sum-on-demand it holds by construction.
 
 **Eviction is two-phase** (review-fix 2026-04-20):
 - **Phase 1** runs inside `_registry_lock`: select eviction candidates (by LRU order for size-driven eviction, by `last_used_at` for idle TTL) and remove them from `self._cache` so no new requests find them.
@@ -494,7 +495,7 @@ Single `asyncio` worker. Every 30s (or signal from ingest): pulls batches, runs 
 2. Signal flusher + KG worker to drain.
 3. Wait up to **10s** for in-flight handlers.
 4. Cancel stragglers; writes roll back cleanly so outbox retries pick up.
-5. Close all Palace handles (fsync Chroma + KG).
+5. Close all Palace handles (fsync Chroma + KG) via `PalaceRegistry.close_all()` — reuses the same two-phase eviction pattern as `sweep_idle` / `_evict_to_fit_unlocked`: Phase 1 snapshots + clears `_cache` inside the registry lock; Phase 2 acquires each user's writer_lock and calls `handle.close()`.
 6. Exit. `TimeoutStopSec=15s` in systemd (10s drain + 5s grace).
 
 ### 5.8 Config (`/etc/mempalace/sidecar.env`)

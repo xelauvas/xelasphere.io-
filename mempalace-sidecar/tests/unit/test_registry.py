@@ -157,6 +157,55 @@ async def test_eviction_blocks_on_held_reader_lock(
     e1.handle.close.assert_called_once()
 
 
+async def test_construct_entry_failure_leaves_cache_clean(tmp_path: Path) -> None:
+    """If _construct_entry raises mid-open, the registry must:
+      (a) release _registry_lock cleanly (a subsequent open on a
+          different user must succeed);
+      (b) NOT insert the failed user into _cache;
+      (c) allow a retry on the same user_id to proceed cleanly.
+
+    Catches the class of bug where a half-constructed PalaceEntry leaks
+    into the cache or where the lock context manager's error path leaves
+    state inconsistent.
+    """
+    r = PalaceRegistry(data_dir=tmp_path, max_bytes=10_000, idle_ttl_sec=3600)
+
+    # Arrange: monkeypatch _construct_entry to raise on first call to
+    # "alice", succeed on second (retry).
+    call_count = {"n": 0}
+
+    async def flaky_ctor(uid: str) -> PalaceEntry:
+        if uid == "alice":
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise RuntimeError("simulated corrupt-meta.json")
+        # Fall through: synthesise a minimal entry.
+        path = r._palaces_dir / uid
+        path.mkdir(parents=True, exist_ok=True)
+        now = time.monotonic()
+        return PalaceEntry(uid, MagicMock(), path, 0, 1, now, now)
+
+    r._construct_entry = flaky_ctor  # type: ignore[assignment]
+
+    # (a) first open raises; lock released on exit.
+    with pytest.raises(RuntimeError, match="simulated corrupt-meta.json"):
+        await r.open("alice")
+    assert "alice" not in r._cache
+
+    # (b) a different user opens successfully — proves _registry_lock
+    # was released.
+    bob = await r.open("bob")
+    assert bob.user_id == "bob"
+    assert "bob" in r._cache
+
+    # (c) alice retry succeeds — proves the failed path didn't leak
+    # state that blocks the retry.
+    alice = await r.open("alice")
+    assert alice.user_id == "alice"
+    assert "alice" in r._cache
+    assert call_count["n"] == 2  # raise + success
+
+
 # ---------------------------------------------------------------------------
 # M0.3.3 — Hypothesis property test: byte accounting stays consistent
 # ---------------------------------------------------------------------------
@@ -203,7 +252,15 @@ async def test_total_bytes_accurate(
     # Unique tmp_path per Hypothesis example — fixtures aren't re-run
     # across examples, so tmp_path_factory is the right escape hatch.
     tmp = tmp_path_factory.mktemp("hyp")
-    r = PalaceRegistry(data_dir=tmp, max_bytes=10_000, idle_ttl_sec=3600)
+    # Low max_bytes (relative to op sizes) so size-driven eviction
+    # actually fires during the sequence — the invariant must hold
+    # across Phase 1 cache mutations too, not just across explicit
+    # open/set_size/evict ops. Earlier draft used max_bytes=10_000
+    # with sizes 0-500; 20 ops rarely tripped the cap, leaving
+    # _evict_to_fit_unlocked effectively untested by the property.
+    # Now: caps at 1500 with sizes 0-500 means roughly every third
+    # open triggers Phase 1 eviction.
+    r = PalaceRegistry(data_dir=tmp, max_bytes=1500, idle_ttl_sec=3600)
 
     for kind, uid, size in ops:
         if kind == "open":

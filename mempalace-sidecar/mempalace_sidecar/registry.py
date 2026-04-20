@@ -35,6 +35,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sqlite3
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -121,28 +122,31 @@ class PalaceRegistry:
     # ------------------------------------------------------------------
 
     def _lock_for(self, user_id: str) -> RWLock:
-        """Lazy-create the per-user RWLock.
+        """Lazy-create the per-user RWLock — race-free via dict.setdefault.
 
-        Not guarded by ``_registry_lock`` because this is called from
-        route handlers that expect a quick dict lookup; races on
-        simultaneous cold lookups would create two RWLock instances and
-        a later caller would see a stale one. The two paths that DO
-        acquire ``_registry_lock`` (``open``, ``sweep_idle``,
-        ``_close_evicted``) access ``self._locks`` through this helper
-        under the registry lock, which is the serialisation point that
-        prevents the torn-read race. Routes that call this outside the
-        registry lock accept that a concurrent cold open may briefly
-        see a lock instance that gets replaced — the race is benign
-        because the second caller will re-lookup after its own registry
-        lock acquire if it ever mutates state. Documented here so the
-        M0.4 ingest author doesn't "fix" the race with per-call
-        locking.
+        Called from route handlers that need quick access to the per-user
+        lock. Spec reviewer + quality reviewer both flagged the earlier
+        "benign race" docstring as real: two concurrent cold lookups
+        could each construct a fresh RWLock and each install its own
+        copy, producing two mutex instances for one user. M0.4's ingest
+        path is the first concurrent writer — two writers holding
+        different "exclusive" locks is silent data corruption, not a
+        "benign" race.
+
+        Fix: ``self._locks.setdefault(user_id, new_lock)`` is
+        GIL-atomic on CPython (single bytecode op), so two racing
+        callers each construct their own RWLock but only one wins the
+        install — and both callers receive the winning reference back.
+        The loser's instance is garbage-collected. No registry-lock
+        acquire needed on the hot path; no torn-read race on the cold
+        path.
         """
         lock = self._locks.get(user_id)
-        if lock is None:
-            lock = RWLock()
-            self._locks[user_id] = lock
-        return lock
+        if lock is not None:
+            return lock
+        # Cold path. setdefault is GIL-atomic on CPython; racing
+        # callers both get the same reference back.
+        return self._locks.setdefault(user_id, RWLock())
 
     # ------------------------------------------------------------------
     # Public API: open + sweep
@@ -325,10 +329,18 @@ class PalaceRegistry:
     def _close_handle_safely(handle: Any) -> None:
         """Call ``handle.close()`` swallowing exceptions. Defensive
         because M0.3 is the last place an unexpected library raise can
-        derail eviction — by M0.11 we'll have metrics on this."""
+        derail eviction — by M0.11 we'll have metrics on this.
+
+        Narrow catch: ``handle.close()`` can raise ``sqlite3.Error``
+        (KG or turns connection close), ``OSError`` (file handle cleanup),
+        ``AttributeError`` / ``KeyError`` (half-constructed handle with
+        missing attrs). Bare ``Exception`` would also swallow programmer
+        errors like ``TypeError`` that should surface — narrowed in
+        response to M0.3.1-5 quality review.
+        """
         try:
             handle.close()
-        except Exception as exc:  # noqa: BLE001 - we really do want to swallow
+        except (sqlite3.Error, OSError, AttributeError, KeyError) as exc:
             log.warning(
                 "handle.close() raised during registry eviction: %s", exc
             )
