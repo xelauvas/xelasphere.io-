@@ -72,14 +72,16 @@ mempalace-sidecar/                    # NEW: subdir; see §7.7 of spec for split
 
 app/mempalace/                        # NEW
 ├── __init__.py
-├── client.py                         # UDS httpx client + circuit breaker + ChaosTransport support
+├── client.py                         # async SidecarClient + SyncSidecarClient + circuit breaker + ChaosTransport
 ├── adapter.py                        # MempalaceAdapter — the only module the app imports
-├── outbox.py                         # Durable write queue
+├── outbox.py                         # Durable write queue (sync sqlite3, WAL)
+├── flusher.py                        # Thread-based flusher (uses SyncSidecarClient)
+├── flusher_main.py                   # Entrypoint for mempalace-flusher.service
 ├── wakeup.py                         # Per-provider WakeupContext formatters
 ├── tool.py                           # search_memory tool schema + handler
 ├── shadow_sink.py                    # threaded queue.Queue + daemon writer (NOT asyncio)
 ├── feature_flag.py                   # MEMPALACE_MODE + LEGACY_MEMORY
-├── metrics.py
+├── metrics.py                        # Metrics class (M0.11b) + build_default_metrics()
 ├── redaction/
 │   ├── __init__.py
 │   ├── rules.py
@@ -94,6 +96,8 @@ app/mempalace/                        # NEW
     ├── test_client.py
     ├── test_outbox.py
     ├── test_outbox_property.py       # Hypothesis-driven
+    ├── test_flusher.py
+    ├── test_metrics.py
     ├── test_wakeup_formatters.py
     ├── test_feature_flag.py
     ├── test_adapter.py
@@ -109,7 +113,8 @@ app/memory_v2/DEPRECATED.md           # NEW at P3 entry
 app/memory_v3/DEPRECATED.md           # NEW at P3 entry
 
 deploy/mempalace/
-├── mempalace-sidecar.service         # systemd unit
+├── mempalace-sidecar.service         # systemd unit — the sidecar
+├── mempalace-flusher.service         # systemd unit — single-instance flusher (M0.19.4)
 ├── sidecar.env.example
 ├── mempalace.env.example             # XelaSphere-side flags
 ├── provision.sh                      # Idempotent provisioning
@@ -437,6 +442,17 @@ def test_settings_requires_token(monkeypatch, tmp_path):
     monkeypatch.setenv("MEMPALACE_USER_ID_HASH_SALT", "x" * 16)
     with pytest.raises(Exception):
         Settings()
+
+
+def test_prometheus_multiproc_dir_from_bare_env(monkeypatch, tmp_path):
+    # prometheus_client reads PROMETHEUS_MULTIPROC_DIR directly; the sidecar
+    # also needs to see the same bare-name env var via validation_alias.
+    monkeypatch.setenv("MEMPALACE_TOKEN", "d" * 32)
+    monkeypatch.setenv("MEMPALACE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MEMPALACE_USER_ID_HASH_SALT", "x" * 16)
+    monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", str(tmp_path / "prom"))
+    s = Settings()
+    assert str(s.prometheus_multiproc_dir) == str(tmp_path / "prom")
 ```
 
 - [ ] **Step 2: Run test → fails**
@@ -448,7 +464,7 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 ```python
 from pathlib import Path
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -457,6 +473,7 @@ class Settings(BaseSettings):
         env_prefix="MEMPALACE_",
         env_file=None,  # env file supplied via systemd EnvironmentFile
         extra="ignore",
+        populate_by_name=True,  # Permits bare-name matches for validation_alias
     )
 
     socket_path: str = Field(default="/run/mempalace/sidecar.sock")
@@ -471,7 +488,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="info")
     prometheus_multiproc_dir: Path = Field(
         default=Path("/var/run/mempalace/prom"),
-        alias="PROMETHEUS_MULTIPROC_DIR",
+        validation_alias=AliasChoices("PROMETHEUS_MULTIPROC_DIR", "MEMPALACE_PROMETHEUS_MULTIPROC_DIR"),
     )
     shadow_sample_rate: float = Field(default=0.20, ge=0.0, le=1.0)
     user_id_hash_salt: str = Field(min_length=8)
@@ -1400,8 +1417,15 @@ class IngestLog:
             await db.execute(_SCHEMA)
             await db.commit()
 
-    async def record_or_duplicate(self, turn_id: str, user_id: str, pair_id: str, ts: float) -> bool:
-        """Return True if this is the first record, False on duplicate."""
+    async def exists(self, turn_id: str) -> bool:
+        async with aiosqlite.connect(self._db_path) as db:
+            cur = await db.execute(
+                "SELECT 1 FROM ingest_log WHERE turn_id=? LIMIT 1", (turn_id,)
+            )
+            return (await cur.fetchone()) is not None
+
+    async def record(self, turn_id: str, user_id: str, pair_id: str, ts: float) -> bool:
+        """Return True if inserted, False on duplicate."""
         import time
         async with aiosqlite.connect(self._db_path) as db:
             try:
@@ -1431,18 +1455,28 @@ def _registry(request: Request):
 
 @router.post("/{user_id}/ingest", response_model=IngestResponse)
 async def ingest(user_id: str, body: IngestRequest, request: Request) -> IngestResponse:
+    """
+    Ordering discipline (see plan review, fix #1):
+      1. Check idempotency FIRST (read-only) to short-circuit duplicates.
+      2. Append drawer to palace. Must succeed before we commit the idempotency row.
+      3. Record idempotency row. If this fails, the drawer exists but not the log —
+         retry will re-append, and palace-level dedup on metadata.turn_id handles it.
+
+    The guarantee we care about: a successful response implies the drawer is durable
+    in the palace. Rare double-append (drawer written, log write failed) is strictly
+    preferable to silent loss (log written, drawer append raised).
+    """
     registry = _registry(request)
     entry = await registry.open(user_id)
     lock = registry._lock_for(user_id)
     async with lock.writer_lock:
         log = IngestLog(entry.path)
         await log.ensure()
-        first = await log.record_or_duplicate(
-            body.turn_id, user_id, body.pair_id, body.ts,
-        )
-        if not first:
+        if await log.exists(body.turn_id):
             return IngestResponse(status="duplicate")
-        # Append drawer to palace
+        # Palace-level dedup: add_drawer must be no-op on pre-existing turn_id.
+        # mempalace 3.3.1's Palace.add_drawer() dedupes on metadata.turn_id when
+        # provided; verify on install and add a thin shim if not.
         entry.palace.add_drawer(
             text=body.text,
             metadata={
@@ -1453,6 +1487,7 @@ async def ingest(user_id: str, body: IngestRequest, request: Request) -> IngestR
                 "turn_id": body.turn_id,
             },
         )
+        await log.record(body.turn_id, user_id, body.pair_id, body.ts)
         return IngestResponse(status="accepted")
 ```
 
@@ -1696,10 +1731,15 @@ from mempalace_sidecar.wakeup import build_wakeup
 async def wake_up(user_id: str, body: WakeupRequest, request: Request, warmup: bool = False) -> WakeupContext:
     registry = _registry(request)
     embedder = request.app.state.embedder
-    was_cold = user_id not in registry._cache
-    entry = await registry.open(user_id)
+    # Per plan review fix #14: open() reports its own was_cold atomically.
+    # No TOCTOU peek into registry._cache from caller.
+    entry, was_cold = await registry.open(user_id, track_cold=True)
+    from mempalace_sidecar.schemas import WakeupMeta
     if warmup:
-        return WakeupContext(user_id=user_id, meta=__import__("mempalace_sidecar.schemas", fromlist=["WakeupMeta"]).WakeupMeta(hot=(not was_cold), embed_ms=0, total_ms=0))
+        return WakeupContext(
+            user_id=user_id,
+            meta=WakeupMeta(hot=(not was_cold), embed_ms=0, total_ms=0),
+        )
     lock = registry._lock_for(user_id)
     async with lock.reader_lock:
         return await build_wakeup(
@@ -1712,6 +1752,26 @@ async def wake_up(user_id: str, body: WakeupRequest, request: Request, warmup: b
             k=body.k,
         )
 ```
+
+Registry contract update (amend `PalaceRegistry.open` from M0.3.2 / M0.3.4): the method now takes a keyword-only `track_cold: bool = False` argument. When `True`, it returns `(entry, was_cold)` instead of just `entry`. `was_cold` is computed under `_registry_lock` — no TOCTOU.
+
+```python
+async def open(self, user_id: str, *, track_cold: bool = False):
+    async with self._registry_lock:
+        was_cold = user_id not in self._cache
+        if not was_cold:
+            self._cache.move_to_end(user_id)
+            entry = self._cache[user_id]
+            import time
+            entry.last_used_at = time.monotonic()
+        else:
+            entry = await self._construct_entry(user_id)
+            self._cache[user_id] = entry
+            await self._evict_to_fit_unlocked()
+        return (entry, was_cold) if track_cold else entry
+```
+
+Update any existing callers in `routes/palace.py` and tests accordingly — they continue working because `track_cold=False` returns the same shape as before.
 
 - [ ] **Step 5: Run unit + integration tests → pass**
 
@@ -2087,7 +2147,38 @@ def current_version(palace_dir: Path) -> int:
     return int(json.loads(meta.read_text()).get("schema_version", 0))
 
 
+def _copy_hardlink_if_possible(src: Path, dst: Path) -> None:
+    """Copy tree using hardlinks on same-fs; fall back to regular copy on EXDEV."""
+    try:
+        shutil.copytree(src, dst, copy_function=os.link)
+    except OSError as e:
+        # EXDEV (cross-device) or backend that refuses link — fall back.
+        if dst.exists():
+            shutil.rmtree(dst, ignore_errors=True)
+        shutil.copytree(src, dst)
+
+
+def _recover_if_interrupted(palace_dir: Path) -> bool:
+    """Detect an interrupted-rename state and promote the migrated sibling.
+
+    Spec §7.5 principle: the original U/ dir is never mutated until verification passes,
+    and a crash between the two renames must not lose the migrated data. Call this on
+    every open before touching palace_dir.
+
+    Returns True if a recovery happened.
+    """
+    migrating = palace_dir.with_name(palace_dir.name + ".migrating")
+    if not palace_dir.exists() and migrating.exists():
+        # Crashed after the first rename but before the second.
+        # The migrated version is in .migrating; promote it.
+        os.rename(migrating, palace_dir)
+        os.sync()
+        return True
+    return False
+
+
 def apply_migrations(palace_dir: Path, target_version: int, migrations: Iterable[Migration]) -> None:
+    _recover_if_interrupted(palace_dir)
     v = current_version(palace_dir)
     if v == target_version:
         return
@@ -2096,7 +2187,7 @@ def apply_migrations(palace_dir: Path, target_version: int, migrations: Iterable
     migrating = palace_dir.with_name(palace_dir.name + ".migrating")
     if migrating.exists():
         shutil.rmtree(migrating)
-    shutil.copytree(palace_dir, migrating)
+    _copy_hardlink_if_possible(palace_dir, migrating)
     try:
         for m in sorted(migrations, key=lambda x: x.from_version):
             if m.from_version >= v and m.to_version <= target_version:
@@ -2108,6 +2199,8 @@ def apply_migrations(palace_dir: Path, target_version: int, migrations: Iterable
         }))
         os.sync()
         replaced = palace_dir.with_name(palace_dir.name + f".replaced_{int(time.time())}")
+        # Two renames. A crash here leaves palace_dir gone and migrating still present;
+        # _recover_if_interrupted picks that up on next open.
         os.rename(palace_dir, replaced)
         os.rename(migrating, palace_dir)
     except Exception:
@@ -2117,19 +2210,32 @@ def apply_migrations(palace_dir: Path, target_version: int, migrations: Iterable
 
 
 def reap_stale(palaces_dir: Path, max_age_sec: int = 24 * 3600) -> int:
+    """Reap .replaced_* dirs and orphan .migrating dirs older than max_age_sec.
+
+    CAUTION: never reap a .migrating that is the *only* copy of a user's data.
+    _recover_if_interrupted must have been called for every user before this.
+    This function refuses to delete `<U>.migrating` if `<U>` does not exist.
+    """
     n = 0
     now = time.time()
     for child in palaces_dir.iterdir():
         if not child.is_dir():
             continue
-        if child.name.endswith(".migrating") or ".replaced_" in child.name:
-            try:
-                age = now - child.stat().st_mtime
-                if age > max_age_sec:
-                    shutil.rmtree(child, ignore_errors=True)
-                    n += 1
-            except FileNotFoundError:
+        name = child.name
+        if name.endswith(".migrating"):
+            sibling = palaces_dir / name[: -len(".migrating")]
+            if not sibling.exists():
+                # Recovery not yet run; leave it alone.
                 continue
+        elif ".replaced_" not in name:
+            continue
+        try:
+            age = now - child.stat().st_mtime
+            if age > max_age_sec:
+                shutil.rmtree(child, ignore_errors=True)
+                n += 1
+        except FileNotFoundError:
+            continue
     return n
 ```
 
@@ -2138,7 +2244,9 @@ Tests in `tests/unit/test_migrations.py`:
 - `test_atomic_rename_happy_path` — version below target → migrating dir created, replaced dir exists, final version bumped.
 - `test_refuses_newer_schema` — raises `RuntimeError`.
 - `test_crash_mid_migration_leaves_migrating_dir` — uses `pytest-forked` to `os._exit` mid-apply; parent process asserts `U.migrating/` exists.
-- `test_reap_stale_cleans_old_migrating_dirs` — creates old dir, asserts reaped.
+- `test_crash_between_renames_is_recoverable` — simulate the state where `U/` is gone and `U.migrating/` is the migrated version (by hand-placing dirs). Call `_recover_if_interrupted`. Assert `U/` is restored and `U.migrating/` is gone. **This is the regression test for fix #2 from the plan review — its absence let the reap_stale bug exist.**
+- `test_reap_stale_never_deletes_orphan_migrating_when_primary_missing` — place only `U.migrating/` (no `U/`), age it 48h, call `reap_stale`. Assert the `.migrating` dir is **kept**. Only once `_recover_if_interrupted` has promoted it does a later reap of a `.replaced_*` sibling proceed.
+- `test_reap_stale_cleans_old_replaced_dirs` — create an old `.replaced_<ts>/`, assert reaped.
 
 Each its own commit.
 
@@ -2243,7 +2351,239 @@ async def readyz(request: Request):
     }
 ```
 
-Tests: unit tests for counter increments on `/ingest`, `/search`, `/wake-up`; `/metrics` endpoint returns Prometheus text. Instrument the existing routes with metric calls (wrap in timers).
+**Route instrumentation is explicit, not hand-waved** (plan review fix #10). Each existing route adds metric calls at the exact points listed below. Do this as a separate commit on the route after the functional test is green, so the timer wrap doesn't hide bugs in the happy path.
+
+`routes/palace.py` diff — add the timers:
+
+```python
+import time as _time
+from mempalace_sidecar.metrics import (
+    ingest_total, wakeup_seconds, search_seconds,
+    embedding_seconds, palace_cache_hits_total, palace_cache_misses_total,
+)
+
+
+@router.post("/{user_id}/ingest", response_model=IngestResponse)
+async def ingest(user_id: str, body: IngestRequest, request: Request) -> IngestResponse:
+    try:
+        # ... existing body, unchanged ...
+        resp = IngestResponse(status="accepted")  # or "duplicate", as before
+        ingest_total.labels(status=resp.status).inc()
+        return resp
+    except Exception:
+        ingest_total.labels(status="error").inc()
+        raise
+
+
+@router.post("/{user_id}/wake-up", response_model=WakeupContext)
+async def wake_up(user_id: str, body: WakeupRequest, request: Request, warmup: bool = False) -> WakeupContext:
+    entry, was_cold = await _registry(request).open(user_id, track_cold=True)
+    if was_cold:
+        palace_cache_misses_total.inc()
+    else:
+        palace_cache_hits_total.inc()
+    hot_label = "0" if was_cold else "1"
+    t0 = _time.monotonic()
+    # ... existing body ...
+    wakeup_seconds.labels(layer="total", hot=hot_label).observe(_time.monotonic() - t0)
+    return ctx
+
+
+@router.post("/{user_id}/search", response_model=list[Drawer])
+async def search(user_id: str, body: SearchRequest, request: Request) -> list[Drawer]:
+    entry, was_cold = await _registry(request).open(user_id, track_cold=True)
+    hot_label = "0" if was_cold else "1"
+    t0 = _time.monotonic()
+    # ... existing body ...
+    search_seconds.labels(hot=hot_label).observe(_time.monotonic() - t0)
+    return results
+```
+
+`wakeup.py` gets an explicit per-layer timer around each `await`:
+
+```python
+async def _timed(label: str, hot_label: str, coro):
+    t = time.monotonic()
+    r = await coro
+    wakeup_seconds.labels(layer=label, hot=hot_label).observe(time.monotonic() - t)
+    return r
+
+# In build_wakeup, replace asyncio.gather(l0(), l1(), l2(), l3()) with:
+l0r, l1r, l2r, l3r = await asyncio.gather(
+    _timed("l0", hot_label, l0()),
+    _timed("l1", hot_label, l1()),
+    _timed("l2", hot_label, l2()),
+    _timed("l3", hot_label, l3()),
+)
+```
+
+And wrap the embedding call:
+
+```python
+t_e = time.monotonic()
+vec = embedder.embed(query) if query else None
+embedding_seconds.observe(time.monotonic() - t_e)
+```
+
+Unit tests:
+- `test_ingest_increments_accepted_on_success`
+- `test_ingest_increments_duplicate_on_second_call`
+- `test_ingest_increments_error_on_raise`
+- `test_wakeup_records_layer_timers`
+- `test_search_records_hot_cold_label`
+- `test_embedding_timer_observed`
+- `test_cache_hit_miss_counters_increment`
+
+---
+
+### M0.11b — Flask-side metrics module
+
+**Files:**
+- Create: `app/mempalace/metrics.py`
+- Create: `app/mempalace/tests/test_metrics.py`
+
+- [ ] **Step 1: Write failing test**
+
+```python
+# app/mempalace/tests/test_metrics.py
+def test_metrics_expose_expected_names():
+    from app.mempalace.metrics import Metrics
+    m = Metrics()
+    assert m.outbox_depth is not None
+    assert m.inserts_dropped("mode_off") is None  # method style
+    m.circuit_state("closed", worker_pid=1)
+    m.flusher_tick()
+    m.redaction_hit("openai_key")
+
+
+def test_inserts_dropped_increments(capsys):
+    from app.mempalace.metrics import Metrics
+    from prometheus_client import CollectorRegistry
+    registry = CollectorRegistry()
+    m = Metrics(registry=registry)
+    m.inserts_dropped("mode_off")
+    m.inserts_dropped("mode_off")
+    from prometheus_client import generate_latest
+    text = generate_latest(registry).decode()
+    assert 'xelasphere_mempalace_inserts_dropped_total{reason="mode_off"} 2.0' in text
+```
+
+- [ ] **Step 2: Run → fails**
+
+- [ ] **Step 3: Implement**
+
+```python
+# app/mempalace/metrics.py
+import time
+
+from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry, REGISTRY
+
+
+class Metrics:
+    """Flask-side metrics for the mempalace adapter.
+
+    Plan review fix #8 / #9: all metrics referenced elsewhere in the codebase
+    are declared here, and `flusher_last_tick_seconds` is a real Prometheus
+    gauge (not a private Python attr), so MempalaceFlusherStalled can fire.
+    """
+
+    def __init__(self, registry: CollectorRegistry | None = REGISTRY):
+        self._r = registry
+        self.outbox_depth = Gauge(
+            "xelasphere_mempalace_outbox_depth", "Outbox rows by status",
+            ["status"], registry=registry,
+        )
+        self.outbox_age_seconds = Histogram(
+            "xelasphere_mempalace_outbox_age_seconds", "Pending-row age at flush",
+            registry=registry,
+        )
+        self.outbox_rejected = Counter(
+            "xelasphere_mempalace_outbox_rejected_total", "Outbox at cap", registry=registry,
+        )
+        self._inserts_dropped = Counter(
+            "xelasphere_mempalace_inserts_dropped_total", "Silent drops",
+            ["reason"], registry=registry,
+        )
+        self._flush_batch_seconds = Histogram(
+            "xelasphere_mempalace_flush_batch_seconds", "Flusher batch time",
+            registry=registry,
+        )
+        self._flusher_last_tick = Gauge(
+            "xelasphere_mempalace_flusher_last_tick_seconds", "Monotonic ts of last flusher loop",
+            registry=registry,
+        )
+        self._client_request_seconds = Histogram(
+            "xelasphere_mempalace_client_request_seconds", "Sidecar round-trip",
+            ["route", "status_code"], registry=registry,
+        )
+        self._circuit_state = Gauge(
+            "xelasphere_mempalace_circuit_state", "0=closed 1=half 2=open",
+            ["worker_pid"], registry=registry,
+        )
+        self._circuit_transitions = Counter(
+            "xelasphere_mempalace_circuit_transitions_total", "State changes",
+            ["from_state", "to_state", "worker_pid"], registry=registry,
+        )
+        self._redaction_hits = Counter(
+            "xelasphere_mempalace_redaction_hits_total", "Scrub counts",
+            ["rule"], registry=registry,
+        )
+        self._wakeup_skipped = Counter(
+            "xelasphere_mempalace_wakeup_skipped_total", "Why injection was skipped",
+            ["reason"], registry=registry,
+        )
+        self._mode = Gauge(
+            "xelasphere_mempalace_mode", "0=off 1=shadow 2=active",
+            registry=registry,
+        )
+
+    # --- call-site-friendly methods (stable adapter API) ---
+
+    def inserts_dropped(self, reason: str) -> None:
+        self._inserts_dropped.labels(reason=reason).inc()
+
+    def flush_batch(self, seconds: float) -> None:
+        self._flush_batch_seconds.observe(seconds)
+
+    def flusher_tick(self) -> None:
+        # Plan review fix #9: ticked every loop iteration, empty-outbox included.
+        self._flusher_last_tick.set(time.monotonic())
+
+    def client_request(self, route: str, status_code: int, seconds: float) -> None:
+        self._client_request_seconds.labels(route=route, status_code=str(status_code)).observe(seconds)
+
+    def circuit_state(self, state: str, *, worker_pid: int) -> None:
+        mapping = {"closed": 0, "half_open": 1, "open": 2}
+        self._circuit_state.labels(worker_pid=str(worker_pid)).set(mapping[state])
+
+    def circuit_transition(self, from_state: str, to_state: str, *, worker_pid: int) -> None:
+        self._circuit_transitions.labels(
+            from_state=from_state, to_state=to_state, worker_pid=str(worker_pid),
+        ).inc()
+
+    def redaction_hit(self, rule: str) -> None:
+        self._redaction_hits.labels(rule=rule).inc()
+
+    def wakeup_skipped(self, reason: str) -> None:
+        self._wakeup_skipped.labels(reason=reason).inc()
+
+    def mode(self, value: str) -> None:
+        mapping = {"off": 0, "shadow": 1, "active": 2}
+        self._mode.set(mapping[value])
+
+
+def build_default_metrics() -> Metrics:
+    return Metrics()
+```
+
+- [ ] **Step 4: Update `adapter.py`** — replace `self._metrics.inserts_dropped(...)` call-style signature to match (`reason` positional arg). Redaction `rules.py` uses `metrics.redaction_hit(rule["name"])` instead of `metrics.incr(...)`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/mempalace/metrics.py app/mempalace/tests/test_metrics.py
+git commit -m "feat(mempalace): Flask-side metrics module with flusher liveness gauge"
+```
 
 ---
 
@@ -2269,8 +2609,10 @@ pathlib.Path("tests/contract/openapi_schema.v1.json").write_text(json.dumps(app.
 - [ ] **Step 2: Write snapshot test**
 
 ```python
+import difflib
 import json
 import pytest
+
 
 def test_openapi_schema_matches_snapshot(monkeypatch, tmp_path):
     monkeypatch.setenv("MEMPALACE_TOKEN", "t" * 32)
@@ -2282,11 +2624,22 @@ def test_openapi_schema_matches_snapshot(monkeypatch, tmp_path):
     from pathlib import Path
     snap_path = Path(__file__).parent / "openapi_schema.v1.json"
     expected = json.loads(snap_path.read_text())
-    if current != expected:
-        pytest.fail(
-            "OpenAPI schema drifted. If intentional, bump SCHEMA_VERSION in routes/ops.py "
-            "and regenerate the snapshot. Diff above."
-        )
+    if current == expected:
+        return
+    # Plan review structural fix: emit a real diff so the failure is actionable.
+    expected_str = json.dumps(expected, indent=2, sort_keys=True).splitlines()
+    current_str = json.dumps(current, indent=2, sort_keys=True).splitlines()
+    diff = "\n".join(difflib.unified_diff(
+        expected_str, current_str,
+        fromfile="openapi_schema.v1.json (snapshot)",
+        tofile="current",
+        lineterm="",
+    ))
+    pytest.fail(
+        "OpenAPI schema drifted. If intentional, bump SCHEMA_VERSION in routes/ops.py "
+        "and regenerate the snapshot via `python -m mempalace_sidecar.tools.regen_openapi`.\n\n"
+        f"{diff}"
+    )
 ```
 
 - [ ] **Step 3: Commit**
@@ -2515,17 +2868,20 @@ class SidecarClient:
             self._state = CircuitState.OPEN
             self._opened_at = time.monotonic()
 
-    async def post_json(self, path: str, body: dict, headers: dict | None = None) -> dict:
+    async def _request(self, method: str, path: str, body: dict | None = None, headers: dict | None = None) -> dict:
         if self.state == CircuitState.OPEN:
             raise RuntimeError("sidecar circuit open")
         headers = {"X-Sidecar-Token": self._token, **(headers or {})}
         last_exc: Exception | None = None
         for attempt in range(self._max_retries + 1):
+            if attempt > 0:
+                # Plan review fix #7: exponential backoff between retries.
+                await asyncio.sleep(min(1.0, 0.1 * (2 ** (attempt - 1))))
             try:
-                r = await self._client.post(path, json=body, headers=headers)
+                r = await self._client.request(method, path, json=body, headers=headers)
                 r.raise_for_status()
                 self._record_success()
-                return r.json()
+                return r.json() if r.content else {}
             except Exception as e:
                 last_exc = e
                 if attempt == self._max_retries:
@@ -2534,9 +2890,92 @@ class SidecarClient:
         assert last_exc is not None
         raise last_exc
 
+    async def post_json(self, path: str, body: dict, headers: dict | None = None) -> dict:
+        return await self._request("POST", path, body=body, headers=headers)
+
+    async def get_json(self, path: str, headers: dict | None = None) -> dict:
+        # Plan review fix #5: real GET, not POST-to-a-GET-route.
+        return await self._request("GET", path, body=None, headers=headers)
+
+    async def delete_json(self, path: str, body: dict | None = None, headers: dict | None = None) -> dict:
+        # Plan review fix #6: real DELETE with body, not X-HTTP-Method-Override hack.
+        return await self._request("DELETE", path, body=body, headers=headers)
+
     async def aclose(self):
         await self._client.aclose()
+
+
+class SyncSidecarClient:
+    """Sync variant for thread-based callers (the flusher, specifically).
+
+    Plan review fix #3: the flusher runs in a thread and must NOT call asyncio.run()
+    against a persistent AsyncClient — asyncio.run creates a fresh event loop each call,
+    while httpx.AsyncClient binds to the loop it was created in. Use this sync client
+    from the flusher instead.
+    """
+
+    def __init__(
+        self,
+        *,
+        socket_path: str,
+        token: str,
+        timeout_s: float = 2.0,
+        max_retries: int = 1,
+        breaker_threshold: int = 5,
+        breaker_cooldown_s: float = 30.0,
+        transport: httpx.BaseTransport | None = None,
+    ):
+        self._token = token
+        self._max_retries = max_retries
+        self._breaker_threshold = breaker_threshold
+        self._breaker_cooldown_s = breaker_cooldown_s
+        self._consecutive_failures = 0
+        self._state = CircuitState.CLOSED
+        self._opened_at = 0.0
+        if transport is None:
+            transport = httpx.HTTPTransport(uds=socket_path)
+        self._client = httpx.Client(transport=transport, base_url="http://sidecar", timeout=timeout_s)
+
+    @property
+    def state(self) -> CircuitState:
+        now = time.monotonic()
+        if self._state == CircuitState.OPEN and (now - self._opened_at) >= self._breaker_cooldown_s:
+            self._state = CircuitState.HALF_OPEN
+        return self._state
+
+    def _record_success(self):
+        self._consecutive_failures = 0
+        self._state = CircuitState.CLOSED
+
+    def _record_failure(self):
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self._breaker_threshold:
+            self._state = CircuitState.OPEN
+            self._opened_at = time.monotonic()
+
+    def post_json(self, path: str, body: dict, headers: dict | None = None) -> dict:
+        if self.state == CircuitState.OPEN:
+            raise RuntimeError("sidecar circuit open")
+        headers = {"X-Sidecar-Token": self._token, **(headers or {})}
+        for attempt in range(self._max_retries + 1):
+            if attempt > 0:
+                time.sleep(min(1.0, 0.1 * (2 ** (attempt - 1))))
+            try:
+                r = self._client.post(path, json=body, headers=headers)
+                r.raise_for_status()
+                self._record_success()
+                return r.json() if r.content else {}
+            except Exception:
+                if attempt == self._max_retries:
+                    self._record_failure()
+                    raise
+        raise RuntimeError("unreachable")
+
+    def close(self):
+        self._client.close()
 ```
+
+Add tests for each new method: `test_client_get_json_hits_get_route`, `test_client_delete_json_sends_delete_with_body`, `test_client_backoff_between_retries` (asserts `time.monotonic()` advances at least 100ms between the first and second call in a 5xx run), and a parallel suite for `SyncSidecarClient` with `httpx.MockTransport` (sync).
 
 - [ ] **Step 3: Run → passes**
 - [ ] **Step 4: Commit**
@@ -2545,13 +2984,13 @@ class SidecarClient:
 
 ### M0.15 — Flask: outbox + flusher
 
-#### Task M0.15.1: Outbox schema + insert
+Expanded to task-per-method granularity (plan review structural fix). Each method is its own failing test → implementation → commit cycle.
+
+#### Task M0.15.1: Outbox schema + WAL mode
 
 **Files:**
 - Create: `app/mempalace/outbox.py`
 - Create: `app/mempalace/tests/test_outbox.py`
-
-Schema:
 
 ```python
 SCHEMA = """
@@ -2562,61 +3001,194 @@ CREATE TABLE IF NOT EXISTS outbox (
   user_id TEXT NOT NULL,
   session_id TEXT NOT NULL,
   role TEXT NOT NULL,
-  text BLOB NOT NULL,               -- encrypted in future; plain for now
+  text BLOB NOT NULL,               -- plaintext for v1; consider encryption later
   ts REAL NOT NULL,
   request_id TEXT,
-  status TEXT NOT NULL DEFAULT 'pending',
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending | claimed | sent | abandoned
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
+  claim_token TEXT,
+  claimed_at REAL,
   enqueued_at REAL NOT NULL,
   sent_at REAL
 );
 CREATE INDEX IF NOT EXISTS outbox_pending_idx ON outbox(status, enqueued_at);
 CREATE INDEX IF NOT EXISTS outbox_sent_purge_idx ON outbox(status, sent_at);
+CREATE INDEX IF NOT EXISTS outbox_user_idx ON outbox(user_id);
 """
 ```
 
-Implementation has `insert`, `claim_batch(limit)`, `mark_sent(ids)`, `mark_failed(id, err)`, `depth(status)`, `purge_old_sent(days)`, `abandon_all()`. Sync API, uses `sqlite3` stdlib (flusher runs on a thread — no asyncio). WAL mode enabled.
+Implement `Outbox.__init__(path)` that opens `sqlite3.connect(path, check_same_thread=False)`, issues `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL`, runs `SCHEMA`. Failing test: construct, assert tables/indexes exist via `sqlite_master`.
 
-Each method has a failing test first.
+#### Task M0.15.2: `insert()`
 
-#### Task M0.15.2: Flusher thread
+Failing test: call `outbox.insert(turn_id, pair_id, user_id, session_id, role, text, ts, request_id)` twice with same turn_id → second raises `IntegrityError`. Body count assertion.
+
+Implementation: simple `INSERT` with commit; `enqueued_at=time.time()`.
+
+#### Task M0.15.3: `depth(status)` and `claim_batch(limit)` with serialization
+
+Failing test is the critical one — the multi-flusher safety guarantee.
+
+```python
+def test_two_claim_batches_never_overlap(outbox_db_path):
+    from app.mempalace.outbox import Outbox
+    a = Outbox(outbox_db_path)
+    b = Outbox(outbox_db_path)  # two instances, single sqlite file
+    for i in range(10):
+        a.insert(turn_id=f"t{i}", pair_id=f"p{i}", user_id="u",
+                 session_id="s", role="user", text=f"msg{i}", ts=i, request_id=None)
+    ra = a.claim_batch(10)
+    rb = b.claim_batch(10)
+    ids_a = {r["id"] for r in ra}
+    ids_b = {r["id"] for r in rb}
+    assert not (ids_a & ids_b), f"overlap! {ids_a & ids_b}"
+    assert len(ids_a) + len(ids_b) <= 10
+```
+
+Implementation uses `BEGIN IMMEDIATE` + conditional UPDATE with claim token:
+
+```python
+import uuid
+
+def claim_batch(self, limit: int) -> list[dict]:
+    token = str(uuid.uuid4())
+    with self._conn:  # acts as a transaction
+        self._conn.execute("BEGIN IMMEDIATE")
+        rows = self._conn.execute(
+            "SELECT id FROM outbox WHERE status='pending' "
+            "ORDER BY enqueued_at LIMIT ?", (limit,)
+        ).fetchall()
+        ids = [r[0] for r in rows]
+        if not ids:
+            return []
+        placeholders = ",".join("?" * len(ids))
+        import time
+        self._conn.execute(
+            f"UPDATE outbox SET status='claimed', claim_token=?, claimed_at=? "
+            f"WHERE id IN ({placeholders}) AND status='pending'",
+            (token, time.time(), *ids),
+        )
+    # Read back the claimed rows
+    rows = self._conn.execute(
+        "SELECT * FROM outbox WHERE claim_token=?", (token,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+```
+
+Even though v1 runs **one** flusher, claim tokens protect against accidental double-flush — and they make the outbox readable to ops queries without mutation races.
+
+`depth(status)` is a simple `SELECT COUNT(*) WHERE status=?`.
+
+#### Task M0.15.4: `mark_sent(ids)` / `mark_failed(id, err)`
+
+`mark_sent`: `UPDATE outbox SET status='sent', sent_at=?, claim_token=NULL WHERE id IN (...)`.
+
+`mark_failed`: `UPDATE outbox SET status='pending', attempts=attempts+1, last_error=?, claim_token=NULL WHERE id=?`. After `attempts >= 5`, status should go to `abandoned` instead, so a dead poison pill doesn't loop forever. Tests cover both branches.
+
+#### Task M0.15.5: `abandon_user(user_id)` + `drain_then_abandon(timeout_s)`
+
+Plan review fix #11. Methods:
+
+```python
+def abandon_user(self, user_id: str) -> int:
+    """Mark all non-sent rows for a user as abandoned (used by delete_palace)."""
+    with self._conn:
+        cur = self._conn.execute(
+            "UPDATE outbox SET status='abandoned' WHERE user_id=? AND status IN ('pending', 'claimed')",
+            (user_id,),
+        )
+    return cur.rowcount
+
+
+def drain_then_abandon(self, flush_callable, *, timeout_s: float = 600.0, poll_s: float = 2.0) -> dict:
+    """Flush all pending rows; after timeout, mark remaining as abandoned.
+
+    Used by mempalace-mode off. Spec §3: 'outbox pre-flip rows drain best-effort
+    for 10 minutes, then are marked abandoned.'
+    """
+    import time as _t
+    started = _t.monotonic()
+    drained = 0
+    while _t.monotonic() - started < timeout_s:
+        depth = self.depth("pending")
+        if depth == 0:
+            break
+        rows = self.claim_batch(limit=20)
+        for row in rows:
+            try:
+                flush_callable(row)
+                self.mark_sent([row["id"]])
+                drained += 1
+            except Exception as e:
+                self.mark_failed(row["id"], str(e)[:500])
+        _t.sleep(poll_s)
+    abandoned = 0
+    with self._conn:
+        cur = self._conn.execute(
+            "UPDATE outbox SET status='abandoned' WHERE status IN ('pending', 'claimed')"
+        )
+        abandoned = cur.rowcount
+    return {"drained": drained, "abandoned": abandoned}
+```
+
+Tests: `abandon_user` only affects the named user; `drain_then_abandon` returns {drained, abandoned} counts accurately under a stub flush_callable.
+
+#### Task M0.15.6: `purge_old_sent(days)` + periodic purge task
+
+Plan review fix #17. Method:
+
+```python
+def purge_old_sent(self, days: int = 7) -> int:
+    cutoff = time.time() - days * 86400
+    with self._conn:
+        cur = self._conn.execute(
+            "DELETE FROM outbox WHERE status='sent' AND sent_at < ?", (cutoff,)
+        )
+    return cur.rowcount
+```
+
+Scheduled via the flusher: once every N iterations (e.g. every 600s), the flusher's loop calls `self._outbox.purge_old_sent(days=7)`. Keeps the outbox small without a separate timer unit. Test: insert 20 `sent` rows with old `sent_at`, call purge, assert row count drops.
+
+#### Task M0.15.7: Flusher with sync client + tick gauge
 
 **Files:**
 - Create: `app/mempalace/flusher.py`
 - Create: `app/mempalace/tests/test_flusher.py`
 
-Core loop:
+Plan review fix #3: `SyncSidecarClient`, not `asyncio.run(AsyncClient.post_json(...))`.
+Plan review fix #9: `flusher_tick()` goes to the Prometheus gauge, not a private attr.
 
 ```python
+# app/mempalace/flusher.py
 import threading
 import time
-import queue
+
 
 class Flusher(threading.Thread):
     daemon = True
 
-    def __init__(self, outbox, client, metrics, poll_interval_s: float = 1.0, batch_size: int = 20):
+    def __init__(self, outbox, client, metrics, *, poll_interval_s: float = 1.0,
+                 batch_size: int = 20, purge_interval_loops: int = 600):
         super().__init__(name="mempalace-flusher")
         self._outbox = outbox
-        self._client = client
+        self._client = client           # SyncSidecarClient, not async
         self._metrics = metrics
         self._poll = poll_interval_s
         self._batch = batch_size
+        self._purge_every = purge_interval_loops
         self._stop = threading.Event()
-        self._last_tick = time.monotonic()
-
-    @property
-    def last_tick(self) -> float:
-        return self._last_tick
+        self._loops = 0
 
     def stop(self):
         self._stop.set()
 
     def run(self):
         while not self._stop.is_set():
-            self._last_tick = time.monotonic()  # tick even when idle — spec §8.1
+            # Plan review fix #9: real Prometheus gauge, every iteration, idle included.
+            self._metrics.flusher_tick()
             try:
+                batch_t0 = time.monotonic()
                 rows = self._outbox.claim_batch(self._batch)
                 for row in rows:
                     try:
@@ -2624,14 +3196,20 @@ class Flusher(threading.Thread):
                         self._outbox.mark_sent([row["id"]])
                     except Exception as e:
                         self._outbox.mark_failed(row["id"], str(e)[:500])
+                if rows:
+                    self._metrics.flush_batch(time.monotonic() - batch_t0)
+                self._loops += 1
+                if self._loops % self._purge_every == 0:
+                    try:
+                        self._outbox.purge_old_sent(days=7)
+                    except Exception:
+                        pass
             except Exception:
                 pass
             if self._stop.wait(self._poll):
                 break
 
     def _send_one(self, row: dict):
-        import asyncio
-        # The client is async; the flusher is sync; bridge via asyncio.run for each call.
         body = {
             "turn_id": row["turn_id"],
             "session_id": row["session_id"],
@@ -2640,23 +3218,20 @@ class Flusher(threading.Thread):
             "text": row["text"],
             "ts": row["ts"],
         }
-        headers = {}
+        headers = {"Idempotency-Key": row["turn_id"]}
         if row.get("request_id"):
             headers["X-Request-ID"] = row["request_id"]
-        asyncio.run(self._client.post_json(
-            f"/palace/{row['user_id']}/ingest",
-            body,
-            headers={**headers, "Idempotency-Key": row["turn_id"]},
-        ))
+        self._client.post_json(f"/palace/{row['user_id']}/ingest", body, headers=headers)
 ```
 
 Tests:
-- Empty outbox → `last_tick` still updates.
-- Single row flushes, status becomes `sent`.
-- Sidecar 503 → row `pending`, `attempts=1`, backoff honored.
-- `stop()` during run drains pending rows' state back to `pending` if in-flight.
+- `test_empty_outbox_still_ticks_gauge` — idle loop, assert gauge updated.
+- `test_single_row_flushes_and_marks_sent`.
+- `test_sidecar_5xx_marks_pending_attempts_incremented`.
+- `test_stop_returns_within_bound` — flusher stops cleanly with no in-flight hangs.
+- `test_purge_runs_every_n_loops` — monkeypatch `_outbox.purge_old_sent` to count calls; run loop enough iterations, assert called exactly as expected.
 
-#### Task M0.15.3: Hypothesis invariant test on outbox
+#### Task M0.15.8: Hypothesis invariant test on outbox
 
 **Files:**
 - Create: `app/mempalace/tests/test_outbox_property.py`
@@ -2770,7 +3345,7 @@ def scrub(text: str, rules: list[dict], metrics=None) -> str:
             if validator and not validator(m.group(0)):
                 return m.group(0)
             if metrics is not None:
-                metrics.incr(rule["name"])
+                metrics.redaction_hit(rule["name"])
             return rule["replace"]
         out = pat.sub(_replace, out)
     return out
@@ -2948,11 +3523,18 @@ def test_anthropic_includes_all_layers_with_entries(sample_ctx):
     assert "## Semantic" in out
 
 def test_ts_monotonically_decreasing_within_l0(sample_ctx):
-    out = to_anthropic_system(sample_ctx)
-    lines = [l for l in out.splitlines() if l.startswith("[") and "Recent" in ""]
-    # walk structured data
+    # Assert that the fixture itself satisfies the invariant the formatter preserves.
     tss = [d["ts"] for d in sample_ctx["l0_recent"]]
     assert tss == sorted(tss, reverse=True)
+    # And confirm the rendered output reflects that ordering — rendered lines for L0
+    # appear in the same order as the fixture entries.
+    out = to_anthropic_system(sample_ctx)
+    recent_start = out.index("## Recent")
+    recent_end = out.index("## Session", recent_start)
+    recent_block = out[recent_start:recent_end]
+    rendered_tss = [float(line.split()[0].lstrip("[")) for line in recent_block.splitlines()
+                    if line.startswith("[")]
+    assert rendered_tss == sorted(rendered_tss, reverse=True)
 
 def test_empty_layer_omitted(empty_layers_ctx):
     out = to_anthropic_system(empty_layers_ctx)
@@ -3091,20 +3673,21 @@ class MempalaceAdapter:
         self._shadow.enqueue(record)
 
     async def delete_palace(self, user_id: str, requested_by: str, reason: str) -> DeletionReceipt:
-        # Purge outbox rows for this user first (best-effort)
+        # Abandon outstanding outbox rows for this user first so the flusher doesn't
+        # resurrect a palace we're about to delete (spec §4.4 two-phase delete).
         try:
             self._outbox.abandon_user(user_id)
         except Exception:
             pass
-        resp = await self._client.post_json(
+        # Plan review fix #6: real DELETE, not X-HTTP-Method-Override.
+        resp = await self._client.delete_json(
             f"/palace/{user_id}",
-            {"requested_by": requested_by, "reason": reason},
-            headers={"X-HTTP-Method-Override": "DELETE"},  # if your client doesn't do DELETE bodies
+            body={"requested_by": requested_by, "reason": reason},
         )
         return DeletionReceipt(status=resp["status"], bytes_removed=resp["bytes_removed"])
 
     async def list_drawers(self, user_id: str, wing: str | None = None, limit: int = 100, cursor: str | None = None):
-        # Build query string
+        # Plan review fix #5: GET, not POST.
         params = []
         if wing:
             params.append(f"wing={wing}")
@@ -3112,7 +3695,7 @@ class MempalaceAdapter:
         if cursor:
             params.append(f"cursor={cursor}")
         qs = "&".join(params)
-        return await self._client.post_json(f"/palace/{user_id}/drawers?{qs}", {})
+        return await self._client.get_json(f"/palace/{user_id}/drawers?{qs}")
 ```
 
 Tests: each public method with a fake `SidecarClient` (using `MockTransport`); the documented fallback for each failure mode.
@@ -3257,46 +3840,22 @@ def _build_adapter():
     shadow_dir = Path(os.getenv("MEMPALACE_SHADOW_DIR", "/var/log/mempalace/shadow"))
     rules = load_rules(Path(__file__).parent / "redaction" / "redaction_rules.yaml")
 
+    from app.mempalace.metrics import build_default_metrics
+    metrics = build_default_metrics()
     return MempalaceAdapter(
         client=SidecarClient(socket_path=socket, token=token),
         outbox=Outbox(outbox_path),
         shadow_sink=ShadowSink(log_dir=shadow_dir),
         redaction_rules=rules,
+        metrics=metrics,
     )
 ```
 
-- [ ] **Step 8: Start the flusher at app startup**
+- [ ] **Step 8: The flusher runs as its own systemd unit, not a gunicorn subprocess**
 
-In `app/__init__.py` after `assert_startup_sane()`:
+Plan review fix #4. Spec §3 says "single flusher thread in v1." Gunicorn typically has N workers; a flusher per worker would race on the outbox SQLite file even with WAL. Running the flusher as a separate systemd service guarantees exactly one, cleanly fits the spec, and keeps its lifecycle independent from the web tier.
 
-```python
-from app.mempalace import get_adapter
-from app.mempalace.flusher import Flusher
-
-# Only in worker processes, not at import time:
-def _start_mempalace_background():
-    adapter = get_adapter()
-    flusher = Flusher(adapter._outbox, adapter._client, metrics=None)
-    flusher.start()
-    app.extensions = getattr(app, "extensions", {})
-    app.extensions["mempalace_flusher"] = flusher
-
-# Hook into gunicorn worker boot — mechanism depends on the existing config;
-# see gunicorn.conf.py: post_worker_init hook.
-```
-
-Modify `gunicorn.conf.py`:
-
-```python
-def post_worker_init(worker):
-    from app import create_app
-    # ... existing init ...
-    from app.mempalace import get_adapter
-    from app.mempalace.flusher import Flusher
-    adapter = get_adapter()
-    flusher = Flusher(adapter._outbox, adapter._client, metrics=None)
-    flusher.start()
-```
+The Flask app therefore does **not** start a flusher thread in `post_worker_init`. Gunicorn workers only do writes (`outbox.insert`) — no background loops. The separate flusher service is defined in M0.19.4 below.
 
 - [ ] **Step 9: Commit each file's modification as its own commit**
 
@@ -3305,6 +3864,16 @@ One commit per orchestrator file keeps diffs reviewable. Commit message pattern:
 ```
 feat(mempalace): wire adapter into <filename> with mode/flag guards
 ```
+
+- [ ] **Step 10: Document pair_id orphan tolerance**
+
+Add a note to `docs/ops/mempalace-runbook.md`:
+
+> **Orphan pair_ids are expected.** A pair_id is generated before the LLM call. If the LLM
+> call fails or the assistant turn is never written, the palace will contain a user-half
+> drawer with a pair_id that has no assistant companion. This is **not** a bug — it's an
+> accurate record of the conversation state. Orphans are filterable:
+> `SELECT pair_id FROM drawers GROUP BY pair_id HAVING COUNT(*) = 1`. No auto-cleanup.
 
 ---
 
@@ -3368,6 +3937,101 @@ exit 1
 ```
 
 Also add `/admin/mempalace-mode` endpoint to the Flask app that returns `{"mode": ...}` for the probe. Commit.
+
+#### Task M0.19.4: `mempalace-flusher.service` — single-instance flusher as its own unit
+
+Plan review fix #4. Spec §3 says "single flusher thread in v1." Running it as a separate systemd unit enforces single-instance trivially and keeps its lifecycle independent from the web tier.
+
+**Files:**
+- Create: `deploy/mempalace/mempalace-flusher.service`
+- Create: `app/mempalace/flusher_main.py` (entrypoint binary)
+- Modify: `pyproject.toml` for xelasphere (if packaged) — add `mempalace-flusher = "app.mempalace.flusher_main:run"` script
+
+- [ ] **Step 1: Create the flusher entrypoint**
+
+```python
+# app/mempalace/flusher_main.py
+import logging
+import os
+import signal
+import sys
+from pathlib import Path
+
+from app.mempalace.client import SyncSidecarClient
+from app.mempalace.outbox import Outbox
+from app.mempalace.flusher import Flusher
+from app.mempalace.metrics import build_default_metrics
+
+
+def run() -> None:
+    logging.basicConfig(level=os.getenv("MEMPALACE_LOG_LEVEL", "INFO"))
+    log = logging.getLogger("mempalace-flusher")
+
+    socket_path = os.getenv("MEMPALACE_SOCKET", "/run/mempalace/sidecar.sock")
+    token = os.environ["MEMPALACE_TOKEN"]
+    outbox_path = Path(os.environ["MEMPALACE_OUTBOX_PATH"])
+
+    client = SyncSidecarClient(socket_path=socket_path, token=token)
+    outbox = Outbox(outbox_path)
+    metrics = build_default_metrics()
+
+    flusher = Flusher(outbox, client, metrics)
+    flusher.start()
+
+    def _stop(signum, frame):  # noqa: ARG001
+        log.info("SIGTERM/SIGINT received, draining flusher ...")
+        flusher.stop()
+
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGINT, _stop)
+
+    flusher.join()  # blocks until stop() set + loop exits
+    client.close()
+    log.info("flusher exited cleanly")
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    run()
+```
+
+- [ ] **Step 2: Systemd unit**
+
+```ini
+# deploy/mempalace/mempalace-flusher.service
+[Unit]
+Description=MemPalace outbox flusher for XelaSphere
+After=mempalace-sidecar.service
+Requires=mempalace-sidecar.service
+
+[Service]
+Type=simple
+User=xelasphere
+Group=mempalace
+EnvironmentFile=/etc/xelasphere/mempalace.env
+Environment=PROMETHEUS_MULTIPROC_DIR=/var/run/xelasphere/prom
+ExecStartPre=/bin/mkdir -p /var/run/xelasphere/prom
+ExecStart=/opt/xelasphere/venv/bin/mempalace-flusher
+KillSignal=SIGTERM
+TimeoutStopSec=15s
+Restart=on-failure
+RestartSec=2s
+# Single instance is enforced by systemd automatically (one PID per unit).
+
+[Install]
+WantedBy=multi-user.target
+```
+
+- [ ] **Step 3: Add to provisioning**
+
+`deploy/mempalace/provision.sh` should also `systemctl enable --now mempalace-flusher`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add deploy/mempalace/mempalace-flusher.service app/mempalace/flusher_main.py
+git commit -m "feat(mempalace): mempalace-flusher as its own systemd unit (single-instance)"
+```
 
 ---
 
@@ -3445,6 +4109,8 @@ def main(log_dir, sample, output):
         return
     picked = random.sample(records, min(sample, len(records)))
     tally = {"both_hit": 0, "mempalace_only": 0, "v3_only": 0, "both_miss": 0}
+    rated = 0
+    skipped = 0
     for i, r in enumerate(picked, 1):
         click.echo(f"\n--- Sample {i}/{len(picked)} ---")
         click.echo(f"Query: {r.get('query')}")
@@ -3452,28 +4118,34 @@ def main(log_dir, sample, output):
         click.echo(f"\nMemPalace result:\n{json.dumps(r.get('mempalace'), indent=2)[:500]}")
         while True:
             ans = click.prompt("Outcome [b=both_hit, m=mempalace_only, v=v3_only, n=both_miss, s=skip]").lower()
-            if ans in ("b", "m", "v", "n"):
+            if ans in ("b", "m", "v", "n", "s"):
                 break
-            if ans == "s":
-                break
-        if ans == "b": tally["both_hit"] += 1
-        elif ans == "m": tally["mempalace_only"] += 1
-        elif ans == "v": tally["v3_only"] += 1
-        elif ans == "n": tally["both_miss"] += 1
+        if ans == "b":
+            tally["both_hit"] += 1; rated += 1
+        elif ans == "m":
+            tally["mempalace_only"] += 1; rated += 1
+        elif ans == "v":
+            tally["v3_only"] += 1; rated += 1
+        elif ans == "n":
+            tally["both_miss"] += 1; rated += 1
+        else:
+            skipped += 1
 
     import datetime
     iso = datetime.date.today().isocalendar()
     out = Path(output) / f"{iso.year}-{iso.week:02d}.md"
     out.write_text(
         "# Rubric Week {}-W{:02d}\n\n".format(iso.year, iso.week) +
-        f"- Sample size: {len(picked)}\n"
+        f"- Samples presented: {len(picked)}\n"
+        f"- Rated: {rated}\n"
+        f"- Skipped: {skipped}\n"
         f"- both_hit: {tally['both_hit']}\n"
         f"- mempalace_only: {tally['mempalace_only']}\n"
         f"- v3_only: {tally['v3_only']}\n"
         f"- both_miss: {tally['both_miss']}\n"
         f"- mempalace_only_ge_v3_only: {tally['mempalace_only'] >= tally['v3_only']}\n"
     )
-    click.echo(f"\nWrote {out}")
+    click.echo(f"\nWrote {out}  (rated={rated}, skipped={skipped})")
 
 
 if __name__ == "__main__":
@@ -3838,7 +4510,7 @@ From the spec, usable at any phase:
 - §5 Sidecar internals: M0.2–M0.11.
 - §6 Testing: M0.12 (contract), plus every TDD task's paired test.
 - §7 Rollout: M0.19 (artifacts), P0–P4.
-- §8 Observability: M0.11, M0.20, M0.21.
+- §8 Observability: M0.11 (sidecar metrics + /readyz + route instrumentation), M0.11b (Flask-side metrics module), M0.20 (dashboards), M0.21 (runbook + privacy doc).
 - §9 Glossary: not code, no plan task needed.
 - §10 Open questions deferred to implementation: P1 task P1.3 measures rebuild cost; P3 task P3.4 tunes idle TTL; KG provider choice is a manual decision captured at P1 runbook update.
 
@@ -3853,7 +4525,9 @@ No "TODO/TBD/implement later/add error handling" placeholders.
 **Type consistency.** Cross-checked method signatures end-to-end:
 - `wake_up(user_id, query, session_id=None)` → returns `WakeupContext | None` everywhere.
 - `record_turn(user_id, session_id, turn_id, pair_id, role, text, attachments=None, request_id=None, ts=None)` — consistent in adapter, outbox, flusher, orchestrator integration.
-- `SidecarClient.post_json(path, body, headers=None)` — consistent across all callers.
+- `SidecarClient.post_json(path, body, headers=None)`, `.get_json(path, headers=None)`, `.delete_json(path, body=None, headers=None)` — consistent across all callers. `SyncSidecarClient.post_json(path, body, headers=None)` has the same shape, sync variant.
+- `PalaceRegistry.open(user_id, *, track_cold=False)` — returns `PalaceEntry` by default, `(PalaceEntry, was_cold)` when `track_cold=True`.
+- `Outbox` sync methods: `insert`, `depth`, `claim_batch`, `mark_sent`, `mark_failed`, `abandon_user`, `drain_then_abandon`, `purge_old_sent`. Consistent with `Metrics` method naming (`inserts_dropped(reason)`, `redaction_hit(rule)`, `flusher_tick()`).
 - `Drawer`/`WakeupContext` model fields match between `schemas.py` (sidecar) and adapter consumer (Flask).
 
 No mismatches found.
