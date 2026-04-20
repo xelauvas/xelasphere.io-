@@ -44,7 +44,8 @@ XelaSphere currently ships two internal memory subsystems (`app/memory_v2/` and 
                                                                  ▼
                      ┌────────────────────────────────────────┐
                      │     mempalace-sidecar (systemd unit)   │
-                     │     FastAPI wrapping mempalace.Palace  │
+                     │     FastAPI wrapping PalaceHandle      │
+                     │     (library isolation; see §5.3)      │
                      │                                        │
                      │     POST /palace/{uid}/ingest          │
                      │     POST /palace/{uid}/wake-up         │
@@ -68,7 +69,9 @@ XelaSphere currently ships two internal memory subsystems (`app/memory_v2/` and 
 
 **Authentication:** `X-Sidecar-Token` header checked by FastAPI middleware. Token is 32 random bytes, generated once at provisioning, stored in `/etc/mempalace/sidecar.env` and XelaSphere's env file. **Tokens do not rotate in v1**; rotation requires a scheduled ~60s outage window. This is a design constraint, not an oversight.
 
-**Per-user isolation:** the sidecar dispatches by `user_id` in the URL. Each user gets a `Palace` instance backed by their own directory. Palaces are cached in a size-weighted LRU, capped at `MEMPALACE_CACHE_MAX_BYTES` (default 2 GB resident). Cold palaces close their ChromaDB handle after `MEMPALACE_IDLE_TTL_SEC` (default 14400 = 4h). Cold-wake-up rate is monitored; if it exceeds 5% of wake-ups during P2, TTL is raised to 8h.
+**Per-user isolation:** the sidecar dispatches by `user_id` in the URL. Each user gets a `PalaceHandle` instance (§5.3) backed by their own directory. PalaceHandles are cached in a size-weighted LRU (§5.4), capped at `MEMPALACE_CACHE_MAX_BYTES` (default 2 GB resident). Cold palaces close their ChromaDB handle after `MEMPALACE_IDLE_TTL_SEC` (default 14400 = 4h). Cold-wake-up rate is monitored; if it exceeds 5% of wake-ups during P2, TTL is raised to 8h.
+
+The underlying `mempalace.backends.chroma.ChromaBackend` singleton keeps its own `{palace_path → PersistentClient}` cache with no eviction API. Any PalaceHandle eviction MUST also pop the corresponding entry from that backend dict; the cache-eviction contract is stated with teeth in §5.3 and verified by test. Without that discipline the sidecar leaks one ChromaDB client per palace ever opened, and a memory-capped systemd unit OOMs after the Nth cold user opens.
 
 **Failure model:** Flask wraps every call in a timeout — 500ms for hot reads, 2s for cold reads, fire-and-forget for writes (durable outbox picks up slack). On timeout or error, memory injection is skipped and chat continues. Circuit breaker trips after N consecutive failures, closes after cooldown. Breaker state is per-worker (each gunicorn worker has its own view of sidecar health); this is known and accepted for v1.
 
@@ -106,7 +109,7 @@ class MempalaceAdapter:
     def record_turn(user_id, session_id, turn_id, pair_id, role, text,
                     attachments=None, request_id=None)
     def delete_palace(user_id, requested_by, reason) -> DeletionReceipt
-    def list_drawers(user_id, wing=None, limit=100, cursor=None)
+    def list_drawers(user_id, wing=None, limit=100, offset=0)
     def health() -> dict
 ```
 
@@ -270,8 +273,9 @@ mempalace-sidecar/                 (subdir within xelasphere.io-; see §8 for sp
 │   │   ├── lifecycle.py     # DELETE, rebuild
 │   │   └── ops.py           # healthz, readyz, metrics
 │   ├── auth.py              # X-Sidecar-Token middleware
+│   ├── palace_handle.py     # PalaceHandle: library isolation boundary (see §5.3)
 │   ├── registry.py          # PalaceRegistry: size-weighted LRU + per-user aiorwlock
-│   ├── wakeup.py            # Concurrent L0/L1/L2/L3 composition
+│   ├── wakeup.py            # L0/L1/L2/L3 composition (see §5.3 for the layer calls)
 │   ├── kg_queue.py          # Durable kg_pending queue + batched worker
 │   ├── audit.py             # Append-only audit SQLite
 │   ├── migrations/          # atomic-rename runner + per-version modules
@@ -288,7 +292,7 @@ mempalace-sidecar/                 (subdir within xelasphere.io-; see §8 for sp
 | POST | `/palace/{uid}/ingest` | `{turn_id, session_id, pair_id, role, text, ts, attachments?}` | `{status: accepted\|duplicate}` | `Idempotency-Key` = turn_id. Write lock. |
 | POST | `/palace/{uid}/wake-up?warmup=0\|1` | `{query, k?, layers?}` | `WakeupContext` | Read lock. 500ms hot / 2s cold. |
 | POST | `/palace/{uid}/search` | `{query, wing?, k=5}` | `[Drawer]` | Read lock. Tool calls. |
-| GET  | `/palace/{uid}/drawers?wing=&limit=&cursor=` | — | `{drawers, next_cursor}` | Admin + GDPR access. |
+| GET  | `/palace/{uid}/drawers?wing=&limit=&offset=` | — | `{drawers, total, next_offset}` | Admin + GDPR access. Offset-based (ChromaDB has no cursor). |
 | POST | `/palace/{uid}/rebuild` | `{conversations: [...]}` or `{from_path}` | `{ingested, skipped, job_id}` | Long-running, streaming. |
 | DELETE | `/palace/{uid}` | `{requested_by, reason}` | `{status, bytes_removed}` | Atomic dir rename → rm → audit row. |
 | POST | `/palace/{uid}/kg/query` | `{subject?, predicate?, object?, at?}` | `[Triple]` | KG reads. |
@@ -298,18 +302,117 @@ mempalace-sidecar/                 (subdir within xelasphere.io-; see §8 for sp
 
 OpenAPI spec is auto-generated by FastAPI from Pydantic models; CI snapshots it and fails any PR that changes the spec without bumping `schema_version` in `/healthz`. No hand-maintained pact file.
 
-### 5.3 PalaceRegistry — dispatch and caching
+### 5.3 PalaceHandle — library isolation boundary
 
-- `_cache: dict[user_id, PalaceEntry]` — hot palaces.
+**Purpose.** PalaceHandle is the sidecar-owned OOP wrapper around the `mempalace` 3.3.1 functional API. Every route (`ingest`, `wake-up`, `search`, `drawers`, `kg/*`, `rebuild`, `DELETE`) goes through a PalaceHandle. The library is referenced from exactly one file (`palace_handle.py`) and nowhere else. Swapping to a future version, a fork, or a rewrite is an edit contained to this boundary.
+
+**Why not bridge to `mempalace.mcp_server`.** The library ships 29 MCP tool handlers (`TOOLS` dict, `handle_request` dispatcher) that cover every drawer/KG/tunnel operation. Not used. Every handler calls `_get_collection(create=False)` which reads a module-level `_config: MempalaceConfig` and a module-level `_collection_cache` (see `mcp_server.py:214` in `mempalace==3.3.1`). Every `tool_*` operates on a single global palace bound at process start. Invoking two handlers for two users from the same process targets whichever palace was configured last — a race, not a bug. In a multi-tenant sidecar the first such race is a cross-user data leak, and in shadow-mode logs it turns a P1 rollout phase into a security incident. We bridge to the path-threaded primitives (`searcher.search_memories(query, palace_path, ...)`, `miner.add_drawer(collection, ...)`, `layers.Layer0/1/2/3(palace_path=...)`, `knowledge_graph.KnowledgeGraph(db_path=...)`) instead. Upstream issue to file: [TBD — github.com/MemPalace/mempalace/issues]. Until that issue lands, `mcp_server.*` is strictly forbidden in the sidecar; a unit test greps the package and fails if an import appears.
+
+**Naming collision, semantically distinct.** The library also has `mempalace.layers.MemoryStack.wake_up()`, `Layer0/Layer1/Layer2/Layer3`, and the letters "L0-L3" — but its semantics are not ours.
+
+- Library's `wake_up()` returns a pre-composed string of L0 (identity text from `~/.mempalace/identity.txt`) + L1 (top-15-drawers-by-importance summary). Synchronous. Covers only L0+L1. Shape: `str`.
+- Library's `Layer0.render()` is identity text, `Layer1.generate()` is importance-sorted drawers, `Layer2.retrieve()` is wing/room metadata filter, `Layer3.search()` is vector search.
+- Our wake-up is a four-layer dict composition covering recent-drawers / session-drawers / topic-filtered / semantic — a different product built on top of the library's retrieval primitives. We do not call `MemoryStack.wake_up()` and we do not consume `Layer0.render()` as our L0. We reimplement each of our layers on top of the library's retrieval primitives because our L0 is "recent drawers," not "identity.txt."
+
+**State held per handle.**
+
+```
+PalaceHandle(palace_path):
+  palace_path: str                              # /var/mempalace/palaces/<user_id>/
+  _collection: ChromaCollection                 # cached via mempalace.palace.get_collection(palace_path);
+                                                # reused across all calls on this handle
+  kg: KnowledgeGraph                            # db_path = f"{palace_path}/kg.sqlite";
+                                                # library class, has .add_triple/.query_entity/.timeline/.close
+  config: MempalaceConfig                       # config_dir = f"{palace_path}/config/";
+                                                # per-user people_map/topic_wings/entity_languages,
+                                                # not the library's ~/.mempalace/ default
+  turns: sqlite3.Connection                     # db_path = f"{palace_path}/turns.sqlite";
+                                                # OWNED BY THE SIDECAR — idempotency + session lookup
+  meta: dict                                    # parsed meta.json (schema_version, created_at)
+  size_bytes: int                               # refreshed on ingest + on eviction sweep
+```
+
+**`turns.sqlite`** is a sidecar-owned table that `mempalace` does not know about. Purpose:
+
+```sql
+CREATE TABLE turns (
+  turn_id TEXT PRIMARY KEY,                     -- idempotency key from ingest
+  drawer_id TEXT NOT NULL,                      -- derived deterministically; stored for reverse lookup
+  session_id TEXT NOT NULL,
+  pair_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK(role IN ('user','assistant')),
+  ts REAL NOT NULL,
+  filed_at REAL NOT NULL
+);
+CREATE INDEX turns_session_ts ON turns(session_id, ts);
+CREATE INDEX turns_pair ON turns(pair_id);
+```
+
+Two things we can't get from the library alone and need for M0.4/M0.5:
+- **Idempotency:** `PRIMARY KEY(turn_id)` rejects duplicate ingests of the same `turn_id`. Drawer metadata in Chroma can't carry `turn_id` because `miner.add_drawer` generates its own metadata and discards unknown fields.
+- **Session retrieval:** `handle.session_drawers(session_id, limit)` does `SELECT drawer_id FROM turns WHERE session_id=? ORDER BY ts DESC LIMIT ?`, then `self._collection.get(ids=drawer_ids)`. mempalace has no concept of "session" — that's a XelaSphere concept.
+
+**Method surface (v1 — M0.3 through M0.8 only).** PalaceHandle v1 is defined by the methods our M0.3-M0.8 call sites need, plus one escape hatch for direct Chroma access. Nothing beyond.
+
+| Method | Bridges to | Notes |
+|---|---|---|
+| `PalaceHandle.open(palace_path) -> PalaceHandle` | opens: `mempalace.palace.get_collection(palace_path, create=True)`, `KnowledgeGraph(db_path=…/kg.sqlite)`, `MempalaceConfig(config_dir=…/config/)`, sqlite3 connect to `turns.sqlite`; reads or writes `meta.json` | classmethod factory. Creates palace dir + all child state if missing. Cheap (~1-5 ms) assuming Chroma client already cached; ~50-200 ms first-ever open for a palace. |
+| `handle.add_drawer(*, turn_id, session_id, pair_id, role, text, ts, wing="conversations", room="session", agent="xelasphere") -> AddDrawerResult` | `miner.add_drawer(self._collection, wing, room, text, source_file=f"turn:{turn_id}", chunk_index=0, agent)` + `INSERT OR IGNORE INTO turns ...` | Drawer ID derived from `sha256(f"turn:{turn_id}" + "0")[:24]` — idempotent per `turn_id`. If `turn_id` already in `turns.sqlite`, returns `AddDrawerResult(status="duplicate", drawer_id=existing)` without calling the library. |
+| `handle.recent_drawers(limit=10) -> list[DrawerDict]` | `self._collection.get(limit=limit*4, include=["documents","metadatas"])` + Python-side sort by `filed_at` desc, truncate to `limit` | Our L0. We over-fetch 4× then sort because Chroma has no `order_by`. For palaces >10k drawers this gets expensive; M0.5 integration test measures p95 and flags if over budget. |
+| `handle.session_drawers(session_id, limit=10) -> list[DrawerDict]` | `SELECT drawer_id FROM turns WHERE session_id=? ORDER BY ts DESC LIMIT ?` → `self._collection.get(ids=drawer_ids, include=["documents","metadatas"])` | Our L1. Cheap — sqlite index lookup + single Chroma `get` by IDs. |
+| `handle.topic_search(query, k=5) -> list[DrawerDict]` | `searcher.search_memories(query, self.palace_path, n_results=k)["results"]` | Our L2. v1 behaves identically to `semantic_search`; topic-filter logic deferred to a future milestone (see Open Question §10.x added below). |
+| `handle.semantic_search(query, k=5) -> list[DrawerDict]` | `searcher.search_memories(query, self.palace_path, n_results=k)["results"]` | Our L3. The library's `search_memories` is a hybrid BM25 + vector + closet-boost rerank — strictly better than anything we'd write. |
+| `handle.search(query, *, wing=None, k=5) -> list[DrawerDict]` | `searcher.search_memories(query, self.palace_path, wing=wing, room=None, n_results=k)["results"]` | Tool-call search (M0.6). |
+| `handle.list_drawers(*, wing=None, room=None, limit=20, offset=0) -> ListDrawersResult` | `self._collection.get(where=build_where_filter(wing, room), limit=limit, offset=offset, include=["documents","metadatas"])` — where `build_where_filter` is imported from `mempalace.searcher` | GDPR admin listing. Returns `{drawers, total, next_offset}`. |
+| `handle.kg_add_triple(subject, predicate, obj, ...)` | `self.kg.add_triple(...)` (library method) | KG writes (M0.7). |
+| `handle.kg_query_entity(name, as_of=None, direction="outgoing")` | `self.kg.query_entity(...)` | KG reads (M0.7). |
+| `handle.kg_timeline(entity_name=None)` | `self.kg.timeline(entity_name)` | KG timeline reads. |
+| `handle.close()` | `self.kg.close()` → `self.turns.close()` → **`mempalace.palace._DEFAULT_BACKEND._clients.pop(self.palace_path, None)`** | **CACHE EVICTION CONTRACT — see "contract with teeth" below.** |
+| `handle.col` (property) | returns `self._collection` | Escape hatch for routes that need raw Chroma access (e.g. M0.8 `DELETE /palace/{uid}` enumerates + deletes). Prefer a named method; only use when one doesn't exist. |
+
+**Cache-eviction contract (with teeth).** The library's `ChromaBackend._DEFAULT_BACKEND._clients: dict[palace_path, PersistentClient]` grows every time any path in the sidecar calls `mempalace.palace.get_collection(path, ...)` and has **no public eviction API**. If we open 10 000 palaces over a month and never pop this dict, the sidecar holds 10 000 long-lived PersistentClient instances with open ChromaDB file handles. On a memory-capped systemd unit this OOMs.
+
+Therefore:
+
+1. **Every `PalaceHandle.close()` MUST call `mempalace.palace._DEFAULT_BACKEND._clients.pop(self.palace_path, None)` as the final step, AFTER closing our own state.** This is the boundary between our LRU's view of "evicted" and reality.
+2. **A unit test (`test_palace_handle_close_pops_backend_cache`) MUST assert `palace_path not in mempalace.palace._DEFAULT_BACKEND._clients` after `close()`.** This is the test that fails if a future well-meaning refactor "simplifies" the close path and silently reintroduces the leak.
+3. **An integration test (`test_registry_eviction_bounds_backend_cache`) MUST open N palaces exceeding the registry's size cap, force evictions, and assert `len(_DEFAULT_BACKEND._clients) <= registry_cache_cap` throughout.** This is the test that fails if the registry evicts the PalaceHandle but the backend cache grows anyway.
+4. **Upstream issue to file: [TBD — github.com/MemPalace/mempalace/issues]** requesting `mempalace.palace.close_backend(palace_path)` as a proper public API. When that lands, we swap our `._clients.pop(...)` for the public call and remove the `_`-prefix access in palace_handle.py. This keeps the library-isolation-boundary story intact.
+
+**Per-`turn_id` idempotency: the source_file encoding trick.** `miner.add_drawer` generates drawer IDs as `f"drawer_{wing}_{room}_{sha256(source_file + str(chunk_index))[:24]}"` and does not accept arbitrary metadata. We encode our `turn_id` into `source_file` as `f"turn:{turn_id}"` with `chunk_index=0`, which produces a deterministic drawer ID per turn. Same idempotency guarantee as "turn_id-as-primary-key" via a different mechanism.
+
+Two consequences that must be written into the tests, not just the prose:
+
+- **If the library ever changes how it derives drawer IDs from source_file** (path normalization, extension handling, length truncation, dropping the `chunk_index` from the hash), our idempotency breaks silently. Therefore: pin `mempalace==3.3.1` exactly (not `>=3.3.1`) in `pyproject.toml`, and `tests/unit/test_idempotency.py::test_same_turn_id_produces_same_drawer_id` must call `miner.add_drawer` twice with the same `turn_id` and assert `collection.count() == 1`. If the upstream ever bumps the hashing scheme, CI fails before the bad version reaches prod.
+- **`file_already_mined` in `mempalace.palace` checks `where={"source_file": source_file}`** (exact match, not prefix/suffix). Collision across `turn:<uuid_A>` and `turn:<uuid_B>` is not possible via prefix — each distinct UUID gives a distinct source_file string. Safe.
+
+**Concurrency model inside PalaceHandle.** Every library call we bridge to is synchronous Python. `miner.add_drawer`, `searcher.search_memories`, `col.get`, `col.query`, `kg.add_triple` — all sync. Three consequences:
+
+- PalaceHandle methods are `async def` but call into sync code. If a caller composes multiple layer calls with `asyncio.gather(l0, l1, l2, l3)`, **the gather does not parallelize sync bodies** — it runs them sequentially on the event loop. To get real parallelism across layer calls, the caller must wrap each call in `asyncio.to_thread(...)` and then gather the thread-pool futures.
+- **Whether we need concurrency is a measurement question, not a spec one.** On modest palaces (≤1 k drawers) four sync layer calls might total <100 ms serial, and the thread-pool plumbing is overhead we'd pay for nothing. On larger palaces (L0 `recent_drawers` is O(N) in drawer count for Python-side sort; L3 is an embedding + Chroma query ~30-100 ms) we may need real concurrency to hold p95.
+- **M0.5 treats concurrency as an implementation detail deferred to integration-test measurement.** The spec requires `wakeup` to produce a structured `WakeupContext` within §4.2's latency budget; how the four layer calls are composed is not prescribed. If serial is fast enough, ship serial. If not, wrap in `asyncio.to_thread` and gather. The integration test measures both and the plan records which shipped.
+
+**Lifecycle.**
+
+- **Construct:** `PalaceHandle.open(palace_path)` creates the palace directory, writes `meta.json` if absent, opens Chroma via `get_collection`, opens KG sqlite, opens `turns.sqlite`, constructs per-user `MempalaceConfig`. Cheap for a warm Chroma client (~1-5 ms); first-ever open for a new palace pays the Chroma init cost (~50-200 ms) once.
+- **Warmup:** none explicitly. Chroma's persistent client lazy-loads the HNSW index on first `query`; pre-warming by issuing a no-op query at open is optional and deferred to M0.5 integration measurement.
+- **Eviction:** `PalaceRegistry` (§5.4) calls `handle.close()` while holding the user's write lock. `close()` is idempotent: safe to call twice.
+- **Close order:** KG sqlite → `turns.sqlite` → `_DEFAULT_BACKEND._clients.pop`. The library's PersistentClient has no explicit `close()` that we must call; removing it from the dict plus letting GC finish is the library's documented lifecycle (verified by reading `chromadb` source once during M0.3 implementation).
+
+### 5.4 PalaceRegistry — dispatch and caching
+
+- `_cache: dict[user_id, PalaceEntry]` — hot palaces; each entry holds a `PalaceHandle` (§5.3) plus bookkeeping.
 - `_lru_keys: OrderedDict` — access-order.
 - `_total_bytes: int` — sum of resident palace sizes. Size sampled on open + on-write.
 - `_max_bytes: int` = `MEMPALACE_CACHE_MAX_BYTES` (default 2 GB).
 - `_locks: dict[user_id, aiorwlock.RWLock]` — per-user RWLock. Reads parallel, writes exclusive.
 - Registry-level dict mutations guarded by a single `asyncio.Lock`.
 
-**Eviction** is async and acquires the user's write-lock first (drains in-flight ops). Idle TTL 4h — longer than typical chat gaps, deliberately, to mitigate cold wake-ups.
+**Eviction** is async and acquires the user's write-lock first (drains in-flight ops). Idle TTL 4h — longer than typical chat gaps, deliberately, to mitigate cold wake-ups. Every eviction calls `handle.close()`, which MUST pop the library's backend cache per §5.3's cache-eviction contract. The integration test `test_registry_eviction_bounds_backend_cache` verifies this invariant holds across forced LRU + TTL evictions.
 
-### 5.4 KG extraction — durable queue
+**Layered locks.** The sidecar holds two independent lock scopes. The per-user RWLock in this registry serializes writes and lets reads run parallel at the palace level. Inside `miner.add_drawer` (and any library code that enters `mempalace.palace.mine_lock(source_file)`), the library acquires an fcntl file lock on `~/.mempalace/locks/<sha>.lock` keyed by `source_file`. The two lock scopes compose — our registry lock is per-palace, the library lock is per-source_file across palaces. For turn-ingest with `source_file=f"turn:{turn_id}"` the library lock is effectively per-turn and benign.
+
+### 5.5 KG extraction — durable queue
 
 ```sql
 CREATE TABLE kg_pending (
@@ -326,16 +429,46 @@ CREATE TABLE kg_pending (
 
 Single `asyncio` worker. Every 30s (or signal from ingest): pulls batches, runs **one** LLM NER+RE call per batch of **N=8 drawers**, writes triples into the user's `kg.sqlite` with `valid_from=drawer_ts`. Retries/backoff identical to the Flask outbox. Cost ceiling from `MEMPALACE_KG_DAILY_USD_CAP`; cap hit → worker pauses (metric alert); queue keeps growing until next day. KG metadata stays inside each palace directory, so it's included in daily backups (not regenerated on restore).
 
-### 5.5 Migrations — atomic
+### 5.6 Migrations — atomic
 
-Sibling-directory pattern:
+**Three version dimensions, all orthogonal.** When a palace opens, the sidecar may need to upgrade one, two, or all three. Knowing which is which saves hours in month 14 when someone hits a migration error and has to grep for what version means what.
+
+```
+┌────────────────────────┬──────────────────────┬────────────────────┬────────────────────┬──────────────────────────┐
+│ Dimension              │ What it tracks       │ Who manages        │ Trigger            │ Failure mode             │
+├────────────────────────┼──────────────────────┼────────────────────┼────────────────────┼──────────────────────────┤
+│ Chroma on-disk format  │ ChromaDB release     │ library            │ library upgrade    │ corrupt index on open;   │
+│                        │ compatibility        │ mempalace.migrate  │ (pip bump)         │ call library.migrate()   │
+│                        │                      │                    │                    │ before any collection op │
+├────────────────────────┼──────────────────────┼────────────────────┼────────────────────┼──────────────────────────┤
+│ Drawer normalize_      │ How noise-stripping, │ library            │ library upgrade    │ stale drawers look OK    │
+│ version                │ chunking, and tagging│ mempalace.palace   │ (pip bump)         │ but index mismatches;    │
+│                        │ work at write time   │ .NORMALIZE_VERSION │                    │ library auto-heals on    │
+│                        │                      │                    │                    │ next mine (see           │
+│                        │                      │                    │                    │ file_already_mined)      │
+├────────────────────────┼──────────────────────┼────────────────────┼────────────────────┼──────────────────────────┤
+│ Sidecar schema_version │ meta.json fields,    │ us (this sidecar)  │ sidecar release    │ we refuse to open with   │
+│                        │ turns.sqlite shape,  │ mempalace_sidecar  │ (systemd deploy)   │ 500; migration runner    │
+│                        │ routes/schemas.py    │ .migrations/       │                    │ runs atomic sibling-dir  │
+│                        │ contract             │                    │                    │ pattern below            │
+└────────────────────────┴──────────────────────┴────────────────────┴────────────────────┴──────────────────────────┘
+```
+
+**Open-palace sequence** (on every `PalaceHandle.open(palace_path)`):
+
+1. Check Chroma on-disk format via `mempalace.migrate.detect_chromadb_version(palace_path)`. If mismatched against `mempalace.backends.chroma.ChromaBackend.backend_version()`, call `mempalace.migrate.migrate(palace_path, dry_run=False, confirm=True)` BEFORE any collection open. Fails early with structured error if migration can't proceed.
+2. Check `meta.json.schema_version` (our dimension). If lower than current sidecar's `CURRENT_SCHEMA_VERSION`, run our migration (below). If higher, refuse with 500 "sidecar too old."
+3. Drawer `normalize_version` heals lazily. `file_already_mined(collection, source_file)` returns False for stale drawers and the next mine pass silently rebuilds. No action needed on open.
+
+**Our sidecar's meta.json migration — sibling-directory pattern:**
+
 1. `copytree U/ → U.migrating/` (hardlinks when on same fs).
 2. Apply migrations in order.
 3. `fsync`, then `rename(U.migrating, U)` after moving old to `U.replaced_<ts>`.
 4. On crash: leftover `*.migrating`/`*.replaced_*` older than 24h reaped on next open. The original `U/` directory is never mutated until verification passes — rollback is always `rm -rf U.migrating/`.
 5. Schema too new → refuse with 500, "sidecar too old."
 
-### 5.6 Shutdown protocol (SIGTERM)
+### 5.7 Shutdown protocol (SIGTERM)
 
 1. FastAPI lifespan stops accepting new connections.
 2. Signal flusher + KG worker to drain.
@@ -344,7 +477,7 @@ Sibling-directory pattern:
 5. Close all Palace handles (fsync Chroma + KG).
 6. Exit. `TimeoutStopSec=15s` in systemd (10s drain + 5s grace).
 
-### 5.7 Config (`/etc/mempalace/sidecar.env`)
+### 5.8 Config (`/etc/mempalace/sidecar.env`)
 
 ```
 MEMPALACE_SOCKET=/run/mempalace/sidecar.sock
