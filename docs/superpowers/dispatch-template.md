@@ -81,13 +81,19 @@ them — don't let the subagent discover them at runtime.
    includes BOTH a test body AND an impl body for the same behavior, read
    them together and name the shared semantic they jointly encode. Any
    disagreement — assertion expects X, impl produces Y — surfaces here,
-   not at Stage 3 test-run. **The defense mechanism for plan-half
-   inconsistency is this pre-resolution cross-check, NOT nastiest-context
-   test design.** Hit #6 at M0.13 cost a Stage 3 round-trip because
-   pre-resolution read each half independently; a 30-second re-read
-   together would have surfaced the mismatch at dispatch time. Sibling
-   discipline to B4 (write-the-tests) — distinct defense, distinct class
-   of bugs caught. See appendix doctrine entry for the class separation.
+   not at Stage 3 test-run. **Diagnostic model:** plan-verbatim on both
+   sides doesn't imply internal consistency. The plan author may have
+   drafted the test half and the implementation half at different times,
+   with different mental models of what the behavior was supposed to be.
+   Each half read in isolation looks correct against its own local
+   semantic; it's only reading them together that surfaces the mismatch.
+   **The defense mechanism for plan-half inconsistency is this
+   pre-resolution cross-check, NOT nastiest-context test design.** Hit #6
+   at M0.13 cost a Stage 3 round-trip because pre-resolution read each
+   half independently; a 30-second re-read together would have surfaced
+   the mismatch at dispatch time. Sibling discipline to B4 (write-the-
+   tests) — distinct defense, distinct class of bugs caught. See appendix
+   doctrine entry for the class separation.
 5. **Parametrized-case-count estimation (named at M0.13).** When tests
    will be parametrized via `@pytest.mark.parametrize`, estimate
    COLLECTED-CASE count, not DECLARED-TEST count. pytest reports each
