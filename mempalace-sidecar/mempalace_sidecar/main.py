@@ -28,14 +28,21 @@ def _sd_notify_stopping() -> None:
 
 @asynccontextmanager
 async def _lifespan(app):
-    """App startup/shutdown — construct PalaceRegistry, drain on exit.
+    """App startup/shutdown — pre-warm embeddings, construct
+    PalaceRegistry, drain on exit.
 
-    Plan M0.4.2 Step 4: the registry lives for the lifetime of the
-    process and is attached to ``app.state.registry`` so every route
-    can pull it off ``request.app.state``. Embedding model pre-warm
-    slots in here during M0.5 (single process-global
-    sentence-transformers load, ~2-5 s cold) — spec §5.3
-    "Embedding-model scope".
+    Startup order (spec §5.3 "Embedding-model scope — process-global,
+    warmed once"):
+
+    1. ``prime_embedding_function`` forces ChromaDB's default
+       sentence-transformers model to resolve + load before any
+       real wake-up can hit /wake-up. ~2-5 s cold; shifts the
+       cost off the first user turn. Runs BEFORE registry
+       construction so ``app.state.embedding_ready = True`` can
+       gate /readyz (M0.11).
+
+    2. ``PalaceRegistry`` is attached to ``app.state.registry`` for
+       route handlers to pull via ``request.app.state``.
 
     Shutdown: ``registry.close_all()`` runs BEFORE ``STOPPING=1`` so
     systemd sees STOPPING only after every resident palace has
@@ -49,8 +56,22 @@ async def _lifespan(app):
     # but keeping the import local mirrors the plan Step 4 pseudo-code
     # exactly and makes the lifespan's contract visually self-contained.
     from mempalace_sidecar.registry import PalaceRegistry
+    from mempalace_sidecar.warmup import prime_embedding_function
 
     settings: Settings = app.state.settings
+
+    # Step 1: embedding pre-warm. We do this in a worker thread so the
+    # event-loop startup stays responsive — a 2-5s synchronous call in
+    # the lifespan would block every other startup hook. Every
+    # subsequent /wake-up hits a hot embedding model.
+    import asyncio as _asyncio
+
+    await _asyncio.to_thread(
+        prime_embedding_function, settings.data_dir / "_warmup"
+    )
+    app.state.embedding_ready = True
+
+    # Step 2: registry.
     app.state.registry = PalaceRegistry(
         data_dir=settings.data_dir,
         max_bytes=settings.cache_max_bytes,

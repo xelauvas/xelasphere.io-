@@ -240,13 +240,88 @@ async def test_wakeup_warmup_param_skips_composition(client, auth) -> None:
     assert r2.json()["meta"]["hot"] is True
 
 
+async def test_wakeup_layers_run_in_thread_pool(client, auth) -> None:
+    """Direct event-loop-non-blocking assertion for Job A: the four
+    layer calls in ``build_wakeup`` MUST offload sync work via
+    ``asyncio.to_thread``. Forgetting ``to_thread`` blocks the loop
+    during the (synchronous) Chroma query and kills concurrency for
+    every other async task the worker is handling.
+
+    Cannot be gamed by forgetting ``to_thread`` — dropping the wrapper
+    immediately collapses the sentinel tick count. Complementary to
+    the ratio-based sum-of-parts test above: the ratio test proves
+    layers are *faster*, this test proves the *loop is free*. Separate
+    properties, separate tests. See deltas entry B (2026-04-20) for
+    why this was added as a stricter Job A guard once the singleton
+    patch unlocked real parallelism.
+    """
+    await _seed_drawers(client, auth, "tick", n=50, session="s1")
+    # Warm: palace hot, embedding singleton hot.
+    await client.post(
+        "/palace/tick/wake-up",
+        headers=auth,
+        json={"query": "content", "k": 5, "session_id": "s1"},
+    )
+
+    # Run a rapidly-ticking sentinel concurrently with one wake-up.
+    # asyncio.sleep(0) yields unconditionally — if the event loop is
+    # free, this task gets scheduled between every blocking point.
+    # If the wake-up synchronously blocks the loop (missing to_thread),
+    # the sentinel count stays near zero.
+    ticks = 0
+    stop = False
+
+    async def sentinel() -> None:
+        nonlocal ticks
+        while not stop:
+            await asyncio.sleep(0)
+            ticks += 1
+
+    sentinel_task = asyncio.create_task(sentinel())
+
+    r = await client.post(
+        "/palace/tick/wake-up",
+        headers=auth,
+        json={"query": "searchable content", "k": 5, "session_id": "s1"},
+    )
+    stop = True
+    await sentinel_task
+
+    assert r.status_code == 200, r.text
+
+    # Threshold rationale: on a warm palace, wake-up total ≈ 60-150ms
+    # (measured across runs). With to_thread, sentinel fires hundreds
+    # of times during that window. Without to_thread, sentinel fires
+    # 0-2 times (the await on client.post itself yields once or twice
+    # before the sync block completes). 50 is a wide margin: trivially
+    # passed when to_thread works, trivially fails when it doesn't.
+    print(f"[wakeup-sentinel] ticks during wake-up: {ticks}", file=sys.stderr)
+    assert ticks > 50, (
+        f"Sentinel ticked only {ticks} times during wake-up — the "
+        f"event loop was blocked. build_wakeup is likely dispatching "
+        f"sync layer calls without asyncio.to_thread."
+    )
+
+
 @pytest.mark.slow
 async def test_wakeup_composition_within_latency_budget(client, auth) -> None:
-    """Spec §4.2: p95 wake-up total_ms < 500 ms hot on modest palaces.
+    """Spec §4.2 p95 regression gate anchored to measured floor.
 
-    10 measured wake-ups after warmup, sorted, pick p95. Marked slow so
-    CI runs can skip when the box is noisy — enforcement lives in the
-    sum-of-parts test.
+    Measured floor (AMD EPYC-Rome VPS, 100-drawer palace, singleton
+    EF + intra_op=1): wake-up p95 ~100-120ms. Ceiling is 1.3× that
+    floor = ~160ms, rounded to 200ms for CI variance tolerance.
+
+    Two failure modes this catches:
+
+      * p95 climbs to 500ms+ — the singleton patch was reverted
+        (check mempalace_sidecar/_chromadb_patch.py is applied).
+      * p95 climbs to 200-400ms — something else got slower:
+        per-embedding work, per-call overhead, unexpected rerank cost.
+        cProfile a warm semantic_search to localise.
+
+    Marked slow so a noisy CI box can skip when background contention
+    blows the ceiling; the sum-of-parts test still enforces parallelism
+    when this is skipped.
     """
     user = "perf"
     async def seed_one(i: int):
@@ -285,9 +360,14 @@ async def test_wakeup_composition_within_latency_budget(client, auth) -> None:
 
     times_ms.sort()
     p95 = times_ms[int(len(times_ms) * 0.95)]
-    # Generous budget — CI/thread-pool variance. Spec §4.2 has the
-    # hard 500 ms number; we log p95 and only fail at 2× budget so
-    # the test stays green on noisy CI while still catching real
-    # regressions (e.g. the sidecar swapping back to serial).
-    print(f"[wakeup-p95] p95={p95:.1f}ms budget=500ms", file=sys.stderr)
-    assert p95 < 1000, f"p95={p95:.1f}ms exceeds 2× hot budget (500ms)"
+    print(
+        f"[wakeup-p95] p95={p95:.1f}ms  floor ~110ms  ceiling 200ms  "
+        f"spec hard-cap 500ms",
+        file=sys.stderr,
+    )
+    assert p95 < 200, (
+        f"p95={p95:.1f}ms exceeds 1.3× floor (~200ms ceiling). "
+        f"Regression vs measured baseline. Likely cause: the "
+        f"_chromadb_patch singleton was reverted or something slowed "
+        f"per-layer work. See mempalace_sidecar/_chromadb_patch.py."
+    )

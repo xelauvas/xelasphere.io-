@@ -158,7 +158,9 @@ class PalaceRegistry:
     # Public API: open + sweep
     # ------------------------------------------------------------------
 
-    async def open(self, user_id: str) -> PalaceEntry:
+    async def open(
+        self, user_id: str, *, track_cold: bool = False
+    ) -> "PalaceEntry | tuple[PalaceEntry, bool]":
         """Return the cached ``PalaceEntry`` for ``user_id``, opening a
         fresh PalaceHandle if cold.
 
@@ -169,6 +171,14 @@ class PalaceRegistry:
         Raises ``RuntimeError`` if ``close_all`` has been called —
         shutdown hedge prevents a new open from racing into a freshly-
         cleared cache while existing handles are still being closed.
+
+        ``track_cold`` (M0.5.2): when ``True``, returns a
+        ``(entry, was_cold)`` tuple instead of the bare entry.
+        ``was_cold`` is captured under ``_registry_lock`` BEFORE any
+        mutation, so no TOCTOU peek from the caller is possible.
+        Backward-compatible: callers that don't pass ``track_cold``
+        (M0.4 ingest route, existing tests) continue to receive just
+        the ``PalaceEntry``.
         """
         if self._shutting_down:
             raise RuntimeError(
@@ -176,7 +186,13 @@ class PalaceRegistry:
             )
         to_close_after: list[tuple[str, PalaceEntry]] = []
         async with self._registry_lock:
-            if user_id in self._cache:
+            # Capture was_cold under the registry lock — that's the
+            # whole point of computing it here rather than peeking at
+            # ``user_id in registry._cache`` from the caller. Between
+            # the peek and the open() call, another task could have
+            # constructed the entry, making the caller's "cold" stale.
+            was_cold = user_id not in self._cache
+            if not was_cold:
                 # Hot path: move to MRU end, refresh last_used_at, return
                 # the existing entry. Identity matters — callers that
                 # stash the entry reference don't want a new object on
@@ -202,6 +218,8 @@ class PalaceRegistry:
         # the writer_lock (blocks on in-flight readers), then close.
         for evicted_uid, evicted_entry in to_close_after:
             await self._close_evicted(evicted_uid, evicted_entry)
+        if track_cold:
+            return entry, was_cold
         return entry
 
     async def sweep_idle(self) -> int:

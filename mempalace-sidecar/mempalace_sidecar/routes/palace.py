@@ -25,7 +25,14 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
-from mempalace_sidecar.schemas import IngestRequest, IngestResponse
+from mempalace_sidecar.schemas import (
+    IngestRequest,
+    IngestResponse,
+    WakeupContext,
+    WakeupMeta,
+    WakeupRequest,
+)
+from mempalace_sidecar.wakeup import build_wakeup
 
 log = logging.getLogger(__name__)
 
@@ -153,6 +160,87 @@ async def ingest(
             ts=body.ts,
         )
     return IngestResponse(status=result.status)
+
+
+@router.post("/{user_id}/wake-up", response_model=WakeupContext)
+async def wake_up(
+    user_id: str,
+    body: WakeupRequest,
+    request: Request,
+    warmup: bool = False,
+) -> WakeupContext:
+    """Assemble the four-layer wake-up context (L0/L1/L2/L3) for a
+    user turn. HOT READ path — every turn hits this before the LLM.
+
+    Flow (spec §4.2 read path A):
+
+      1. ``registry.open(user_id, track_cold=True)`` — returns the
+         cached ``PalaceEntry`` or opens a fresh palace if cold. The
+         ``was_cold`` flag propagates into ``WakeupMeta.hot`` so the
+         caller (Flask adapter, M0.17) can render latency expectations.
+
+      2. If ``?warmup=true``, return an empty ``WakeupContext`` —
+         the purpose of the request was to move the palace into the
+         cache, NOT to run the composition. Useful for pre-turn
+         background warmup from the Flask adapter.
+
+      3. Otherwise acquire ``registry.lock_for(user_id).reader_lock``
+         (NOT writer_lock — wake-up is a READ) and call
+         ``build_wakeup``. Parallel wake-ups for the same user run
+         concurrently under the reader_lock; concurrent writers
+         (ingest) serialise against readers via the writer_lock.
+
+      4. Any ``RuntimeError`` containing "shutting down" from the
+         registry maps to HTTP 503 (mirrors the ingest pattern).
+
+    user_id is logged pseudonymously per spec §8.4 (sha256+salt).
+    """
+    registry = _registry(request)
+    settings = request.app.state.settings
+    uid_hash = _hash_uid(user_id, settings.user_id_hash_salt)
+
+    log.info(
+        "wake_up",
+        extra={
+            "user_id": uid_hash,
+            "session_id": body.session_id,
+            "query_len": len(body.query),
+            "warmup_only": warmup,
+        },
+    )
+
+    try:
+        entry, was_cold = await registry.open(user_id, track_cold=True)
+    except RuntimeError as exc:
+        if "shutting down" in str(exc).lower():
+            raise HTTPException(
+                status_code=503, detail="sidecar shutting down"
+            ) from exc
+        raise  # other RuntimeErrors surface as 500
+
+    if warmup:
+        # Connection-warmup short-circuit. Return an empty context
+        # with meta.hot reflecting whether THIS open was the cold
+        # one. No composition work done.
+        return WakeupContext(
+            user_id=user_id,
+            meta=WakeupMeta(hot=(not was_cold), embed_ms=0.0, total_ms=0.0),
+        )
+
+    lock = registry.lock_for(user_id)
+    # READ path — reader_lock. Parallel wake-ups for the same user
+    # MUST run concurrently (that's the whole point of the RWLock).
+    # If this ever becomes ``writer_lock``, the concurrency story
+    # for back-to-back turns is destroyed.
+    async with lock.reader_lock:
+        return await build_wakeup(
+            user_id=user_id,
+            query=body.query,
+            handle=entry.handle,
+            session_id=body.session_id,
+            hot=(not was_cold),
+            k=body.k,
+        )
 
 
 __all__ = ["router"]
