@@ -153,15 +153,21 @@ class RebuildResponse(BaseModel):
 
     ``ingested`` counts ``AddDrawerResult.status == 'accepted'``;
     ``skipped`` counts ``'duplicate'``. Together they sum to
-    ``len(request.conversations)``. ``job_id`` is a UUID4 generated
-    at request time — forward-compatible with streaming (where it
-    would identify the rebuild across chunks) but not load-bearing
-    in the sync flow; the caller already has the full receipt.
+    ``len(request.conversations)``.
+
+    **No ``job_id`` in M0.8.** The earlier draft had a UUID4
+    ``job_id`` field "forward-compatible with streaming." M0.8
+    quality review flagged it as dead weight with a silent-drift
+    risk: a caller seeing a UUID in the response reasonably assumes
+    polling semantics (standard job-queue idiom), and when streaming
+    lands and ``job_id`` becomes load-bearing, callers that already
+    started relying on it in M0.8 hit a silent contract change.
+    Dropped for M0.8; reintroduced when streaming ships and its
+    semantics are actually used.
     """
 
     ingested: int
     skipped: int
-    job_id: str
 
 
 class DrawersPage(BaseModel):

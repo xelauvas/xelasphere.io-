@@ -21,7 +21,6 @@ import logging
 import os
 import shutil
 import time
-import uuid
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Request
@@ -44,9 +43,18 @@ log = logging.getLogger(__name__)
 
 
 # Spec §8.1 metric catalog — one counter for successful deletions.
-# Module-level default-registry Counter for M0.8; M0.11b's metrics
-# module will consolidate all counters under a single home with
-# multiprocess-safe wiring.
+#
+# **M0.11 multiproc wiring TODO.** This Counter is attached to
+# prometheus_client's default registry. Under multi-worker uvicorn
+# (sidecar's settings.prometheus_multiproc_dir is set per spec §5.8),
+# default-registry counters produce non-monotonic scrapes across
+# workers (each worker has its own value; Prometheus sees whichever
+# worker answered the /metrics request). M0.11b consolidates all
+# counters through a shared metrics module using
+# prometheus_client.multiprocess.MultiProcessCollector. In the
+# meantime: single-worker uvicorn (systemd unit should set
+# --workers 1 explicitly) avoids the divergence. See deltas
+# "Deferred to M0.11" list for the consolidation item.
 _DELETE_TOTAL = Counter(
     "mempalace_delete_total",
     "Total number of successful palace deletions.",
@@ -116,7 +124,7 @@ async def delete_palace(
         )
         raise HTTPException(
             status_code=404,
-            detail=f"palace for user not found (may already be deleted)",
+            detail="palace for user not found (may already be deleted)",
         )
 
     log.info(
@@ -231,14 +239,12 @@ async def rebuild_palace(
     registry = _registry(request)
     settings = request.app.state.settings
     uid_hash = _hash_uid(user_id, settings.user_id_hash_salt)
-    job_id = str(uuid.uuid4())
 
     log.info(
         "rebuild_palace",
         extra={
             "user_id": uid_hash,
             "count": len(body.conversations),
-            "job_id": job_id,
         },
     )
 
@@ -273,7 +279,7 @@ async def rebuild_palace(
             elif result.status == "duplicate":
                 skipped += 1
 
-    return RebuildResponse(ingested=ingested, skipped=skipped, job_id=job_id)
+    return RebuildResponse(ingested=ingested, skipped=skipped)
 
 
 __all__ = ["router"]

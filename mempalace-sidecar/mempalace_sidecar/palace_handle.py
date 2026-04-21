@@ -250,13 +250,19 @@ class PalaceHandle:
         guards on ``self._connection is not None``), so the guard doesn't
         strictly protect step 1, only step 2. We keep it for the race.
 
-        Close order (spec §5.3):
+        Close order (spec §5.3, amended 2026-04-21):
             1. KG sqlite  (library-owned; self-idempotent)
             2. turns.sqlite  (sidecar-owned; NOT idempotent without guard)
             3. _DEFAULT_BACKEND._clients.pop  (library's Chroma cache)
+            4. client.close()  (explicit release of chromadb SQLite file locks)
 
-        The Chroma PersistentClient has no explicit close(); removing it
-        from the dict + GC finishing is its documented lifecycle.
+        Step 4 was added at M0.8 after chromadb 1.5.x contract drift
+        surfaced: the library ships ``PersistentClient.close()``
+        specifically to release SQLite file locks, and relying on
+        GC to finalize the client (the pre-M0.8 approach) leaves
+        locks held long enough for a subsequent open-to-the-same-path
+        to hit SQLITE_READONLY_DBMOVED. See the module comment near
+        the pop/close call for the full diagnostic trail.
         """
         if self._closed:
             return

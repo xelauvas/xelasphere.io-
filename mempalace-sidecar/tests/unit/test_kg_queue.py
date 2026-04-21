@@ -268,6 +268,39 @@ async def test_worker_pauses_when_cap_hit(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
+def test_hash_uid_consistency_between_common_and_kg_worker() -> None:
+    """Per M0.8 quality review I3: ``_hash_uid`` is duplicated in
+    ``routes/_common.py`` and ``kg_worker.py`` pending M0.11's
+    ``logging_utils`` consolidation. The two copies MUST produce
+    identical hashes for the same ``(user_id, salt)`` pair —
+    operators correlate log lines across routes and the worker by
+    the hash. A silent drift (someone edits one copy but not the
+    other) would break cross-route correlation without any runtime
+    failure.
+
+    This test exists for exactly that: if the copies ever
+    disagree, it fails red. When M0.11 consolidates into
+    ``logging_utils``, this test retires.
+    """
+    from mempalace_sidecar.kg_worker import _hash_uid as kg_hash_uid
+    from mempalace_sidecar.routes._common import _hash_uid as common_hash_uid
+
+    # A few representative (user_id, salt) pairs. Any divergence
+    # between the two functions fails at least one.
+    cases = [
+        ("alice", "pepper"),
+        ("", ""),
+        ("user-with-unicode-ø", "salt-with-!@#"),
+        ("a" * 128, "s" * 16),
+    ]
+    for user_id, salt in cases:
+        assert kg_hash_uid(user_id, salt) == common_hash_uid(user_id, salt), (
+            f"_hash_uid drift detected for ({user_id!r}, {salt!r}): "
+            f"kg_worker={kg_hash_uid(user_id, salt)!r} vs "
+            f"_common={common_hash_uid(user_id, salt)!r}"
+        )
+
+
 async def test_worker_inner_handler_propagates_cancelled_error(
     tmp_path: Path,
 ):
