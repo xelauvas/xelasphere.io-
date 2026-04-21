@@ -94,6 +94,30 @@ async def test_registry_eviction_bounds_backend_cache(tmp_path: Path) -> None:
             "on eviction"
         )
         assert str(e2.path) in _DEFAULT_BACKEND._clients
+
+        # Strong-presence assertion (added M0.8 from chromadb 1.5.8
+        # client-close drift discovery). The absence check above
+        # ("alice_path not in _clients") passes both before and after
+        # PalaceHandle.close calls chromadb's explicit client.close() —
+        # popping-without-closing still removes the dict key. What the
+        # absence check CANNOT catch is a stale rust-side sqlite lock
+        # keeping the on-disk db read-only on the next open.
+        #
+        # This assertion closes that gap: re-open alice's palace after
+        # eviction and verify a subsequent write succeeds (no
+        # SQLITE_READONLY_DBMOVED, error code 1032). If the eviction
+        # path ever regresses to "pop without close," this write fails
+        # red. See deltas "2026-04-21 M0.8 chromadb close-before-pop".
+        e3 = await r.open("alice")
+        assert str(e3.path) in _DEFAULT_BACKEND._clients
+        e3.handle.add_drawer(
+            turn_id="post-eviction-write",
+            session_id="s",
+            pair_id="p",
+            role="user",
+            text="reopen after eviction must accept writes",
+            ts=1.0,
+        )
     finally:
         await r.close_all()
 
