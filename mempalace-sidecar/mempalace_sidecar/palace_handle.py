@@ -199,6 +199,42 @@ class PalaceHandle:
         # client is undefined behavior.
         _maybe_migrate_chromadb_format(palace_path)
 
+        # Sidecar schema migration (spec §5.6 dimension 3, M0.9).
+        #
+        # **Ordering is load-bearing (spec §5.6 amendment
+        # 2026-04-21).** Dim1 (above) runs BEFORE dim3 (here) because
+        # dim1 modifies chroma.sqlite3 in place and dim3 uses
+        # copy_function=os.link (hardlinks). If dim1 ran after dim3,
+        # the in-place write would propagate through the hardlink to
+        # the .replaced_<ts> snapshot, breaking rollback integrity.
+        # Future open-path additions that modify palace files in
+        # place MUST slot before this apply_migrations call, or use
+        # copy-on-write semantics (check os.stat(f).st_nlink; if > 1,
+        # unlink before write).
+        from mempalace_sidecar.migrations import ALL_MIGRATIONS
+        from mempalace_sidecar.migrations.runner import apply_migrations
+
+        current_v = int(meta.get("schema_version", 0))
+        if current_v > CURRENT_SCHEMA_VERSION:
+            # Spec §5.6 step 2 — schema too new for this sidecar.
+            # Route handlers map RuntimeError → HTTP 500 via
+            # FastAPI's default exception handling.
+            raise RuntimeError(
+                f"palace at {palace_path} has schema_version="
+                f"{current_v} > sidecar CURRENT_SCHEMA_VERSION="
+                f"{CURRENT_SCHEMA_VERSION}; sidecar too old"
+            )
+        if current_v < CURRENT_SCHEMA_VERSION:
+            apply_migrations(
+                palace_path,
+                target_version=CURRENT_SCHEMA_VERSION,
+                migrations=ALL_MIGRATIONS,
+            )
+            # Re-read meta.json — the runner rewrote it during the
+            # migration's finalise step and the in-memory dict above
+            # is now stale.
+            meta = json.loads(meta_path.read_text())
+
         # Open or create the drawers collection. get_collection(create=True)
         # is the right entry point — it populates _DEFAULT_BACKEND._clients
         # which close() later has to pop.

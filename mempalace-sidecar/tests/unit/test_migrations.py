@@ -443,19 +443,32 @@ def test_dim1_does_not_corrupt_replaced_snapshot_via_hardlink(
 # ---------------------------------------------------------------------------
 
 
-def test_palace_handle_open_at_current_schema_does_not_touch_disk(
-    tmp_path: Path,
+def test_palace_handle_open_at_current_schema_does_not_call_apply_migrations(
+    tmp_path: Path, monkeypatch,
 ) -> None:
-    """Belt-and-suspenders for the ``< CURRENT_SCHEMA_VERSION`` guard
-    in PalaceHandle.open's wire-up (deviation #1). A refactor that
+    """Strong version of the guard-regression check (originally
+    drafted as ``does_not_touch_disk``; strengthened per M0.9
+    Stage 3 to verify INTENT rather than absence-of-symptoms).
+
+    The ``< CURRENT_SCHEMA_VERSION`` guard in ``PalaceHandle.open``
+    (deviation #1) must skip ``apply_migrations`` entirely when the
+    palace is already at the current schema. A refactor that
     ran ``apply_migrations`` unconditionally would create
     .migrating/ + .replaced_<ts>/ dirs + rewrite meta.json on every
-    open for a current-schema palace — churn + snapshot pollution
-    for no benefit.
+    open for a current-schema palace — churn + snapshot pollution.
 
-    Test opens a v1 palace (current schema), asserts no sibling
-    dirs created and meta.json mtime unchanged.
+    Monkeypatches ``apply_migrations`` to raise if called, then
+    opens a v1 palace (current schema) via ``PalaceHandle.open``
+    directly. The open MUST NOT raise — which is only possible
+    when the guard correctly skipped ``apply_migrations``.
+
+    Strictly stronger than the original ``does_not_touch_disk``
+    formulation: that version passed vacuously at RED (no
+    wire-up = no disk-touching); this version verifies the intent
+    (guard is present AND skips the call) rather than the absence
+    of symptoms.
     """
+    from mempalace_sidecar.migrations import runner
     from mempalace_sidecar.palace_handle import (
         CURRENT_SCHEMA_VERSION,
         PalaceHandle,
@@ -466,17 +479,15 @@ def test_palace_handle_open_at_current_schema_does_not_touch_disk(
     (palace_dir / "meta.json").write_text(
         json.dumps({"schema_version": CURRENT_SCHEMA_VERSION})
     )
-    original_mtime = (palace_dir / "meta.json").stat().st_mtime
-    # Small wait so mtime-change detection would actually register
-    # if it happened.
-    time.sleep(0.01)
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError(
+            "apply_migrations was called for a palace already at "
+            "CURRENT_SCHEMA_VERSION; the < guard in PalaceHandle.open "
+            "must skip it to avoid churn + snapshot pollution"
+        )
+
+    monkeypatch.setattr(runner, "apply_migrations", _fail_if_called)
 
     handle = PalaceHandle.open(palace_dir)
-    try:
-        # No sibling dirs.
-        assert not (tmp_path / "alice.migrating").exists()
-        assert not list(tmp_path.glob("alice.replaced_*"))
-        # meta.json mtime unchanged.
-        assert (palace_dir / "meta.json").stat().st_mtime == original_mtime
-    finally:
-        handle.close()
+    handle.close()

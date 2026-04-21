@@ -109,6 +109,26 @@ async def _lifespan(app):
     app.state.audit = AuditLog(settings.data_dir / "audit.sqlite")
     await app.state.audit.ensure()
 
+    # Step 2c: reap stale migration artifacts (plan M0.9, spec §5.6).
+    # Clean up .replaced_<ts> dirs older than 24h + orphan .migrating
+    # dirs where the primary still exists. Skips .migrating where
+    # primary is missing — those are recovery-in-progress states that
+    # PalaceHandle.open's _recover_if_interrupted will promote on
+    # next open for that user.
+    #
+    # **Order is load-bearing:** runs BEFORE PalaceRegistry
+    # construction below so there's no interaction with in-memory
+    # palace state; reap_stale is pure filesystem, no registry
+    # coupling. Wrapped in to_thread because it walks the palaces
+    # directory (sync) which can be slow under large palace counts
+    # — acceptable at v1 scale (<5k users); monitor at M1 scale
+    # review (could push startup into minutes for 10k+ users).
+    from mempalace_sidecar.migrations.runner import reap_stale
+
+    palaces_dir = settings.data_dir / "palaces"
+    if palaces_dir.exists():
+        await _asyncio.to_thread(reap_stale, palaces_dir, 24 * 3600)
+
     # Step 3: KG queue + worker (plan M0.7).
     # TODO(M0.16-ish): swap NullExtractor for a real LLM-backed
     # extractor driven by ``settings.kg_llm_provider`` (ollama /

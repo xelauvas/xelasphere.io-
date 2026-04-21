@@ -50,6 +50,22 @@ class Migration(ABC):
         The migration MUST NOT update ``meta.json``'s
         ``schema_version`` field itself — the runner writes the final
         meta.json once all migrations in the chain have applied.
+
+        **Hardlink-snapshot-integrity (spec §5.6 amendment
+        2026-04-21).** The runner creates ``.migrating`` via
+        ``copy_function=os.link`` when src and dst are on the same
+        filesystem. Files in ``.migrating`` therefore share inodes
+        with files in the primary directory — any in-place write
+        propagates through the hardlink to primary (which becomes
+        ``.replaced_<ts>`` after the first rename), silently
+        corrupting the snapshot. **Migration authors: if your
+        ``apply`` modifies an EXISTING file**, check
+        ``os.stat(file).st_nlink > 1`` and unlink the file first
+        (or use rename-over semantics) to break the hardlink
+        before writing. New files created in ``.migrating`` have
+        st_nlink=1 automatically, no unlink needed. The runner
+        itself follows this discipline for its ``meta.json``
+        finalise write.
         """
         ...
 
