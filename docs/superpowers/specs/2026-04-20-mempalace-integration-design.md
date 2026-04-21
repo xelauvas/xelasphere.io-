@@ -489,6 +489,25 @@ Single `asyncio` worker. Every 30s (or signal from ingest): pulls batches, runs 
 4. On crash: leftover `*.migrating`/`*.replaced_*` older than 24h reaped on next open. The original `U/` directory is never mutated until verification passes — rollback is always `rm -rf U.migrating/`.
 5. Schema too new → refuse with 500, "sidecar too old."
 
+**Hardlink-snapshot-integrity invariant (amendment 2026-04-21, M0.9).** `apply_migrations` uses `copytree(..., copy_function=os.link)` for same-filesystem efficiency. After the sibling rename, the primary palace and its `.replaced_<ts>` snapshot share inodes for every file that wasn't overwritten during migration. **Linux does NOT implement copy-on-write for hardlinked files:** any in-place modification writes through the hardlink, silently mutating the snapshot.
+
+**Rule.** Before any in-place modification to a palace file (including but not limited to: dim1 chromadb format migration via `_maybe_migrate_chromadb_format`; the runner's own `meta.json` finalise write; future SQLite VACUUM, compaction, or GC operations), verify `os.stat(file).st_nlink == 1`. If `> 1`, the file is hardlinked to a `.replaced_<ts>` snapshot. Options:
+
+- **(a) Unlink + fresh write.** `file.unlink()` removes the primary-side hardlink (snapshot's copy survives with `st_nlink` decremented by one), then create a fresh file via `write_text` / `open(..., 'w')` / etc. Simplest; works for small files. Used by the runner for its meta.json finalise.
+- **(b) Write-to-temp + rename-over.** Textbook copy-on-write: write new content to a temp file in the same directory, then `os.rename(temp, target)` atomically replaces. Breaks the hardlink via the rename. Appropriate when atomic replacement matters (partial writes on crash must not be visible).
+- **(c) Defer.** If the modification isn't urgent, wait until `reap_stale` has cleaned the `.replaced_<ts>` snapshot (default 24h after migration). At that point `st_nlink` drops to 1 automatically and in-place writes are safe.
+
+**Teeth-bearing tests:**
+- `test_atomic_rename_happy_path` — regression catch for the runner's own meta.json write; asserts `.replaced_<ts>/meta.json` preserves pre-migration `schema_version`.
+- `test_hardlink_rename_shares_inodes` — verifies inode identity between primary and `.replaced_<ts>` post-rename; without this, the `st_nlink > 1` guard wouldn't fire.
+- `test_dim1_does_not_corrupt_replaced_snapshot_via_hardlink` — verifies the invariant class applies beyond the runner (demonstrates the reverse-order bug the sibling-rename sequence explicitly prevents when dim1 runs before apply_migrations).
+
+**Known v1 limitation.** The st_nlink guard covers known callers (dim1's chromadb migration; the runner's meta.json finalise). However, **post-migration writes to primary files by chromadb / turns.sqlite / kg.sqlite happen inside the library/sidecar app-flow code**, not inside migration-time code paths — those writes have NO st_nlink guard and WILL propagate through hardlinks to `.replaced_<ts>` during the 24h retention window. Implication: `.replaced_<ts>` is a valid rollback target ONLY immediately after migration (before any primary-side write). Normal operations gradually corrupt the snapshot via hardlinks. The 24h retention is therefore a disaster-window *visibility* mechanism (operator can see what state existed at migration time), NOT a guaranteed rollback mechanism.
+
+A future milestone (M1 candidate) may add a post-migration "seal" step that iterates primary/ and breaks all remaining hardlinks via copy-over. Cost: ~100MB duplicate disk + ~500ms-2s wall time per migration for typical palaces. Benefit: true 24h rollback integrity. Decision deferred to M1 scope review.
+
+Discovered via M0.9 Stage 3 GREEN when `test_atomic_rename_happy_path` caught plan-sketch code writing `meta.json` through the hardlink. See deltas entry `2026-04-21 M0.9 runner meta.json write-through-hardlink bug` for the full trail.
+
 ### 5.7 Shutdown protocol (SIGTERM)
 
 1. FastAPI lifespan stops accepting new connections.
