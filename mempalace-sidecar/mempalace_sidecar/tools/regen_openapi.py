@@ -56,23 +56,61 @@ def _snapshot_path() -> Path:
     )
 
 
-def regenerate() -> Path:
-    """Write the current OpenAPI snapshot and return its path."""
-    with tempfile.TemporaryDirectory() as tmp:
-        os.environ.setdefault("MEMPALACE_TOKEN", "t" * 32)
-        os.environ.setdefault("MEMPALACE_DATA_DIR", tmp)
-        os.environ.setdefault("MEMPALACE_USER_ID_HASH_SALT", "x" * 16)
-        # Deferred import so env vars land before Settings parse.
-        from mempalace_sidecar.main import create_app
+_ENV_DEFAULTS = {
+    "MEMPALACE_TOKEN": "t" * 32,
+    "MEMPALACE_DATA_DIR": None,  # filled in from TemporaryDirectory
+    "MEMPALACE_USER_ID_HASH_SALT": "x" * 16,
+}
 
-        app = create_app()
-        schema = app.openapi()
+
+def regenerate() -> Path:
+    """Write the current OpenAPI snapshot and return its path.
+
+    Env-var restoration: the three MEMPALACE_* vars are
+    save/restored around the setdefault block so importing
+    ``regenerate()`` from a long-lived process (tests, notebooks)
+    doesn't leak a dev-token / dev-salt / now-cleaned-up-tempdir
+    ``MEMPALACE_DATA_DIR`` into the caller's environment. CLI
+    invocation via ``__main__`` drops the env on process exit
+    regardless; the restoration matters only for the import path.
+    """
+    saved: dict[str, str | None] = {
+        key: os.environ.get(key) for key in _ENV_DEFAULTS
+    }
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ.setdefault("MEMPALACE_TOKEN", _ENV_DEFAULTS["MEMPALACE_TOKEN"])
+            os.environ.setdefault("MEMPALACE_DATA_DIR", tmp)
+            os.environ.setdefault("MEMPALACE_USER_ID_HASH_SALT", _ENV_DEFAULTS["MEMPALACE_USER_ID_HASH_SALT"])
+            # Deferred import so env vars land before Settings parse.
+            from mempalace_sidecar.main import create_app
+
+            app = create_app()
+            schema = app.openapi()
+    finally:
+        # Restore: if the key wasn't set before, remove it; if it
+        # was set to a prior value, restore it. Preserves
+        # operator-env transparency.
+        for key, prior in saved.items():
+            if prior is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = prior
 
     path = _snapshot_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     # Trailing newline so the file plays nicely with editors that
     # auto-add one on save (no spurious diff noise).
-    path.write_text(json.dumps(schema, indent=2, sort_keys=True) + "\n")
+    try:
+        path.write_text(json.dumps(schema, indent=2, sort_keys=True) + "\n")
+    except OSError as exc:
+        # Disk full / permissions / read-only FS — surface a clean
+        # message so the operator doesn't have to parse a raw
+        # traceback to understand the failure.
+        raise RuntimeError(
+            f"failed to write OpenAPI snapshot to {path}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
     return path
 
 

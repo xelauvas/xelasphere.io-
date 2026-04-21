@@ -101,7 +101,22 @@ def test_openapi_schema_matches_snapshot(monkeypatch, tmp_path: Path) -> None:
             "commits the output."
         )
 
-    expected = json.loads(snap_path.read_text())
+    # Corrupted / unreadable snapshot (merge-conflict markers,
+    # truncated file, encoding mishap) surfaces with the same
+    # "run the regen tool" remediation as any other drift — future
+    # contributor shouldn't have to infer the fix from a raw
+    # JSONDecodeError.
+    try:
+        expected = json.loads(snap_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        pytest.fail(
+            f"OpenAPI snapshot at {snap_path} is unreadable "
+            f"({type(exc).__name__}: {exc}). If the file has merge "
+            "markers, truncation, or other corruption, run "
+            "`python -m mempalace_sidecar.tools.regen_openapi` "
+            "to regenerate it cleanly from the current app, then "
+            "commit the result."
+        )
 
     if current == expected:
         return
