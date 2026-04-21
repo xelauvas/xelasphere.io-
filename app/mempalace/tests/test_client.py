@@ -13,6 +13,7 @@ body (D1-D7). Each test below documents which deviation(s) it exercises.
 
 from __future__ import annotations
 
+import json
 import time
 from unittest.mock import patch
 
@@ -44,6 +45,9 @@ async def test_client_posts_json_ok_on_200(
     assert result == {"ok": True}
     assert client.state == CircuitState.CLOSED
     assert client._consecutive_failures == 0
+    # Quality I2: auth surface gated — X-Sidecar-Token must be on every request.
+    assert wrap.last_request is not None
+    assert wrap.last_request.headers.get("X-Sidecar-Token") == "t" * 32
 
 
 @pytest.mark.asyncio
@@ -295,20 +299,22 @@ async def test_client_delete_json_sends_delete_with_body(
 ):
     """Plan fix #6: real DELETE with body, not X-HTTP-Method-Override hack.
 
-    Sidecar-side route at mempalace-sidecar/.../lifecycle.py:66-71
-    accepts DeleteRequest body on DELETE /palace/u/.
+    Sidecar-side route at mempalace-sidecar/.../lifecycle.py:66-71 accepts
+    DeleteRequest body on DELETE /palace/u/{user_id}. Body fields match the
+    real sidecar contract at mempalace-sidecar/.../schemas.py:119-121
+    (requested_by + reason) per Spec M2 fold — test now documents the
+    actual payload shape future readers will need.
     """
-    import json
-
     wrap = capturing_mock_transport(
         lambda req: httpx.Response(200, json={"deleted": True})
     )
     client = await async_sidecar_client(transport=wrap.transport)
-    result = await client.delete_json("/palace/u/", {"user_id": "x"})
+    body = {"requested_by": "flusher-test", "reason": "user-initiated"}
+    result = await client.delete_json("/palace/u/", body)
     assert result == {"deleted": True}
     assert wrap.last_request is not None
     assert wrap.last_request.method == "DELETE"
-    assert json.loads(wrap.last_request.content) == {"user_id": "x"}
+    assert json.loads(wrap.last_request.content) == body
 
 
 @pytest.mark.asyncio
@@ -329,6 +335,25 @@ async def test_client_non_empty_malformed_json_on_200_treated_as_transient_retry
         await client.post_json("/palace/u/search", {"query": "x"})
     assert len(wrap.requests) == 3
     assert client._consecutive_failures == 1
+
+
+@pytest.mark.asyncio
+async def test_aclose_is_idempotent(async_sidecar_client):
+    """Quality I1: aclose() called twice must not raise (M0.3 convention).
+
+    Teeth-bearing for the _closed-flag guard. A regression that dropped the
+    guard would produce either a silent double-close of httpx.AsyncClient
+    (tolerated on some httpx versions) OR a RuntimeError/AttributeError
+    depending on internal state — both of which would manifest as fixture
+    teardown failures on tests that manually aclose. Without this test the
+    failure mode surfaces only under the specific pattern "test aclose + fixture
+    aclose," which is cross-cutting and easy to misattribute.
+    """
+    client = await async_sidecar_client()
+    await client.aclose()
+    assert client._closed is True
+    await client.aclose()  # must not raise
+    assert client._closed is True
 
 
 @pytest.mark.asyncio
@@ -365,11 +390,19 @@ async def test_chaos_transport_fails_every_n_calls_deterministic():
 
 
 def test_sync_client_posts_json_ok_on_200(sync_sidecar_client):
-    transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"ok": True}))
+    captured: list = []
+
+    def handler(req):
+        captured.append(req)
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
     client = sync_sidecar_client(transport=transport)
     result = client.post_json("/palace/u/search", {"query": "x"})
     assert result == {"ok": True}
     assert client._consecutive_failures == 0
+    # Quality I2: auth surface gated on sync path too.
+    assert captured[-1].headers.get("X-Sidecar-Token") == "t" * 32
 
 
 def test_sync_client_retries_on_5xx_then_gives_up(sync_sidecar_client):
@@ -435,3 +468,17 @@ def test_sync_client_reprobe_window_requires_N_failures_to_retrip(sync_sidecar_c
     with pytest.raises(httpx.HTTPStatusError):
         client.post_json("/palace/u/search", {"query": "x"})
     assert client.state == CircuitState.OPEN
+
+
+def test_sync_close_is_idempotent(sync_sidecar_client):
+    """Quality I1: close() called twice must not raise (M0.3 convention).
+
+    Sync mirror of test_aclose_is_idempotent. Same rationale — the _closed
+    guard on sync path must pass teeth-bearing verification; regression
+    produces teardown-time failures that are cross-cutting to attribute.
+    """
+    client = sync_sidecar_client()
+    client.close()
+    assert client._closed is True
+    client.close()  # must not raise
+    assert client._closed is True

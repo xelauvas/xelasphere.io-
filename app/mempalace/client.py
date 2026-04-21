@@ -126,7 +126,6 @@ class SidecarClient:
         breaker_cooldown_s: float = 30.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self._socket_path = socket_path
         self._token = token
         self._timeout_s = timeout_s
         self._max_retries = max_retries
@@ -284,7 +283,6 @@ class SyncSidecarClient:
         breaker_cooldown_s: float = 30.0,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
-        self._socket_path = socket_path
         self._token = token
         self._timeout_s = timeout_s
         self._max_retries = max_retries
