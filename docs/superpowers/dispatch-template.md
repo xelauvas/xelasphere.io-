@@ -424,12 +424,35 @@ Only then dispatch M0.N+1.
 
 ## Part 4 — When you execute in main session instead of a subagent
 
-Sometimes subagent dispatch isn't the right call:
+**Default mode for implementer dispatch (post-M0.7): main session, not
+subagent.** This is the revised default based on M0.6 + M0.7 data —
+see deltas "2026-04-21 M0.7 subagent dispatch architecture — read/write
+split validated." Three data points confirmed a clean pattern: subagent
+dispatches that need to mutate the filesystem (Write / Edit / Bash-for-
+commit) hit sandbox permission denials; subagent dispatches that only
+read (Bash-for-git-log / Read / Grep) succeed reliably.
 
-- Subagent hit a structural block (the M0.6 first-attempt case — should
-  be rare after the Bash-preamble fix, but not impossible).
-- The remaining work is a mechanical execution of a plan that's already
-  been fully specified (no context-isolation benefit left to protect).
+**The hybrid pattern that works for this project:**
+
+| Task type | Dispatch mode |
+|---|---|
+| Exploration / research / codebase analysis | Subagent |
+| Spec-compliance review | Subagent |
+| Code-quality review | Subagent |
+| Implementer dispatch (write code, commit) | Main session |
+| One-off read-heavy questions | Subagent |
+
+Main-session implementer execution is not a fallback anymore — it's
+the primary mode. The review-pair pattern in Part 3 stays fully
+subagent-driven; that's where the author-isolation value lives and
+it's empirically reliable.
+
+Other reasons main-session execution may still be appropriate even if
+subagent dispatch becomes viable again:
+
+- The remaining work is a mechanical execution of a plan that's
+  already been fully specified (no context-isolation benefit left to
+  protect).
 - Main session has the cache-hot context and re-briefing a subagent
   costs more than executing.
 
@@ -499,6 +522,17 @@ future edits can see the forcing function:
   discipline prevents commit trickle.
 - **Deltas file.** M0.1 - M0.2; drift-log discipline separated from plan
   freeze.
+- **Main-session default for implementer dispatch.** M0.6 + M0.7.
+  Three data points (two implementer failures + three reviewer
+  successes) confirmed the read/write split: subagent sandbox denies
+  mutation operations but permits reads + review. Template default
+  flipped post-M0.7.
+- **Cross-reviewer severity reconciliation.** M0.7 review pair:
+  spec-reviewer flagged a log-line as Important (§8.4 spec "always"
+  language); quality-reviewer flagged same line as Minor (framed as
+  comment clarity). Rule: when two reviewers disagree on severity of
+  the same finding, the spec-reviewer's classification wins for
+  spec-compliance questions.
 
 This template itself is expected to evolve. After M0.7 lands, reflect on
 what the subagent tripped over, what you had to re-explain, what you
