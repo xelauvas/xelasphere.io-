@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from mempalace_sidecar.auth import TokenAuthMiddleware
 from mempalace_sidecar.config import Settings
+from mempalace_sidecar.logging_middleware import StructuredLoggingMiddleware
 from mempalace_sidecar.routes import lifecycle as lifecycle_router
 from mempalace_sidecar.routes import ops
 from mempalace_sidecar.routes import palace as palace_router
@@ -191,8 +192,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # middleware before the lifespan finishes.
     app.state.in_flight = InFlightCounter()
     app.state.accepting = True
+    # Middleware order (Starlette: last-added runs first / outermost):
+    #   StructuredLoggingMiddleware → InFlightCounterMiddleware →
+    #   TokenAuthMiddleware → route. Logging wraps everything so it
+    #   captures latency including auth failures, and shutdown's
+    #   InFlightCounter sits between logging and auth so unauthorised
+    #   requests never increment the drain counter.
     app.add_middleware(TokenAuthMiddleware, expected_token=settings.token)
     app.add_middleware(InFlightCounterMiddleware, counter=app.state.in_flight)
+    app.add_middleware(
+        StructuredLoggingMiddleware, salt=settings.user_id_hash_salt
+    )
     app.include_router(ops.router)
     app.include_router(palace_router.router)
     app.include_router(lifecycle_router.router)
