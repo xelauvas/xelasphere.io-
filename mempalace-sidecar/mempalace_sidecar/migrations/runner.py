@@ -45,6 +45,7 @@ inode. Future in-place operations must check ``os.stat(f).st_nlink``
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import time
@@ -52,6 +53,9 @@ from pathlib import Path
 from typing import Iterable
 
 from mempalace_sidecar.migrations._base import Migration
+
+
+log = logging.getLogger(__name__)
 
 
 def current_version(palace_dir: Path) -> int:
@@ -218,6 +222,23 @@ def apply_migrations(
         raise
 
 
+def _rmtree_warn(func, path, exception) -> None:
+    """``shutil.rmtree(onexc=...)`` callback — logs the failing
+    operation + path + exception so journald surfaces stuck
+    ``.replaced_*`` dirs instead of silently leaving bytes behind.
+
+    Signature matches Python 3.12+ ``onexc``: ``(function, path,
+    exception_instance)``. Prior call sites passed
+    ``ignore_errors=True`` which swallowed every rmtree failure
+    without a trace — a permission glitch or a stuck filehandle
+    on ``.replaced_<ts>`` would accumulate disk forever.
+    """
+    log.warning(
+        "reap_stale: failed to remove %s via %s: %s",
+        path, func.__name__, exception,
+    )
+
+
 def reap_stale(palaces_dir: Path, max_age_sec: int = 24 * 3600) -> int:
     """Reap ``.replaced_*`` dirs and orphan ``.migrating`` dirs
     older than ``max_age_sec``.
@@ -230,7 +251,13 @@ def reap_stale(palaces_dir: Path, max_age_sec: int = 24 * 3600) -> int:
     data before recovery ran. Rule encoded: refuse to delete
     ``<U>.migrating`` if ``<U>`` does not exist.
 
-    Returns the count of directories reaped.
+    Errors during the rmtree itself are routed through
+    ``_rmtree_warn`` (spec: never swallow silently); the sweep
+    continues to the next candidate rather than aborting.
+
+    Returns the count of directories whose ``rmtree`` was
+    invoked (includes partial-failure cases — the dir may still
+    exist on disk if ``_rmtree_warn`` fired mid-walk).
     """
     n = 0
     now = time.time()
@@ -248,7 +275,7 @@ def reap_stale(palaces_dir: Path, max_age_sec: int = 24 * 3600) -> int:
         try:
             age = now - child.stat().st_mtime
             if age > max_age_sec:
-                shutil.rmtree(child, ignore_errors=True)
+                shutil.rmtree(child, onexc=_rmtree_warn)
                 n += 1
         except FileNotFoundError:
             continue
