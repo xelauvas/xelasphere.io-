@@ -307,14 +307,28 @@ class PalaceHandle:
         # for now.
         client = _DEFAULT_BACKEND._clients.pop(str(self.palace_path), None)
         if client is not None:
-            try:
-                client.close()
-            except Exception as e:  # pragma: no cover - defensive
-                log.warning(
-                    "chromadb client.close() raised during "
-                    "PalaceHandle.close: %s",
-                    e,
-                )
+            # ``hasattr`` guard is forward-compat: if a future chromadb
+            # version removes or renames ``close()``, we silently fall
+            # back to the pre-M0.8 GC-only lifecycle rather than
+            # log-spamming every close path. This matches the behavior
+            # on chromadb 0.6.x where ``client.close()`` didn't exist
+            # and the pop-and-GC pattern was sufficient.
+            if hasattr(client, "close"):
+                try:
+                    client.close()
+                except Exception as e:
+                    # Unexpected: ``close()`` exists but raised. Log
+                    # at error level with exc_info so an operator can
+                    # file a chromadb issue with a useful traceback.
+                    log.error(
+                        "chromadb client.close() raised during "
+                        "PalaceHandle.close: %s",
+                        e, exc_info=True,
+                    )
+            # else: no ``close`` method (older chromadb or hypothetical
+            # future rename). Silent — GC fallback is the pre-M0.8
+            # behavior that worked fine at that version; log-spamming
+            # on every close would be operational noise.
 
         self._closed = True
 

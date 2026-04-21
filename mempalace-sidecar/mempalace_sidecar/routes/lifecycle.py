@@ -152,7 +152,14 @@ async def delete_palace(
             before_bytes = await asyncio.to_thread(
                 _dir_size_bytes, entry.path
             )
-            entry.handle.close()
+            # handle.close() is synchronous (sqlite .close(), chromadb
+            # client.close()); wrap in to_thread for event-loop
+            # consistency with the M0.4 ingest discipline ("any
+            # disk-touching synchronous library call goes through
+            # to_thread"). MUST stay inside writer_lock — moving it
+            # outside would let another coroutine reopen the palace
+            # mid-teardown.
+            await asyncio.to_thread(entry.handle.close)
             await registry.evict(user_id)
 
             # Phase B: atomic rename + audit (shielded) + rmtree.
