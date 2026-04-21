@@ -217,9 +217,21 @@ orchestrator:
       system_prompt.append(wakeup.to_<provider>(ctx))
 ```
 
-Latency budgets:
-- Hot palace: p95 ≤ 150ms target, 500ms hard cap.
-- Cold palace (first open after idle): up to 2s. First turn after idle gets no memory injection — acknowledged UX cost. Mitigated by pre-warming.
+Latency budgets (M0.11 measured-baseline × 1.3 formulas; pre-M0.11 hardcoded-aesthetic numbers replaced per deltas "M0.5 latency anchor" and "M0.11 spec §4.2 amendment"):
+
+| Metric | Budget formula | Current target | Hard cap | Baseline source |
+|---|---|---|---|---|
+| Hot-palace wake-up p95 | `measured × 1.3` | ~140ms | 500ms | 106ms single-wake M0.5 |
+| Cold-palace open p95 (per open) | `measured × 1.3` | ~155ms | 2s | 119ms @ N=8 concurrent M0.11 |
+| Ingest per-drawer p95 | `measured × 1.3` | ~135ms | 500ms | 104ms M0.5 |
+| Semantic search p95 | `measured × 1.3` | ~125ms | 500ms | 95ms M0.5 |
+
+**Raw baselines** (anchor, date-stamped; hardware: AMD EPYC-Rome VPS, chromadb 1.5.8 + singleton + intra_op=1, 300-drawer palace unless noted):
+- 2026-04-21 M0.5 + M0.11 suite: wake-up single 106ms; wake-up 4-concurrent 162ms; cold-open p95 per-open 119ms at N=8; ingest per-drawer 104ms; semantic_search 95ms.
+
+**Re-anchor rule.** If any measured baseline drifts by more than 10% from the numbers above (either direction), the `× 1.3` target re-anchors, the raw baseline updates, and a deltas entry captures the re-anchor with new measurement context. The formula insulates the targets from hardware migration and library-version shifts that would otherwise age hardcoded milliseconds ungracefully.
+
+Cold-palace UX note: first turn after idle gets no memory injection — acknowledged cost. Mitigated by pre-warming.
 
 **Pre-warming:** WebSocket open or first HTTP session-start fires `POST /palace/{uid}/wake-up?warmup=true`. Fire-and-forget, hydrates the palace handle before the first real turn.
 

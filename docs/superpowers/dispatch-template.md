@@ -663,37 +663,68 @@ future edits can see the forcing function:
   despite migrations/shutdown/metrics complexity), revisit whether
   spec-reviewer dispatch still earns its cost. Don't cut yet.
 
-- **Plan sketches require teeth-bearing verification — "nastiest
-  reachable context" doctrine (M0.8 + M0.9 + M0.10, three-for-three
-  across orthogonal bug classes).** Plan sketches are design intent,
-  not safety-verified artifacts. Three consecutive milestones had
-  bugs in the plan code itself, each caught by a teeth-bearing test:
+- **"Nastiest reachable context" doctrine (M0.8 + M0.9 + M0.10
+  + M0.11 — five-for-five across orthogonal bug classes, layers at
+  plan-sketch AND implementation).** The invariant that defines
+  doctrine hits is NOT "plan-sketch had a wrong assumption." It
+  is: an interface behaved differently under conditions the
+  [plan-sketch OR implementation] didn't imagine, AND a
+  teeth-bearing test exercising the nastiest reachable context
+  caught it before the bug shipped. Whether the faulty assumption
+  lived in the plan-sketch or the implementation is secondary to
+  the test doing its job.
 
-    - **M0.8 (library-semantic).** chromadb close-before-pop. Spec
-      §5.3 assumed GC-sufficient close; chromadb 1.5.x requires
-      explicit `client.close()`. Caught by
-      `test_delete_then_reopen_creates_fresh_palace` — the first
-      test to exercise close-then-reopen on the same path within a
+    - **M0.8 (library-semantic, plan-sketch layer).** chromadb
+      close-before-pop. Spec §5.3 assumed GC-sufficient close;
+      chromadb 1.5.x requires explicit `client.close()`. Caught by
+      `test_delete_then_reopen_creates_fresh_palace` — first test
+      to exercise close-then-reopen on the same path within a
       process lifetime.
-    - **M0.9 (filesystem-semantic).** Runner's meta.json
-      write-through-hardlink. Plan code at line 2784 assumed
-      `write_text` was COW; Linux truncates the shared inode and
-      propagates through every hardlink. Caught by
+    - **M0.9 (filesystem-semantic, plan-sketch layer).** Runner's
+      meta.json write-through-hardlink. Plan code at line 2784
+      assumed `write_text` was COW; Linux truncates the shared
+      inode and propagates through every hardlink. Caught by
       `test_atomic_rename_happy_path` asserting
       `.replaced_<ts>/meta.json` preserved pre-migration
       `schema_version`.
-    - **M0.10 (runtime-semantic).** Shutdown gate read
-      `request.app.state.accepting`; `starlette.Request.app` is a
-      property that raises `KeyError` on scopes without an `"app"`
-      entry. Caught by `test_middleware_counter_sequence_under_exception`
-      (unit) with its deliberately-minimal ASGI scope. Integration
-      tests would never have fired it — scope["app"] is always
-      populated in real-app flow.
+    - **M0.10 (runtime-semantic, plan-sketch layer).** Shutdown
+      gate read `request.app.state.accepting`;
+      `starlette.Request.app` is a property that raises `KeyError`
+      on scopes without an `"app"` entry. Caught by
+      `test_middleware_counter_sequence_under_exception` (unit)
+      with its deliberately-minimal ASGI scope.
+    - **M0.11 hit #1 (framework-semantic, implementation layer).**
+      Ingest route's bare `raise` after bumping the error counter
+      propagated through Starlette's `BaseHTTPMiddleware` in a way
+      that bypasses `ServerErrorMiddleware`'s 500-conversion —
+      known Starlette quirk where exceptions escape through the
+      `call_next` task boundary. Caught by
+      `test_ingest_increments_error_on_raise` at `assert r.status_code
+      == 500`. Fix: `raise HTTPException(500) from exc`.
+    - **M0.11 hit #2 (spec-intent-semantic, implementation layer).**
+      Structured-log middleware set `route` field to
+      `request.url.path`, which contains raw user_id verbatim —
+      a sibling-field leak despite the `user_id` field itself
+      being hashed correctly. Caught by
+      `test_structured_log_schema`'s `assert raw_user not in
+      payload` check. Fix: `_normalize_route(path)` replaces the
+      user_id segment with `{user_id}` template.
 
-  Three consecutive milestones, three structurally orthogonal bug
-  classes (library / filesystem / runtime). Rules out "narrow
-  domain luck" — the mechanism generalises across interface
-  categories.
+  Five hits over four milestones, structurally orthogonal bug
+  classes (library / filesystem / runtime / framework / spec-intent),
+  two-layer distribution (three plan-sketch, two implementation).
+  Rules out both "narrow domain luck" AND "plan-sketch-specific
+  failure mode" — the mechanism generalises across interface
+  categories AND across where-the-assumption-lives.
+
+  **The accounting question that surfaced at M0.11 close.** Counting
+  only plan-sketch hits undercounts what the B4 checklist catches.
+  The checklist is defined at the interface/test level; an
+  implementation-layer assumption about an interface is the same
+  failure shape as a plan-sketch-layer assumption, and the same
+  defense mechanism catches it. For reflection accounting at M0.12+,
+  the honest metric is "nastiest-context tests caught something
+  that would have shipped" — not "plan-sketches had bugs."
 
   **Two layers of verification, both load-bearing, neither subsumes
   the other:**
@@ -731,10 +762,21 @@ future edits can see the forcing function:
   survives a bad day. See B4 above for the checklist form.
 
   **Forward-looking.** Every milestone with new filesystem /
-  library / runtime interaction surface (M0.11 prometheus multiproc
-  registry, M0.15 outbox WAL + fsync, M0.19 systemd socket
-  activation) will likely surface more such findings. Not failures
+  library / runtime / framework / spec-intent interaction surface
+  (M0.15 outbox WAL + fsync, M0.19 systemd socket activation, M1
+  backend evaluation) will likely continue to surface such findings,
+  at either the plan-sketch OR implementation layer. Not failures
   — the discipline working.
+
+  **Saturation-vs-regression-to-mean test (open at M0.12).** If
+  M0.12 closes with 0 doctrine hits (either layer), that's data for
+  saturation — specific interface categories covered by existing
+  tests may have exhausted their assumption-violation surface. If
+  hits continue at ~1-2 per milestone, that's regression-to-mean —
+  the defense mechanism is steadily catching a real ongoing failure
+  rate, and "three consecutive" was not a saturation signal but a
+  sampling artifact. Either outcome informs the M1 scope review;
+  neither is a problem for the defense itself.
 
 This template itself is expected to evolve. After M0.7 lands, reflect on
 what the subagent tripped over, what you had to re-explain, what you
