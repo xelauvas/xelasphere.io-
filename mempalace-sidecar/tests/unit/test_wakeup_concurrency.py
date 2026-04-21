@@ -181,13 +181,13 @@ async def test_to_drawer_handles_recent_shape() -> None:
     """``handle.recent_drawers`` returns
     ``{"text": str, "metadata": {"ts", "wing", "room", "pair_id", ...}}``.
     The converter must extract fields from ``metadata`` nested dict."""
-    from mempalace_sidecar.wakeup import _to_drawer
+    from mempalace_sidecar.wakeup import to_drawer
 
     raw = {
         "text": "hello",
         "metadata": {"ts": 12.0, "wing": "W", "room": "R", "pair_id": "P"},
     }
-    d = _to_drawer(raw)
+    d = to_drawer(raw)
     assert d.text == "hello"
     assert d.wing == "W"
     assert d.room == "R"
@@ -199,7 +199,7 @@ async def test_to_drawer_handles_searcher_shape() -> None:
     """``handle.semantic_search`` / ``topic_search`` return library
     searcher shape: ``{"text", "wing", "room", "similarity", ...}`` —
     flat, NO ``metadata`` nesting. The converter must handle both."""
-    from mempalace_sidecar.wakeup import _to_drawer
+    from mempalace_sidecar.wakeup import to_drawer
 
     raw = {
         "text": "world",
@@ -207,7 +207,7 @@ async def test_to_drawer_handles_searcher_shape() -> None:
         "room": "R2",
         "similarity": 0.42,
     }
-    d = _to_drawer(raw)
+    d = to_drawer(raw)
     assert d.text == "world"
     assert d.wing == "W2"
     assert d.room == "R2"

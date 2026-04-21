@@ -42,7 +42,7 @@ from typing import Any, Optional
 from mempalace_sidecar.schemas import Drawer, WakeupContext, WakeupMeta
 
 
-def _to_drawer(raw: Any) -> Drawer:
+def to_drawer(raw: Any) -> Drawer:
     """Normalise the two handle-return shapes into ``schemas.Drawer``.
 
     ``PalaceHandle.recent_drawers`` and ``session_drawers`` return the
@@ -167,12 +167,12 @@ async def build_wakeup(
     total_ms = (time.monotonic() - t0) * 1000.0
     return WakeupContext(
         user_id=user_id,
-        l0_recent=[_to_drawer(r) for r in l0r],
-        l1_session=[_to_drawer(r) for r in l1r],
-        l2_topic=[_to_drawer(r) for r in l2r],
-        l3_semantic=[_to_drawer(r) for r in l3r],
+        l0_recent=[to_drawer(r) for r in l0r],
+        l1_session=[to_drawer(r) for r in l1r],
+        l2_topic=[to_drawer(r) for r in l2r],
+        l3_semantic=[to_drawer(r) for r in l3r],
         meta=WakeupMeta(hot=hot, embed_ms=0.0, total_ms=total_ms),
     )
 
 
-__all__ = ["build_wakeup", "_to_drawer"]
+__all__ = ["build_wakeup", "to_drawer"]

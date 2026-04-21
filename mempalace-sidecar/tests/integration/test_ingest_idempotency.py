@@ -36,56 +36,12 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+
+# Fixtures (app, auth, client, token) come from tests/integration/conftest.py
+# — shared across all integration test modules after the M0.6 review response
+# unified them.
 
 pytestmark = pytest.mark.integration
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def token() -> str:
-    return "t" * 32
-
-
-@pytest.fixture
-def app(monkeypatch, tmp_path: Path, token: str):
-    """Fresh sidecar app with its data_dir rooted at tmp_path.
-
-    Each test gets its own data_dir so Chroma file locks and
-    turns.sqlite state can never bleed between tests. Lifespan is driven
-    by the per-test ``client`` fixture below, so app.state.registry is
-    real.
-    """
-    monkeypatch.setenv("MEMPALACE_TOKEN", token)
-    monkeypatch.setenv("MEMPALACE_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("MEMPALACE_USER_ID_HASH_SALT", "x" * 16)
-    from mempalace_sidecar.main import create_app
-
-    return create_app()
-
-
-@pytest.fixture
-def auth(token: str) -> dict[str, str]:
-    return {"X-Sidecar-Token": token}
-
-
-@pytest.fixture
-async def client(app):
-    """AsyncClient wired to the app, with lifespan driven explicitly.
-
-    Without this, ``app.state.registry`` would never be initialised and
-    the ingest route would ``AttributeError``. Using the app's
-    ``lifespan_context`` is the documented Starlette/FastAPI way to drive
-    startup/shutdown outside uvicorn — no new deps.
-    """
-    async with app.router.lifespan_context(app):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://t") as c:
-            yield c
 
 
 # ---------------------------------------------------------------------------

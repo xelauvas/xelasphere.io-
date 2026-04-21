@@ -35,7 +35,7 @@ from mempalace_sidecar.schemas import (
     WakeupMeta,
     WakeupRequest,
 )
-from mempalace_sidecar.wakeup import _to_drawer, build_wakeup
+from mempalace_sidecar.wakeup import build_wakeup, to_drawer
 
 log = logging.getLogger(__name__)
 
@@ -290,12 +290,15 @@ async def search(
         raws = await asyncio.to_thread(
             entry.handle.search, body.query, wing=body.wing, k=body.k
         )
-    raws = raws or []
-    return [_to_drawer(r) for r in raws]
+    # PalaceHandle.search always returns a list (see palace_handle.py:458,
+    # `result.get("results", [])`). No coalesce needed; trust the handle
+    # contract. If that contract ever widens to allow None, the test
+    # suite's empty-palace case will catch it first.
+    return [to_drawer(r) for r in raws]
 
 
 @router.get("/{user_id}/drawers", response_model=DrawersPage)
-async def drawers(
+async def list_drawers(
     user_id: str,
     request: Request,
     wing: str | None = Query(None),
@@ -352,7 +355,7 @@ async def drawers(
             offset=offset,
         )
     return DrawersPage(
-        drawers=[_to_drawer(r) for r in result["drawers"]],
+        drawers=[to_drawer(r) for r in result["drawers"]],
         total=result["total"],
         next_offset=result["next_offset"],
     )

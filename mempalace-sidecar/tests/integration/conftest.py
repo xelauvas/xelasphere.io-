@@ -7,9 +7,11 @@ Fixtures:
   * ``client`` — AsyncClient wired to the app with lifespan driven
     explicitly (httpx 0.28 ASGITransport no longer drives lifespan).
 
-These mirror the ones in ``test_ingest_idempotency.py`` so M0.5 / M0.6
-tests can import them without re-declaring. ``test_ingest_idempotency``
-still declares its own copies; we can unify after M0.5 settles.
+Shared across every integration test module (ingest, wake-up, search,
+list_drawers) as of the M0.6 review response. Earlier drafts had
+``test_ingest_idempotency.py`` re-declaring identical copies locally —
+deleted in the M0.6 fold-in to eliminate silent-drift risk between the
+conftest and the in-module copies.
 """
 
 from __future__ import annotations

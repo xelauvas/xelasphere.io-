@@ -74,12 +74,14 @@ async def test_search_finds_keyword_in_top_k(client, auth) -> None:
 async def test_search_empty_palace_returns_empty_list(client, auth) -> None:
     """Query against a user with no drawers. The route MUST NOT 404 or
     500; it returns 200 with an empty list. This is the "palace exists
-    but is cold/empty" path — first call creates the palace, search
-    finds nothing, route returns [].
+    but is cold/empty" path — first call creates the palace via
+    ``registry.open``, the search finds nothing in an empty Chroma
+    collection, and the route returns ``[]``.
 
-    Exercises the ``raws or []`` coalesce in the route: some library
-    search paths return ``None`` instead of ``[]`` for zero-hit queries,
-    and the route must normalise.
+    Guards the full path from ``registry.open`` on a never-seen user
+    through ``handle.search`` on an empty collection. A broken impl
+    that 404s (palace-not-found), 500s (handle raises on empty), or
+    returns null (missing response_model coercion) fails here.
     """
     r = await client.post(
         "/palace/empty/search",
