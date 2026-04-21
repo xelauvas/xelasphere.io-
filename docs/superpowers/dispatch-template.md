@@ -404,6 +404,43 @@ Name the tests you expect. For each, specify:
 
 Mark minimum tests vs optional tests. Give a test-count ladder (see B6).
 
+#### B4b. Fix-propagation check on doctrine-class bugs
+
+When a Stage 3 GREEN fix resolves a doctrine-class bug — or any
+bug whose shape suggests it could recur at sibling call sites —
+grep for the same pattern across the codebase BEFORE the fix is
+considered complete. Mechanical checklist, not a judgment call:
+
+1. **Name the pattern in grep-able form.** e.g., "bare `raise`
+   after `except RuntimeError`", "`request.app.` vs `request.scope.
+   get('app')`", "`write_text` on a path that might be hardlinked."
+2. **Grep across `mempalace_sidecar/` and `tests/`.** Single
+   ripgrep command, not a mental scan.
+3. **Triage every match.** Does it need the same fix, a similar
+   fix, or is it structurally different? Write down the answer
+   per match.
+4. **Apply the fix to every site that needs it in the same commit
+   as the original fix** — OR if scope genuinely warrants splitting,
+   file an explicit follow-up task listing the remaining sites so
+   they can't rot.
+
+**Why a checklist item, not a heuristic.** M0.11 shipped doctrine
+hit #4's `HTTPException(500)` fix at the ingest `add_drawer` path
+only. Five sibling call sites had the identical bare-raise hazard
+(ingest/wake-up/search/list_drawers/delete/rebuild on
+`registry.open`'s non-"shutting down" `RuntimeError` path). The
+review pair caught the gap as Important #1; the Stage 3 grep would
+have taken 30 seconds and surfaced all five. The fix-after-review
+version cost a whole review-response cycle of investigation + a
+uniform-fix commit. Mechanical rule, load-bearing.
+
+**Relationship to the B4 "nastiest reachable context" doctrine.**
+B4 is the WRITE-the-tests discipline (design the test to fail if
+the plan-sketch OR implementation got the context wrong). B4b is
+the PROPAGATE-the-fix discipline (when the test catches a bug,
+check if the same bug lives at sibling sites). Different in kind —
+sit side-by-side, neither subsumes the other.
+
 #### B5. Milestone-specific escalation triggers
 
 Beyond the generic "in over your head" list in Section A, name the
