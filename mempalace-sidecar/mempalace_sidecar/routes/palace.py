@@ -20,11 +20,11 @@ PalaceHandle caller.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from mempalace_sidecar.routes._common import _hash_uid, _registry
 from mempalace_sidecar.schemas import (
     Drawer,
     DrawersPage,
@@ -39,29 +39,7 @@ from mempalace_sidecar.wakeup import build_wakeup, to_drawer
 
 log = logging.getLogger(__name__)
 
-
-def _hash_uid(user_id: str, salt: str) -> str:
-    """Spec §8.4 pseudonymous-logging contract: logs MUST carry
-    ``sha256(user_id + salt)[:12]``, never the raw user_id. M0.11 will
-    lift this helper into a shared ``logging_utils`` module once the
-    structured-logging middleware lands; until then each route hashes
-    inline to honor the contract without shipping raw PII to journald.
-    """
-    return hashlib.sha256(f"{user_id}{salt}".encode()).hexdigest()[:12]
-
 router = APIRouter(prefix="/palace", tags=["palace"])
-
-
-def _registry(request: Request):
-    """Pull the PalaceRegistry off app.state.
-
-    Wired by ``main._lifespan`` (spec §5.4). Surfacing this via a tiny
-    helper keeps the route body focused on the ingest flow and makes
-    the registry dependency visible to future middleware that wants to
-    introspect it (e.g. M0.10 shutdown drain checks resident palaces
-    via this attribute).
-    """
-    return request.app.state.registry
 
 
 @router.post("/{user_id}/ingest", response_model=IngestResponse)
