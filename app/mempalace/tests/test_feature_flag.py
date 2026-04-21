@@ -133,6 +133,17 @@ def test_feature_flag_defaults_compose_to_sane_startup(monkeypatch):
         ("  on  ", True),
         ("off ", False),
         (" off", False),
+        # Realistic operator-paste patterns (post-M0.13 review catch
+        # Minor #2): Python's str.strip() with no argument strips
+        # \t \n \r \v \f in addition to spaces. These three values
+        # represent the three most common operator-paste shapes —
+        # trailing newline from docs, tab-indented bullet, Windows
+        # CRLF from a text file. Without this parametrization, a
+        # future narrowing of .strip() to .strip(" ") would silently
+        # break all three without reding a test.
+        ("on\n", True),
+        ("\ton", True),
+        ("on\r\n", True),
         # Empty string — treat as "unset" fallback to on? Or "off"?
         # Chosen semantic: empty-string means "the operator set
         # the env var but the value is blank" which is more likely

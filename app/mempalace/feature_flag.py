@@ -21,6 +21,13 @@ at the moment of the change.
 
 **Asymmetric parsing** (intentional — written down because it
 looks inconsistent at first glance):
+  - ``MEMPALACE_MODE`` is permissive-on-whitespace
+    (``.strip().lower()``) and case-insensitive. Operator-rotated
+    rollout knob; paste-from-docs patterns should not flip
+    ``MempalaceMode(" off".lower())`` into an uncaught
+    ``ValueError``. Landed post-M0.13 review catch: original
+    plan-verbatim version used only ``.lower()`` without
+    ``.strip()``, inconsistent with LEGACY_MEMORY's parser.
   - ``LEGACY_MEMORY`` is permissive (``.strip().lower()``). Operators
     rotate this knob; realistic deployment patterns include
     config-doc paste with stray whitespace or shell-history recall
@@ -67,8 +74,15 @@ def mode() -> MempalaceMode:
     between calls must be observed. A module-level constant
     (``MODE = MempalaceMode(os.getenv(...))``) would capture env
     once at import time and the tests could not override it.
+
+    Permissive-on-whitespace + case-insensitive parsing — see the
+    asymmetric-parsing block in the module docstring.
+    ``MEMPALACE_MODE=" off"`` (leading space from operator paste)
+    normalizes to ``"off"`` and returns ``MempalaceMode.OFF``
+    rather than raising an uncaught ValueError from the enum
+    constructor.
     """
-    return MempalaceMode(os.getenv("MEMPALACE_MODE", "off").lower())
+    return MempalaceMode(os.getenv("MEMPALACE_MODE", "off").strip().lower())
 
 
 def legacy_memory_active() -> bool:

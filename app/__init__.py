@@ -48,6 +48,14 @@ def create_app():
         # blueprints). SystemExit(2) from an unsafe flag combination
         # short-circuits the whole create_app — production deploy
         # fails loud rather than limping along with partial state.
+        #
+        # SystemExit is a BaseException (not Exception), so it
+        # propagates past the outer ``except Exception`` wrapper
+        # around this try-block by design. A future refactor that
+        # narrows the wrapper (e.g., ``except (Exception,
+        # SystemExit)``) would silently swallow the sanity check —
+        # do not add SystemExit to the caught types without
+        # reviewing this invariant.
         from app.mempalace.feature_flag import assert_startup_sane
         assert_startup_sane()
 
