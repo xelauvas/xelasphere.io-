@@ -21,6 +21,15 @@ Items surfaced in earlier-milestone reviews that are correct to defer but easy t
 - **Concurrent cold-palace open benchmark** (from M0.3.1-5 sign-off 2026-04-20). `PalaceRegistry._construct_entry` runs inside `_registry_lock`, serialising all cold opens at ~50-200ms each. Add `test_benchmark_concurrent_cold_opens` that fires N simultaneous first-touch opens, measures p95 queueing delay, and documents the threshold at which the sentinel-pattern fix is warranted. Gates the fix on measured evidence, not premature optimisation.
 - **Full structured-logging middleware** (from M0.4 quality review 2026-04-20). Spec §8.4 prescribes `ts, service, level, event, user_id, turn_id, route, latency_ms, err, request_id`. Ingest route currently hashes `user_id` inline via `_hash_uid`, but `latency_ms`, `route`, and `request_id` are still missing. M0.11 lifts the hash helper into a shared `logging_utils` module and adds a per-request middleware that captures the missing fields.
 - **`mempalace_ingest_total{status=error}` label** (from M0.4 quality review 2026-04-20). Spec §8.1 lists `status={accepted,duplicate,error}` as the intended labels. Ingest route currently only emits `accepted` / `duplicate` (via `AddDrawerResult.status`); `error` requires the route to catch + classify library exceptions and emit a metric with the `error` label before re-raising. M0.11 adds the wrapper.
+- **Spec §4.2 latency-anchor amendment** (from M0.5 latency investigation 2026-04-20, deltas entry C). The current §4.2 numbers (hot p95 ≤150ms, hard cap 500ms) were engineering aesthetics chosen in advance of measurement. M0.5's singleton fix landed wake-up p95 around 100ms on a 300-drawer palace on AMD EPYC-Rome. M0.11 should rewrite §4.2's targets as `measured-baseline × 1.3` formulas anchored to the M0.11 benchmark run, with the raw measured number captured in a dated benchmark file. Hardcoded ms numbers rot; ratios against measured baselines age more gracefully.
+
+---
+
+## Deferred architectural considerations
+
+Notes about future architecture decisions that are not blocking M0.x but would be expensive to discover late. Each note has a concrete trigger condition so it stays actionable instead of decaying into folklore.
+
+- **Wake-up on critical path vs. pre-fetch** (flagged 2026-04-20, deltas entry B). Current architecture places wake-up on the critical path of every turn. At ~100ms p95 on 300-drawer palaces, this sits comfortably under the 150ms target. As palaces grow, the fixed per-embed cost (~85ms with the singleton + intra_op=1 patch) stays roughly constant but retrieval-graph traversal grows sub-linearly; the comfortable margin will compress. Pre-fetch patterns — wake-up on WebSocket open and cache for N seconds, or wake-up parallel with LLM system-prompt ingestion — move wake-up off the critical path and insulate against this growth. Not a blocker at current scale. **Review trigger: hot p95 crosses 100ms on any production palace.** At that point, the critical-path architecture decision needs to be made before it becomes a visible latency regression.
 
 ---
 
@@ -34,6 +43,61 @@ Items surfaced in earlier-milestone reviews that are correct to defer but easy t
 - `2026-04-20 M0.1` — Deliberate cross-venv `httpx` pin-style mismatch: Flask-side `requirements-cpu.txt` pins `httpx==0.28.1` (exact), sidecar `pyproject.toml` declares `httpx>=0.27` (floor). Not a bug — the two processes communicate over UDS with HTTP/1.1 wire format, which is stable across httpx minor versions. Each venv is entitled to resolve its own version. If a wire-protocol incompatibility ever surfaces, either pin the sidecar to the same exact version or add an integration test that exercises both ends together.
 - `2026-04-20 M0.2.5` — No-op. The plan's M0.2.5 calls for adding a shadow-log-ownership docstring to `mempalace_sidecar/__init__.py`, but the M0.1 implementer pre-shipped that docstring during M0.1.1. No M0.2.5 commit created.
 - `2026-04-20 M0.2.4` — Test-only deviation from plan. Plan's `test_sd_notify.py` uses `httpx.AsyncClient(transport=ASGITransport(app=app))` to verify lifespan notifies READY. `httpx 0.28.x` `ASGITransport` no longer drives the ASGI lifespan protocol (breaking change from earlier versions). Implementer swapped to `fastapi.testclient.TestClient` used as a context manager — it does drive lifespan, requires no new dependency, and the assertion (`_sd_notify_ready` called once during startup) is unchanged. Production code in `main.py` matches the plan verbatim. Commit `613eea1`.
+- `2026-04-20 M0.5 finding A — Chroma HNSW filesystem-lock serialization` — Four-layer wake-up composition via `asyncio.gather(asyncio.to_thread(_l0), ...)` was expected to parallelize across L0/L1/L2/L3. Empirical investigation at M0.5 dispatch time showed that ChromaDB's `PersistentClient.query()` serializes at the filesystem/HNSW-lock layer, not the Python client layer — separate `PersistentClient` instances against the same path do NOT bypass the lock.
+
+  **Benchmark** (200-drawer palace, bare chromadb 1.5.8, AMD EPYC-Rome VPS, 16 cores):
+
+  ```
+  single query:                  265.8ms
+  4 serial queries:              964.8ms  (avg 241.2ms/query)
+  4 concurrent queries:          940.7ms  (ratio 0.98 — no parallelism)
+  4 concurrent, separate clients: 936.0ms  (ratio 0.97 — shared FS lock)
+  ```
+
+  **Impact.** On its own, this finding would mean the M0.5.3 teeth-bearing test (`test_wakeup_concurrent_faster_than_sum_of_parts`, asserting `total < 0.7 × (l0 + 2×l3)`) is physically unreachable with the current backend. Wake-up total floors at `l0 + l1 + 2×l3`, giving ratio ~1.0 regardless of `to_thread` correctness.
+
+  **Resolution.** Superseded by finding B below. The singleton EF + `intra_op_num_threads=1` patch landed in commit `a8c7ed7` incidentally enabled real 4-layer parallelism — each `handle.semantic_search` call still goes through Chroma, but the per-call embedding work now parallelizes across cores via separate threads. The 0.7× test now passes at ratio ~0.54 because the embedding dominates per-layer cost, not the Chroma HNSW path. Filesystem-lock serialization remains real; it's just no longer on the critical path at current palace sizes.
+
+  **Track for M1.** Backend alternatives to evaluate when palace sizes grow or multi-tenant load increases: lancedb, qdrant, usearch. Criteria: true concurrent read without path-scoped filesystem lock, same-tenant isolation model, comparable recall@5 on LongMemEval. Not a blocker; revisit at the first production palace that shows p95 regression.
+
+- `2026-04-20 M0.5 finding B — chromadb DefaultEmbeddingFunction re-instantiation per call` — **10× wake-up speedup from an 8-line fix.** Commit `a8c7ed7`.
+
+  **Finding.** chromadb 1.5.8 at `chromadb/api/types.py:965`:
+
+  ```python
+  def __call__(self, input: Documents) -> Embeddings:
+      from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import (
+          ONNXMiniLM_L6_V2,
+      )
+      return ONNXMiniLM_L6_V2()(input)
+  ```
+
+  `DefaultEmbeddingFunction.__call__` constructs a fresh `ONNXMiniLM_L6_V2` on **every** call, triggering cold lazy-init of the tokenizer (~5ms) and ONNX `InferenceSession` (~180ms) per embedding. On a 300-drawer palace this lifted `semantic_search` from ~25ms (if reused) to ~250ms (fresh-per-call) and pushed wake-up p95 to ~770ms — over spec §4.2's 500ms hard cap.
+
+  **Independent second cause.** With the singleton in place at chromadb's default `intra_op_num_threads=0` ("use all cores"), four concurrent embeddings each tried to fan out across all 16 cores, producing severe context-switch contention — 4-concurrent p95 climbed to 1291ms, a ratio of 4.36× vs single-call p95 (296ms). Setting `intra_op_num_threads=1` + `inter_op_num_threads=1` made each embedding single-threaded so N concurrent embeddings parallelize across N separate cores with near-flat p95.
+
+  **Empirical impact** (300-drawer palace, AMD EPYC-Rome VPS):
+
+  ```
+                          pre-patch  post-patch (singleton + intra_op=1)
+  semantic_search p95:    412ms      95ms        (4.3× faster)
+  build_wakeup p95:       768ms      106ms       (7.2× faster)
+  4-concurrent ratio:     4.36×      1.35×       (3.2× better scaling)
+  ingest per-drawer:      299ms      104ms       (2.9× faster)
+  ```
+
+  **Fix site.** Monkey-patch `DefaultEmbeddingFunction.__call__` in `mempalace_sidecar/_chromadb_patch.py`, imported from the top of `mempalace_sidecar/__init__.py` so the patch lands before any chromadb collection is constructed. The patched call routes through a process-global single-threaded `ONNXMiniLM_L6_V2` subclass. Safety: `InferenceSession.run()` is thread-safe per ONNX runtime docs; Rust-backed tokenizer is thread-safe. Vector stability: same class, same default pad=256, deterministic — byte-identical embeddings for identical input pre- and post-patch, no palace rebuild required.
+
+  **Defensive guards.** Version pin (`assert chromadb.__version__ == "1.5.8"`) fails loud on upgrade; idempotency guard via `_xela_patched` marker prevents double-patch; three canary tests (`test_patch_applied_on_bare_import`, `test_default_ef_singleton_invariant`, `test_patch_idempotent`) catch both regression of our patch and upstream fixes. See the module docstring for the "when to remove this module" checklist.
+
+  **Upstream.** File chromadb issue with the benchmark data + proposed fix. Not yet filed.
+
+  **Method note for the month-14 reader.** An initial `cached_property` patch attempt produced a 20% improvement instead of the expected 10×. The plausible-but-wrong interpretation was "the patch partially worked." The correct interpretation — turned out to be — "the patch didn't work at all, and the 20% residual came from something else entirely." Predicted magnitude vs actual magnitude is the signal. A patch that doesn't reach its predicted magnitude is a failed patch, not a partially-successful one, and the gap is where the real bug hides. 25 more minutes of verification (confirming the patch site, then the cached-property-vs-composition distinction in `DefaultEmbeddingFunction`) surfaced the actual bug. Without that discipline, we would have shipped a half-fix, declared §4.2 unachievable, and wasted the subsequent milestone on a false architectural conversation.
+
+- `2026-04-20 M0.5 finding C — spec §4.2 latency-anchor amendment (pending M0.11)` — Spec §4.2 currently asserts hot p95 ≤150ms target, 500ms hard cap. Those numbers were chosen before measurement; they're engineering aesthetics, not empirical anchors. With finding B's fix in place, measured wake-up p95 on a 300-drawer palace on AMD EPYC-Rome lands around 100ms (single-user) and ~160ms (4 concurrent against 4 different users). Under target for single-user workloads; borderline for concurrent. **Action deferred to M0.11 (metrics + /readyz dispatch)** where the benchmark run produces ground-truth numbers and spec §4.2 gets rewritten as `hot p95 ≤ measured-baseline × 1.3` (or similar ratio) with the raw measurement captured in a dated benchmark artifact. Hardcoded ms numbers rot as hardware and palace sizes evolve; ratios against measured baselines age more gracefully. See the M0.11 deferral section above.
+
+- `2026-04-20 M0.5 test-split deviation from plan` — Plan M0.5.3 called for a single teeth-bearing test `test_wakeup_concurrent_faster_than_sum_of_parts` with a 0.7× coefficient. During implementation, investigation of finding A above suggested the test was physically unreachable with the backend as it stood; the review direction was to split the test into (a) an event-loop-non-blocking sentinel test for Job A and (b) an empirical-floor regression test for Job B. The singleton + `intra_op=1` fix in finding B then restored real parallelism and made the original 0.7× test achievable again (passing at ratio ~0.54). Shipped: KEPT the 0.7× test as the Job B enforcement (it now does what the original review intended), ADDED `test_wakeup_layers_run_in_thread_pool` as a stricter Job A complement (21,763 sentinel ticks observed during wake-up — directly asserts the event loop stays free, cannot be gamed by forgetting `to_thread`), and tightened the existing `test_wakeup_composition_within_latency_budget` ceiling from 1000ms (2× hard cap) to 200ms (≈1.3× measured floor) for smaller-regression detection. Commit `ea746ae`. The deviation from the literal "replace the 0.7× test" instruction is documented because the premise behind that instruction (Chroma serialization makes 0.7× unreachable) was invalidated by finding B's fix before implementation landed.
+
 - `2026-04-20 M0.4 review-response` — Three Important findings from the M0.4 quality review applied:
   - **`registry._lock_for` → `registry.lock_for`** (public). The underscore-name was reachable by route code (route handlers need the per-user lock), and the earlier docstring documented the access pattern while keeping the underscore. Renaming to the non-private form before M0.5/M0.6/M0.7 all copy-paste the underscore would calcify the contract. Call-sites updated in `routes/palace.py`, `tests/unit/test_registry.py`, `tests/integration/test_registry_real.py`.
   - **`user_id` hashing in structured logs.** Spec §8.4 prescribes `sha256(user_id + salt)[:12]` for pseudonymous logs; the route was shipping raw `user_id` to journald. Added `_hash_uid(user_id, salt)` helper in `routes/palace.py`; both info-log and mismatch-warning now emit the hash. When M0.11's structured-logging middleware lands, the helper moves to a shared `logging_utils` module.
