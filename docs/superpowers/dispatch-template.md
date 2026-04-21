@@ -626,22 +626,81 @@ future edits can see the forcing function:
   + M0.8 reviewer pairs all hit the same narrow denial (`pytest`
   specifically blocked, everything else works). Reviewers complete via
   diff-inspection. Not fixable from prompts. Named in Part 3.
-- **Spec-reviewer-findings trend (tentative).** M0.6: 4 Importants.
-  M0.7: 1 Important. M0.8: 0 findings. Reading: pre-resolution + Code
-  catching spec ambiguities upstream + discovered-deviation fixes
-  landing same-session before reviewers see code. NOT decay-toward-lazy
-  review (quality reviewer still caught 7 Minors at M0.8). If M0.9+
-  maintains zero-findings at the spec layer despite increasing
-  milestone complexity (migrations, shutdown protocol, metrics),
-  revisit at M0.10 whether spec-reviewer dispatch still earns its cost.
-  Until then, spec reviewer stays in the standard review pair.
+- **Spec-reviewer-findings trend (holding at M0.9).** M0.6: 4
+  Importants. M0.7: 1 Important. M0.8: 0 findings. M0.9: 0 Critical
+  + 0 Important + 2 Minor (lifespan comment-vs-code mismatch,
+  redundant schema check — both low-stakes). Reading: pre-resolution
+  + code catching spec ambiguities upstream + discovered-deviation
+  fixes landing same-session before reviewers see code. NOT
+  decay-toward-lazy review — quality reviewer still produced 3
+  Importants at M0.9 (plan-sketch latent bug, spec prominence,
+  untested chain). So the review pair is NOT redundant; quality
+  reviewer is load-bearing. But spec-reviewer's value proposition is
+  shifting: from "catches spec compliance bugs" to "ratifies that
+  pre-resolution caught everything spec-relevant." If the pattern
+  holds at M0.10/M0.11 (spec reviewer zero Critical + zero Important
+  despite migrations/shutdown/metrics complexity), revisit whether
+  spec-reviewer dispatch still earns its cost. Don't cut yet.
+
+- **Plan sketches require teeth-bearing verification (M0.8 + M0.9
+  doctrine).** Plan sketches are design intent, not safety-verified
+  artifacts. Two consecutive milestones had bugs in the plan code
+  itself, caught by teeth-bearing tests during implementation: M0.8
+  chromadb close-before-pop (spec §5.3 assumed GC-sufficient close;
+  chromadb 1.5.x requires explicit `client.close()`) and M0.9
+  meta.json write-through-hardlink (plan code at line 2784 assumed
+  `write_text` was COW; Linux filesystem semantics disagree). Both
+  looked right on paper. Both would have shipped undetected through
+  spec + quality review, because both are filesystem/library-semantic
+  assumptions that the plan-level text got wrong.
+
+  **Two layers of verification, both load-bearing, neither subsumes
+  the other:**
+
+    - **Pre-resolution** (Part 1 discipline, enforced before dispatch)
+      catches **plan-vs-reality drift**: plan assumes API X, the
+      code currently has API Y. Stale method names, deprecated
+      patterns, library-boundary shifts. Fixed by reading current
+      code against the plan sketch.
+    - **Teeth-bearing tests** (Part 2 B4 discipline, enforced
+      inside the milestone's RED/GREEN cycle) catch
+      **plan-vs-correctness drift**: plan code compiles and looks
+      right but produces wrong behavior under specific conditions.
+      Fixed by designing the test to fail if the plan code is
+      wrong, not just if your implementation is wrong.
+
+  **When writing teeth-bearing tests, design them against the plan
+  sketch's assumptions, not just against the behavior you intend to
+  implement.** The M0.8/M0.9 findings surfaced because the tests
+  asserted specific post-condition state (backend-cache emptied AND
+  reopen-to-same-path succeeds on a new write; `.replaced_<ts>/meta.json`
+  preserves pre-migration `schema_version`). A weaker assertion
+  ("just check the dict is empty" or "just check the primary has
+  new schema_version") would have passed the plan code and missed
+  the bug. This is the absence-vs-presence principle (template Part
+  2 B4) applied pre-emptively: assume the plan's filesystem/library
+  assumptions might be wrong; write tests that would catch them if
+  they are.
+
+  **Lineage.** M0.8 findings (chromadb close-before-pop) were caught
+  by `test_delete_then_reopen_creates_fresh_palace`. M0.9 finding
+  (meta.json hardlink propagation) was caught by
+  `test_atomic_rename_happy_path`. In both cases the test was
+  written explicitly to exercise the plan's specific claim, not
+  just general behavior. Expected to continue — every milestone
+  with new filesystem/library interaction surface (M0.10 signal
+  handling + subprocess semantics, M0.11 prometheus multiproc
+  registry, M0.15 outbox WAL + fsync) will likely surface more
+  such findings. Not failures — the discipline working.
 
 This template itself is expected to evolve. After M0.7 lands, reflect on
 what the subagent tripped over, what you had to re-explain, what you
 found yourself adding milestone-specific that should have been general.
 Revise. After M0.8, reflect again. Two milestones of evolution gets the
-template to a stable shape; one is insufficient. **As of post-M0.8: three
-milestones of evolution have landed. Template is considered stable
+template to a stable shape; one is insufficient. **As of post-M0.9: four
+milestones of evolution have landed (M0.6 template extraction, M0.7
+hybrid-default flip, M0.8 absence-vs-presence + stage-boundary checks,
+M0.9 plan-sketch-verification doctrine). Template is considered stable
 baseline. Future edits should pass a higher bar (i.e., a specific
 milestone-forced lesson worth encoding) rather than speculative
 refinement.**
