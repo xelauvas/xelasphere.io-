@@ -40,7 +40,7 @@ from typing import Awaitable, Callable
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 
 log = logging.getLogger(__name__)
@@ -120,15 +120,34 @@ class InFlightCounterMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         if _is_exempt(request.url.path):
             return await call_next(request)
-        # Stage 1 RED HALF-IMPLEMENTATION: increment only, no
-        # try/finally decrement. Stage 3 GREEN wraps ``call_next``
-        # in try/finally so the decrement runs on both the success
-        # and exception paths. The unit test
-        # ``test_middleware_counter_sequence_under_exception``
-        # enforces that discipline by raising inside ``call_next``
-        # and asserting the counter ended at 0.
+        # Phase-1 gate: once ``shutdown_sequence`` flips
+        # ``accepting`` to False, new non-exempt requests get 503
+        # *without* bumping the counter — otherwise a barrage of
+        # post-gate clients would keep drain open past its budget.
+        #
+        # ``scope.get("app")`` instead of ``request.app``: the
+        # ``Request.app`` property raises ``KeyError`` when ASGI
+        # scope has no ``"app"`` entry (minimal unit-test scopes
+        # skip it). Stage 3 first-pass used the property directly
+        # and the exception-sequence unit test caught it — doctrine
+        # hit #3.
+        scope_app = request.scope.get("app")
+        if scope_app is not None and not getattr(
+            scope_app.state, "accepting", True
+        ):
+            return JSONResponse(
+                {"detail": "shutting down"}, status_code=503
+            )
         self._counter.enter()
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        finally:
+            # try/finally so the decrement runs on both the success
+            # and exception paths. The unit test
+            # ``test_middleware_counter_sequence_under_exception``
+            # enforces this discipline by raising inside ``call_next``
+            # and asserting the post-exception counter is zero.
+            self._counter.exit()
 
 
 async def shutdown_sequence(
@@ -138,6 +157,112 @@ async def shutdown_sequence(
 ) -> None:
     """Run the six-phase shutdown protocol (spec §5.7).
 
-    Stage 1 RED stub — full implementation lands in Stage 3 GREEN.
+    Idempotent. The lifespan's finally block calls this on normal
+    exit; integration tests call it explicitly inside the same
+    lifespan context. Second (and subsequent) invocations
+    short-circuit via ``app.state._shutdown_done`` — re-running
+    phase 4 (``registry.close_all``) or phase 5 (systemd notify)
+    after the first pass would double-close palace handles and
+    re-fire ``STOPPING=1`` to a dead socket.
+
+    Parameters
+    ----------
+    app : FastAPI
+        Reads ``app.state.{in_flight, kg_worker_task, registry,
+        accepting, _shutdown_done}``. Missing state members are
+        tolerated — each phase guards with ``getattr(..., None)``
+        so a partially-built test harness can still exercise the
+        surface without needing a full lifespan startup.
+    drain_timeout_sec : float
+        Maximum time phase 3 blocks waiting for in-flight handlers
+        to finish. Systemd's ``TimeoutStopSec`` is 15s (10s drain +
+        5s grace); exceeding the systemd budget risks SIGKILL
+        mid-drain.
     """
-    raise NotImplementedError("shutdown_sequence lands in M0.10 Stage 3 GREEN")
+    if getattr(app.state, "_shutdown_done", False):
+        return
+    # Set the flag BEFORE running phases. If a phase raises, the
+    # second invocation still short-circuits — partial cleanup is
+    # preferable to a second attempt at already-closed resources.
+    app.state._shutdown_done = True
+
+    # Phase 1: gate — stop accepting new work. The middleware reads
+    # ``accepting`` on every non-exempt request and returns 503
+    # without bumping the counter.
+    app.state.accepting = False
+    log.info("shutdown_gate: accepting=False")
+
+    # Phase 2: worker cancel — the KG worker holds palace handles
+    # via ``registry.open``. Closing the registry first (phase 4)
+    # would yank handles out from under an in-flight triple write,
+    # so the worker MUST finish or be cancelled here.
+    worker_task = getattr(app.state, "kg_worker_task", None)
+    log.info(
+        "shutdown_worker_cancel: worker_task=%s",
+        "absent" if worker_task is None else
+        "done" if worker_task.done() else "cancelling",
+    )
+    if worker_task is not None and not worker_task.done():
+        worker_task.cancel()
+        try:
+            # 10s budget independent of drain_timeout_sec — a stuck
+            # extractor swallowing CancelledError shouldn't block
+            # the HTTP drain phase.
+            await asyncio.wait_for(worker_task, timeout=10.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+        except Exception as exc:
+            log.warning(
+                "shutdown_worker_cancel: worker raised on cancel: %r",
+                exc,
+            )
+
+    # Phase 3: drain — wait for in-flight HTTP handlers. Uses
+    # ``wait_idle`` (asyncio.Event) so we wake the instant the last
+    # request's try/finally decrement fires, not via polling.
+    counter = getattr(app.state, "in_flight", None)
+    if counter is not None:
+        log.info(
+            "shutdown_drain: waiting up to %.1fs for %d in-flight",
+            drain_timeout_sec, counter.count,
+        )
+        idle = await counter.wait_idle(timeout=drain_timeout_sec)
+        if not idle:
+            log.warning(
+                "shutdown_drain: timed out; %d handler(s) still "
+                "in flight — leaving to event-loop teardown",
+                counter.count,
+            )
+    else:
+        log.info("shutdown_drain: no counter attached")
+
+    # Phase 4: registry close — two-phase evict every resident
+    # palace (spec §5.4). Exceptions are logged + swallowed so the
+    # STOPPING notify (phase 5) still fires — systemd distinguishes
+    # cleanly-stopped vs failed, and that routes oncall differently.
+    registry = getattr(app.state, "registry", None)
+    log.info(
+        "shutdown_registry_close: registry=%s",
+        "absent" if registry is None else "present",
+    )
+    if registry is not None:
+        try:
+            await registry.close_all()
+        except Exception as exc:
+            log.warning(
+                "shutdown_registry_close: close_all raised: %r",
+                exc,
+            )
+
+    # Phase 5: systemd notify. Fresh import from main so
+    # monkeypatches in tests (``monkeypatch.setattr("...main.
+    # _sd_notify_stopping", fake)``) resolve against the live
+    # attribute at call time.
+    from mempalace_sidecar.main import _sd_notify_stopping
+
+    log.info("shutdown_systemd_notify: STOPPING=1")
+    _sd_notify_stopping()
+
+    # Phase 6: done — terminal marker. After this the event loop
+    # can exit; the lifespan's generator returns from its yield.
+    log.info("shutdown_done: event loop can now exit")

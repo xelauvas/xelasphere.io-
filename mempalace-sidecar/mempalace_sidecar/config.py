@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     embed_model: str = Field(default="all-MiniLM-L6-v2")
     kg_llm_provider: str = Field(default="ollama")
     kg_daily_usd_cap: float = Field(default=5.0)
+    # M0.10 shutdown protocol (spec §5.7). 10s matches the drain
+    # budget named in spec; systemd's TimeoutStopSec is 15s (10s
+    # drain + 5s grace), so tuning this above 10s requires bumping
+    # the unit file in lockstep or risk SIGKILL mid-drain.
+    drain_timeout_sec: float = Field(default=10.0, gt=0.0)
     log_level: str = Field(default="info")
     prometheus_multiproc_dir: Path = Field(
         default=Path("/var/run/mempalace/prom"),

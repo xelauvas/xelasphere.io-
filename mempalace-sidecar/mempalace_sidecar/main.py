@@ -167,36 +167,17 @@ async def _lifespan(app):
     try:
         yield
     finally:
-        # Shutdown deviation #3 — worker cancel BEFORE close_all.
-        # Reversing this order would close palace handles while
-        # the worker is mid-write, corrupting per-palace kg.sqlite
-        # transactions.
-        worker_task = app.state.kg_worker_task
-        if not worker_task.done():
-            worker_task.cancel()
-        try:
-            # Budget 10s per spec §5.7 "wait up to 10s for
-            # in-flight handlers." If the worker is stuck (e.g.,
-            # a misbehaving extractor swallowing CancelledError),
-            # wait_for will re-raise TimeoutError and we proceed to
-            # close_all anyway — better to leave the worker task
-            # hanging than to hang shutdown forever.
-            await _asyncio.wait_for(worker_task, timeout=10.0)
-        except (_asyncio.CancelledError, _asyncio.TimeoutError):
-            pass
-        except Exception:
-            # Any non-cancellation exception from the worker task
-            # is logged and swallowed — shutdown continues.
-            pass
+        # M0.10: full six-phase shutdown protocol (spec §5.7) runs
+        # here. Replaces the earlier ad-hoc "cancel worker → close
+        # registry → notify stopping" trio. ``shutdown_sequence``
+        # is idempotent via ``app.state._shutdown_done`` so
+        # integration tests that call it explicitly inside the
+        # lifespan context still get a clean lifespan exit.
+        from mempalace_sidecar.shutdown import shutdown_sequence
 
-        # Now drain resident palaces. If close_all raises mid-loop,
-        # the registry logs + swallows the per-handle error (see
-        # registry._close_handle_safely) — the outer call still
-        # returns cleanly.
-        try:
-            await app.state.registry.close_all()
-        finally:
-            _sd_notify_stopping()
+        await shutdown_sequence(
+            app, drain_timeout_sec=settings.drain_timeout_sec
+        )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
