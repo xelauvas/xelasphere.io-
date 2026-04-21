@@ -227,7 +227,7 @@ Latency budgets (M0.11 measured-baseline × 1.3 formulas; pre-M0.11 hardcoded-ae
 | Semantic search p95 | `measured × 1.3` | ~125ms | 500ms | 95ms M0.5 |
 
 **Raw baselines** (anchor, date-stamped; hardware: AMD EPYC-Rome VPS, chromadb 1.5.8 + singleton + intra_op=1, 300-drawer palace unless noted):
-- 2026-04-21 M0.5 + M0.11 suite: wake-up single 106ms; wake-up 4-concurrent 162ms; cold-open p95 per-open 119ms at N=8; ingest per-drawer 104ms; semantic_search 95ms.
+- 2026-04-21 M0.5 + M0.11 suite: wake-up single 106ms; cold-open p95 per-open 119ms at N=8 concurrent; ingest per-drawer 104ms; semantic_search 95ms. (A wake-up 4-concurrent measurement of 162ms was observed at M0.5 but is not an external SLO anchor — internal parallelism detail, not a table row.)
 
 **Re-anchor rule.** If any measured baseline drifts by more than 10% from the numbers above (either direction), the `× 1.3` target re-anchors, the raw baseline updates, and a deltas entry captures the re-anchor with new measurement context. The formula insulates the targets from hardware migration and library-version shifts that would otherwise age hardcoded milliseconds ungracefully.
 
@@ -735,7 +735,7 @@ DR hierarchy — derived from §1's "palace is a derived index, conversations ar
 | `mempalace_kg_queue_depth` | gauge | `status={pending,running,failed}` | KG backlog |
 | `mempalace_kg_daily_usd_spent` | gauge | — | Cost vs cap |
 | `mempalace_kg_extraction_total` | counter | `status={success,failure,skipped_cap}` | Worker outcomes |
-| `mempalace_schema_migration_total` | counter | `from`, `to`, `status` | Migration surface |
+| `mempalace_schema_migration_total` | counter | `from_version`, `to_version`, `status` | Migration surface |
 | `mempalace_open_palace_errors_total` | counter | `reason={corrupt,schema_too_new,perm}` | Open failure modes |
 | `mempalace_delete_total` | counter | — | GDPR deletes (cross-ref `audit.sqlite`) |
 | `mempalace_readyz` | gauge | — | 1 if all subsystems good |

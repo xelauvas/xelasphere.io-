@@ -12,30 +12,23 @@ The module name is ``_``-prefixed to mark it as internal to the
 ``routes`` package. Callers outside the package should not import
 from it directly; they go through the route surfaces.
 
-``_hash_uid`` is duplicated inline in ``kg_worker.py`` (as a local
-``_hash_uid`` function) pending the M0.11 consolidation into a
-shared ``logging_utils`` module — see deltas 2026-04-20 M0.4
-review-response + M0.11 deferral list. Keeping the two copies in
-sync by contract so every sidecar log line emitting ``user_id``
-(ingest, wake-up, search, drawers, DELETE, rebuild, kg_worker's
-failure path) produces the same 12-char hash for the same
-``(user_id, salt)`` pair. Operators correlate a retried turn across
-Flask-outbox → sidecar-ingest → kg_worker-extract by matching the
-hash across log streams.
+``_hash_uid`` is now a re-export of ``logging_utils.hash_uid``
+(M0.11 consolidation — the canonical module). Retained under the
+``_hash_uid`` name so the existing route imports keep working
+unchanged; M0.12+ migrates the callers to the canonical name and
+deletes this alias. Because it's an alias assignment (not a
+duplicate function body), the two names can't drift — any future
+edit to the hash landed in ``logging_utils.hash_uid`` propagates
+automatically. ``kg_worker._hash_uid`` remains a parallel body
+pending the M0.12+ migration; ``test_hash_uid_consistency_across_all_callers``
+keeps it aligned by value.
 """
 
 from __future__ import annotations
 
-import hashlib
-
 from fastapi import Request
 
-
-def _hash_uid(user_id: str, salt: str) -> str:
-    """Spec §8.4 pseudonymous-logging contract: ``sha256(user_id +
-    salt)[:12]``. Never raw user_id to journald.
-    """
-    return hashlib.sha256(f"{user_id}{salt}".encode()).hexdigest()[:12]
+from mempalace_sidecar.logging_utils import hash_uid as _hash_uid
 
 
 def _registry(request: Request):

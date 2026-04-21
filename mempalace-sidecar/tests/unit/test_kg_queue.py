@@ -268,25 +268,29 @@ async def test_worker_pauses_when_cap_hit(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_hash_uid_consistency_between_common_and_kg_worker() -> None:
-    """Per M0.8 quality review I3: ``_hash_uid`` is duplicated in
-    ``routes/_common.py`` and ``kg_worker.py`` pending M0.11's
-    ``logging_utils`` consolidation. The two copies MUST produce
-    identical hashes for the same ``(user_id, salt)`` pair —
-    operators correlate log lines across routes and the worker by
-    the hash. A silent drift (someone edits one copy but not the
-    other) would break cross-route correlation without any runtime
-    failure.
+def test_hash_uid_consistency_across_all_callers() -> None:
+    """Per M0.8 quality review I3 + M0.11 quality review I3: three
+    ``hash_uid`` call sites coexist pending the M0.12+ migration —
+    ``routes/_common._hash_uid``, ``kg_worker._hash_uid``, and the
+    canonical ``logging_utils.hash_uid`` landed at M0.11. All three
+    MUST produce identical hashes for the same ``(user_id, salt)``
+    pair — operators correlate log lines across routes, the worker,
+    and the structured-logging middleware by this hash. Silent
+    drift (someone edits one copy but not the others) would break
+    cross-stream correlation with no runtime failure.
 
-    This test exists for exactly that: if the copies ever
-    disagree, it fails red. When M0.11 consolidates into
-    ``logging_utils``, this test retires.
+    M0.11 review-response: ``_common._hash_uid`` is now a true
+    re-export (``_hash_uid = hash_uid``) of ``logging_utils.hash_uid``,
+    so that pair can't drift. ``kg_worker._hash_uid`` remains a
+    parallel implementation until the M0.12+ migration; this test
+    keeps it aligned by value.
     """
     from mempalace_sidecar.kg_worker import _hash_uid as kg_hash_uid
+    from mempalace_sidecar.logging_utils import hash_uid as canonical_hash_uid
     from mempalace_sidecar.routes._common import _hash_uid as common_hash_uid
 
     # A few representative (user_id, salt) pairs. Any divergence
-    # between the two functions fails at least one.
+    # between the three functions fails at least one.
     cases = [
         ("alice", "pepper"),
         ("", ""),
@@ -294,10 +298,18 @@ def test_hash_uid_consistency_between_common_and_kg_worker() -> None:
         ("a" * 128, "s" * 16),
     ]
     for user_id, salt in cases:
-        assert kg_hash_uid(user_id, salt) == common_hash_uid(user_id, salt), (
-            f"_hash_uid drift detected for ({user_id!r}, {salt!r}): "
+        canonical = canonical_hash_uid(user_id, salt)
+        assert kg_hash_uid(user_id, salt) == canonical, (
+            f"_hash_uid drift (kg_worker vs logging_utils) for "
+            f"({user_id!r}, {salt!r}): "
             f"kg_worker={kg_hash_uid(user_id, salt)!r} vs "
-            f"_common={common_hash_uid(user_id, salt)!r}"
+            f"logging_utils={canonical!r}"
+        )
+        assert common_hash_uid(user_id, salt) == canonical, (
+            f"_hash_uid drift (_common vs logging_utils) for "
+            f"({user_id!r}, {salt!r}): "
+            f"_common={common_hash_uid(user_id, salt)!r} vs "
+            f"logging_utils={canonical!r}"
         )
 
 

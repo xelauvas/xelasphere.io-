@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+import urllib.parse
 import uuid
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
@@ -72,11 +73,19 @@ def _extract_user_id(path: str) -> str | None:
     fancier approach (resolve via ``request.scope['route']``) depends
     on middleware-ordering assumptions the middleware itself
     shouldn't make.
+
+    The raw path segment is URL-decoded via ``urllib.parse.unquote``
+    so middleware-computed hashes match the Starlette-decoded
+    user_id the route handler receives. Without the unquote, a
+    user_id containing ``%20`` or ``%2F`` would hash differently
+    at middleware-layer vs route-handler-layer and break
+    cross-stream log correlation (spec §8.4 intent is one hash
+    per request).
     """
     parts = path.split("/")
     # Expect ['', 'palace', '<uid>', ...]; tolerate anything else.
     if len(parts) >= 3 and parts[1] == "palace" and parts[2]:
-        return parts[2]
+        return urllib.parse.unquote(parts[2])
     return None
 
 

@@ -135,7 +135,9 @@ async def delete_palace(
                 raise HTTPException(
                     status_code=503, detail="sidecar shutting down"
                 ) from exc
-            raise
+            raise HTTPException(
+                status_code=500, detail="delete open failed"
+            ) from exc
 
         lock = registry.lock_for(user_id)
         async with lock.writer_lock:
@@ -253,7 +255,9 @@ async def rebuild_palace(
             raise HTTPException(
                 status_code=503, detail="sidecar shutting down"
             ) from exc
-        raise
+        raise HTTPException(
+            status_code=500, detail="rebuild open failed"
+        ) from exc
 
     lock = registry.lock_for(user_id)
     ingested = 0

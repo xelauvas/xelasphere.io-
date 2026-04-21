@@ -131,7 +131,12 @@ async def ingest(
     except RuntimeError as exc:
         if "shutting down" in str(exc).lower():
             raise HTTPException(status_code=503, detail="sidecar shutting down") from exc
-        raise  # surface as 500; other RuntimeErrors are unexpected
+        # Non-"shutting down" RuntimeErrors (corrupt meta.json, schema-
+        # too-new; see palace_handle.py:187, 222) must convert to
+        # HTTPException(500). A bare raise bypasses ServerErrorMiddleware
+        # through BaseHTTPMiddleware — doctrine hit #4 framework-semantic
+        # hazard. Uniform fix at every open-raising route.
+        raise HTTPException(status_code=500, detail="ingest open failed") from exc
     lock = registry.lock_for(user_id)
     try:
         async with lock.writer_lock:
@@ -248,7 +253,15 @@ async def wake_up(
             raise HTTPException(
                 status_code=503, detail="sidecar shutting down"
             ) from exc
-        raise  # other RuntimeErrors surface as 500
+        # Non-"shutting down" RuntimeErrors from registry.open (corrupt
+        # meta.json, schema-too-new) must convert to HTTPException(500)
+        # — a bare raise propagates through BaseHTTPMiddleware and
+        # bypasses ServerErrorMiddleware's 500-conversion. Same
+        # framework-semantic hazard as doctrine hit #4 at the ingest
+        # route; uniform fix at every open-raising route.
+        raise HTTPException(
+            status_code=500, detail="wake-up failed"
+        ) from exc
 
     # Hit / miss counters (spec §8.1). Bumped here — not inside the
     # registry — because the registry's own open API is used
@@ -327,7 +340,9 @@ async def search(
             raise HTTPException(
                 status_code=503, detail="sidecar shutting down"
             ) from exc
-        raise
+        raise HTTPException(
+            status_code=500, detail="search open failed"
+        ) from exc
 
     hot_label = "0" if was_cold else "1"
 
@@ -393,7 +408,9 @@ async def list_drawers(
             raise HTTPException(
                 status_code=503, detail="sidecar shutting down"
             ) from exc
-        raise
+        raise HTTPException(
+            status_code=500, detail="list_drawers open failed"
+        ) from exc
 
     lock = registry.lock_for(user_id)
     async with lock.reader_lock:
