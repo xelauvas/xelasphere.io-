@@ -215,6 +215,106 @@ async def test_delete_then_reopen_creates_fresh_palace(
     )
 
 
+async def test_delete_user_a_does_not_touch_user_b(
+    client, auth, tmp_path: Path
+) -> None:
+    """Cross-user isolation (production-critical invariant).
+
+    DELETE on alice's palace MUST NOT affect bob's palace state —
+    bob's drawers, bob's kg.sqlite, bob's backend-cache entry, bob's
+    writer_lock, all untouched. A future "optimization" that
+    accidentally shared state across users (e.g., reusing a single
+    Chroma client across palaces, a global audit ref that points at
+    any user's dir, a misscoped rmtree pattern) would fail this
+    test.
+
+    The weaker version of this test — "after DELETE alice, can bob
+    still ingest?" — would miss a bug where bob's post-delete
+    ingest succeeds but his PRE-existing drawers are gone. This
+    test checks bob's full state survives: pre-existing drawers +
+    post-delete fresh ingest + backend-cache entry all intact.
+    """
+    from mempalace.palace import _DEFAULT_BACKEND
+
+    # Seed alice with 2 drawers and bob with 3.
+    for name, count in (("alice", 2), ("bob", 3)):
+        for i in range(count):
+            r = await client.post(
+                f"/palace/{name}/ingest",
+                headers=auth,
+                json={
+                    "turn_id": f"{name[0]}{'0' * 30}{i:02d}",
+                    "session_id": "s",
+                    "pair_id": f"{name[0]}p{'0' * 29}{i:02d}",
+                    "role": "user",
+                    "text": f"{name} turn {i}",
+                    "ts": 1_700_000_500.0 + i,
+                },
+            )
+            assert r.status_code == 200, r.text
+
+    alice_path = str(tmp_path / "palaces" / "alice")
+    bob_path = str(tmp_path / "palaces" / "bob")
+    # Precondition: both palaces in backend cache.
+    assert alice_path in _DEFAULT_BACKEND._clients
+    assert bob_path in _DEFAULT_BACKEND._clients
+
+    # DELETE alice.
+    r = await client.request(
+        "DELETE",
+        "/palace/alice",
+        headers=auth,
+        json={"requested_by": "admin", "reason": "isolation test"},
+    )
+    assert r.status_code == 200, r.text
+
+    # Alice-side teardown: palace gone from backend cache, dir gone.
+    assert alice_path not in _DEFAULT_BACKEND._clients
+    assert not (tmp_path / "palaces" / "alice").exists()
+
+    # Bob-side preserved: backend cache entry untouched, palace dir
+    # intact, drawers queryable.
+    assert bob_path in _DEFAULT_BACKEND._clients, (
+        "bob's backend client was disturbed by alice's DELETE — "
+        "cross-user isolation violated"
+    )
+    r = await client.get("/palace/bob/drawers?limit=10", headers=auth)
+    assert r.status_code == 200, r.text
+    page = r.json()
+    assert page["total"] == 3, (
+        f"bob should still have his 3 drawers after alice's DELETE; "
+        f"got total={page['total']}"
+    )
+
+    # Bob can still ingest post-alice-delete.
+    r = await client.post(
+        "/palace/bob/ingest",
+        headers=auth,
+        json={
+            "turn_id": "b" * 32,
+            "session_id": "s",
+            "pair_id": "B" * 32,
+            "role": "user",
+            "text": "bob's post-alice-delete ingest",
+            "ts": 1_700_001_000.0,
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "accepted"
+
+    # Final state: bob at 4 drawers, alice 404.
+    r = await client.get("/palace/bob/drawers?limit=10", headers=auth)
+    assert r.json()["total"] == 4
+
+    r = await client.request(
+        "DELETE",
+        "/palace/alice",
+        headers=auth,
+        json={"requested_by": "admin", "reason": "second delete"},
+    )
+    assert r.status_code == 404
+
+
 async def test_delete_on_already_deleted_user_returns_404(
     client, auth
 ) -> None:
