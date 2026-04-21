@@ -6,6 +6,7 @@ from mempalace_sidecar.config import Settings
 from mempalace_sidecar.routes import lifecycle as lifecycle_router
 from mempalace_sidecar.routes import ops
 from mempalace_sidecar.routes import palace as palace_router
+from mempalace_sidecar.shutdown import InFlightCounter, InFlightCounterMiddleware
 
 
 def _sd_notify(message: str) -> None:
@@ -202,7 +203,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     app = FastAPI(title="mempalace-sidecar", version="0.1.0", lifespan=_lifespan)
     app.state.settings = settings
+    # M0.10: InFlightCounter tracks request depth so shutdown_sequence
+    # can drain cleanly (spec §5.7). Instantiated in create_app (not
+    # lifespan startup) so ``app.state.in_flight`` is already live when
+    # the middleware dispatches its first request — Starlette processes
+    # middleware before the lifespan finishes.
+    app.state.in_flight = InFlightCounter()
+    app.state.accepting = True
     app.add_middleware(TokenAuthMiddleware, expected_token=settings.token)
+    app.add_middleware(InFlightCounterMiddleware, counter=app.state.in_flight)
     app.include_router(ops.router)
     app.include_router(palace_router.router)
     app.include_router(lifecycle_router.router)
