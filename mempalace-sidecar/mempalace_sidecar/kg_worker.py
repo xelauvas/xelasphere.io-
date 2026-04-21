@@ -39,6 +39,7 @@ the ordering directly.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from collections import defaultdict
@@ -50,6 +51,20 @@ from mempalace_sidecar.kg_queue import KGQueue
 
 
 log = logging.getLogger(__name__)
+
+
+def _hash_uid(user_id: str, salt: str) -> str:
+    """Spec §8.4 pseudonymous-logging: ``sha256(user_id + salt)[:12]``.
+
+    Duplicated inline from ``routes/palace.py`` (also ``_hash_uid``)
+    until M0.11 consolidates both into a shared ``logging_utils``
+    module — see deltas "2026-04-20 M0.4 review-response" + M0.11
+    deferral list. Keeping the two copies in sync matters: both must
+    emit identical hashes for the same (user_id, salt) pair so
+    operators can correlate ingest-route and kg_worker log lines for
+    the same user.
+    """
+    return hashlib.sha256(f"{user_id}{salt}".encode()).hexdigest()[:12]
 
 
 @dataclass(frozen=True)
@@ -172,6 +187,7 @@ async def _run_one_tick(
     extractor: KGExtractor,
     cap_usd: float,
     kg_writer: KGWriter | None = None,
+    user_id_hash_salt: str = "",
 ) -> None:
     """One iteration of the worker.
 
@@ -254,7 +270,9 @@ async def _run_one_tick(
             log.warning(
                 "kg_worker: batch failed",
                 extra={
-                    "user_id_hash_prefix": user_id[:4],  # no salt at this layer
+                    # Spec §8.4 pseudonymous-logging contract — never
+                    # raw user_id, always sha256(user_id + salt)[:12].
+                    "user_id": _hash_uid(user_id, user_id_hash_salt),
                     "err": str(exc)[:200],
                     "drawer_count": len(drawer_ids),
                 },
@@ -281,6 +299,7 @@ async def run_kg_worker(
     extractor: KGExtractor,
     cap_usd: float,
     interval_sec: float = 30.0,
+    user_id_hash_salt: str = "",
 ) -> None:
     """Long-running worker task. One ``_run_one_tick`` per
     ``interval_sec``, exits cleanly on ``task.cancel()`` via the
@@ -306,7 +325,13 @@ async def run_kg_worker(
     try:
         while True:
             try:
-                await _run_one_tick(queue, registry, extractor, cap_usd)
+                await _run_one_tick(
+                    queue,
+                    registry,
+                    extractor,
+                    cap_usd,
+                    user_id_hash_salt=user_id_hash_salt,
+                )
             except asyncio.CancelledError:
                 # Propagate to the outer handler; DO NOT catch here.
                 # (Kept explicit for reviewer clarity; `except
@@ -314,10 +339,10 @@ async def run_kg_worker(
                 raise
             except Exception:
                 log.exception("kg_worker: tick error, will retry")
-            try:
-                await asyncio.sleep(interval_sec)
-            except asyncio.CancelledError:
-                raise
+            # asyncio.sleep's CancelledError propagates naturally up
+            # to the outer `except asyncio.CancelledError:` handler;
+            # no inner try wrapper needed here (quality-review M2).
+            await asyncio.sleep(interval_sec)
     except asyncio.CancelledError:
         log.info("kg_worker: cancelled, exiting")
         # Return cleanly — callers can `await task` without seeing

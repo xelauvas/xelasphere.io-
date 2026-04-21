@@ -114,6 +114,7 @@ async def _lifespan(app):
             registry=app.state.registry,
             extractor=NullExtractor(),
             cap_usd=settings.kg_daily_usd_cap,
+            user_id_hash_salt=settings.user_id_hash_salt,
         )
     )
 

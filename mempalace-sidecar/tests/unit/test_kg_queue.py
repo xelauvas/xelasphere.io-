@@ -201,8 +201,12 @@ async def test_worker_backoff_increments_attempts_on_failure(tmp_path: Path):
     assert row[0] == "failed", (
         f"after 5 failures, status={row[0]}, expected 'failed'"
     )
-    assert row[1] >= 5, (
-        f"after 5 failures, attempts={row[1]}, expected >= 5"
+    # Tightened from >= 5 per M0.7 quality review M3: attempts
+    # increments by exactly 1 per mark_failed call, so after 5
+    # ticks the count is exactly 5 — a future bug that increments
+    # twice per tick would still pass >= 5, but fails == 5.
+    assert row[1] == 5, (
+        f"after 5 failures, attempts={row[1]}, expected exactly 5"
     )
 
 

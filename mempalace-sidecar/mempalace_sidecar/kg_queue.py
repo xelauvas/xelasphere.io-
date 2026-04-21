@@ -28,6 +28,16 @@ duplicate signal; the dedup is invisible upstream.
 gets excluded from future claims. The final failing tick flips status
 to ``'failed'`` explicitly for clarity (and for the
 ``mempalace_kg_queue_depth{status=failed}`` metric landing in M0.11).
+
+**Deviation #6 from plan sketch (M0.7 quality review):** the plan's
+``mark_failed`` sketch at plan line 2602-2608 unconditionally resets
+``status='pending'`` after incrementing attempts — rows would loop
+forever and never reach the ``'failed'`` terminal state. This
+implementation flips to ``'failed'`` when ``new_attempts >= _ATTEMPT_CAP``,
+matching the ``claim`` filter (``attempts < 5``) and the metric alert
+at spec line 702 (``mempalace_kg_queue_depth{status=failed}``). Plan
+sketch should be amended; captured here for the month-14 reader who
+compares code to plan and wonders about the drift.
 """
 
 from __future__ import annotations
