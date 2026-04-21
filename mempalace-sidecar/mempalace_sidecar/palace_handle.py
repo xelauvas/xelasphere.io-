@@ -276,15 +276,39 @@ class PalaceHandle:
         except (sqlite3.Error, AttributeError) as e:  # pragma: no cover - defensive
             log.warning("turns.close() raised during PalaceHandle.close: %s", e)
 
-        # Step 3: library backend cache pop. MUST run last — if it ran
-        # first, a concurrent reader with self._collection in its stack
-        # frame would reference a client whose file handles we just
-        # released. Two-phase eviction (spec §5.4) guarantees no such
-        # reader exists, but keeping the pop last is defensive.
+        # Step 3: library backend cache pop + explicit client.close().
+        # MUST run last — if it ran first, a concurrent reader with
+        # self._collection in its stack frame would reference a client
+        # whose file handles we just released. Two-phase eviction (spec
+        # §5.4) guarantees no such reader exists, but keeping the pop
+        # last is defensive.
         #
-        # Use str(self.palace_path) to match what get_collection inserted;
-        # the library keys _clients by whatever string the caller passed.
-        _DEFAULT_BACKEND._clients.pop(str(self.palace_path), None)
+        # Use str(self.palace_path) to match what get_collection
+        # inserted; the library keys _clients by whatever string the
+        # caller passed.
+        #
+        # **chromadb 1.5.8 requires an explicit client.close() to
+        # release SQLite file locks** (discovered M0.8 via DBMOVED
+        # error code 1032 on the DELETE-then-reopen path). chromadb's
+        # docstring: "This is particularly important for PersistentClient
+        # to avoid SQLite file locking issues." Without this call,
+        # removing the client from _clients + relying on Python GC is
+        # insufficient — chromadb's Rust backend retains state that
+        # causes SQLITE_READONLY_DBMOVED on a fresh PersistentClient
+        # opened for the same path after rmtree. Upstream issue in
+        # mempalace.backends.chroma worth filing (ChromaBackend should
+        # call client.close() before popping); fixed at our boundary
+        # for now.
+        client = _DEFAULT_BACKEND._clients.pop(str(self.palace_path), None)
+        if client is not None:
+            try:
+                client.close()
+            except Exception as e:  # pragma: no cover - defensive
+                log.warning(
+                    "chromadb client.close() raised during "
+                    "PalaceHandle.close: %s",
+                    e,
+                )
 
         self._closed = True
 

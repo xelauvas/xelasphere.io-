@@ -211,6 +211,38 @@ class KGQueue:
             row = await cursor.fetchone()
             return float(row[0]) if row else 0.0
 
+    async def reset_stale_running(self, threshold_sec: float = 180.0) -> int:
+        """Reset rows stuck in ``status='running'`` older than
+        ``threshold_sec`` back to ``'pending'`` so the worker can
+        re-claim them. M0.8 (carried in from M0.7 deltas).
+
+        **Call at lifespan startup BEFORE ``run_kg_worker`` launches.**
+        If the worker launches first, its very first ``claim()``
+        races this ``UPDATE``: claim might grab a row that's about to
+        be marked pending-again, or the sweep might revert a row the
+        worker just legitimately claimed. Small window, real bug.
+        Lifespan orders the calls correctly in ``main.py``.
+
+        Default threshold 180s = 6 × ``interval_sec=30``. A row
+        stuck in 'running' for 3 minutes is definitively a crash
+        artifact — the worker's normal tick is <1 s and followed
+        immediately by ``mark_done`` or ``mark_failed``. 60s or 90s
+        would be tight enough to false-positive a slow-but-healthy
+        tick racing a just-restarted sidecar's sweep; 180s is safely
+        beyond any legitimate in-flight tick.
+
+        Returns the count of rows reset (for the lifespan's log).
+        """
+        cutoff = time.time() - threshold_sec
+        async with aiosqlite.connect(self._db_path) as db:
+            cursor = await db.execute(
+                "UPDATE kg_pending SET status='pending', updated_at=? "
+                "WHERE status='running' AND updated_at < ?",
+                (time.time(), cutoff),
+            )
+            await db.commit()
+            return cursor.rowcount
+
     async def add_spend(self, usd: float) -> None:
         """Add ``usd`` to today's running total. Upsert — creates the
         row for today if missing."""

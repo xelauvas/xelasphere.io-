@@ -77,12 +77,29 @@ class AuditLog:
             await db.executescript(SCHEMA)
             await db.commit()
 
-    # record_delete intentionally NOT YET IMPLEMENTED — lands in the
-    # M0.8 GREEN commit alongside the DELETE route body. The RED
-    # commit's test_audit_log_records_deletion fails with
-    # AttributeError, which is the discipline-correct RED failure
-    # shape ("method missing") rather than an import-error or a
-    # wrong-answer pass.
+    async def record_delete(
+        self,
+        *,
+        user_id: str,
+        requested_by: str,
+        reason: str,
+        before_bytes: int,
+    ) -> None:
+        """Append one deletion row. Append-only — UPDATE and DELETE
+        are not in the contract. Called from the DELETE route BEFORE
+        the rmtree side-effect runs (spec §4.4 order-of-operations);
+        caller should ``asyncio.shield`` this call so a timeout on
+        the overall DELETE doesn't prevent the audit row from
+        landing.
+        """
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                "INSERT INTO deletion_audit "
+                "(ts, user_id, requested_by, reason, before_bytes) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (time.time(), user_id, requested_by, reason, before_bytes),
+            )
+            await db.commit()
 
 
 __all__ = ["AuditLog"]

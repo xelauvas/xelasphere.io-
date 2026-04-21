@@ -247,6 +247,31 @@ class PalaceRegistry:
             await self._close_evicted(uid, entry)
         return len(evicted)
 
+    async def evict(self, user_id: str) -> "PalaceEntry | None":
+        """Remove a single user's entry from the cache. M0.8.
+
+        Used by the DELETE route during its two-phase destructive-
+        delete flow. Atomically pops from ``self._cache`` under
+        ``_registry_lock``. The caller MUST close the returned
+        handle itself — ``evict`` does NOT call ``handle.close()``.
+
+        Design mirrors Phase 1 of the existing eviction pattern (pop
+        under ``_registry_lock``); the DELETE caller holds the user's
+        writer_lock across the entire flow and performs Phase 2
+        (close) itself, which is why closing is caller-owned here
+        instead of registry-internal.
+
+        The per-user lock in ``self._locks`` is NOT removed — spec
+        §5.4 accepts the ~1 MB-at-10k-users cost vs. the
+        mid-operation-delete race that cleaning up locks would
+        introduce (see deltas "2026-04-20 M0.3.1-5 review-response").
+
+        Returns the popped entry, or ``None`` if the user had no
+        resident palace.
+        """
+        async with self._registry_lock:
+            return self._cache.pop(user_id, None)
+
     async def close_all(self) -> None:
         """Close every resident handle. Intended for shutdown (M0.10)
         and test teardown — the latter wants deterministic handle

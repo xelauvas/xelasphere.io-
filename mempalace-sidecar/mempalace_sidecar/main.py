@@ -117,6 +117,12 @@ async def _lifespan(app):
     # drop-in replacement per the KGExtractor Protocol.
     kg_queue = KGQueue(settings.data_dir / "kg_pending.sqlite")
     await kg_queue.ensure()
+    # Crash-recovery: reset any rows stuck in 'running' from a
+    # previous process that died mid-tick. Runs BEFORE the worker
+    # launches so there's no race between the UPDATE here and the
+    # worker's first claim(). Threshold 180s protects against
+    # false-positive resets of legitimate in-flight ticks. M0.8.
+    await kg_queue.reset_stale_running(threshold_sec=180.0)
     app.state.kg_queue = kg_queue
     app.state.kg_worker_task = _asyncio.create_task(
         run_kg_worker(
