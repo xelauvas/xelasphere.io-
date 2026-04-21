@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from mempalace_sidecar.auth import TokenAuthMiddleware
 from mempalace_sidecar.config import Settings
+from mempalace_sidecar.routes import lifecycle as lifecycle_router
 from mempalace_sidecar.routes import ops
 from mempalace_sidecar.routes import palace as palace_router
 
@@ -74,6 +75,7 @@ async def _lifespan(app):
     # be fine — but keeping the imports local mirrors the plan
     # pseudo-code and makes the lifespan's contract visually
     # self-contained.
+    from mempalace_sidecar.audit import AuditLog
     from mempalace_sidecar.kg_queue import KGQueue
     from mempalace_sidecar.kg_worker import NullExtractor, run_kg_worker
     from mempalace_sidecar.registry import PalaceRegistry
@@ -98,6 +100,14 @@ async def _lifespan(app):
         max_bytes=settings.cache_max_bytes,
         idle_ttl_sec=settings.idle_ttl_sec,
     )
+
+    # Step 2b: audit log (plan M0.8). Sidecar-level sqlite at
+    # settings.data_dir / "audit.sqlite" — append-only record of
+    # deletions, included in backups per spec §7.8. Init here so
+    # the DELETE route (Stage 3 GREEN) can write audit rows via
+    # app.state.audit without further wiring.
+    app.state.audit = AuditLog(settings.data_dir / "audit.sqlite")
+    await app.state.audit.ensure()
 
     # Step 3: KG queue + worker (plan M0.7).
     # TODO(M0.16-ish): swap NullExtractor for a real LLM-backed
@@ -161,6 +171,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(TokenAuthMiddleware, expected_token=settings.token)
     app.include_router(ops.router)
     app.include_router(palace_router.router)
+    app.include_router(lifecycle_router.router)
     return app
 
 

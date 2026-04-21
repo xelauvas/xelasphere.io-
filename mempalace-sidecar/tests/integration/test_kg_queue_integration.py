@@ -87,6 +87,84 @@ async def test_ingest_enqueues_kg_pending_row(
     )
 
 
+async def test_kg_queue_startup_sweep_resets_stale_running(
+    app, tmp_path
+) -> None:
+    """Plan M0.8 deferred-in from M0.7 quality review M5:
+    ``KGQueue.reset_stale_running(threshold_sec=180.0)`` resets rows
+    stuck in ``status='running'`` older than the threshold to
+    ``'pending'`` so they get re-claimed. Lifespan startup calls
+    this BEFORE ``run_kg_worker`` launches.
+
+    Seeds two rows directly into kg_pending.sqlite before driving
+    lifespan:
+      - ``alice``'s row: updated_at = now - 200s  (older than 180s
+        threshold → MUST be reset to 'pending' by the sweep)
+      - ``bob``'s row: updated_at = now - 60s    (younger than
+        threshold → MUST stay 'running')
+
+    Tests BOTH directions of the threshold — a bug that reset all
+    running rows (no threshold check) would pass the first
+    assertion but fail the second.
+
+    Fails at RED because the lifespan doesn't call
+    ``reset_stale_running`` yet (Stage 3 adds both the method and
+    the lifespan call).
+    """
+    import sqlite3
+    import time
+
+    queue_path = tmp_path / "kg_pending.sqlite"
+    # Schema has to exist before we can INSERT. Prime it via a direct
+    # KGQueue.ensure() call — the lifespan also calls ensure() but we
+    # seed BEFORE lifespan runs.
+    from mempalace_sidecar.kg_queue import KGQueue
+
+    queue = KGQueue(queue_path)
+    await queue.ensure()
+
+    now = time.time()
+    with sqlite3.connect(str(queue_path)) as conn:
+        conn.execute(
+            "INSERT INTO kg_pending "
+            "(user_id, drawer_ids, drawer_ids_hash, status, "
+            " attempts, enqueued_at, updated_at) "
+            "VALUES (?, ?, ?, 'running', 0, ?, ?)",
+            ("alice", '["d1"]', "hash-alice", now - 500, now - 200),
+        )
+        conn.execute(
+            "INSERT INTO kg_pending "
+            "(user_id, drawer_ids, drawer_ids_hash, status, "
+            " attempts, enqueued_at, updated_at) "
+            "VALUES (?, ?, ?, 'running', 0, ?, ?)",
+            ("bob", '["d2"]', "hash-bob", now - 120, now - 60),
+        )
+        conn.commit()
+
+    # Drive lifespan — the sweep runs at startup.
+    async with app.router.lifespan_context(app):
+        pass
+
+    # Post-lifespan inspection.
+    with sqlite3.connect(str(queue_path)) as conn:
+        rows = {
+            r[0]: r[1]
+            for r in conn.execute(
+                "SELECT user_id, status FROM kg_pending"
+            )
+        }
+
+    assert rows.get("alice") == "pending", (
+        f"stale 'running' row (updated_at=now-200, threshold=180) "
+        f"should be reset to 'pending'; got status={rows.get('alice')!r}"
+    )
+    assert rows.get("bob") == "running", (
+        f"fresh 'running' row (updated_at=now-60, threshold=180) "
+        f"must stay 'running' to avoid racing an in-flight tick; "
+        f"got status={rows.get('bob')!r}"
+    )
+
+
 async def test_worker_lifecycle_cancels_cleanly_on_shutdown(app):
     """Deviation #3 teeth-bearing test: during lifespan teardown, the
     KG worker task is cancelled BEFORE ``registry.close_all`` runs.

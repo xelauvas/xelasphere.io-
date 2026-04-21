@@ -126,6 +126,44 @@ class DeletionReceipt(BaseModel):
     bytes_removed: int
 
 
+class RebuildRequest(BaseModel):
+    """Request body for ``POST /palace/{user_id}/rebuild`` (M0.8).
+
+    ``conversations`` is a list of ingest-shaped turns. Each is the
+    exact same wire shape as a normal ``/ingest`` request (reusing
+    ``IngestRequest``) so the rebuild path and the normal ingest path
+    share validation and the handle's ``add_drawer`` call signature.
+
+    **Cap: 100 items per request** — spec §5.2 calls the route
+    "long-running, streaming" but M0.8 ships sync-POST (see deltas
+    2026-04-21 M0.8 rebuild-streaming deviation). A sync rebuild
+    holds the per-user writer_lock for the full duration; at ~100ms
+    per drawer, 100 conversations ~= 10s worst-case lock hold, which
+    is the ceiling that keeps parallel reads from timing out at
+    Flask's 2s client budget. The 501st item is rejected with HTTP
+    413; larger rebuilds land when streaming + ``from_path`` arrive
+    in a later milestone.
+    """
+
+    conversations: list["IngestRequest"]
+
+
+class RebuildResponse(BaseModel):
+    """Response for ``POST /palace/{user_id}/rebuild`` (M0.8).
+
+    ``ingested`` counts ``AddDrawerResult.status == 'accepted'``;
+    ``skipped`` counts ``'duplicate'``. Together they sum to
+    ``len(request.conversations)``. ``job_id`` is a UUID4 generated
+    at request time — forward-compatible with streaming (where it
+    would identify the rebuild across chunks) but not load-bearing
+    in the sync flow; the caller already has the full receipt.
+    """
+
+    ingested: int
+    skipped: int
+    job_id: str
+
+
 class DrawersPage(BaseModel):
     """Paginated response for GET /palace/{user_id}/drawers (M0.6.2).
 
@@ -167,4 +205,6 @@ __all__ = [
     "DeleteRequest",
     "DeletionReceipt",
     "DrawersPage",
+    "RebuildRequest",
+    "RebuildResponse",
 ]
