@@ -233,8 +233,12 @@ def _rmtree_warn(func, path, exception) -> None:
     without a trace — a permission glitch or a stuck filehandle
     on ``.replaced_<ts>`` would accumulate disk forever.
     """
+    # %r on the exception captures both the type and the message
+    # (e.g. ``PermissionError('... stuck filehandle ...')``); journald
+    # operators diagnosing a stuck ``.replaced_<ts>`` need the type
+    # to tell "locked file" from "vanished mid-walk".
     log.warning(
-        "reap_stale: failed to remove %s via %s: %s",
+        "reap_stale: failed to remove %s via %s: %r",
         path, func.__name__, exception,
     )
 

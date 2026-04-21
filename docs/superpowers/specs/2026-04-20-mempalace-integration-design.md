@@ -290,7 +290,7 @@ mempalace-sidecar/                 (subdir within xelasphere.io-; see §8 for sp
 │   ├── migrations/          # atomic-rename runner + per-version modules
 │   ├── metrics.py           # Prometheus multiprocess-safe collectors
 │   ├── config.py            # Pydantic settings
-│   └── shutdown.py          # SIGTERM handler
+│   └── shutdown.py          # shutdown_sequence + 503 gate + drain (SIGTERM via uvicorn lifespan)
 └── tests/
 ```
 

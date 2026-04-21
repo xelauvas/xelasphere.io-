@@ -77,10 +77,21 @@ class InFlightCounter:
             self._idle.clear()
 
     def exit(self) -> None:
-        # Clamp to 0 so a stray double-exit can't drive the counter
-        # negative + trick ``wait_idle`` into returning while real
-        # handlers are still running. A negative count would pass
-        # the ``== 0`` short-circuit in ``wait_idle``.
+        # Clamp to 0 as a best-effort defense against a stray
+        # double-exit — keeps the counter non-negative so
+        # ``wait_idle``'s ``== 0`` short-circuit isn't fooled.
+        #
+        # **Limitation.** The clamp does NOT cover every interleaving
+        # of a double-exit plus a legitimate fresh ``enter``. If the
+        # sequence is ``enter → exit → enter → exit → exit``
+        # (pathological second exit racing a real entry), the
+        # second ``exit`` fires ``_idle.set()`` while a real handler
+        # is still running. Risk is gated on the upstream invariant
+        # "each ``enter`` is paired with exactly one ``exit``"
+        # (middleware try/finally guarantees this), so the pathological
+        # interleave is not reachable under the current middleware.
+        # If a future caller site violates the invariant, this clamp
+        # is not sufficient — swap for a stricter assertion then.
         self._count -= 1
         if self._count <= 0:
             self._count = 0

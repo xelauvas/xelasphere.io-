@@ -84,16 +84,19 @@ async def test_shutdown_sequence_emits_all_phase_markers(
         "shutdown_systemd_notify",
         "shutdown_done",
     ]
-    observed_in_order = [
-        phase
-        for rec in caplog.records
-        for phase in expected
-        if phase in rec.getMessage()
-    ]
+    # FIRST phase name per record — avoids double-counting if a
+    # future log message happens to mention two phases in one line
+    # (e.g., "shutdown_drain: skipped because shutdown_gate fired").
+    observed_in_order: list[str] = []
+    for rec in caplog.records:
+        msg = rec.getMessage()
+        first = next((p for p in expected if p in msg), None)
+        if first is not None:
+            observed_in_order.append(first)
     # De-dup consecutive duplicates then assert the distinct
     # sequence equals the expected ordering. Any phase missing —
     # or out of order — fails here.
-    deduped = []
+    deduped: list[str] = []
     for name in observed_in_order:
         if not deduped or deduped[-1] != name:
             deduped.append(name)
@@ -144,10 +147,13 @@ async def test_drain_respects_timeout_on_stuck_request(app) -> None:
     """A wedged request cannot hold shutdown hostage indefinitely.
 
     Leaves the counter bumped and NEVER releases it. ``shutdown_sequence``
-    returns within the drain_timeout budget. Upper bound tight at 1.0s
-    to catch accidental double-wait or fallback-poll bugs — if the
-    timeout path did a `sleep(timeout)` AFTER a failed `wait_for`,
-    this would land near 1.0s+, not inside the tight window.
+    returns within the drain_timeout budget. Upper bound tight at
+    ``0.7s`` for a 0.5s budget — catches a full double-wait
+    (0.5 + 0.5 ≈ 1.0s) AND a partial-fallback-sleep regression
+    (e.g., a ``sleep(0.3)`` after a failed ``wait_for`` would land
+    at 0.8s, outside the window). Current impl has no fallback
+    path; tightening the upper bound keeps the assertion aligned
+    with the advertised bug class.
     """
     from mempalace_sidecar.shutdown import shutdown_sequence
 
@@ -159,20 +165,27 @@ async def test_drain_respects_timeout_on_stuck_request(app) -> None:
         await shutdown_sequence(app, drain_timeout_sec=0.5)
         elapsed = time.perf_counter() - t0
 
-        assert 0.4 <= elapsed <= 1.0, (
-            f"drain timeout outside tight window [0.4, 1.0]: "
+        assert 0.4 <= elapsed <= 0.7, (
+            f"drain timeout outside tight window [0.4, 0.7]: "
             f"elapsed={elapsed:.3f}s"
         )
 
 
 async def test_concurrent_drain_waits_for_all_handlers(app) -> None:
-    """Three concurrent in-flight requests all complete before
-    the registry close phase runs.
+    """Three concurrent in-flight requests all complete before the
+    registry close phase runs, and ``wait_idle`` wakes promptly on
+    the last release.
 
-    A serialized drain (N × per-handler) would push wall-clock past
-    1.8s; the concurrent gather-based drain should finish well
-    under. Bound widened to 1.8s to tolerate scheduler jitter on
-    loaded CI runners while still catching serialized regressions.
+    Bound rationale: the final release fires at t≈0.3s; a healthy
+    drain observes ``idle.set()`` and proceeds immediately, landing
+    total wall-clock near 0.3s. The 1.8s bound tolerates scheduler
+    jitter on loaded CI runners. This test does NOT catch "serialized
+    drain" — the impl is a single ``asyncio.Event.wait``, not a
+    per-handler loop, so serialization isn't reachable. What it DOES
+    catch: drain never waking (would hit ``drain_timeout_sec=3.0``
+    and land at 3.0s+, failing the bound); the ``_idle.set()``
+    signal path being broken (same failure shape); or the event
+    being cleared by a spurious post-exit re-enter (also 3.0s+).
     """
     from mempalace_sidecar.shutdown import shutdown_sequence
 
@@ -201,7 +214,7 @@ async def test_concurrent_drain_waits_for_all_handlers(app) -> None:
         assert len(completed) == 3
         assert elapsed < 1.8, (
             f"concurrent drain took too long: elapsed={elapsed:.3f}s "
-            "(bug: are releases being serialized?)"
+            "(bug: drain never woke, or idle signal path broken)"
         )
         assert counter.count == 0
 
@@ -215,7 +228,6 @@ async def test_close_all_failure_still_emits_stopping(
     journald distinguishes cleanly-stopped vs failed units; a
     swallowed notify routes oncall alerts to the wrong bucket.
     """
-    from mempalace_sidecar import shutdown as shutdown_mod
     from mempalace_sidecar.shutdown import shutdown_sequence
 
     stopping_calls: list[None] = []
@@ -224,17 +236,13 @@ async def test_close_all_failure_still_emits_stopping(
         stopping_calls.append(None)
 
     async with app.router.lifespan_context(app):
-        # Patch BOTH the main-module notifier (used by lifespan) and
-        # the shutdown-module notifier (used by shutdown_sequence).
-        # Stage 3 GREEN ships a single notifier location; this test
-        # tolerates either wiring.
+        # Patch ``main._sd_notify_stopping`` — shutdown_sequence
+        # does a fresh ``from mempalace_sidecar.main import
+        # _sd_notify_stopping`` inside phase 5, so the attribute
+        # lookup resolves against the patched main module.
         monkeypatch.setattr(
             "mempalace_sidecar.main._sd_notify_stopping", _fake_stopping
         )
-        if hasattr(shutdown_mod, "_sd_notify_stopping"):
-            monkeypatch.setattr(
-                shutdown_mod, "_sd_notify_stopping", _fake_stopping
-            )
 
         async def _raising_close_all() -> None:
             raise RuntimeError("simulated close_all blowup")
@@ -253,12 +261,19 @@ async def test_close_all_failure_still_emits_stopping(
 
 
 async def test_install_signal_handlers_wires_sigterm_sigint(app) -> None:
-    """OPTIONAL — SIGTERM/SIGINT handlers route through
-    ``shutdown_sequence``.
+    """OPTIONAL — **permanently skipped per M0.10 close decision.**
 
-    Skipped if the shutdown module doesn't expose
-    ``install_signal_handlers``. Stage 3 GREEN decides whether to
-    wire via signal handlers or rely on uvicorn's SIGTERM routing.
+    Rationale (see deltas ``2026-04-21 M0.10 test #8``): uvicorn
+    catches SIGTERM + SIGINT via ``capture_signals()`` and routes
+    them through its own ``handle_exit`` → ``lifespan.shutdown()``
+    path. The lifespan's finally block then invokes
+    ``shutdown_sequence``. Installing custom in-process signal
+    handlers would duplicate uvicorn's path and risks double
+    invocation or ordering surprises.
+
+    Kept in the suite as a skip-on-absent-symbol guard: if a
+    future milestone decides to install handlers, the skip flips
+    to an assertion automatically.
     """
     import signal
 
