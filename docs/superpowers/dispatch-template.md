@@ -105,6 +105,29 @@ Before firing, also verify:
 - The previous milestone's review-response commit has landed (don't dispatch
   M0.N while M0.N-1 is still pending review fold-in).
 
+### Stage-boundary git check (before every stage, not just at milestone start)
+
+Before starting ANY stage of a multi-stage milestone (refactor → RED → GREEN
+→ deltas → review-response), run:
+
+```bash
+git log --oneline -3
+```
+
+and confirm the previous stage landed as a committed artifact. Uncommitted
+Stage N state contaminates Stage N+1's diff — the two become one commit, the
+review pair has trouble reasoning about which change produced which test
+outcome, and bisection over that range degrades silently.
+
+**Forcing function from M0.8 Stage 1 → Stage 2.** The refactor commit was
+ready to stage but I went straight into Stage 2 scaffolding without
+committing. Caught mid-Stage-2 when `git diff --cached --stat` showed 789
+insertions across 10 files — clearly two stages squashed together. Had to
+split via `git restore --staged` + selective re-add. The check is cheap
+(two seconds); the failure is expensive (untangling a combined diff, rewriting
+history, explaining the squash to reviewers). Run the check at the top of
+every stage.
+
 ---
 
 ## Part 2 — The dispatch prompt
@@ -197,6 +220,36 @@ code? -> fix it and move on.
    boundary cases, honest-totals contracts, response-shape invariants,
    ordering or ranking properties. If your test would pass against a
    stub that returns `{}`, rewrite it.
+
+   **Absence-vs-presence principle (added post-M0.8).** Assertions on
+   "absence of bad state" (e.g., `key not in cache`, `assert ... is None`
+   for post-cleanup state, `not hasattr(...)`) are WEAKER than
+   assertions on "presence of good state" (e.g., "reopen the resource
+   and a write succeeds," "query returns the expected new value").
+   Absence-only passes whether or not the underlying cleanup actually
+   happened; presence fails when cleanup silently drifts. For
+   load-bearing teeth-bearing tests, prefer presence-of-good-state
+   wherever practical. Lineage: M0.8 chromadb close-before-pop drift,
+   silently-latent since M0.3 because every eviction-related test
+   asserted key-absent rather than reopen-succeeds. Caught only when
+   a new teeth-bearing test (`test_delete_then_reopen_creates_fresh_palace`)
+   exercised the full lifecycle. `test_registry_eviction_bounds_backend_cache`
+   was upgraded post-hoc with a reopen+write assertion to prevent
+   future regressions.
+
+5. **RED scaffolding: prefer "method missing" over "method raises
+   NotImplementedError."** When writing the RED commit's stubs,
+   leave the target method/attribute UNDEFINED entirely rather than
+   defining a stub that raises. The RED test then fails with
+   `AttributeError: 'Foo' object has no attribute 'bar'` — boring,
+   unambiguous, no coupling to the stub's exception message.
+   Whereas `raise NotImplementedError("M0.8 stub")` couples the
+   test's assertion to the exact string "M0.8 stub" (or whatever),
+   and some callers catch `NotImplementedError` for unrelated
+   reasons. Lineage: M0.8 AuditLog scaffolding — `record_delete`
+   was deliberately left undefined rather than stubbed, RED test
+   fell through to `AttributeError`, and the GREEN commit added
+   the method cleanly without stub-removal ceremony.
 
 ## Before You Begin
 
@@ -382,6 +435,25 @@ Both dispatches should carry the Section-A Bash-preamble + stop-on-
 ambiguity clarification. Reviewers are just as prone to self-censoring as
 implementers.
 
+### Known environmental constraint: pytest-denial on reviewer subagents
+
+Reviewer subagents in this project's environment CANNOT run `pytest`.
+Three data points (M0.6, M0.7, M0.8 reviewer pairs) all show the same
+narrow pattern: `pytest` specifically blocked, while Read + Grep + Glob
++ Bash-for-inspect (git log, git show, ls, cat, wc) all work fine.
+Reviewers complete successfully via diff-inspection against the
+RED→GREEN commit lineage — they don't need to re-run the suite because
+the implementer's test count is the evidence and the RED→GREEN shape
+shows what changed.
+
+**This is environmental, not a dispatch-prompt problem.** Do NOT attempt
+to work around it with different preamble language, don't file it as a
+subagent bug, don't try enabling pytest via Bash flags. The pattern is
+stable across sessions and narrow enough not to block review work.
+Dispatch prompts already tell reviewers "if pytest is sandboxed, that's
+fine — inspect against the diff"; that instruction is correctly
+load-bearing and should stay.
+
 ### Classify findings
 
 Every reviewer returns in the `{Critical, Important, Minor}` severity
@@ -533,9 +605,43 @@ future edits can see the forcing function:
   comment clarity). Rule: when two reviewers disagree on severity of
   the same finding, the spec-reviewer's classification wins for
   spec-compliance questions.
+- **Stage-boundary git-check discipline.** M0.8. Stage 1 refactor and
+  Stage 2 scaffolding nearly shipped as one commit because the
+  stage-between-commit wasn't made. Caught via `git diff --cached
+  --stat` showing a suspicious line count. Added as a Part 1 rule:
+  `git log --oneline -3` at the top of every stage.
+- **Absence-vs-presence testing principle.** M0.8 chromadb
+  close-before-pop drift. Silent since M0.3 because every eviction
+  test asserted "key absent from cache" (absence of bad state) rather
+  than "reopen + write succeeds" (presence of good state). Caught only
+  when a new teeth-bearing test (`test_delete_then_reopen_creates_fresh_palace`)
+  exercised the full lifecycle. Upgraded the M0.3 eviction test
+  post-hoc. Added to Part 2 B4 standing discipline.
+- **RED "method missing" over "stub raises."** M0.8. AuditLog's
+  `record_delete` was left undefined rather than stubbed with
+  `NotImplementedError`; the cleaner `AttributeError` decoupled the
+  RED test from a stub-specific exception message. Generalized to a
+  Part 2 rule.
+- **pytest-denial on reviewer subagents is environmental.** M0.6 + M0.7
+  + M0.8 reviewer pairs all hit the same narrow denial (`pytest`
+  specifically blocked, everything else works). Reviewers complete via
+  diff-inspection. Not fixable from prompts. Named in Part 3.
+- **Spec-reviewer-findings trend (tentative).** M0.6: 4 Importants.
+  M0.7: 1 Important. M0.8: 0 findings. Reading: pre-resolution + Code
+  catching spec ambiguities upstream + discovered-deviation fixes
+  landing same-session before reviewers see code. NOT decay-toward-lazy
+  review (quality reviewer still caught 7 Minors at M0.8). If M0.9+
+  maintains zero-findings at the spec layer despite increasing
+  milestone complexity (migrations, shutdown protocol, metrics),
+  revisit at M0.10 whether spec-reviewer dispatch still earns its cost.
+  Until then, spec reviewer stays in the standard review pair.
 
 This template itself is expected to evolve. After M0.7 lands, reflect on
 what the subagent tripped over, what you had to re-explain, what you
 found yourself adding milestone-specific that should have been general.
 Revise. After M0.8, reflect again. Two milestones of evolution gets the
-template to a stable shape; one is insufficient.
+template to a stable shape; one is insufficient. **As of post-M0.8: three
+milestones of evolution have landed. Template is considered stable
+baseline. Future edits should pass a higher bar (i.e., a specific
+milestone-forced lesson worth encoding) rather than speculative
+refinement.**
