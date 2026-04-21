@@ -377,9 +377,30 @@ enforces "proof the subagent read the dispatch."
 
 Name the tests you expect. For each, specify:
 
-- Test name (imperative, describes what it proves).
-- Setup (what to seed, how, via what path).
-- Assertion depth (what a broken impl would fail — not just "200 OK").
+- **Test name** (imperative, describes what it proves).
+- **Setup** (what to seed, how, via what path).
+- **Assertion depth** (what a broken impl would fail — not just "200 OK").
+- **Nastiest reachable context** (mandatory for any test exercising
+  a filesystem / library / runtime interface). What specific context
+  will the test exercise the interface under — and why is that context
+  the one most likely to violate an assumption the plan-sketch didn't
+  name? Examples from M0.8-M0.10 lineage:
+    - M0.8 close-then-reopen: reopen on the same path within the
+      same process lifetime, immediately after `.close()`. Nominal
+      context is "close at process exit"; nastiest reachable is
+      "close during test, reopen same path in the next test line."
+    - M0.9 atomic-rename meta.json: asserting `.replaced_<ts>/meta.json`
+      preserves pre-migration `schema_version`. Nominal is "new
+      primary has new schema"; nastiest is "the inode shared with
+      primary survived the migration untouched."
+    - M0.10 middleware exception path: scope has no `"app"` entry.
+      Nominal is "request arrived through real Starlette app";
+      nastiest reachable is "unit harness built a minimal scope."
+  If the interface has no surprising-context surface (pure-logic
+  data structure, pure computation), write "N/A — pure logic" and
+  explain. Silence here is the failure mode; forcing one line per
+  test is the load-bearing discipline. See the "nastiest reachable
+  context" doctrine entry in the appendix for the why.
 
 Mark minimum tests vs optional tests. Give a test-count ladder (see B6).
 
@@ -642,17 +663,37 @@ future edits can see the forcing function:
   despite migrations/shutdown/metrics complexity), revisit whether
   spec-reviewer dispatch still earns its cost. Don't cut yet.
 
-- **Plan sketches require teeth-bearing verification (M0.8 + M0.9
-  doctrine).** Plan sketches are design intent, not safety-verified
-  artifacts. Two consecutive milestones had bugs in the plan code
-  itself, caught by teeth-bearing tests during implementation: M0.8
-  chromadb close-before-pop (spec §5.3 assumed GC-sufficient close;
-  chromadb 1.5.x requires explicit `client.close()`) and M0.9
-  meta.json write-through-hardlink (plan code at line 2784 assumed
-  `write_text` was COW; Linux filesystem semantics disagree). Both
-  looked right on paper. Both would have shipped undetected through
-  spec + quality review, because both are filesystem/library-semantic
-  assumptions that the plan-level text got wrong.
+- **Plan sketches require teeth-bearing verification — "nastiest
+  reachable context" doctrine (M0.8 + M0.9 + M0.10, three-for-three
+  across orthogonal bug classes).** Plan sketches are design intent,
+  not safety-verified artifacts. Three consecutive milestones had
+  bugs in the plan code itself, each caught by a teeth-bearing test:
+
+    - **M0.8 (library-semantic).** chromadb close-before-pop. Spec
+      §5.3 assumed GC-sufficient close; chromadb 1.5.x requires
+      explicit `client.close()`. Caught by
+      `test_delete_then_reopen_creates_fresh_palace` — the first
+      test to exercise close-then-reopen on the same path within a
+      process lifetime.
+    - **M0.9 (filesystem-semantic).** Runner's meta.json
+      write-through-hardlink. Plan code at line 2784 assumed
+      `write_text` was COW; Linux truncates the shared inode and
+      propagates through every hardlink. Caught by
+      `test_atomic_rename_happy_path` asserting
+      `.replaced_<ts>/meta.json` preserved pre-migration
+      `schema_version`.
+    - **M0.10 (runtime-semantic).** Shutdown gate read
+      `request.app.state.accepting`; `starlette.Request.app` is a
+      property that raises `KeyError` on scopes without an `"app"`
+      entry. Caught by `test_middleware_counter_sequence_under_exception`
+      (unit) with its deliberately-minimal ASGI scope. Integration
+      tests would never have fired it — scope["app"] is always
+      populated in real-app flow.
+
+  Three consecutive milestones, three structurally orthogonal bug
+  classes (library / filesystem / runtime). Rules out "narrow
+  domain luck" — the mechanism generalises across interface
+  categories.
 
   **Two layers of verification, both load-bearing, neither subsumes
   the other:**
@@ -666,32 +707,34 @@ future edits can see the forcing function:
       inside the milestone's RED/GREEN cycle) catch
       **plan-vs-correctness drift**: plan code compiles and looks
       right but produces wrong behavior under specific conditions.
-      Fixed by designing the test to fail if the plan code is
-      wrong, not just if your implementation is wrong.
+      Fixed by designing the test to exercise the nastiest
+      reachable context, not the nominal one.
 
-  **When writing teeth-bearing tests, design them against the plan
-  sketch's assumptions, not just against the behavior you intend to
-  implement.** The M0.8/M0.9 findings surfaced because the tests
-  asserted specific post-condition state (backend-cache emptied AND
-  reopen-to-same-path succeeds on a new write; `.replaced_<ts>/meta.json`
-  preserves pre-migration `schema_version`). A weaker assertion
-  ("just check the dict is empty" or "just check the primary has
-  new schema_version") would have passed the plan code and missed
-  the bug. This is the absence-vs-presence principle (template Part
-  2 B4) applied pre-emptively: assume the plan's filesystem/library
-  assumptions might be wrong; write tests that would catch them if
-  they are.
+  **Sharper heuristic (supersedes the M0.8+M0.9 formulation).** The
+  plan-sketch isn't wrong about what the interface DOES. It's wrong
+  about what the interface does in the specific **context** the
+  code will actually run in. `.close()` under a subsequent same-path
+  reopen. `.write_text()` on a file with `st_nlink > 1`.
+  `request.app` on an ASGI scope without an `"app"` key. Doctrine:
+  **when writing a teeth-bearing test for any filesystem / library
+  / runtime interface, exercise it under the nastiest reachable
+  context, not the nominal one.** Reachable = a context the
+  production path or a unit-test harness will actually produce.
+  Nastiest = the one most likely to violate an assumption the
+  sketch didn't name.
 
-  **Lineage.** M0.8 findings (chromadb close-before-pop) were caught
-  by `test_delete_then_reopen_creates_fresh_palace`. M0.9 finding
-  (meta.json hardlink propagation) was caught by
-  `test_atomic_rename_happy_path`. In both cases the test was
-  written explicitly to exercise the plan's specific claim, not
-  just general behavior. Expected to continue — every milestone
-  with new filesystem/library interaction surface (M0.10 signal
-  handling + subprocess semantics, M0.11 prometheus multiproc
-  registry, M0.15 outbox WAL + fsync) will likely surface more
-  such findings. Not failures — the discipline working.
+  **Operational promotion — doctrine moves to B4 checklist item.**
+  As of post-M0.10, Part 2 B4 requires each test-plan entry to
+  name the nasty context it exercises, not just the assertion
+  depth. Named principles are easy to skip when fatigued;
+  checklist items aren't. Lower variance — the discipline
+  survives a bad day. See B4 above for the checklist form.
+
+  **Forward-looking.** Every milestone with new filesystem /
+  library / runtime interaction surface (M0.11 prometheus multiproc
+  registry, M0.15 outbox WAL + fsync, M0.19 systemd socket
+  activation) will likely surface more such findings. Not failures
+  — the discipline working.
 
 This template itself is expected to evolve. After M0.7 lands, reflect on
 what the subagent tripped over, what you had to re-explain, what you
