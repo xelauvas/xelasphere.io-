@@ -77,7 +77,27 @@ them — don't let the subagent discover them at runtime.
    code for the referenced symbol and verify the assumption still holds.
 3. For every new fixture seeding pattern the tests will need: verify the
    seeding path exists and is reachable from a test.
-4. Any gap you find becomes a **pre-declared deviation** in the dispatch
+4. **Plan-half consistency check (named at M0.13).** When the plan sketch
+   includes BOTH a test body AND an impl body for the same behavior, read
+   them together and name the shared semantic they jointly encode. Any
+   disagreement — assertion expects X, impl produces Y — surfaces here,
+   not at Stage 3 test-run. **The defense mechanism for plan-half
+   inconsistency is this pre-resolution cross-check, NOT nastiest-context
+   test design.** Hit #6 at M0.13 cost a Stage 3 round-trip because
+   pre-resolution read each half independently; a 30-second re-read
+   together would have surfaced the mismatch at dispatch time. Sibling
+   discipline to B4 (write-the-tests) — distinct defense, distinct class
+   of bugs caught. See appendix doctrine entry for the class separation.
+5. **Parametrized-case-count estimation (named at M0.13).** When tests
+   will be parametrized via `@pytest.mark.parametrize`, estimate
+   COLLECTED-CASE count, not DECLARED-TEST count. pytest reports each
+   parametrized invocation independently — a single test declaration with
+   18 parametrized values lands as 18 collected cases. Ladder-rung
+   predictions based on declared-test count will be off by (n-1) per
+   parametrized test where n is the parametrization count. M0.13 surfaced
+   this: predicted "+7 tests" landed as "+24 cases" via one test's 18
+   whitespace/empty-string parametrizations.
+6. Any gap you find becomes a **pre-declared deviation** in the dispatch
    prompt, with `(a) if X world, do Y; (b) if Z world, do W; (c) if neither,
    defer with a note` decisions already made.
 
@@ -199,6 +219,20 @@ code? -> fix it and move on.
    typos, or missing-schema are NOT the right kind of red. Fix those
    first, then re-run until the RED state is specifically "the thing
    this test is about doesn't exist." THEN commit.
+
+   **Standalone-commit discipline for cross-milestone carry-ins
+   (named at M0.13, stable pattern across M0.8 → M0.10).** When a
+   prior-milestone review surfaced Minor findings that defer to a
+   later milestone, land them as a **standalone commit between RED
+   and GREEN of the receiving milestone**, NOT bundled into GREEN.
+   Observed carry-ins: M0.8 chromadb close-path Minors → M0.9
+   Stage 2 commit; M0.9 `reap_stale` onexc → M0.10 Stage 2 commit.
+   Clean bisection across the milestone boundary: the milestone
+   work and the tech-debt cleanup become separately attributable
+   in `git log`. Don't skip this step by squashing the carry-in
+   into GREEN — a future `git bisect` on the GREEN commit will
+   then attribute the GREEN functionality to the carry-in fix,
+   which is false.
 
 2. **Mandatory deviations note.** End your report with a "Deviations
    from plan" section. List every deviation from the plan sketch
@@ -766,6 +800,24 @@ future edits can see the forcing function:
   Rules out both "narrow domain luck" AND "plan-sketch-specific
   failure mode" — the mechanism generalises across interface
   categories AND across where-the-assumption-lives.
+
+  **Plan-half consistency is a SIBLING discipline, NOT a sixth
+  class under this doctrine (named at M0.13 post-reflection).**
+  M0.13 surfaced a new failure class: plan test-half and plan
+  impl-half encoded disagreeing semantics for the same behavior.
+  Caught at Stage 3 test-run; defense was plan-half consistency
+  check at pre-resolution (Part 1 item #4), NOT nastiest-context
+  test design. Structural difference from hits 1-5: the code
+  behaves EXACTLY AS WRITTEN; what's inconsistent is the PLAN
+  (two halves disagree with each other). Hits 1-5's defense is
+  "write the test against the nastiest context the code will
+  see"; hit 6's defense is "verify the plan's test-half and
+  impl-half encode the same semantic before writing either one."
+  Different defense → different discipline → not a sixth class
+  under the nastiest-reachable-context doctrine but a sibling
+  discipline that sits next to it. Do NOT fold the plan-half
+  class into a "6 over 5 milestones" tally that implies the
+  same defense mechanism is catching both — it isn't.
 
   **The accounting question that surfaced at M0.11 close.** Counting
   only plan-sketch hits undercounts what the B4 checklist catches.
