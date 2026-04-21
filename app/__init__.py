@@ -40,7 +40,17 @@ def create_app():
     try:
         # Load configuration
         app.config.from_object(Config)
-        
+
+        # M0.13: refuse to boot if MEMPALACE_MODE + LEGACY_MEMORY
+        # combination would leave users with no memory subsystem.
+        # Runs immediately after config load so the check fires
+        # before any other init work (CSRF, limiter, CORS, session,
+        # blueprints). SystemExit(2) from an unsafe flag combination
+        # short-circuits the whole create_app — production deploy
+        # fails loud rather than limping along with partial state.
+        from app.mempalace.feature_flag import assert_startup_sane
+        assert_startup_sane()
+
         # Log that the SECRET_KEY is properly set
         app.logger.info("Initializing with SECRET_KEY (first 4 chars): %s...", app.config['SECRET_KEY'][:4] if app.config['SECRET_KEY'] else "Not set!")
         
