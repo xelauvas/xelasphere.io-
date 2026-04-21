@@ -886,6 +886,79 @@ future edits can see the forcing function:
   sampling artifact. Either outcome informs the M1 scope review;
   neither is a problem for the defense itself.
 
+## Appendix — "Watching" section (candidate disciplines not yet promoted)
+
+Two-tier template evolution: **promoted** items live in the
+checklist (Part 1 / Part 2 / Part 3); **candidate** items live
+here with their data-point count. Migration from watching to
+checklist requires meeting the promotion criterion below. The
+watching section exists so candidate classes stay visible
+across milestones without inflating the checklist with patterns
+that aren't yet stable.
+
+**Promotion criterion for new discipline classes (named at M0.14
+post-reflection).** Three orthogonal data points across milestones,
+where **orthogonal means different manifestations of the same
+class**, not just repeat occurrences of the same specific bug.
+Two data points is a trend worth naming; three orthogonal is a
+discipline worth codifying. The orthogonality requirement is
+load-bearing: without it, a single recurring-instance bug could
+be pattern-matched into a false class by counting each occurrence
+separately. The same specific fixture bug appearing three times
+across three milestones is one data point, not three.
+
+**Why a formal promotion criterion, not a heuristic.** Patterns
+that get named early and promoted late tend to be stronger patterns
+than ones that get promoted the moment they're spotted. The
+promotion bar is intentionally high so the checklist stays small
+and load-bearing; items in the checklist carry "do this every
+milestone" weight, which dilutes if the checklist grows too long
+too fast.
+
+### Test-harness-semantics (2 data points, M0.13 + M0.14)
+
+**Candidate class.** Pre-resolution estimation errors about how
+the test harness reports or executes tests, distinct from
+production-code plan-sketch errors.
+
+**Data points:**
+  - **M0.13 Stage 1:** `@pytest.mark.parametrize` with 18
+    whitespace/empty-string values produced 18 collected cases
+    against 1 declared test. Pre-resolution predicted "+7 tests"
+    on the ladder; actual was "+24 cases." Surfaced at first
+    pytest run.
+  - **M0.14 Stage 1:** `@pytest.fixture` on an async generator
+    produced `TypeError: 'async_generator' object is not callable`
+    because pytest.ini doesn't set `asyncio_mode = auto`, so
+    pytest-asyncio 1.3.0 runs in strict mode requiring
+    `@pytest_asyncio.fixture` on async fixtures. Surfaced at
+    first pytest run.
+
+**Why not promoted yet.** Two data points; orthogonality is
+borderline (both are pre-resolution estimation errors about test
+harness behavior, but in different axes — case counting vs fixture
+execution model). A third orthogonal data point in a clearly
+different sub-axis (e.g., fixture scope semantics, plugin
+interaction, pytest-xdist coordination) would confirm the class
+is real and not just "two instances of the same thing expressed
+differently."
+
+**M0.15 watchpoint.** M0.15 (outbox + flusher) introduces SQLite
+fixtures, potentially pytest-xdist or pytest-forked concerns, and
+cross-process test coordination. At M0.15 pre-resolution, scan
+for: fixture scope / session vs function vs module; any pytest
+plugin required by the test plan that hasn't been verified present
+in the Flask venv; SQLite fixture concurrency semantics. If a
+third orthogonal test-harness-semantic finding surfaces at Stage 1
+or first-pytest-run, promote to a Part 1 checklist item.
+
+**Promotion draft (for when the third data point lands).**
+"Test-harness configuration review — pytest.ini settings, conftest
+decorator types for async/plugin fixtures, fixture scope
+implications for the test surface you're adding." Sits next to
+Part 1 #4 (plan-half consistency) and #5 (parametrized-case-count
+estimation) as a dispatch-time test-harness verification pass.
+
 This template itself is expected to evolve. After M0.7 lands, reflect on
 what the subagent tripped over, what you had to re-explain, what you
 found yourself adding milestone-specific that should have been general.
