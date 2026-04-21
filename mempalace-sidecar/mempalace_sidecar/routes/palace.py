@@ -162,6 +162,32 @@ async def ingest(
             text=body.text,
             ts=body.ts,
         )
+
+    # Fire-and-forget KG enqueue (plan M0.7). Runs OUTSIDE the
+    # writer_lock — the enqueue is a single sqlite INSERT to a
+    # separate sidecar-level DB, not a per-palace write, and it
+    # must never block the ingest write path. Shape is
+    # ``await queue.enqueue(...)`` (not ``asyncio.create_task``)
+    # per dispatch enqueue-shape note: the operation is fast
+    # enough to await inline, and catching its exceptions here is
+    # cleaner than orphaning a task (which would require a
+    # done-callback to log failures and would make shutdown noisy).
+    #
+    # Any exception (including the silent IntegrityError path in
+    # enqueue) MUST NOT fail ingest — that contract is why the
+    # wrapper swallows everything. If the queue is unhealthy, ingest
+    # still succeeds and the KG work is simply skipped for this
+    # turn (degraded mode, not broken mode).
+    kg_queue = getattr(request.app.state, "kg_queue", None)
+    if kg_queue is not None:
+        try:
+            await kg_queue.enqueue(user_id, [result.drawer_id])
+        except Exception:
+            log.exception(
+                "kg_enqueue_failed",
+                extra={"user_id": uid_hash, "turn_id": body.turn_id},
+            )
+
     return IngestResponse(status=result.status)
 
 
