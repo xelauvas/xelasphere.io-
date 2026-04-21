@@ -157,11 +157,29 @@ async def build_wakeup(
     # all four in parallel across the default thread pool. Replacing
     # this with plain asyncio.gather(_l0(), _l1(), ...) destroys
     # parallelism — enforced by test_build_wakeup_runs_layers_concurrently.
+    #
+    # ``_timed`` (M0.11) wraps each to_thread awaitable so per-layer
+    # latency lands on ``mempalace_wakeup_seconds{layer=l0..l3, hot=...}``.
+    # The histogram is load-bearing for the spec §8.1 wake-up budget
+    # tracking; the test ``test_wakeup_records_layer_timers`` asserts
+    # one observation per layer per wake-up.
+    from mempalace_sidecar.metrics import wakeup_seconds
+
+    hot_label = "1" if hot else "0"
+
+    async def _timed(label: str, coro):
+        t = time.monotonic()
+        r = await coro
+        wakeup_seconds.labels(layer=label, hot=hot_label).observe(
+            time.monotonic() - t
+        )
+        return r
+
     l0r, l1r, l2r, l3r = await asyncio.gather(
-        asyncio.to_thread(_l0),
-        asyncio.to_thread(_l1),
-        asyncio.to_thread(_l2),
-        asyncio.to_thread(_l3),
+        _timed("l0", asyncio.to_thread(_l0)),
+        _timed("l1", asyncio.to_thread(_l1)),
+        _timed("l2", asyncio.to_thread(_l2)),
+        _timed("l3", asyncio.to_thread(_l3)),
     )
 
     total_ms = (time.monotonic() - t0) * 1000.0

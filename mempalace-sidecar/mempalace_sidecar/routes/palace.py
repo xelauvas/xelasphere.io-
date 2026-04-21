@@ -21,9 +21,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from mempalace_sidecar import metrics
 from mempalace_sidecar.routes._common import _hash_uid, _registry
 from mempalace_sidecar.schemas import (
     Drawer,
@@ -117,6 +119,13 @@ async def ingest(
     # registry.open has its own _registry_lock + two-phase eviction
     # discipline; no need to take the per-user writer_lock around it.
     # The writer_lock only gates the write step (add_drawer) itself.
+    #
+    # Metrics discipline (spec §8.1): every exit path from this
+    # handler bumps ``ingest_total`` with the right status label
+    # exactly once. Success → ``accepted`` | ``duplicate``. Exception
+    # from add_drawer → ``error``, counter bumped BEFORE the raise
+    # reaches the client (``test_ingest_increments_error_on_raise``
+    # asserts the ordering).
     try:
         entry = await registry.open(user_id)
     except RuntimeError as exc:
@@ -124,22 +133,38 @@ async def ingest(
             raise HTTPException(status_code=503, detail="sidecar shutting down") from exc
         raise  # surface as 500; other RuntimeErrors are unexpected
     lock = registry.lock_for(user_id)
-    async with lock.writer_lock:
-        # handle.add_drawer is synchronous (spec §5.3 "Concurrency
-        # model"). Wrap in to_thread so the event loop stays responsive
-        # for other users while this user's write executes. See
-        # deviations note — plan pseudo-code called it directly; the
-        # stronger contract is to always to_thread synchronous library
-        # calls that can touch disk.
-        result = await asyncio.to_thread(
-            entry.handle.add_drawer,
-            turn_id=body.turn_id,
-            session_id=body.session_id,
-            pair_id=body.pair_id,
-            role=body.role,
-            text=body.text,
-            ts=body.ts,
+    try:
+        async with lock.writer_lock:
+            # handle.add_drawer is synchronous (spec §5.3 "Concurrency
+            # model"). Wrap in to_thread so the event loop stays
+            # responsive for other users while this user's write
+            # executes.
+            result = await asyncio.to_thread(
+                entry.handle.add_drawer,
+                turn_id=body.turn_id,
+                session_id=body.session_id,
+                pair_id=body.pair_id,
+                role=body.role,
+                text=body.text,
+                ts=body.ts,
+            )
+    except Exception as exc:
+        metrics.ingest_total.labels(status="error").inc()
+        log.exception(
+            "ingest_failed",
+            extra={"user_id": uid_hash, "turn_id": body.turn_id},
         )
+        # Convert to HTTPException so the 500 flows through FastAPI's
+        # ExceptionMiddleware cleanly. A bare ``raise`` would propagate
+        # through BaseHTTPMiddleware (auth / in-flight / logging) and
+        # bypass ServerErrorMiddleware's 500-conversion — a known
+        # Starlette quirk. The client needs to see 500 JSON, not a
+        # connection error.
+        raise HTTPException(
+            status_code=500, detail="ingest failed"
+        ) from exc
+
+    metrics.ingest_total.labels(status=result.status).inc()
 
     # Fire-and-forget KG enqueue (plan M0.7). Runs OUTSIDE the
     # writer_lock — the enqueue is a single sqlite INSERT to a
@@ -225,6 +250,16 @@ async def wake_up(
             ) from exc
         raise  # other RuntimeErrors surface as 500
 
+    # Hit / miss counters (spec §8.1). Bumped here — not inside the
+    # registry — because the registry's own open API is used
+    # elsewhere (KG worker, shutdown drain) where route-level
+    # cache-hit semantics don't apply.
+    if was_cold:
+        metrics.palace_cache_misses_total.inc()
+    else:
+        metrics.palace_cache_hits_total.inc()
+    hot_label = "0" if was_cold else "1"
+
     if warmup:
         # Connection-warmup short-circuit. Return an empty context
         # with meta.hot reflecting whether THIS open was the cold
@@ -239,8 +274,9 @@ async def wake_up(
     # MUST run concurrently (that's the whole point of the RWLock).
     # If this ever becomes ``writer_lock``, the concurrency story
     # for back-to-back turns is destroyed.
+    t0 = time.monotonic()
     async with lock.reader_lock:
-        return await build_wakeup(
+        ctx = await build_wakeup(
             user_id=user_id,
             query=body.query,
             handle=entry.handle,
@@ -248,6 +284,10 @@ async def wake_up(
             hot=(not was_cold),
             k=body.k,
         )
+    metrics.wakeup_seconds.labels(layer="total", hot=hot_label).observe(
+        time.monotonic() - t0
+    )
+    return ctx
 
 
 @router.post("/{user_id}/search", response_model=list[Drawer])
@@ -281,7 +321,7 @@ async def search(
     )
 
     try:
-        entry = await registry.open(user_id)
+        entry, was_cold = await registry.open(user_id, track_cold=True)
     except RuntimeError as exc:
         if "shutting down" in str(exc).lower():
             raise HTTPException(
@@ -289,11 +329,17 @@ async def search(
             ) from exc
         raise
 
+    hot_label = "0" if was_cold else "1"
+
     lock = registry.lock_for(user_id)
+    t0 = time.monotonic()
     async with lock.reader_lock:
         raws = await asyncio.to_thread(
             entry.handle.search, body.query, wing=body.wing, k=body.k
         )
+    metrics.search_seconds.labels(hot=hot_label).observe(
+        time.monotonic() - t0
+    )
     # PalaceHandle.search always returns a list (see palace_handle.py:458,
     # `result.get("results", [])`). No coalesce needed; trust the handle
     # contract. If that contract ever widens to allow None, the test

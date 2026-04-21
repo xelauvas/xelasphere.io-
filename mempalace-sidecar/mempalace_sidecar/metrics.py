@@ -154,15 +154,11 @@ open_palace_errors_total = Counter(
 
 
 # --- Lifecycle ----------------------------------------------------------
-#
-# ``delete_total`` lands here at Stage 3 GREEN alongside the
-# ``routes/lifecycle.py::_DELETE_TOTAL`` migration. Declaring it at
-# Stage 1 would collide with the existing lifecycle.py declaration —
-# prometheus_client raises "Duplicated timeseries" when two Counter
-# objects register the same metric name on the default registry.
-# ``test_delete_total_declared_in_shared_module`` fails at RED via
-# ``hasattr(metrics, "delete_total")`` returning False; passes at
-# GREEN once the migration lands.
+
+delete_total = Counter(
+    "mempalace_delete_total",
+    "GDPR-delete completions (cross-ref audit.sqlite).",
+)
 
 
 # --- Readiness gauge ----------------------------------------------------
@@ -193,15 +189,48 @@ def update_cache_gauges(count: int, total_bytes: int) -> None:
 # --- Rendering ---------------------------------------------------------
 
 
+_MULTIPROC_WARNED = False
+
+
 def render_metrics() -> tuple[bytes, str]:
     """Render current metric state for ``GET /metrics``.
 
-    Stage 1 RED stub — full implementation (multiproc-aware) lands
-    in Stage 3 GREEN.
+    Branches on ``PROMETHEUS_MULTIPROC_DIR``:
+
+    - **Set (production, multi-worker uvicorn).** Build a fresh
+      ``CollectorRegistry`` + attach a ``MultiProcessCollector`` —
+      the collector walks the per-pid mmap files under the env dir
+      and aggregates across workers (livesum / max / min per the
+      Gauge's declared mode). This is the load-bearing path for
+      spec §8.1 aggregation semantics.
+    - **Unset (dev, unit tests).** Fall back to the module-global
+      default registry. Gauges with ``multiprocess_mode`` still
+      work — the mode is inert in single-process context. A
+      one-shot WARNING log on the first scrape names the fallback
+      so an operator who accidentally deployed without the env var
+      sees it surfaced.
+
+    Returns ``(body_bytes, content_type)``; the ops route wraps
+    the tuple in a ``Response``.
     """
-    raise NotImplementedError(
-        "render_metrics lands in M0.11 Stage 3 GREEN"
-    )
+    global _MULTIPROC_WARNED
+    mp_dir = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
+    if mp_dir:
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)
+    else:
+        if not _MULTIPROC_WARNED:
+            log.warning(
+                "PROMETHEUS_MULTIPROC_DIR not set — rendering from "
+                "default registry. Multi-worker uvicorn deployments "
+                "will produce non-monotonic scrapes in this mode."
+            )
+            _MULTIPROC_WARNED = True
+        # prometheus_client's default REGISTRY — every metric above
+        # is registered on it via the module-level declarations.
+        from prometheus_client import REGISTRY as _default
+        registry = _default
+    return generate_latest(registry), CONTENT_TYPE_LATEST
 
 
 __all__ = [
@@ -219,6 +248,7 @@ __all__ = [
     "kg_extraction_total",
     "schema_migration_total",
     "open_palace_errors_total",
+    "delete_total",
     "readyz_gauge",
     "update_cache_gauges",
     "render_metrics",

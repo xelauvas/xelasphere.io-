@@ -44,6 +44,7 @@ from typing import Any
 
 from aiorwlock import RWLock
 
+from .metrics import update_cache_gauges
 from .palace_handle import PalaceHandle
 
 log = logging.getLogger(__name__)
@@ -218,6 +219,13 @@ class PalaceRegistry:
         # the writer_lock (blocks on in-flight readers), then close.
         for evicted_uid, evicted_entry in to_close_after:
             await self._close_evicted(evicted_uid, evicted_entry)
+        # M0.11 cache-size gauge refresh (spec §8.1). Tail-placement so
+        # both the Phase 1 insert and any Phase-1-triggered eviction
+        # (via _evict_to_fit_unlocked) are reflected. See also
+        # sweep_idle / evict / close_all; every cache-mutation method
+        # ends in this same one-liner so the livesum gauge stays
+        # current per-worker.
+        update_cache_gauges(len(self._cache), self._total_bytes())
         if track_cold:
             return entry, was_cold
         return entry
@@ -245,6 +253,7 @@ class PalaceRegistry:
 
         for uid, entry in evicted:
             await self._close_evicted(uid, entry)
+        update_cache_gauges(len(self._cache), self._total_bytes())
         return len(evicted)
 
     async def evict(self, user_id: str) -> "PalaceEntry | None":
@@ -270,7 +279,9 @@ class PalaceRegistry:
         resident palace.
         """
         async with self._registry_lock:
-            return self._cache.pop(user_id, None)
+            popped = self._cache.pop(user_id, None)
+        update_cache_gauges(len(self._cache), self._total_bytes())
+        return popped
 
     async def close_all(self) -> None:
         """Close every resident handle. Intended for shutdown (M0.10)
@@ -292,6 +303,9 @@ class PalaceRegistry:
 
         for uid, entry in entries:
             await self._close_evicted(uid, entry)
+        # Cache is now empty; set explicit zeros so the scrape doesn't
+        # retain a stale last-known value from before shutdown.
+        update_cache_gauges(0, 0)
 
     # ------------------------------------------------------------------
     # Byte accounting

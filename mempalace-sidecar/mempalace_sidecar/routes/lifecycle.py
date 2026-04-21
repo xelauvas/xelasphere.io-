@@ -24,8 +24,8 @@ import time
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Request
-from prometheus_client import Counter
 
+from mempalace_sidecar import metrics as _metrics
 from mempalace_sidecar.registry import _dir_size_bytes
 from mempalace_sidecar.routes._common import _hash_uid, _registry
 from mempalace_sidecar.schemas import (
@@ -42,23 +42,14 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-# Spec §8.1 metric catalog — one counter for successful deletions.
-#
-# **M0.11 multiproc wiring TODO.** This Counter is attached to
-# prometheus_client's default registry. Under multi-worker uvicorn
-# (sidecar's settings.prometheus_multiproc_dir is set per spec §5.8),
-# default-registry counters produce non-monotonic scrapes across
-# workers (each worker has its own value; Prometheus sees whichever
-# worker answered the /metrics request). M0.11b consolidates all
-# counters through a shared metrics module using
-# prometheus_client.multiprocess.MultiProcessCollector. In the
-# meantime: single-worker uvicorn (systemd unit should set
-# --workers 1 explicitly) avoids the divergence. See deltas
-# "Deferred to M0.11" list for the consolidation item.
-_DELETE_TOTAL = Counter(
-    "mempalace_delete_total",
-    "Total number of successful palace deletions.",
-)
+# M0.11 migration: the Counter lives in ``mempalace_sidecar.metrics``
+# (shared module for every sidecar metric per spec §8.1). ``_DELETE_TOTAL``
+# is kept as an aliased re-export so older import sites that reference
+# ``lifecycle._DELETE_TOTAL`` continue to resolve — but they resolve to
+# the same Counter object the shared module owns. The presence-
+# assertion test ``test_delete_total_declared_in_shared_module`` holds
+# future regressions at the alias contract.
+_DELETE_TOTAL = _metrics.delete_total
 
 
 router = APIRouter(prefix="/palace", tags=["palace-lifecycle"])
