@@ -23,16 +23,19 @@ import asyncio
 import hashlib
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from mempalace_sidecar.schemas import (
+    Drawer,
+    DrawersPage,
     IngestRequest,
     IngestResponse,
+    SearchRequest,
     WakeupContext,
     WakeupMeta,
     WakeupRequest,
 )
-from mempalace_sidecar.wakeup import build_wakeup
+from mempalace_sidecar.wakeup import _to_drawer, build_wakeup
 
 log = logging.getLogger(__name__)
 
@@ -241,6 +244,118 @@ async def wake_up(
             hot=(not was_cold),
             k=body.k,
         )
+
+
+@router.post("/{user_id}/search", response_model=list[Drawer])
+async def search(
+    user_id: str, body: SearchRequest, request: Request
+) -> list[Drawer]:
+    """Tool-call search over a user's palace (plan M0.6.1).
+
+    Thin bridge over ``PalaceHandle.search`` — library-owned hybrid
+    BM25 + vector + closet-boost retrieval with optional wing filter.
+    Read path, reader_lock (NOT writer_lock). Synchronous library
+    call goes through ``asyncio.to_thread`` so the event loop stays
+    responsive for parallel readers under the same user and for
+    every other user on the worker.
+
+    503 on ``registry.open`` raising "shutting down" — mirrors the
+    ingest/wake-up pattern so load-balancers classify correctly.
+    """
+    registry = _registry(request)
+    settings = request.app.state.settings
+    uid_hash = _hash_uid(user_id, settings.user_id_hash_salt)
+
+    log.info(
+        "search",
+        extra={
+            "user_id": uid_hash,
+            "query_len": len(body.query),
+            "wing": body.wing,
+            "k": body.k,
+        },
+    )
+
+    try:
+        entry = await registry.open(user_id)
+    except RuntimeError as exc:
+        if "shutting down" in str(exc).lower():
+            raise HTTPException(
+                status_code=503, detail="sidecar shutting down"
+            ) from exc
+        raise
+
+    lock = registry.lock_for(user_id)
+    async with lock.reader_lock:
+        raws = await asyncio.to_thread(
+            entry.handle.search, body.query, wing=body.wing, k=body.k
+        )
+    raws = raws or []
+    return [_to_drawer(r) for r in raws]
+
+
+@router.get("/{user_id}/drawers", response_model=DrawersPage)
+async def drawers(
+    user_id: str,
+    request: Request,
+    wing: str | None = Query(None),
+    room: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> DrawersPage:
+    """Paginated GDPR-admin listing (plan M0.6.2).
+
+    Thin bridge over ``PalaceHandle.list_drawers``. Offset pagination
+    (ChromaDB's ``col.get`` has no cursor concept; see deltas
+    "2026-04-20 M0.3 library isolation", cursor → offset bullet).
+    ``total`` is ``None`` when wing/room filter applies (honest-totals
+    contract). ``next_offset`` is ``None`` at end-of-pagination.
+
+    Read path, same reader_lock / asyncio.to_thread / 503 discipline
+    as /search above.
+
+    ``limit`` default aligns to ``PalaceHandle.list_drawers``'s own
+    default (20); plan sketch's 100 predates the handle. Route bounds
+    ``ge=1, le=200`` prevent a million-item request.
+    """
+    registry = _registry(request)
+    settings = request.app.state.settings
+    uid_hash = _hash_uid(user_id, settings.user_id_hash_salt)
+
+    log.info(
+        "list_drawers",
+        extra={
+            "user_id": uid_hash,
+            "wing": wing,
+            "room": room,
+            "limit": limit,
+            "offset": offset,
+        },
+    )
+
+    try:
+        entry = await registry.open(user_id)
+    except RuntimeError as exc:
+        if "shutting down" in str(exc).lower():
+            raise HTTPException(
+                status_code=503, detail="sidecar shutting down"
+            ) from exc
+        raise
+
+    lock = registry.lock_for(user_id)
+    async with lock.reader_lock:
+        result = await asyncio.to_thread(
+            entry.handle.list_drawers,
+            wing=wing,
+            room=room,
+            limit=limit,
+            offset=offset,
+        )
+    return DrawersPage(
+        drawers=[_to_drawer(r) for r in result["drawers"]],
+        total=result["total"],
+        next_offset=result["next_offset"],
+    )
 
 
 __all__ = ["router"]

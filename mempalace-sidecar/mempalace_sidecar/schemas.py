@@ -126,6 +126,34 @@ class DeletionReceipt(BaseModel):
     bytes_removed: int
 
 
+class DrawersPage(BaseModel):
+    """Paginated response for GET /palace/{user_id}/drawers (M0.6.2).
+
+    A first-class response model rather than a raw dict because M0.12's
+    OpenAPI snapshot contract test captures whatever the route declares.
+    A route returning a bare dict renders as an empty object in the
+    generated schema, which would lock in "this endpoint has no
+    documented response" forever and silently pass every future
+    response-shape change.
+
+    ``total`` is ``None`` whenever a wing/room filter is applied — the
+    honest-totals contract (see deltas "2026-04-20 list_drawers honest
+    totals"). Chroma's ``col.count()`` has no filter argument, so
+    returning an unfiltered total under a filter would be a
+    user-visible lie. ``None`` lets the Flask adapter render "showing
+    N of many" or omit the count.
+
+    ``next_offset`` is ``None`` at end-of-pagination — either because
+    the current page was short (``len(drawers) < limit``) or because
+    ``offset + limit >= total``. Callers iterate until they see
+    ``next_offset is None``.
+    """
+
+    drawers: list[Drawer]
+    total: Optional[int] = None
+    next_offset: Optional[int] = None
+
+
 __all__ = [
     "AddDrawerResult",
     "Role",
@@ -138,4 +166,5 @@ __all__ = [
     "SearchRequest",
     "DeleteRequest",
     "DeletionReceipt",
+    "DrawersPage",
 ]
