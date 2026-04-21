@@ -177,6 +177,11 @@ def test_mark_sent_transitions_rows_and_clears_claim_token(outbox_db_path):
 
 
 def test_mark_failed_increments_attempts_or_abandons_at_5(outbox_db_path):
+    """Drive a row through 5 failures. After each mark_failed, assert the
+    row's status BEFORE the next claim_batch — otherwise the re-claim
+    mutates the state the assertion is trying to verify (intra-author
+    plan-half inconsistency caught at Stage 3 GREEN, 2026-04-21).
+    """
     outbox = Outbox(outbox_db_path)
     outbox.insert(
         turn_id="t1", pair_id="p1", user_id="u", session_id="s",
@@ -184,25 +189,29 @@ def test_mark_failed_increments_attempts_or_abandons_at_5(outbox_db_path):
     )
     claimed = outbox.claim_batch(1)
     row_id = claimed[0]["id"]
-    # First 4 failures: status returns to 'pending', attempts increments.
-    for attempt in range(1, 5):
+    # Drive through 5 failures. Assert AFTER mark_failed and BEFORE the
+    # next re-claim, so the assertion observes mark_failed's effect
+    # rather than the subsequent re-claim's.
+    for attempt in range(1, 6):
         outbox.mark_failed(row_id, f"err{attempt}")
-        # Re-claim between failures (production path: failed row → pending → re-claimed).
-        if attempt < 4:
-            outbox.claim_batch(1)
         row = outbox._conn.execute(
             "SELECT status, attempts FROM outbox WHERE id=?", (row_id,)
         ).fetchone()
-        assert row["status"] == "pending", f"after failure {attempt}, status={row['status']}"
         assert row["attempts"] == attempt
-    # 5th failure: transitions to 'abandoned'.
-    outbox.claim_batch(1)
-    outbox.mark_failed(row_id, "err5")
-    row = outbox._conn.execute(
-        "SELECT status, attempts FROM outbox WHERE id=?", (row_id,)
-    ).fetchone()
-    assert row["status"] == "abandoned"
-    assert row["attempts"] == 5
+        if attempt < 5:
+            assert row["status"] == "pending", (
+                f"after failure {attempt}, status={row['status']} "
+                f"(expected 'pending' before 5th failure)"
+            )
+            # Re-claim for next iteration (production path:
+            # failed row → pending → re-claimed → fail again).
+            outbox.claim_batch(1)
+        else:
+            # 5th failure: transitions to 'abandoned'.
+            assert row["status"] == "abandoned", (
+                f"after 5th failure, status={row['status']} "
+                f"(expected 'abandoned')"
+            )
 
 
 def test_mark_failed_abandoned_branch_clears_claim_token(outbox_db_path):
