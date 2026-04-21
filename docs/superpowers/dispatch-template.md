@@ -441,6 +441,19 @@ the PROPAGATE-the-fix discipline (when the test catches a bug,
 check if the same bug lives at sibling sites). Different in kind —
 sit side-by-side, neither subsumes the other.
 
+**Grep-ability gate on B4b (flagged post-M0.12 consolidated
+reflection).** B4b only works when the hazard class is grep-able.
+"Bare `raise` after `except RuntimeError`" — grep-able. "`write_text`
+on a path that might be hardlinked" — grep-able. "Implicit assumption
+about `request.app` under minimal ASGI scope" — NOT grep-able; you'd
+have to reason about every scope instantiation and middleware
+invocation. When future findings surface, ask "is this grep-able?"
+before promoting the fix to B4b discipline. If it isn't, the applicable
+discipline is **B4's nastiest-reachable-context test design**, not
+B4b's grep. Non-grep-able hazards demand enumerate-the-axis-of-recurrence
+thinking, which the test-design discipline already encodes. B4b is the
+fast tool for the cases it fits; don't stretch it past its reach.
+
 #### B5. Milestone-specific escalation triggers
 
 Beyond the generic "in over your head" list in Section A, name the
