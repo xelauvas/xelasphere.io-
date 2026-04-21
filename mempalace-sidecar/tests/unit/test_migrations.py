@@ -443,6 +443,146 @@ def test_dim1_does_not_corrupt_replaced_snapshot_via_hardlink(
 # ---------------------------------------------------------------------------
 
 
+def test_multi_step_chain_runs_in_order(tmp_path: Path) -> None:
+    """M0.9 quality-review I-3: the migration runner's
+    ``for m in sorted(migrations, key=...)`` iteration is exercised
+    with exactly one registered migration (V0ToV1NoOp). Multi-step
+    chains (v0 → v1 → v2, from any starting point) are untested.
+
+    This test uses TWO ad-hoc Migration subclasses (NOT from
+    ALL_MIGRATIONS) to exercise:
+      - Iteration order (v0→v1 runs before v1→v2)
+      - The ``v = m.to_version`` update
+      - The filter ``m.from_version >= v and m.to_version <= target``
+      - Final meta.json at target_version
+
+    Each ad-hoc migration writes a unique marker file. Post-run
+    assertions: both markers exist AND their content indicates the
+    ordered execution.
+    """
+    from mempalace_sidecar.migrations._base import Migration
+    from mempalace_sidecar.migrations.runner import apply_migrations
+
+    palace_dir = tmp_path / "alice"
+    palace_dir.mkdir()
+    (palace_dir / "meta.json").write_text('{"schema_version": 0}')
+
+    # Mutable state both migrations touch — lets us verify ordering.
+    order_log: list[str] = []
+
+    class V0ToV1(Migration):
+        from_version = 0
+        to_version = 1
+
+        def apply(self, dir_: Path) -> None:
+            order_log.append("v0_to_v1")
+            (dir_ / "m1_marker.txt").write_text(
+                f"v0_to_v1 ran at order_log length={len(order_log)}"
+            )
+
+    class V1ToV2(Migration):
+        from_version = 1
+        to_version = 2
+
+        def apply(self, dir_: Path) -> None:
+            order_log.append("v1_to_v2")
+            (dir_ / "m2_marker.txt").write_text(
+                f"v1_to_v2 ran at order_log length={len(order_log)}"
+            )
+
+    # Pass migrations in REVERSE declaration order to verify the
+    # runner's sorted-by-from_version discipline. If the runner
+    # iterated without sorting, v1_to_v2 would run first on a
+    # v=0 palace and the filter would reject it.
+    apply_migrations(
+        palace_dir,
+        target_version=2,
+        migrations=[V1ToV2(), V0ToV1()],
+    )
+
+    # Both ran, in correct order.
+    assert order_log == ["v0_to_v1", "v1_to_v2"], (
+        f"expected [v0_to_v1, v1_to_v2] (sorted by from_version); "
+        f"got {order_log}"
+    )
+    # Both markers present in the new primary.
+    assert (palace_dir / "m1_marker.txt").exists()
+    assert (palace_dir / "m2_marker.txt").exists()
+    assert "length=1" in (palace_dir / "m1_marker.txt").read_text()
+    assert "length=2" in (palace_dir / "m2_marker.txt").read_text()
+    # Final meta.json at v2.
+    assert json.loads(
+        (palace_dir / "meta.json").read_text()
+    )["schema_version"] == 2
+
+
+def test_copy_hardlink_falls_back_on_exdev(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """M0.9 quality-review M-2: the EXDEV fallback path in
+    ``_copy_hardlink_if_possible`` (cross-filesystem or
+    hardlink-refusing backend) is untested by default because
+    cross-fs setup is hard in CI. Monkeypatch-based verification:
+    make shutil.copytree raise OSError on the FIRST call (simulating
+    hardlink rejection) and pass through on subsequent calls.
+
+    Expected behavior: partial dst rm-rf'd, second copytree produces
+    a full byte-copy. Post-assert: dst exists with the same content
+    as src.
+    """
+    from mempalace_sidecar.migrations.runner import (
+        _copy_hardlink_if_possible,
+    )
+    import shutil
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "marker.txt").write_text("source content")
+    (src / "nested").mkdir()
+    (src / "nested" / "data.bin").write_bytes(b"nested data")
+
+    dst = tmp_path / "dst"
+
+    original_copytree = shutil.copytree
+    call_count = {"n": 0}
+
+    def _copytree_with_first_call_fail(*args, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            # Simulate EXDEV on the first call (the os.link attempt).
+            # A partial dst may exist; caller rm-rfs before retrying.
+            if dst.exists():
+                pass  # leave partial dst to test the rm-rf path
+            else:
+                # Create a partial dst to verify rm-rf happens.
+                dst.mkdir()
+                (dst / "partial").write_text("leftover")
+            raise OSError(18, "EXDEV simulated (Invalid cross-device link)")
+        # Subsequent calls pass through (no copy_function arg now).
+        return original_copytree(*args, **kwargs)
+
+    monkeypatch.setattr(shutil, "copytree", _copytree_with_first_call_fail)
+
+    _copy_hardlink_if_possible(src, dst)
+
+    # Second copytree produced a full copy.
+    assert dst.exists()
+    assert (dst / "marker.txt").read_text() == "source content"
+    assert (dst / "nested" / "data.bin").read_bytes() == b"nested data"
+    # Partial-dst leftover was rm-rf'd (no "partial" file from the
+    # failed first attempt).
+    assert not (dst / "partial").exists()
+    # At least 2 calls: one EXDEV-fail + one fallback. More are OK
+    # because shutil.copytree recurses via the module-level copytree
+    # attribute which the monkeypatch intercepts on every recursion
+    # into subdirs (src/nested/data.bin makes the recursion visible).
+    # Behavior is what matters, not the count.
+    assert call_count["n"] >= 2, (
+        f"expected >=2 copytree calls (1 EXDEV fail + 1+ fallback); "
+        f"got {call_count['n']}"
+    )
+
+
 def test_palace_handle_open_at_current_schema_does_not_call_apply_migrations(
     tmp_path: Path, monkeypatch,
 ) -> None:

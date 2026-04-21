@@ -486,8 +486,10 @@ Single `asyncio` worker. Every 30s (or signal from ingest): pulls batches, runs 
 1. `copytree U/ → U.migrating/` (hardlinks when on same fs).
 2. Apply migrations in order.
 3. `fsync`, then `rename(U.migrating, U)` after moving old to `U.replaced_<ts>`.
-4. On crash: leftover `*.migrating`/`*.replaced_*` older than 24h reaped on next open. The original `U/` directory is never mutated until verification passes — rollback is always `rm -rf U.migrating/`.
+4. On crash: leftover `*.migrating`/`*.replaced_*` older than 24h reaped on next open. The original `U/` directory is never mutated until verification passes — rollback is always `rm -rf U.migrating/`. **Note: `.replaced_<ts>` is a disaster-window *visibility* mechanism (operator can inspect pre-migration state for up to 24h), NOT a guaranteed rollback target — post-migration normal operations propagate writes through hardlinks and gradually corrupt the snapshot. See the hardlink-snapshot-integrity amendment below for the full invariant and the M1-decision open-question on whether to add a post-migration "seal" step.**
 5. Schema too new → refuse with 500, "sidecar too old."
+
+**M1-decision open-question (2026-04-21).** Should apply_migrations add a post-migration "seal" step that iterates primary/ and breaks all remaining hardlinks via copy-over semantics? Cost: ~100MB duplicate disk + ~500ms-2s wall time per migration for typical palaces. Benefit: true 24h rollback integrity (sibling snapshot genuinely preserves pre-migration state for the full retention window, not just "until the next primary-side write"). Deferred to M1 scope review. Until the decision lands, operators relying on rollback from `.replaced_<ts>` must perform the rollback BEFORE any post-migration user traffic hits the palace — typically a maintenance-window operation.
 
 **Hardlink-snapshot-integrity invariant (amendment 2026-04-21, M0.9).** `apply_migrations` uses `copytree(..., copy_function=os.link)` for same-filesystem efficiency. After the sibling rename, the primary palace and its `.replaced_<ts>` snapshot share inodes for every file that wasn't overwritten during migration. **Linux does NOT implement copy-on-write for hardlinked files:** any in-place modification writes through the hardlink, silently mutating the snapshot.
 

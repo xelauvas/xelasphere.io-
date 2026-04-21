@@ -192,8 +192,15 @@ def apply_migrations(
             })
         )
         os.sync()
+        # Nanosecond precision for the .replaced_<ts> suffix avoids
+        # sub-second collision if two migrations for the same user fire
+        # within 1s (pathological but reachable via registry two-phase
+        # eviction + reopen). int(time.time()) gave 1s resolution; the
+        # second rename-to-existing-non-empty-dir would raise ENOTEMPTY
+        # and surface as a confusing error to the operator. M0.9
+        # quality-review I-1.
         replaced = palace_dir.with_name(
-            palace_dir.name + f".replaced_{int(time.time())}"
+            palace_dir.name + f".replaced_{time.time_ns()}"
         )
         # Two renames. A crash here leaves palace_dir gone and
         # migrating still present; _recover_if_interrupted picks

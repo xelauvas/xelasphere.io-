@@ -116,10 +116,18 @@ async def _lifespan(app):
     # PalaceHandle.open's _recover_if_interrupted will promote on
     # next open for that user.
     #
-    # **Order is load-bearing:** runs BEFORE PalaceRegistry
-    # construction below so there's no interaction with in-memory
-    # palace state; reap_stale is pure filesystem, no registry
-    # coupling. Wrapped in to_thread because it walks the palaces
+    # **Order is not strictly load-bearing** (M0.9 spec-review M1
+    # correction). reap_stale runs AFTER PalaceRegistry construction
+    # and audit init, NOT before as an earlier version of this comment
+    # claimed. Functionally safe because PalaceRegistry.__init__ is
+    # pure filesystem (creates palaces_dir, opens no handles), and
+    # no palace is opened until a route handler fires — which only
+    # happens after lifespan yields. reap_stale → palace-open
+    # ordering is therefore guaranteed by the lifespan-vs-route-
+    # traffic boundary, not by any particular step order within
+    # lifespan.
+    #
+    # Wrapped in to_thread because reap_stale walks the palaces
     # directory (sync) which can be slow under large palace counts
     # — acceptable at v1 scale (<5k users); monitor at M1 scale
     # review (could push startup into minutes for 10k+ users).
