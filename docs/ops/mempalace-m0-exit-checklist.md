@@ -33,12 +33,22 @@ These require a target host with systemd + Flask install + Grafana access. Walke
 
 - [ ] `deploy/mempalace/provision.sh` runs cleanly on a staging box from a clean state.
 - [ ] Systemd unit `mempalace-sidecar.service` enables + starts without restart loop: `systemctl status mempalace-sidecar` shows `active (running)`.
-- [ ] Systemd unit `mempalace-flusher.service` enables + starts without restart loop.
+- [ ] Systemd unit `mempalace-flusher.service` is enabled + `systemctl is-active` returns `active`, with zero restarts in the first 60s. **Scope: unit parses, process starts, stays up.** Does NOT verify functional drain (that's P1-entry — see `docs/ops/mempalace-p1-entry-checklist.md`).
 - [ ] `/readyz` returns `{"ok": true, ...}` within 30s of sidecar start.
 - [ ] Flask gunicorn picks up the `mempalace` group after `systemctl restart xelasphere` (post-check in provision.sh step 8 passes).
 - [ ] `mempalace-mode off|shadow|active` round-trips correctly with Flask restart + `/admin/mempalace-mode` probe verification.
 - [ ] `docs/ops/dashboards/mempalace-live.json` imports into Grafana without errors; panels render (even if "No data" for metrics not yet firing).
 - [ ] `docs/ops/dashboards/mempalace-rollout.json` same.
+
+### Why the flusher check was split at M0.26
+
+The original M0.24 check — *"mempalace-flusher.service enables + starts without restart loop"* — conflated two different questions: **(a)** does the unit parse and the process start (M0-relevant — a syntactically broken unit file is an M0 bug); **(b)** does the flusher do useful work (P1-relevant — requires a non-empty outbox, which requires `MEMPALACE_MODE!=off`, which does not happen during P0 dark-deploy). At M0.26 the critical-path investigation confirmed the `(b)` half is inert at `MEMPALACE_MODE=off`:
+
+- `app/mempalace/adapter.py:280` short-circuits `record_turn` before any `outbox.insert` when mode is `off` — the single Flask-side funnel to the outbox.
+- `app/mempalace/flusher.py:73-74` docstring explicitly calls out "alive but idle" as a designed-for state: the loop polls, finds nothing, emits `flusher_tick`, sleeps.
+- `docs/superpowers/plans/2026-04-20-mempalace-integration-deltas.md:67` (M0.18 stage) is prior precedent: *"default mode=off means no writes happen regardless."*
+
+No hidden coupling surfaced (no side-effect at flusher startup that sidecar checks don't cover). Splitting the check lets M0-exit honestly reflect what was verified in this phase; functional-drain verification moves to P1-entry where it belongs. See the P1-entry checklist for the moved check.
 
 ## Sidecar-environment checks (separate venv)
 
