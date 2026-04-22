@@ -48,12 +48,32 @@ Snapshot **#379196442** (Hetzner, taken 2026-04-22 pre-provision) remains intact
 
 ## P0 — Dark deploy
 
-- Entered: `<YYYY-MM-DD>`
+- Entered: 2026-04-22 23:16:26 UTC (commit `98e23ef`)
 - Config: `MEMPALACE_MODE=off`, `LEGACY_MEMORY=on`
-- Entry check: sidecar running, `/readyz` OK, zero app-side errors.
-- Exit criterion: no mempalace-attributed errors in 3 days.
+- Entry check: sidecar `active (running)`; `/readyz` OK at `{"ok":true,"embedding_loaded":true,"db_ok":true,"audit_ok":true,"schema_version":2}`; zero app-side mempalace-attributed errors at entry.
+- Exit criterion: no mempalace-attributed errors for 3 days (target exit 2026-04-25 23:16:26 UTC).
 - Approver: Unilateral.
-- Exit verified: `<YYYY-MM-DD, link to logs / dashboard screenshot>`
+
+### Daily P0 health check (run once per day until exit)
+
+Minimum discipline — three commands, two minutes, no thought required. If both journals are clean for 3 consecutive days, P0 exits and the P1-entry queue begins. If either shows a mempalace-attributed error, triage before rotating to shadow.
+
+```bash
+# 1. Sidecar journal — errors only, last 24h
+journalctl -u mempalace-sidecar.service --since "24 hours ago" --priority err --no-pager
+
+# 2. Flask journal — mempalace-tagged anything, last 24h
+journalctl -u xelasphere.service --since "24 hours ago" --no-pager | grep -iE "mempalace|MEMPALACE_"
+
+# 3. Sidecar liveness — should still be green
+curl -sf --unix-socket /run/mempalace/sidecar.sock http://localhost/readyz
+```
+
+Clean = all three return nothing surprising (sidecar journal empty at --priority err, Flask journal only shows mempalace entries tagged as INFO/debug/M0-init chatter, `/readyz` unchanged).
+
+If anything surprises: paste the output into a new session for triage. Do not rotate `MEMPALACE_MODE` while anomalous signal is unresolved; spec §7.4 rollback path is `mempalace-mode off` (already the current mode, so effectively a no-op safety net).
+
+- Exit verified: `<YYYY-MM-DD, link to final clean-journal paste + final /readyz snapshot>`
 
 ---
 
