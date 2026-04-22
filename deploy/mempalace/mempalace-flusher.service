@@ -22,11 +22,19 @@ Group=mempalace
 # no duplication.
 EnvironmentFile=/etc/xelasphere/mempalace.env
 
+# systemd owns /run/xelasphere lifecycle (tmpfs-aware). Same fix applied
+# to the sidecar unit at M0.26a; same rationale — /run is tmpfs and the
+# xelasphere user cannot mkdir under root-owned /run on reboot.
+RuntimeDirectory=xelasphere
+RuntimeDirectoryMode=0750
+
 # Prometheus multiproc directory. Separate from the sidecar's /run/mempalace
 # /prom because flusher + Flask + sidecar are distinct Prometheus aggregation
-# scopes.
-Environment=PROMETHEUS_MULTIPROC_DIR=/var/run/xelasphere/prom
-ExecStartPre=/bin/mkdir -p /var/run/xelasphere/prom
+# scopes. Path uses /run/... (not /var/run/...) to match the RuntimeDirectory=
+# created subtree directly.
+Environment=PROMETHEUS_MULTIPROC_DIR=/run/xelasphere/prom
+ExecStartPre=/bin/mkdir -p /run/xelasphere/prom
+ExecStartPre=/bin/rm -rf /run/xelasphere/prom/
 
 ExecStart=/opt/xelasphere/venv/bin/python -m app.mempalace.flusher_main
 

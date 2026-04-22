@@ -88,7 +88,7 @@ def _build_adapter():
     from app.mempalace.redaction.rules import load_rules
     from app.mempalace.shadow_sink import ShadowSink
 
-    socket = os.getenv("MEMPALACE_SOCKET", "/run/mempalace/sidecar.sock")
+    socket = os.getenv("MEMPALACE_SOCKET_PATH", "/run/mempalace/sidecar.sock")
     token = os.getenv("MEMPALACE_TOKEN", "")
     outbox_path = Path(
         os.getenv("MEMPALACE_OUTBOX_PATH", "/var/lib/xelasphere/outbox.db")

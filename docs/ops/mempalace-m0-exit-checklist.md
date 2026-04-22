@@ -12,7 +12,7 @@ Run before flipping to P0 (dark deploy). This is a verification checklist, not a
 $ tools/check-m0-exit.sh
 ```
 
-27 mechanical checks covering the repo-level M0 artifacts. Current state: **all 27 passing** (as of the M0.26 commit; the wheel-presence check § 9 was added to close a false-green window where check-m0-exit.sh reported green on state that would fail provision.sh step 5).
+42 mechanical checks covering the repo-level M0 artifacts. Current state: **all 42 passing** (as of the M0.27 commit). Count grew from 27 → 42 at M0.27 when § 8 was rewritten to cross-reference the sidecar Settings class against template declarations, verify every `<TODO>` placeholder has a matching substitution in provision.sh, and guard against vestigial template vars. See `§ 8` in `tools/check-m0-exit.sh` for the hardening shape and the M0.27 commit body for the scoping rationale.
 
 Covered categories:
 1. Flask-side test suite (app/mempalace + tests/test_m023_5_smoke).

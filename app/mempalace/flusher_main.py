@@ -42,7 +42,7 @@ def run() -> None:
     )
     log = logging.getLogger("mempalace-flusher")
 
-    socket_path = os.getenv("MEMPALACE_SOCKET", "/run/mempalace/sidecar.sock")
+    socket_path = os.getenv("MEMPALACE_SOCKET_PATH", "/run/mempalace/sidecar.sock")
     token = os.environ["MEMPALACE_TOKEN"]
     outbox_path = Path(os.environ["MEMPALACE_OUTBOX_PATH"])
 

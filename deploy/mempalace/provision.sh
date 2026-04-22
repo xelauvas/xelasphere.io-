@@ -13,16 +13,24 @@
 
 set -euo pipefail
 
-# --- Locations (spec §7.1) ---
+# --- Installed env-file locations ---
 SIDECAR_ENV=/etc/mempalace/sidecar.env
 FLASK_ENV=/etc/xelasphere/mempalace.env
-PALACES_DIR=/var/mempalace/palaces
-KG_PENDING=/var/mempalace/kg_pending.sqlite
-AUDIT_DB=/var/mempalace/audit.sqlite
-SHADOW_LOGS=/var/mempalace/shadow_logs
+
+# --- Template locations (source of truth; see M0.27) ---
+SIDECAR_ENV_TEMPLATE="$(dirname "$0")/sidecar.env.example"
+FLASK_ENV_TEMPLATE="$(dirname "$0")/mempalace.env.example"
+
+# --- State directory locations (spec §7.1) ---
+DATA_DIR=/var/mempalace
+LOG_DIR=/var/log/mempalace
+FLASK_STATE_DIR=/var/lib/xelasphere
 # /run/mempalace and /run/mempalace/prom are managed by systemd
 # (RuntimeDirectory= in mempalace-sidecar.service), not this script.
-LOG_DIR=/var/log/mempalace
+# /run/xelasphere and /run/xelasphere/prom likewise for the flusher unit.
+
+# --- Runtime literals (change here, not inline) ---
+SIDECAR_SOCKET=/run/mempalace/sidecar.sock
 
 # --- Install locations ---
 SIDECAR_VENV=/opt/mempalace-sidecar/venv
@@ -39,8 +47,17 @@ else
     echo "[provision] mempalace user exists; skip"
 fi
 
-# Step 2 — add xelasphere to mempalace group (spec §7.3 step 2)
-if ! id -Gn xelasphere 2>/dev/null | grep -qw mempalace; then
+# Step 2 — add xelasphere to mempalace group (spec §7.3 step 2).
+# At M0.27 the xelasphere user is a precondition (pre-created by operator
+# per the M0.26 tombstone — see #6 for the Flask FHS migration); guard so
+# a missing xelasphere user doesn't fail the script silently.
+if ! id -u xelasphere >/dev/null 2>&1; then
+    echo "[provision] ERROR: xelasphere system user does not exist." >&2
+    echo "[provision] Create it with:" >&2
+    echo "[provision]   useradd --system --no-create-home --shell /usr/sbin/nologin xelasphere" >&2
+    exit 3
+fi
+if ! id -Gn xelasphere | grep -qw mempalace; then
     echo "[provision] adding xelasphere to mempalace group"
     usermod -aG mempalace xelasphere
 else
@@ -48,56 +65,104 @@ else
 fi
 
 # Step 3 — directories with ownership/mode from spec §7.1.
-# /run/mempalace and /run/mempalace/prom are intentionally NOT created
-# here: systemd's RuntimeDirectory=mempalace on the sidecar unit owns
-# that tmpfs lifecycle (survives reboots). ExecStartPre in the unit
-# creates /run/mempalace/prom.
 echo "[provision] creating directory tree"
-install -d -o mempalace -g mempalace -m 0750 "$PALACES_DIR"
-install -d -o mempalace -g mempalace -m 0750 "$SHADOW_LOGS"
-install -d -o mempalace -g mempalace -m 0750 "$LOG_DIR"
-install -d -o mempalace -g mempalace -m 0750 "$(dirname "$KG_PENDING")"
-install -d -o root      -g mempalace -m 0750 /etc/mempalace
-install -d -o root      -g xelasphere -m 0750 /etc/xelasphere
+install -d -o mempalace  -g mempalace  -m 0750 "$DATA_DIR"
+install -d -o mempalace  -g mempalace  -m 0750 "$LOG_DIR"
+install -d -o root       -g mempalace  -m 0750 /etc/mempalace
+install -d -o root       -g xelasphere -m 0750 /etc/xelasphere
+# /var/lib/xelasphere — outbox.db home. xelasphere:xelasphere so the
+# flusher (User=xelasphere) can open+write the SQLite DB post-FHS. Flask
+# currently runs as root and bypasses DAC, so it can write regardless.
+install -d -o xelasphere -g xelasphere -m 0750 "$FLASK_STATE_DIR"
 
-# Step 4 — generate MEMPALACE_TOKEN and write to both env files atomically
-if [ ! -f "$SIDECAR_ENV" ] || ! grep -q '^MEMPALACE_TOKEN=' "$SIDECAR_ENV"; then
-    echo "[provision] generating MEMPALACE_TOKEN and writing env files"
-    TOKEN=$(openssl rand -hex 32)
+# Step 4 — install env files from templates with secret substitution.
+#
+# M0.27 architecture change: provision.sh no longer owns the env-file
+# schema; it cp's the templates and substitutes TODO placeholders only.
+# Templates are the source of truth (deploy/mempalace/*.env.example);
+# provision.sh is the substitution mechanism.
+#
+# Generated values are idempotent: if the installed env file already has
+# a real (non-TODO) value for a placeholder, we keep it rather than
+# regenerating (which would rotate secrets silently on every re-run).
 
-    # Sidecar env file
-    TMP_SIDECAR=$(mktemp)
-    if [ -f "$SIDECAR_ENV" ]; then
-        grep -v '^MEMPALACE_TOKEN=' "$SIDECAR_ENV" > "$TMP_SIDECAR" || true
+_install_env_from_template() {
+    # args: <template_path> <dest_path> <owner> <group> <key=value>...
+    local template="$1" dest="$2" owner="$3" group="$4"
+    shift 4
+
+    if [ ! -f "$template" ]; then
+        echo "[provision] ERROR: missing template $template" >&2
+        exit 4
     fi
-    echo "MEMPALACE_TOKEN=$TOKEN" >> "$TMP_SIDECAR"
-    install -m 0640 -o root -g mempalace "$TMP_SIDECAR" "$SIDECAR_ENV"
-    rm -f "$TMP_SIDECAR"
 
-    # Flask env file
-    TMP_FLASK=$(mktemp)
-    if [ -f "$FLASK_ENV" ]; then
-        grep -v '^MEMPALACE_TOKEN=' "$FLASK_ENV" > "$TMP_FLASK" || true
+    # Start from the template
+    local tmp
+    tmp=$(mktemp)
+    cp "$template" "$tmp"
+
+    # Apply each key=value substitution, replacing lines of the form
+    # `KEY=<TODO...>` with `KEY=VALUE`. If the installed file already has
+    # a real value for KEY, prefer that (idempotent secrets).
+    local pair key value existing
+    for pair in "$@"; do
+        key="${pair%%=*}"
+        value="${pair#*=}"
+        existing=""
+        if [ -f "$dest" ]; then
+            existing=$(grep -E "^${key}=" "$dest" | head -1 | cut -d= -f2- || true)
+        fi
+        if [ -n "$existing" ] && ! echo "$existing" | grep -q '^<TODO'; then
+            value="$existing"
+        fi
+        # Escape / for sed delimiter (paths are fine with | as delim, tokens are hex)
+        sed -i "s|^${key}=<TODO.*|${key}=${value}|" "$tmp"
+    done
+
+    install -m 0640 -o "$owner" -g "$group" "$tmp" "$dest"
+    rm -f "$tmp"
+}
+
+# Generate secrets once. Re-runs preserve existing values.
+TOKEN=$(openssl rand -hex 32)
+USER_ID_HASH_SALT=$(openssl rand -hex 32)
+
+echo "[provision] installing env files from templates"
+_install_env_from_template "$SIDECAR_ENV_TEMPLATE" "$SIDECAR_ENV" root mempalace \
+    "MEMPALACE_TOKEN=$TOKEN" \
+    "MEMPALACE_USER_ID_HASH_SALT=$USER_ID_HASH_SALT"
+
+_install_env_from_template "$FLASK_ENV_TEMPLATE" "$FLASK_ENV" root xelasphere \
+    "MEMPALACE_TOKEN=$TOKEN"
+
+# Post-check: required fields present with real values in the sidecar env.
+for required in MEMPALACE_TOKEN MEMPALACE_DATA_DIR MEMPALACE_USER_ID_HASH_SALT; do
+    val=$(grep -E "^${required}=" "$SIDECAR_ENV" | head -1 | cut -d= -f2- || true)
+    if [ -z "$val" ] || echo "$val" | grep -q '^<TODO'; then
+        echo "[provision] ERROR: $SIDECAR_ENV missing or has TODO for $required" >&2
+        exit 5
     fi
-    echo "MEMPALACE_TOKEN=$TOKEN" >> "$TMP_FLASK"
-    install -m 0640 -o root -g xelasphere "$TMP_FLASK" "$FLASK_ENV"
-    rm -f "$TMP_FLASK"
-else
-    echo "[provision] MEMPALACE_TOKEN present in $SIDECAR_ENV; skip"
-fi
+done
 
-# Step 5 — install sidecar wheel to /opt/mempalace-sidecar/venv (optional)
-if [ -n "$SIDECAR_WHEEL" ] && [ ! -x "$SIDECAR_VENV/bin/mempalace-sidecar" ]; then
+# Step 5 — install sidecar wheel to /opt/mempalace-sidecar/venv.
+if [ -n "$SIDECAR_WHEEL" ]; then
+    if [ ! -f "$SIDECAR_WHEEL" ]; then
+        echo "[provision] ERROR: SIDECAR_WHEEL=$SIDECAR_WHEEL does not exist" >&2
+        exit 6
+    fi
     echo "[provision] installing sidecar wheel: $SIDECAR_WHEEL"
     install -d -o root -g root -m 0755 /opt/mempalace-sidecar
-    python3 -m venv "$SIDECAR_VENV"
-    "$SIDECAR_VENV/bin/pip" install --upgrade pip
-    "$SIDECAR_VENV/bin/pip" install "$SIDECAR_WHEEL"
+    if [ ! -x "$SIDECAR_VENV/bin/python" ]; then
+        python3 -m venv "$SIDECAR_VENV"
+        "$SIDECAR_VENV/bin/pip" install --upgrade pip
+    fi
+    "$SIDECAR_VENV/bin/pip" install --upgrade --force-reinstall "$SIDECAR_WHEEL"
 else
     if [ -x "$SIDECAR_VENV/bin/mempalace-sidecar" ]; then
-        echo "[provision] sidecar binary present; skip install"
+        echo "[provision] sidecar binary present; skip install (SIDECAR_WHEEL unset)"
     else
-        echo "[provision] SIDECAR_WHEEL unset and no existing binary; manual install required"
+        echo "[provision] ERROR: SIDECAR_WHEEL unset and no existing binary at $SIDECAR_VENV" >&2
+        exit 7
     fi
 fi
 
@@ -115,12 +180,13 @@ fi
 # Step 6 — enable + start sidecar
 echo "[provision] systemctl daemon-reload + enable sidecar"
 systemctl daemon-reload
-systemctl enable --now mempalace-sidecar
+systemctl enable mempalace-sidecar
+systemctl restart mempalace-sidecar
 
 # Step 7 — wait for /readyz OK
 echo "[provision] waiting for sidecar /readyz ..."
 for i in $(seq 1 30); do
-    if curl -sf --unix-socket /run/mempalace/sidecar.sock http://localhost/readyz >/dev/null 2>&1; then
+    if curl -sf --unix-socket "$SIDECAR_SOCKET" http://localhost/readyz >/dev/null 2>&1; then
         echo "[provision] sidecar /readyz OK"
         break
     fi
@@ -133,7 +199,12 @@ done
 
 # Enable flusher (after sidecar is ready so flusher doesn't fight for the socket)
 if [ -f /etc/systemd/system/mempalace-flusher.service ]; then
-    systemctl enable --now mempalace-flusher
+    systemctl enable mempalace-flusher || true
+    # Don't --now enable the flusher here unconditionally: on this host the
+    # flusher's User=xelasphere cannot exec /opt/xelasphere/venv/bin/python
+    # until the Flask FHS migration (#6) lands. systemctl enable installs
+    # the wants-symlink; a later operator pass starts it post-migration.
+    echo "[provision] flusher unit enabled (not started; see P1-entry checklist)"
 fi
 
 # Step 8 — restart xelasphere; gunicorn picks up new group membership only
@@ -142,6 +213,7 @@ echo "[provision] restarting xelasphere to pick up mempalace group membership"
 systemctl restart xelasphere
 
 # Post-check: verify gunicorn master is now in the mempalace group.
+sleep 2
 GUNICORN_PID=$(pgrep -f 'gunicorn: master' || true)
 if [ -z "$GUNICORN_PID" ]; then
     echo "[provision] WARN: gunicorn master not found; skipping group-membership post-check" >&2

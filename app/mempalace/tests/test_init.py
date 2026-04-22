@@ -54,7 +54,7 @@ def test_get_adapter_returns_singleton_across_calls(monkeypatch):
     covered by the double-checked-locking test below.
     """
     monkeypatch.setenv("MEMPALACE_MODE", "off")
-    monkeypatch.setenv("MEMPALACE_SOCKET", "/tmp/test.sock")
+    monkeypatch.setenv("MEMPALACE_SOCKET_PATH", "/tmp/test.sock")
     monkeypatch.setenv("MEMPALACE_TOKEN", "t" * 32)
     monkeypatch.setenv("MEMPALACE_OUTBOX_PATH", "/tmp/test-outbox.db")
     monkeypatch.setenv("MEMPALACE_SHADOW_DIR", "/tmp/test-shadow")
@@ -70,7 +70,7 @@ def test_get_adapter_constructs_on_first_call(monkeypatch):
     None before first call, not None after.
     """
     monkeypatch.setenv("MEMPALACE_MODE", "off")
-    monkeypatch.setenv("MEMPALACE_SOCKET", "/tmp/test.sock")
+    monkeypatch.setenv("MEMPALACE_SOCKET_PATH", "/tmp/test.sock")
     monkeypatch.setenv("MEMPALACE_TOKEN", "t" * 32)
     monkeypatch.setenv("MEMPALACE_OUTBOX_PATH", "/tmp/test-outbox.db")
     monkeypatch.setenv("MEMPALACE_SHADOW_DIR", "/tmp/test-shadow")
@@ -86,7 +86,7 @@ def test_reset_adapter_clears_singleton(monkeypatch):
     reconstructs a fresh instance.
     """
     monkeypatch.setenv("MEMPALACE_MODE", "off")
-    monkeypatch.setenv("MEMPALACE_SOCKET", "/tmp/test.sock")
+    monkeypatch.setenv("MEMPALACE_SOCKET_PATH", "/tmp/test.sock")
     monkeypatch.setenv("MEMPALACE_TOKEN", "t" * 32)
     monkeypatch.setenv("MEMPALACE_OUTBOX_PATH", "/tmp/test-outbox.db")
     monkeypatch.setenv("MEMPALACE_SHADOW_DIR", "/tmp/test-shadow")
@@ -109,7 +109,7 @@ def test_reset_adapter_calls_teardown(monkeypatch):
     fast.
     """
     monkeypatch.setenv("MEMPALACE_MODE", "off")
-    monkeypatch.setenv("MEMPALACE_SOCKET", "/tmp/test.sock")
+    monkeypatch.setenv("MEMPALACE_SOCKET_PATH", "/tmp/test.sock")
     monkeypatch.setenv("MEMPALACE_TOKEN", "t" * 32)
     monkeypatch.setenv("MEMPALACE_OUTBOX_PATH", "/tmp/test-outbox.db")
     monkeypatch.setenv("MEMPALACE_SHADOW_DIR", "/tmp/test-shadow")

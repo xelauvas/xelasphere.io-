@@ -1,8 +1,19 @@
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
 from fastapi import FastAPI
 from mempalace_sidecar.auth import TokenAuthMiddleware
 from mempalace_sidecar.config import Settings
+
+
+def _package_version() -> str:
+    try:
+        return _pkg_version("mempalace-sidecar")
+    except PackageNotFoundError:
+        # Editable install w/o metadata, or running from source tree
+        # without a wheel installed. Fall back to a marker string so the
+        # FastAPI /openapi.json reflects the gap rather than a false pin.
+        return "0.0.0+src"
 from mempalace_sidecar.logging_middleware import StructuredLoggingMiddleware
 from mempalace_sidecar.routes import lifecycle as lifecycle_router
 from mempalace_sidecar.routes import ops
@@ -183,7 +194,7 @@ async def _lifespan(app):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
-    app = FastAPI(title="mempalace-sidecar", version="0.1.0", lifespan=_lifespan)
+    app = FastAPI(title="mempalace-sidecar", version=_package_version(), lifespan=_lifespan)
     app.state.settings = settings
     # M0.10: InFlightCounter tracks request depth so shutdown_sequence
     # can drain cleanly (spec §5.7). Instantiated in create_app (not
