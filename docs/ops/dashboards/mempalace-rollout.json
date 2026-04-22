@@ -1,0 +1,107 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "MemPalace mode",
+      "description": "0=off, 1=shadow, 2=active. Dashboard indicator (no alert per spec §8.1).",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "xelasphere_mempalace_mode", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "off", "color": "red" }, "1": { "text": "shadow", "color": "yellow" }, "2": { "text": "active", "color": "green" } } }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Shadow log volume (bytes/day)",
+      "description": "Disk growth of /var/mempalace/shadow_logs/. 20G cap via logrotate (spec §7.1). P1 entry requires disk growth within forecast.",
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "increase(node_filesystem_size_bytes{mountpoint=\"/var/mempalace/shadow_logs\"}[1d])", "legendFormat": "daily growth", "refId": "A" },
+        { "expr": "node_filesystem_avail_bytes{mountpoint=\"/var/mempalace/shadow_logs\"}", "legendFormat": "available", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decbytes" }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "title": "2×2 Rubric tally",
+      "description": "Manual rubric tally from docs/mempalace-shadow/*.md. Grafana can render markdown; paste the week's tally or link to the file.",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 4 },
+      "options": {
+        "mode": "markdown",
+        "content": "## 2×2 Rubric — latest\n\n|               | v3_only_hit | v3_miss |\n| ------------- | ----------: | ------: |\n| mempalace_hit |           ? |       ? |\n| mempalace_miss|           ? |       ? |\n\nSource: `docs/mempalace-shadow/YYYY-WW.md`\n\nP2 exit criterion: `mempalace_only_hit ≥ v3_only_hit` for 3 consecutive weeks AND `(both + mempalace_only) ≥ 85%` (spec §7.4)."
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "KG daily spend vs cap",
+      "description": "Knowledge-graph extraction cost tracking. predict_linear over 24h projects to cap hit.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "sum(increase(mempalace_kg_cost_usd_total[1d]))", "legendFormat": "spend today", "refId": "A" },
+        { "expr": "predict_linear(mempalace_kg_cost_usd_total[6h], 3600)", "legendFormat": "1h forward projection", "refId": "B" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 100 }] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Palace storage growth",
+      "description": "Total bytes under /var/mempalace/palaces/ over time. Long-horizon capacity planning.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "sum(mempalace_palace_bytes)", "legendFormat": "total palace bytes", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decbytes" }, "overrides": [] }
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": ["mempalace", "rollout"],
+  "templating": { "list": [] },
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "MemPalace — Rollout",
+  "uid": "mempalace-rollout",
+  "version": 1,
+  "weekStart": ""
+}
