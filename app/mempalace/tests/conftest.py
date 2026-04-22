@@ -116,3 +116,53 @@ def capturing_mock_transport():
         return CapturingMockTransport(response_factory)
 
     return _factory
+
+
+@pytest.fixture
+def flusher_factory():
+    """Factory for Flusher with guaranteed stop+join on teardown.
+
+    Stage 4c fold (Quality I2): flusher tests previously called
+    `flusher.start()` ... `flusher.stop()` ... `flusher.join(...)` inline.
+    If an assertion failed before `stop()`, the thread continued running
+    past the test boundary; tmp_path cleanup then left the background
+    thread hitting file-vanished sqlite errors as noise in subsequent
+    tests. This fixture wraps Flusher construction and guarantees
+    stop + join on teardown, even under assertion failure.
+
+    Matches the M0.14 `sync_sidecar_client` / `async_sidecar_client`
+    pattern (factory yields + teardown loops over tracked instances).
+    """
+    from unittest.mock import MagicMock
+
+    from app.mempalace.flusher import Flusher
+
+    created: list[Flusher] = []
+
+    def _factory(
+        outbox,
+        *,
+        poll_interval_s=0.05,
+        batch_size=20,
+        purge_interval_loops=600,
+        client=None,
+        metrics=None,
+    ):
+        flusher = Flusher(
+            outbox,
+            client if client is not None else MagicMock(),
+            metrics if metrics is not None else MagicMock(),
+            poll_interval_s=poll_interval_s,
+            batch_size=batch_size,
+            purge_interval_loops=purge_interval_loops,
+        )
+        created.append(flusher)
+        return flusher
+
+    try:
+        yield _factory
+    finally:
+        for flusher in created:
+            if flusher.is_alive():
+                flusher.stop()
+                flusher.join(timeout=6.5)

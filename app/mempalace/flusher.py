@@ -22,8 +22,11 @@ import logging
 import sqlite3
 import threading
 import time
+import urllib.parse
 
 import httpx
+
+from app.mempalace.client import CircuitState
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +75,18 @@ class Flusher(threading.Thread):
         """
         while not self._stop_event.is_set():
             self._metrics.flusher_tick()
+            # Stage 4c fold (Spec I2): honor breaker-open state. When the
+            # client circuit is OPEN, `post_json` fast-raises
+            # RuntimeError("sidecar circuit open"); without this gate the
+            # flusher would claim + mark_failed every pending row every
+            # poll interval, abandoning rows well inside the breaker's
+            # cooldown window. Reading `client.state` also triggers the
+            # breaker's lazy OPEN → HALF_OPEN transition after cooldown,
+            # so polling here is both the idle check AND the resume probe.
+            if getattr(self._client, "state", None) == CircuitState.OPEN:
+                if self._stop_event.wait(self._poll):
+                    break
+                continue
             try:
                 batch_t0 = time.monotonic()
                 rows = self._outbox.claim_batch(self._batch)
@@ -97,13 +112,13 @@ class Flusher(threading.Thread):
                         # not kill the flusher. Log and continue.
                         logger.warning(
                             "flusher purge failed",
-                            extra={"error": str(e)[:500]},
+                            extra={"err": str(e)[:500]},
                         )
             except (sqlite3.OperationalError, httpx.HTTPError) as e:
                 # D4: transient — log and continue.
                 logger.warning(
                     "flusher transient error",
-                    extra={"error": str(e)[:500]},
+                    extra={"err": str(e)[:500]},
                 )
             # Unexpected exceptions are NOT caught here; they propagate
             # out of run(), which kills the thread. That's intentional.
@@ -126,6 +141,11 @@ class Flusher(threading.Thread):
         headers = {"Idempotency-Key": row["turn_id"]}
         if row.get("request_id"):
             headers["X-Request-ID"] = row["request_id"]
+        # Stage 4c fold (Spec M1): URL-encode user_id. Latent today under
+        # UUID/slug-shaped user_ids, but the sidecar route `/{user_id}/ingest`
+        # expects a single path segment; any user_id containing `/`, `?`,
+        # `#`, `%`, or whitespace would corrupt the URL.
+        user_id_encoded = urllib.parse.quote(row["user_id"], safe="")
         self._client.post_json(
-            f"/palace/{row['user_id']}/ingest", body, headers=headers
+            f"/palace/{user_id_encoded}/ingest", body, headers=headers
         )

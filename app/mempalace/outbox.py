@@ -167,10 +167,17 @@ class Outbox:
                 f"WHERE id IN ({placeholders}) AND status='pending'",
                 (token, time.time(), *ids),
             )
-        # Read back outside the transaction.
-        rows = self._conn.execute(
-            "SELECT * FROM outbox WHERE claim_token=?", (token,)
-        ).fetchall()
+            # Stage 4c fold (Quality I1): read-back inside the transaction
+            # so the claim+read are a single atomic unit. Under single-
+            # flusher v1 the claim_token alone is sufficient isolation,
+            # but keeping the read inside BEGIN IMMEDIATE removes a subtle
+            # hazard where a concurrent mark_sent between COMMIT and
+            # read-back could clear claim_token on just-claimed rows.
+            # Multi-flusher concurrent-mark_sent test deferred to whichever
+            # milestone introduces multi-flusher.
+            rows = self._conn.execute(
+                "SELECT * FROM outbox WHERE claim_token=?", (token,)
+            ).fetchall()
         return [dict(r) for r in rows]
 
     # ------------------------------------------------------------------
@@ -178,7 +185,11 @@ class Outbox:
     # ------------------------------------------------------------------
 
     def mark_sent(self, ids: list[int]) -> None:
-        """Mark the given rows as sent and clear their claim_token."""
+        """Mark the given rows as sent and clear their claim_token.
+
+        Empty ids is a no-op; no error. Callers that expect non-empty ids
+        should validate upstream.
+        """
         if not ids:
             return
         placeholders = ",".join("?" * len(ids))

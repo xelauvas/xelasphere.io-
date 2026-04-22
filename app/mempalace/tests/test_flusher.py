@@ -29,19 +29,6 @@ from app.mempalace.flusher import Flusher
 from app.mempalace.outbox import Outbox
 
 
-def _make_flusher(outbox, *, poll_interval_s=0.05, batch_size=20,
-                   purge_interval_loops=600, client=None, metrics=None):
-    """Helper: build a Flusher with mocked client + metrics."""
-    return Flusher(
-        outbox,
-        client if client is not None else MagicMock(),
-        metrics if metrics is not None else MagicMock(),
-        poll_interval_s=poll_interval_s,
-        batch_size=batch_size,
-        purge_interval_loops=purge_interval_loops,
-    )
-
-
 def _insert_row(outbox, turn_id="t1", user_id="u"):
     outbox.insert(
         turn_id=turn_id, pair_id="p1", user_id=user_id, session_id="s",
@@ -49,7 +36,7 @@ def _insert_row(outbox, turn_id="t1", user_id="u"):
     )
 
 
-def test_empty_outbox_still_ticks_gauge(outbox_db_path):
+def test_empty_outbox_still_ticks_gauge(outbox_db_path, flusher_factory):
     """Plan fix #9: flusher_tick gauge updates every iteration, idle included.
 
     With an empty outbox, flusher still advances the tick gauge on each
@@ -58,7 +45,7 @@ def test_empty_outbox_still_ticks_gauge(outbox_db_path):
     """
     outbox = Outbox(outbox_db_path)
     metrics = MagicMock()
-    flusher = _make_flusher(outbox, metrics=metrics, poll_interval_s=0.05)
+    flusher = flusher_factory(outbox, metrics=metrics, poll_interval_s=0.05)
     flusher.start()
     time.sleep(0.2)  # 4x poll interval
     flusher.stop()
@@ -67,12 +54,12 @@ def test_empty_outbox_still_ticks_gauge(outbox_db_path):
     assert metrics.flusher_tick.call_count >= 2
 
 
-def test_single_row_flushes_and_marks_sent(outbox_db_path):
+def test_single_row_flushes_and_marks_sent(outbox_db_path, flusher_factory):
     outbox = Outbox(outbox_db_path)
     _insert_row(outbox, turn_id="t1")
     client = MagicMock()
     client.post_json.return_value = {"status": "accepted"}
-    flusher = _make_flusher(outbox, client=client, poll_interval_s=0.05)
+    flusher = flusher_factory(outbox, client=client, poll_interval_s=0.05)
     flusher.start()
     time.sleep(0.3)
     flusher.stop()
@@ -86,7 +73,7 @@ def test_single_row_flushes_and_marks_sent(outbox_db_path):
     client.post_json.assert_called_once()
 
 
-def test_sidecar_5xx_marks_pending_attempts_incremented(outbox_db_path):
+def test_sidecar_5xx_marks_pending_attempts_incremented(outbox_db_path, flusher_factory):
     outbox = Outbox(outbox_db_path)
     _insert_row(outbox, turn_id="t1")
     client = MagicMock()
@@ -96,7 +83,7 @@ def test_sidecar_5xx_marks_pending_attempts_incremented(outbox_db_path):
     client.post_json.side_effect = httpx.HTTPStatusError(
         "503", request=response.request, response=response
     )
-    flusher = _make_flusher(outbox, client=client, poll_interval_s=0.05)
+    flusher = flusher_factory(outbox, client=client, poll_interval_s=0.05)
     flusher.start()
     time.sleep(0.2)
     flusher.stop()
@@ -111,7 +98,7 @@ def test_sidecar_5xx_marks_pending_attempts_incremented(outbox_db_path):
     assert "503" in row["last_error"]
 
 
-def test_stop_returns_within_bound(outbox_db_path):
+def test_stop_returns_within_bound(outbox_db_path, flusher_factory):
     """D7: bound = poll_interval_s + 6.3s (M0.14 SyncSidecarClient worst-
     case post_json budget: max_retries=2 × timeout_s=2.0 + backoff=0.3).
 
@@ -126,7 +113,7 @@ def test_stop_returns_within_bound(outbox_db_path):
         return {"status": "accepted"}
     client.post_json.side_effect = slow_post
     poll = 0.1
-    flusher = _make_flusher(outbox, client=client, poll_interval_s=poll)
+    flusher = flusher_factory(outbox, client=client, poll_interval_s=poll)
     flusher.start()
     time.sleep(0.05)  # ensure flusher entered run loop
     t0 = time.monotonic()
@@ -139,7 +126,7 @@ def test_stop_returns_within_bound(outbox_db_path):
     assert elapsed < poll + 6.3
 
 
-def test_purge_runs_every_n_loops(outbox_db_path):
+def test_purge_runs_every_n_loops(outbox_db_path, flusher_factory):
     outbox = Outbox(outbox_db_path)
     original_purge = outbox.purge_old_sent
     call_count = {"n": 0}
@@ -147,7 +134,7 @@ def test_purge_runs_every_n_loops(outbox_db_path):
         call_count["n"] += 1
         return 0
     outbox.purge_old_sent = counting_purge
-    flusher = _make_flusher(
+    flusher = flusher_factory(
         outbox, poll_interval_s=0.02, purge_interval_loops=3,
     )
     flusher.start()
@@ -162,7 +149,7 @@ def test_purge_runs_every_n_loops(outbox_db_path):
     outbox.purge_old_sent = original_purge  # restore (not strictly needed)
 
 
-def test_flusher_transient_exceptions_continue_loop(outbox_db_path):
+def test_flusher_transient_exceptions_continue_loop(outbox_db_path, flusher_factory):
     """D4: narrowed except — sqlite3.OperationalError and httpx.HTTPError
     are logged at WARNING and the loop continues. Unexpected exceptions
     re-raise (doctrine hit #4 class: bare except: pass swallows real bugs).
@@ -183,7 +170,7 @@ def test_flusher_transient_exceptions_continue_loop(outbox_db_path):
     outbox.claim_batch = raise_operational
 
     metrics = MagicMock()
-    flusher = _make_flusher(outbox, metrics=metrics, poll_interval_s=0.03)
+    flusher = flusher_factory(outbox, metrics=metrics, poll_interval_s=0.03)
     flusher.start()
     time.sleep(0.25)  # enough for 2 OperationalError cycles + normal cycles
     flusher.stop()
@@ -194,3 +181,46 @@ def test_flusher_transient_exceptions_continue_loop(outbox_db_path):
         f"ticks={metrics.flusher_tick.call_count}"
     )
     outbox.claim_batch = original_claim
+
+
+def test_flusher_idles_when_breaker_open(outbox_db_path, flusher_factory):
+    """Stage 4c fold (Spec I2): flusher idles when client breaker is OPEN.
+
+    Without this gate, fast-failing RuntimeError("sidecar circuit open")
+    from post_json would cause the flusher to claim + mark_failed every
+    pending row every poll interval, abandoning rows inside the breaker
+    cooldown window (30s default) within ~5s at poll=1s + attempts-to-abandon=5.
+
+    Shape: pending row + client with state forced to OPEN. After several
+    poll intervals, assert:
+      - post_json was never called (flusher idled, didn't try to send)
+      - outbox row is still 'pending' (no mark_failed progress)
+      - attempts still 0 (no abandon progression)
+    """
+    from app.mempalace.client import CircuitState
+
+    outbox = Outbox(outbox_db_path)
+    _insert_row(outbox, turn_id="t1")
+    client = MagicMock()
+    # Force breaker OPEN. Real client's state is a stateful @property; for
+    # this test a MagicMock attribute suffices because the flusher only
+    # reads `client.state` and compares against CircuitState.OPEN.
+    client.state = CircuitState.OPEN
+    flusher = flusher_factory(outbox, client=client, poll_interval_s=0.05)
+    flusher.start()
+    time.sleep(0.25)  # ~5 poll intervals: plenty to abandon row if ungated
+    flusher.stop()
+    flusher.join(timeout=6.5)
+
+    # post_json never called during the breaker-open period.
+    client.post_json.assert_not_called()
+    # Row still pending, no failure progress.
+    row = outbox._conn.execute(
+        "SELECT status, attempts FROM outbox WHERE turn_id=?", ("t1",),
+    ).fetchone()
+    assert row["status"] == "pending", (
+        f"row should remain pending during breaker-open; got {row['status']}"
+    )
+    assert row["attempts"] == 0, (
+        f"row attempts should not advance during breaker-open; got {row['attempts']}"
+    )
