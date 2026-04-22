@@ -157,6 +157,64 @@ them — don't let the subagent discover them at runtime.
    test-harness layer are a known hazard class, orthogonal to
    code-under-test behavior.
 
+8. **Hazard-class vocabulary enumeration (promoted at M0.17 Stage 4b
+   after two operational applications at M0.16 + M0.17).** Before
+   finalizing the pre-resolution hazard list, cross-read the milestone's
+   in-scope surface against the project's shared hazard-class
+   vocabulary. Current vocabulary:
+
+   - **Primary classes:** library-semantic, filesystem-semantic,
+     runtime-semantic, framework-semantic, spec-intent-semantic.
+   - **Candidate classes:** concurrent-state-machine, cross-process-
+     coordination, transaction-boundary-under-crash, regex-semantic
+     (status varies per project; consult the project's experiment
+     ledger for current candidate tallies and promotion thresholds).
+
+   **How to apply.** For each class, ask: does the milestone's code
+   interact with this surface in a way that could produce the class's
+   characteristic failure mode? Enumerate the hazards that surface
+   per-class. The vocabulary is a *classifier*, not a generator —
+   don't iterate class names to manufacture hazards you wouldn't
+   otherwise consider; use it to CHECK whether your existing hazard
+   enumeration missed a class the milestone's surface actually
+   exercises.
+
+   **Load-bearing against over-generalization.** At M0.16 the discipline
+   was framed specifically as vocabulary-as-classifier (not vocabulary-
+   as-generator) to prevent the pre-resolution from producing
+   speculative hazards that don't correspond to real surface
+   interactions. Generating hazards by class-iteration inflates the
+   hazard list with items the milestone's code doesn't actually risk
+   hitting, dilutes Stage 4c review focus, and muddies the post-close
+   tally by mixing "hazard we considered" with "hazard the surface
+   actually produces."
+
+   **Class-assignment rubric for overlapping cases.** For each catch,
+   ask: which interface's assumption was wrong? The interface being
+   assumed-about is the class, not the caller exercising the
+   assumption. For interactions that don't fit any single-interface
+   rule (e.g., WAL-mode SQLite on a filesystem that violates POSIX
+   fsync ordering — neither purely library nor purely filesystem but
+   the interaction), log as a NEW class with a provisional name,
+   1/1 orthogonal track. Don't retrofit into an existing class.
+
+   **Class-concentration counting rule.** Multiple catches within a
+   single class at one milestone count as 1 class-data-point for
+   taxonomy-saturation purposes, regardless of individual catch count.
+   Applies to any class with ≥3 hazards in a pre-resolution list.
+   Prevents concentrated classes from dominating the taxonomy-
+   saturation signal.
+
+   **Evidence for promotion from ledger to Part 1 codification.** Two
+   operational applications at M0.16 + M0.17, both executing vocabulary-
+   as-classifier without generating speculative hazards; both producing
+   class-appropriate hazard enumeration that matched the milestone's
+   actual surface; both resulting in clean pre-commit-to-review
+   alignment. Scenario A ratification at M0.16 adjudication (`dfde720`)
+   promoted the vocabulary from B4-internal scaffolding to project-
+   wide shared taxonomy; this step codifies the pre-resolution
+   application that ratification scheduled for Stage 4b.
+
 **Evidence this discipline pays.** M0.6 dispatch originally left the
 wing-filter seeding ambiguous ("if `add_drawer` doesn't expose `wing=`,
 NEEDS_CONTEXT"). Pre-resolving via a 5-minute read of `palace_handle.py:295`
