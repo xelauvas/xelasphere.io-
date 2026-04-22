@@ -274,6 +274,9 @@ async def test_install_signal_handlers_wires_sigterm_sigint(app) -> None:
     Kept in the suite as a skip-on-absent-symbol guard: if a
     future milestone decides to install handlers, the skip flips
     to an assertion automatically.
+
+    Tombstone: https://github.com/xelauvas/xelasphere.io-/issues/5
+    (closed as not planned; reopen if the revert condition fires).
     """
     import signal
 
