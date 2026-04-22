@@ -333,23 +333,25 @@ def test_record_turn_scrubs_text_via_rules(adapter_factory):
 # --- log_shadow ---
 
 
-def test_log_shadow_shadow_mode_enqueues(adapter_factory):
-    adapter, _, _, shadow, _ = adapter_factory(mode="shadow")
+@pytest.mark.parametrize("mode,should_enqueue", [
+    ("shadow", True),
+    ("active", False),
+    ("off", False),
+])
+def test_log_shadow_only_enqueues_in_shadow_mode(
+    adapter_factory, mode, should_enqueue
+):
+    """log_shadow enqueues iff mode=SHADOW; active and off both skip.
+
+    Consolidated from three separate test functions at Stage 3 GREEN
+    per Stage 1 RED's flat-structure-vs-parametrize candidate review.
+    Binary-assertion mode-axis with same setup across all cases — the
+    textbook parametrize shape.
+    """
+    adapter, _, _, shadow, _ = adapter_factory(mode=mode)
     adapter.log_shadow({"query": "hello"})
-    assert shadow.enqueued == [{"query": "hello"}]
-
-
-def test_log_shadow_active_mode_skips(adapter_factory):
-    """log_shadow ONLY enqueues in SHADOW mode; active mode ignores."""
-    adapter, _, _, shadow, _ = adapter_factory(mode="active")
-    adapter.log_shadow({"query": "hello"})
-    assert shadow.enqueued == []
-
-
-def test_log_shadow_off_mode_skips(adapter_factory):
-    adapter, _, _, shadow, _ = adapter_factory(mode="off")
-    adapter.log_shadow({"query": "hello"})
-    assert shadow.enqueued == []
+    expected = [{"query": "hello"}] if should_enqueue else []
+    assert shadow.enqueued == expected
 
 
 # --- delete_palace ---
