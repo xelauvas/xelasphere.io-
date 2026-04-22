@@ -48,6 +48,34 @@ Notes about future architecture decisions that are not blocking M0.x but would b
 
 ## Deltas
 
+- `2026-04-22 M0.17 Stage 4a — adapter + shadow_sink + wakeup + tool land; first live-cross-side milestone since M0.15` — Four files under `app/mempalace/` per spec §3 stable-public-surface contract: `adapter.py` (MempalaceAdapter + DeletionReceipt), `shadow_sink.py` (thread-safe non-blocking writer), `wakeup.py` (provider formatters), `tool.py` (search_memory tool schema + handler). Tests cover all 6 adapter public methods + shadow-sink lifecycle + formatter structural invariants + tool schema/handler contract. Commits `055a24b` (Stage 1 RED) → `73fa968` (Stage 3 GREEN).
+
+    **Cross-side classification.** Live under contracts-in-play per A.1: sidecar wake-up/search/drawers/delete endpoints, Drawer schema, scrub contract, outbox contract, metric catalog, search_memory tool schema (downstream consumer is orchestrator+LLM). First live-cross-side milestone since M0.15. Two-trigger spec-dispatch: cross-side (A.1) AND on-demand trigger (v) (new metric catalog entries). Redundant triggers strengthen dispatch rationale.
+
+    **Flask ladder:** 149 → 197 (mempalace subpackage). +48 new tests. Full suite post-GREEN: 298/298 passed.
+
+    **Narrow-frame B4-class catches at Stage 3: 0.** Legacy-watch regression guard per A.8 held. Fourth consecutive milestone with narrow-frame zero (M0.13 / M0.14 / M0.15 / M0.17 — M0.16 was Upgrade-3-inert non-cross-side but also had zero). Factual data accumulation, not a claim about doctrine promotion — the A.8 legacy-watch status now has enough accumulated data that "zero expected, non-zero is re-opening signal" reads as robust-doctrine rather than tentative.
+
+    **Deviation-pre-declaration outcome (single-milestone data point).** Five deviations pre-declared at pre-resolution (D1-D4, D7) landed cleanly at Stage 3 GREEN with zero implementation surprises at first run. Could be evidence that pre-resolution + deviation-pre-declaration caught everything that would have surfaced at implementation time (intended discipline working). Could also be a milestone that happened to not have surprises in its surface. Single data point; don't pattern-claim. Next-milestone observation contributes additional data.
+
+    **Spec §8.1 amendment** (one amendment, three row-level changes):
+      - Extended `inserts_dropped_total` reasons set with `duplicate_turn_id`; operator-disambiguation note distinguishes from `outbox_db_down` so DB-health alerts don't misfire on orchestrator turn_id-generation bugs.
+      - Added `shadow_dropped_total{reason=queue_full}` — shadow-sink enqueue drops; distinct from `inserts_dropped_total` by domain.
+      - Added `shadow_writer_error_total{reason={fs_full,permission_denied,fs_readonly,other}}` — shadow-sink daemon-writer FS errors; errno-based reason mapping.
+
+    **I2 pre-declared hazard resolution.** M0.16 I2 (metric wiring dependency, DEFERRED to wiring milestone) resolved at M0.17 pre-resolution as three concrete spec-intent-semantic findings (H1 missing shadow-sink metric entries, H2 duplicate-turn_id label drift, H3 mode-off metric "elsewhere" handwave) → D1/D2/D3 deviations → landed cleanly at Stage 3 GREEN. Pre-declared-hazard tracking worked: specific waypoint in the experiment ledger created a concrete checkpoint where the hazard was evaluated rather than waiting for surface-at-review.
+
+    **Pre-commit verifications:**
+      - Part 1 #7 parametrize-count: pre-committed 48, collected 48 at Stage 1 RED; preserved through log_shadow parametrize consolidation (3 tests → 1 parametrized×3) at Stage 3 GREEN. HELD.
+      - Narrow-frame-zero: HELD (zero Stage 3 B4-class catches).
+      - A.8 legacy-watch guard: HELD.
+      - Hypothesis-stability: 3 fresh-`.hypothesis/`-DB runs of `test_outbox_property.py` all clean at M0.17 Stage 3 GREEN close; no M0.15-outbox-property regression from M0.17 changes.
+      - Broad-frame pre-commit (posterior <15% for zero review findings): PENDING Stage 4c dispatch.
+
+    **Idempotency pinned at pre-resolution (adapter.record_turn).** NOT idempotent by contract. Spec §4.1 line 183 assigns idempotency authority to sidecar-side `turns.sqlite`, not Flask adapter. Duplicate-turn_id at adapter level is either caller bug or intentional replay; counting as drop with distinct `duplicate_turn_id` label is accurate in both cases. Pin documented in `adapter.py` docstring for Stage 4c reviewers.
+
+    **Hygiene at Stage 1 RED:** fixed pre-existing assertion drift in `app/memory_v2/tests/test_acceptance.py::test_pinned_must_be_active_invariant` — test construction lacked `lifecycle.expires_at` so invariant 1 fired before invariant 3 the test name claimed to exercise. Trivial one-line fix; unrelated to M0.17 scope but would have eroded full-suite-green as verification signal if left.
+
 - `2026-04-22 M0.16 post-fold cleanup — weaken test_outbox_never_loses_or_dupes invariant to match outbox abandon-after-5-attempts semantic (M0.15 latent defect surfacing at M0.16 close)` — After Stage 4c fold commit `9e28e36` landed (claimed 149/149 pass), hypothesis test `test_outbox_never_loses_or_dupes` failed intermittently on full-suite re-runs. Root cause: test's invariant "every inserted pair eventually appears (no drops)" is stronger than outbox's actual contract. Outbox's `mark_failed` abandons rows at attempts≥5 by design (M0.15 D3 atomic UPDATE with CASE). Adversarial op-sequences (insert + flush_5xx × 5) drop the inserted pair. Hypothesis's random search intermittently hits the abandonment-inducing pattern.
 
     **M0.15 latent test/design inconsistency.** Test was shipped with invariant too strong. Did not fail at M0.15 Stage 3 GREEN because hypothesis's 30-examples-per-run didn't happen to generate the pattern. Surfaced at M0.16 stage 4c when `.hypothesis/examples/` picked up a stored counterexample (since removed). Fix: weaken assertion to subset-only (no phantoms — palace ⊆ inserted), remove the equality (no-drops) assertion with a rationale comment naming the abandon semantic + the deferred-restoration path (track abandoned turn_ids separately; assert palace == inserted - pairs_with_all_turns_abandoned). Subset check catches the critical phantom-send failure mode; drop-tracking is additional coverage, not Critical.
