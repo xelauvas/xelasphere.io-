@@ -106,6 +106,56 @@ them — don't let the subagent discover them at runtime.
 6. Any gap you find becomes a **pre-declared deviation** in the dispatch
    prompt, with `(a) if X world, do Y; (b) if Z world, do W; (c) if neither,
    defer with a note` decisions already made.
+7. **Test-harness configuration review (promoted from Watching appendix at
+   M0.15 Stage 4b).** Dispatcher-owned discipline. Primary value is for
+   (a) and (c) below — (a) catches collection-time silent failures that
+   can masquerade as "tests aren't being collected yet" for extended
+   periods; (c) catches ladder-rung prediction errors that shape Stage 1
+   reporting. (b) and (d) surface cleanly at Stage 1 RED either way with
+   legible errors; pre-resolution value for them is modest. Before Stage
+   1 RED, verify:
+
+   (a) **pytest.ini / pyproject.toml test settings align with tests'
+   requirements** — strict mode, asyncio mode, plugin config, `testpaths`,
+   `python_files` conventions. Test settings govern what pytest collects
+   and how; mismatches produce collection-time errors or silent
+   no-collection rather than runtime failures.
+
+   (b) **Fixture decorators are correct for each fixture's async/plugin
+   context** — `@pytest_asyncio.fixture` vs `@pytest.fixture`, scope
+   parameter (function / module / session), whether the fixture is
+   parametrized. Wrong decorator for the plugin version silently fails
+   (e.g., `@pytest.fixture` on `async def` in `asyncio_mode=strict`
+   produces `TypeError: 'async_generator' object is not callable`).
+
+   (c) **When tests will be parametrized, estimate collected-case count,
+   not declared-test count.** (Duplicates item #5 above; included here
+   for checklist completeness when this item is run as a standalone
+   pre-dispatch check.) pytest reports each parametrized invocation
+   independently; a single test declaration with N parametrized values
+   lands as N collected cases.
+
+   (d) **When tests use property-based testing frameworks (hypothesis is
+   the current instance; other frameworks may exist in future
+   milestones), verify fixture-scope compatibility with the generator's
+   execution model.** Function-scoped fixtures don't reset between
+   generated examples — the shared-state pattern lets later examples see
+   earlier examples' state, weakening invariant claims. The principle
+   (generator execution model vs fixture scope semantics) is
+   framework-agnostic; the specific detection mechanism is framework-
+   specific. Hypothesis flags this via `FailedHealthCheck`; the fix is a
+   context manager inside the @given body, not suppressing the warning.
+
+   **Evidence for promotion from Watching appendix.** Three orthogonal
+   data points across three milestones: M0.13 parametrize-case-count
+   (+24 cases predicted as +7); M0.14 pytest-asyncio strict-mode fixture
+   decorator; M0.15 hypothesis + pytest function-scoped-fixture
+   interaction. Each in a distinct sub-axis (case counting / async
+   fixture decorators / cross-plugin fixture-scope); a single
+   "test-harness semantics" checklist item at pre-resolution would have
+   caught each at a different layer. Plugin interactions at the
+   test-harness layer are a known hazard class, orthogonal to
+   code-under-test behavior.
 
 **Evidence this discipline pays.** M0.6 dispatch originally left the
 wing-filter seeding ambiguous ("if `add_drawer` doesn't expose `wing=`,
