@@ -27,7 +27,7 @@ P1 entry is blocked on moving Flask from the ad-hoc `/root/xelas.io/xelasphere.i
 - [ ] Flask boots cleanly from the new layout; all M0.25 app-side tests green against the new venv path.
 - [ ] Flusher starts as `User=xelasphere` without `exec: permission denied`.
 
-Tracked in GitHub issue: *(TBD — filed at M0.26 per `p1-entry` label)*.
+Tracked in GitHub issue [#6](https://github.com/xelauvas/xelasphere.io-/issues/6).
 
 ## Shadow-mode behavior authoring (from M0-exit known-gaps #4)
 
