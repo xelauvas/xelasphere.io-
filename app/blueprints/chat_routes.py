@@ -939,6 +939,29 @@ def chat_stream():
                 })
     except Exception as _mp_exc:
         logger.warning(f"[Stream] Mempalace wiring failed (legacy unaffected): {_mp_exc}")
+
+    # M0.18: record_turn for the user half (mode-gated; off = no-op).
+    # Streaming-path note: assistant-half record_turn is NOT wired in this
+    # path. The stream assembles assistant text across multiple SSE exit
+    # branches (search path, cache hit, main path, done-event) and a clean
+    # single assistant-finalization point doesn't exist without a wrapper
+    # pattern. Deferred to a follow-up commit that introduces a streaming-
+    # completion hook. At mode=off default this is a no-op; at mode=shadow+
+    # the streaming path will record user-halves without assistant-halves
+    # until the wrapper lands (orphan pair_ids per spec §4.4 tolerated).
+    _mp_stream_pair_id = str(uuid.uuid4())
+    try:
+        if user_id and session_id:
+            _mempalace_get_adapter().record_turn(
+                user_id=user_id,
+                session_id=session_id,
+                turn_id=str(uuid.uuid4()),
+                pair_id=_mp_stream_pair_id,
+                role="user",
+                text=display_prompt,
+            )
+    except Exception as _mp_exc:
+        logger.warning(f"[Stream] Mempalace record_turn (user) failed: {_mp_exc}")
     # ============================================================
 
     # --- Smart Context Window: build prompt via ContextBuilder ---
@@ -2669,6 +2692,21 @@ def chat():
                     })
         except Exception as _mp_exc:
             logger.warning(f"Mempalace wiring failed (legacy unaffected): {_mp_exc}")
+
+        # M0.18: record_turn for the user half (mode-gated; off = no-op).
+        # pair_id/turn_id generated above at response_message_id block.
+        try:
+            if user_id and session_id:
+                _mempalace_get_adapter().record_turn(
+                    user_id=user_id,
+                    session_id=session_id,
+                    turn_id=_mp_user_turn_id,
+                    pair_id=_mp_pair_id,
+                    role="user",
+                    text=display_prompt,
+                )
+        except Exception as _mp_exc:
+            logger.warning(f"Mempalace record_turn (user) failed: {_mp_exc}")
         # ============================================================
 
         # Build attachment context (names/types) to keep the model aware of uploaded files
@@ -2715,6 +2753,12 @@ def chat():
             logger.info(f"Added {len(url_content)} chars of URL content")
 
         response_message_id = f"msg_{uuid.uuid4().hex}"
+        # M0.18: pair_id generated orchestrator-side per spec §3 line 122.
+        # Same pair_id used for user-turn and assistant-turn record_turn
+        # calls so downstream drawers can be grouped as a turn pair.
+        _mp_pair_id = str(uuid.uuid4())
+        _mp_user_turn_id = str(uuid.uuid4())
+        _mp_assistant_turn_id = str(uuid.uuid4())
 
         # Build the prompt (skip context for stateless questions)
         try:
@@ -3202,6 +3246,21 @@ def chat():
                 logger.debug(f"Stored list with {len(stored_list.items)} items for pointer resolution")
         except Exception as e:
             logger.debug(f"List extraction failed: {e}")
+
+        # M0.18: record_turn for the assistant half (mode-gated; off = no-op).
+        # Paired with the user-turn record_turn above via shared pair_id.
+        try:
+            if user_id and session_id and response_text:
+                _mempalace_get_adapter().record_turn(
+                    user_id=user_id,
+                    session_id=session_id,
+                    turn_id=_mp_assistant_turn_id,
+                    pair_id=_mp_pair_id,
+                    role="assistant",
+                    text=response_text,
+                )
+        except Exception as _mp_exc:
+            logger.warning(f"Mempalace record_turn (assistant) failed: {_mp_exc}")
 
         # Validate recipe response format
         if is_recipe_request and response_text:
