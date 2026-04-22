@@ -35,6 +35,11 @@ def _render_drawer(d: dict) -> str:
 
     Optional wing/room semantics: absent or None → segment omitted
     (no "None" leakage). Empty string handled identically to None.
+
+    Spec M4 + Quality M5 fold: room-without-wing renders as
+    ``[ts · room]`` rather than ``[ts · /room]``. The orphan slash
+    (visually suggesting a file path) was ad-hoc; cleaner format drops
+    the leading slash since there's no wing to pair it with.
     """
     ts = d.get("ts", "?")
     wing = d.get("wing") or ""
@@ -46,9 +51,7 @@ def _render_drawer(d: dict) -> str:
         if room:
             prefix += f"/{room}"
     elif room:
-        # Room without wing is unusual but the renderer shouldn't drop it;
-        # prepend a bullet so the room remains visible.
-        prefix += f" · /{room}"
+        prefix += f" · {room}"
     prefix += "]"
     return f"{prefix} {text}"
 

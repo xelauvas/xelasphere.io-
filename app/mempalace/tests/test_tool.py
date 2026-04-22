@@ -52,6 +52,16 @@ def test_tool_schema_k_default_is_5():
     assert TOOL_SCHEMA["input_schema"]["properties"]["k"].get("default") == 5
 
 
+def test_tool_schema_k_has_minimum_and_maximum():
+    """Spec M5 fold: k is bounded to prevent hostile/confused tool-calls
+    (k=-1, k=10000) from reaching the sidecar. Bounds mirror site-wide
+    numeric-input convention.
+    """
+    k_schema = TOOL_SCHEMA["input_schema"]["properties"]["k"]
+    assert k_schema.get("minimum") == 1
+    assert k_schema.get("maximum") == 50
+
+
 # --- handle_search_memory behavior tests (fail at RED) ---
 
 
@@ -146,6 +156,31 @@ async def test_off_mode_still_returns_empty_payload():
     # Failure-path is {"results": [], "note": "no results"} (note present).
     # So OFF-mode-via-search-returning-[] falls under happy-path:
     assert out == {"results": []}
+
+
+@pytest.mark.asyncio
+async def test_missing_query_arg_returns_no_results_note():
+    """Quality M1 fold: hostile/malformed tool-call with no `query` key
+    triggers KeyError on args["query"]. The generic except-path returns
+    the standard no-results-note payload — spec §3 line 121 contract
+    (indistinguishable from genuine empty search).
+    """
+    adapter = FakeAdapter(result=[])
+    out = await handle_search_memory(adapter, user_id="u-1", args={})
+    assert out == {"results": [], "note": "no results"}
+
+
+@pytest.mark.asyncio
+async def test_non_integer_k_returns_no_results_note():
+    """Quality M1 fold: tool-call with `k` coerce-to-int failure
+    (e.g., k="abc") triggers ValueError at int(args["k"]). The generic
+    except-path returns the standard no-results-note payload.
+    """
+    adapter = FakeAdapter(result=[])
+    out = await handle_search_memory(
+        adapter, user_id="u-1", args={"query": "hi", "k": "abc"}
+    )
+    assert out == {"results": [], "note": "no results"}
 
 
 @pytest.mark.asyncio

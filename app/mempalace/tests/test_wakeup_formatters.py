@@ -157,6 +157,38 @@ def test_anthropic_none_wing_does_not_leak_literal(none_wing_ctx):
     assert "bare drawer" in out  # text still renders
 
 
+def test_anthropic_room_without_wing_renders_without_orphan_slash():
+    """Spec M4 + Quality M5 fold: wing=None + room=non-empty renders
+    as `[ts · room]` (no orphan slash). Previously rendered as
+    `[ts · /room]` which visually suggested a file path; cleaner
+    format drops the slash since there's no wing to pair with.
+    """
+    ctx = {
+        "user_id": "u-x",
+        "schema_version": 1,
+        "l0_recent": [
+            {
+                "text": "room-only drawer",
+                "wing": None,
+                "room": "sess-x",
+                "ts": 100.0,
+                "pair_id": "p1",
+                "score": None,
+            }
+        ],
+        "l1_session": [],
+        "l2_topic": [],
+        "l3_semantic": [],
+        "meta": {"hot": True, "embed_ms": 0.0, "total_ms": 0.0, "warnings": []},
+    }
+    out = to_anthropic_system(ctx)
+    # Orphan slash MUST NOT appear.
+    assert "/sess-x" not in out, f"orphan slash in output: {out!r}"
+    # The room still renders, preceded by the bullet separator.
+    assert "· sess-x" in out
+    assert "room-only drawer" in out
+
+
 # --- OpenAI / Gemini / local bridges ---
 
 

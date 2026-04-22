@@ -31,7 +31,17 @@ TOOL_SCHEMA: dict = {
                 "type": "string",
                 "description": "Optional wing to scope search.",
             },
-            "k": {"type": "integer", "default": 5},
+            # Spec M5 fold: bounds mirror site-wide convention for numeric
+            # inputs (e.g., sidecar list_drawers Query(ge=1, le=200) at
+            # routes/palace.py:371). Hostile or confused tool-calls with
+            # k=0/k=-1/k=10000 fail schema validation at the LLM provider
+            # layer rather than propagating through the adapter.
+            "k": {
+                "type": "integer",
+                "default": 5,
+                "minimum": 1,
+                "maximum": 50,
+            },
         },
         "required": ["query"],
     },
