@@ -21,10 +21,14 @@ rules:
     pattern: "eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}"
     replace: "[REDACTED:jwt]"
   - name: ssn_us
-    pattern: "(?<!\\d)\\d{3}-\\d{2}-\\d{4}(?!\\d)"
+    # M4 fix: [0-9] for match body (ASCII-only digits), \d in lookarounds
+    # (to reject match if preceded/followed by any digit, ASCII or Unicode).
+    pattern: "(?<!\\d)[0-9]{3}-[0-9]{2}-[0-9]{4}(?!\\d)"
     replace: "[REDACTED:ssn]"
   - name: credit_card_luhn
     # Candidate pattern; rules.py applies Luhn check before redacting.
-    pattern: "(?<!\\d)\\d{13,19}(?!\\d)"
+    # M4 fix: [0-9] for match body; \d in lookarounds (reject on digit-
+    # of-any-kind adjacency).
+    pattern: "(?<!\\d)[0-9]{13,19}(?!\\d)"
     replace: "[REDACTED:cc]"
     validator: luhn

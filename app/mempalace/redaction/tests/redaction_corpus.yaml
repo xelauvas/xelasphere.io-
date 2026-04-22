@@ -1,3 +1,15 @@
+## Corpus — positive + negative cases for redaction rules.
+##
+## M0.16 ships starting corpus of 25+ positives + 25+ negatives per plan
+## line 3967. Spec §6 Testing strategy (line 602) names "redaction corpus
+## (500 strings, 0 leaks)" as the long-term project target; the corpus
+## grows via feedback loop in README.md (step 1: Collect) as production
+## surfaces new leak shapes.
+##
+## Per-family variant coverage as of M0.16 Stage 4c fold (M2):
+##   openai_key 3+1, anthropic_key 3, aws_access_key_id 3, google_api_key 3,
+##   slack_bot_token 3, github_pat 3, jwt 3, ssn_us 3, credit_card_luhn 3.
+
 positives:
   # openai_key (3 variants)
   - text: "api_key=sk-AAAAAAAAAAAAAAAAAAAA in config"
@@ -20,20 +32,26 @@ positives:
     redaction_marker: "[REDACTED:aws_access_key_id]"
   - text: "AKIA0000000000000000"
     redaction_marker: "[REDACTED:aws_access_key_id]"
-  # google_api_key (2 variants — 35 chars after AIza)
+  # google_api_key (3 variants — ≥35 chars after AIza; M2 fold added 3rd)
   - text: "gkey=AIzaabcdefghijklmnopqrstuvwxyz012345678"
     redaction_marker: "[REDACTED:google_api_key]"
   - text: "token AIzaSyDkW1234567890testkeyExampleGoogleApiK1234 end"
     redaction_marker: "[REDACTED:google_api_key]"
-  # slack_bot_token (2 variants)
+  - text: "another AIzaSy_testvariant0123456789abcdefgh_ij key"
+    redaction_marker: "[REDACTED:google_api_key]"
+  # slack_bot_token (3 variants; M2 fold added 3rd)
   - text: "token=xoxb-12345678-abcdefghijkl"
     redaction_marker: "[REDACTED:slack_bot_token]"
   - text: "slack xoxb-1234-56789-ABCDEFGHIJ ok"
     redaction_marker: "[REDACTED:slack_bot_token]"
-  # github_pat (2 variants)
+  - text: "slack auth xoxb-99999999-TESTvariantABC here"
+    redaction_marker: "[REDACTED:slack_bot_token]"
+  # github_pat (3 variants; M2 fold added 3rd)
   - text: "ghp_AaBbCcDdEeFf1234567890xy"
     redaction_marker: "[REDACTED:github_pat]"
   - text: "token ghp_0000000000abcdefghij1234 ok"
+    redaction_marker: "[REDACTED:github_pat]"
+  - text: "pat ghp_testvariantABCDEFGH12345 here"
     redaction_marker: "[REDACTED:github_pat]"
   # jwt (3 variants)
   - text: "jwt=eyJabcdef1234.eyJghijkl5678.sigabc123def"
