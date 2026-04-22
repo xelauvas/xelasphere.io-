@@ -372,6 +372,21 @@ def orchestrator_dashboard():
     return jsonify(get_full_status())
 
 
+@chat_bp.route('/admin/mempalace-mode', methods=['GET'])
+def mempalace_mode_probe():
+    """Probe endpoint for /usr/local/bin/mempalace-mode verification
+    (deploy/mempalace/mempalace-mode script).
+
+    Returns the current MEMPALACE_MODE as read from env. Not
+    @login_required because the probe runs locally as root via the
+    mode-rotation script without a session cookie. Exposes only which
+    mode is currently set — already public info via the systemd env
+    file at /etc/xelasphere/mempalace.env.
+    """
+    from app.mempalace.feature_flag import mode
+    return jsonify({"mode": mode().value})
+
+
 @chat_bp.route('/api/images/create', methods=['POST'])
 @limiter.limit("6 per minute")
 @csrf_required

@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# mempalace-mode — rotate the MEMPALACE_MODE for the Flask app.
+#
+# Installed to /usr/local/bin/mempalace-mode by provision.sh.
+# Usage: mempalace-mode {off|shadow|active}
+#
+# Per spec §7.4 "Rollback": atomically rewrites /etc/xelasphere/mempalace.env,
+# restarts xelasphere (NOT reload — gunicorn's HUP/USR2 does not re-read
+# systemd EnvironmentFile), and verifies via HTTP probe. Target wall time
+# <60s. No inline sed, ever.
+
+set -euo pipefail
+
+MODE_FILE=/etc/xelasphere/mempalace.env
+NEW_MODE="${1:-}"
+
+case "$NEW_MODE" in
+  off|shadow|active) ;;
+  *)
+    echo "usage: $0 {off|shadow|active}" >&2
+    exit 2
+    ;;
+esac
+
+# Atomic rewrite: build new file contents in a tempfile, then install over.
+# Never sed in-place (race window + systemd could read a partial file).
+tmp=$(mktemp)
+if [ -f "$MODE_FILE" ]; then
+    grep -v '^MEMPALACE_MODE=' "$MODE_FILE" > "$tmp" || true
+fi
+echo "MEMPALACE_MODE=$NEW_MODE" >> "$tmp"
+install -m 0640 -o root -g xelasphere "$tmp" "$MODE_FILE"
+rm -f "$tmp"
+
+echo "[$(date -Is)] mempalace-mode set to $NEW_MODE, restarting xelasphere ..."
+systemctl restart xelasphere
+
+# Verify via the /admin/mempalace-mode probe endpoint (added at M0.19.3).
+# Poll for up to 10s; first success wins.
+for i in $(seq 1 10); do
+  if curl -sf http://localhost:8080/admin/mempalace-mode 2>/dev/null | grep -q "\"mode\":\"$NEW_MODE\""; then
+    echo "verified mode=$NEW_MODE"
+    exit 0
+  fi
+  sleep 1
+done
+
+echo "WARN: could not verify mode change via probe; manual check required" >&2
+exit 1
