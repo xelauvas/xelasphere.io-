@@ -104,6 +104,12 @@ def test_writer_thread_survives_fs_error(tmp_path, monkeypatch):
     Strategy: patch `builtins.open` within the writer's scope to raise
     PermissionError on first call, then succeed. First enqueue triggers
     the error path; second enqueue succeeds.
+
+    Quality I1 fold: assertion tightened. Previously asserted only that
+    >=1 error fired and labels were in the taxonomy — a broken D7 (thread
+    died after first error) would pass the old assertion. The assertion
+    now also verifies that {"n": 2} actually landed on disk, which is
+    the specific contract D7 preserves.
     """
     errors: list[str] = []
 
@@ -131,6 +137,18 @@ def test_writer_thread_survives_fs_error(tmp_path, monkeypatch):
     assert all(r in ("fs_full", "permission_denied", "fs_readonly", "other")
                for r in errors), errors
 
+    # Quality I1 fold — survival check: the second enqueue must have
+    # landed on disk. If the writer thread died after the first error,
+    # {"n": 2} would never be written and the assertion below fails.
+    day = time.strftime("%Y-%m-%d")
+    log_file = tmp_path / f"shadow-{day}.jsonl"
+    assert log_file.exists(), "log file should exist after survival"
+    contents = log_file.read_text()
+    assert '"n": 2' in contents, (
+        f"second record did not drain after transient FS error; "
+        f"writer thread likely died. contents={contents!r}"
+    )
+
 
 def test_writer_error_labels_cover_reason_taxonomy(tmp_path, monkeypatch):
     """D7 refinement: error_metric gets a reason label from the taxonomy
@@ -138,13 +156,18 @@ def test_writer_error_labels_cover_reason_taxonomy(tmp_path, monkeypatch):
     amendment declares these as the counter's label values.
 
     Stage 3 GREEN maps:
-      - OSError with errno.ENOSPC → 'fs_full'
+      - OSError with errno.ENOSPC or errno.EDQUOT → 'fs_full'
       - PermissionError → 'permission_denied'
       - OSError with errno.EROFS → 'fs_readonly'
       - any other exception → 'other'
 
-    Stage 1 RED test: parametrized over three triggered-error scenarios,
-    each asserting the mapped label.
+    Quality I2 fold: assertion tightened from `expected_label in errors`
+    subset check to `errors[0] == expected_label` first-element exact.
+    Catches label-mapping drift that the subset check would miss when
+    a recovery-path iteration fires an unintended extra label.
+
+    Spec M2 fold: EDQUOT (quota exceeded) added to fs_full. Same
+    operator-runbook path (§R11 DiskLow) as ENOSPC.
     """
     import errno
 
@@ -153,6 +176,12 @@ def test_writer_error_labels_cover_reason_taxonomy(tmp_path, monkeypatch):
         (OSError(errno.ENOSPC, "no space"), "fs_full"),
         (OSError(errno.EROFS, "read-only fs"), "fs_readonly"),
     ]
+    # Spec M2: include EDQUOT when the platform exposes it (Linux/macOS yes;
+    # Windows no). Platforms lacking EDQUOT skip the scenario; the mapping
+    # is still covered on CI's Linux runners.
+    if hasattr(errno, "EDQUOT"):
+        scenarios.append((OSError(errno.EDQUOT, "quota exceeded"), "fs_full"))
+
     for exc, expected_label in scenarios:
         errors: list[str] = []
         import builtins
@@ -172,8 +201,9 @@ def test_writer_error_labels_cover_reason_taxonomy(tmp_path, monkeypatch):
             time.sleep(0.2)
         finally:
             sink.stop(timeout=5.0)
-        assert expected_label in errors, (
-            f"expected label '{expected_label}' for {exc!r}, got {errors}"
+        # Quality I2 fold: first-element exact rather than subset.
+        assert errors and errors[0] == expected_label, (
+            f"expected first label '{expected_label}' for {exc!r}, got {errors}"
         )
 
 
@@ -189,10 +219,19 @@ def test_stop_is_idempotent(tmp_path):
     sink.stop(timeout=5.0)  # no raise
 
 
-def test_enqueue_after_stop_does_not_raise(tmp_path):
-    """Enqueue after stop is a no-op (or drops silently). Never raises —
-    the calling request path must not see shadow-sink lifecycle errors.
+def test_enqueue_after_stop_drops_with_sink_stopped_reason(tmp_path):
+    """Enqueue after stop fires drop_metric with reason='sink_stopped'.
+
+    Spec M1 fold: previously fired 'queue_full' post-stop, conflating
+    back-pressure ("queue saturated; investigate writer health") with
+    lifecycle ("sink stopped; record arrived too late"). Distinct
+    labels let operator dashboards differentiate the two conditions.
+
+    Never raises — the calling request path must not see shadow-sink
+    lifecycle errors.
     """
-    sink = ShadowSink(log_dir=tmp_path)
+    drops: list[str] = []
+    sink = ShadowSink(log_dir=tmp_path, drop_metric=drops.append)
     sink.stop(timeout=5.0)
-    sink.enqueue({"late": True})  # no raise; record may be dropped
+    sink.enqueue({"late": True})  # no raise; drop fires
+    assert drops == ["sink_stopped"]

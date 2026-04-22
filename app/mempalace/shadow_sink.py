@@ -34,6 +34,15 @@ from typing import Callable, Optional
 log = logging.getLogger(__name__)
 
 
+# Errnos mapped to the `fs_full` reason label. EDQUOT (quota exceeded)
+# is semantically equivalent to ENOSPC for operator purposes (same R11
+# DiskLow runbook path per spec §8.3). Linux/macOS have EDQUOT; Windows
+# does not — getattr guard preserves cross-platform loadability.
+_FS_FULL_ERRNOS = {errno.ENOSPC}
+if hasattr(errno, "EDQUOT"):
+    _FS_FULL_ERRNOS.add(errno.EDQUOT)
+
+
 def _classify_os_error(exc: BaseException) -> str:
     """Map writer-thread exceptions to the reason label taxonomy
     declared in spec §8.1 shadow_writer_error_total:
@@ -42,7 +51,7 @@ def _classify_os_error(exc: BaseException) -> str:
     if isinstance(exc, PermissionError):
         return "permission_denied"
     if isinstance(exc, OSError):
-        if exc.errno == errno.ENOSPC:
+        if exc.errno in _FS_FULL_ERRNOS:
             return "fs_full"
         if exc.errno == errno.EROFS:
             return "fs_readonly"
@@ -85,15 +94,21 @@ class ShadowSink:
         self._t.start()
 
     def enqueue(self, record: dict) -> None:
-        """Non-blocking enqueue. On queue.Full, fires `drop_metric
-        ("queue_full")` and drops the record. Never raises.
+        """Non-blocking enqueue. Never raises.
 
-        Safe to call after `stop()` — a best-effort `put_nowait` is
-        attempted; if the queue can't accept, the drop metric fires
-        (the daemon is no longer draining, so "queue_full" is accurate
-        as shorthand for "cannot deliver"). Never surfaces the
-        post-stop condition as an exception to the request path.
+        Drop-metric labeling (Spec M1 fold):
+          - ``queue_full``: the daemon-writer queue is saturated; put_nowait
+            raised queue.Full. Operator signal for "back-pressure; scale
+            up or investigate writer-thread health."
+          - ``sink_stopped``: enqueue called after stop(). Operator signal
+            for "record lost during graceful shutdown or post-shutdown
+            call-site bug." Distinct from queue_full so dashboards
+            querying "back-pressure rate" aren't noisy on graceful shutdown.
         """
+        if self._stopped:
+            if self._drop_metric is not None:
+                self._drop_metric("sink_stopped")
+            return
         try:
             self._q.put_nowait(record)
         except queue.Full:
