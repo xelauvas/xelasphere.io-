@@ -861,6 +861,40 @@ future edits can see the forcing function:
   despite migrations/shutdown/metrics complexity), revisit whether
   spec-reviewer dispatch still earns its cost. Don't cut yet.
 
+- **Spec-reviewer-downgrade experiment CLOSED at M0.17 (2026-04-22)
+  — option (c) ratified as winning policy.** Experiment ran M0.11 →
+  M0.17 over three option framings (a=always-on, b=cross-side-only,
+  c=cross-side-default-plus-on-demand-for-others). T1 close-out
+  trigger (two consecutive cross-side + option-(c)-correctly-
+  dispatching milestones) fired at M0.17 after M0.15. M0.17 spec-
+  reviewer surfaced 5 Important layer-3 findings quality missed on
+  the cross-side surface (SHAPE (1) outcome); option (c) is now
+  the standing rule, not a policy-under-experiment.
+
+  **Dispatch rule post-closure.** Cross-side milestones (per the
+  contracts-in-play criterion) dispatch spec-reviewer by default.
+  Non-cross-side milestones dispatch spec-reviewer on-demand when
+  any of five trigger categories fire: (i) new spec section
+  introduced; (ii) deviation from existing spec language; (iii)
+  contract with external consumers affected; (iv) new structured-
+  log field; (v) new metric catalog entry. If zero triggers fire
+  on a non-cross-side milestone, only quality-reviewer dispatches.
+
+  **What closure does NOT commit to.** Option (c) winning does
+  NOT lock the dispatch policy as permanent. T4 retirement trigger
+  remains ACTIVE as falsifiability path: if option (c) ever
+  misfires (spec dispatches under contracts-in-play, returns zero
+  layer-3, quality catches spec-class findings spec should have),
+  T4 fires and retirement path re-opens the experiment. Similarly,
+  the A.1 contracts-in-play classification criterion is part of
+  doctrine but could itself be revisited if future milestones
+  surface classification ambiguity.
+
+  Full closure record in the project experiment ledger at
+  `~/.claude/projects/-root-xelas-io-xelasphere-io-/memory/
+  project_mempalace_m011_spec_reviewer_experiment.md` under B.1
+  "M0.17 Stage 4c fold + T1 close-out."
+
 - **"Nastiest reachable context" doctrine (M0.8 + M0.9 + M0.10
   + M0.11 — five-for-five across orthogonal bug classes, layers at
   plan-sketch AND implementation).** The invariant that defines
