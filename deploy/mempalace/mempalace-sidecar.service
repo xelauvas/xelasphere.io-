@@ -20,6 +20,17 @@ EnvironmentFile=/etc/mempalace/sidecar.env
 RuntimeDirectory=mempalace
 RuntimeDirectoryMode=0750
 
+# The mempalace system user has HOME=/home/mempalace by default (set by
+# useradd at Step 1 of provision.sh even without -m), but /home is
+# root:root 0755 — unwritable. chromadb's onnx embedding function calls
+# os.makedirs(~/.cache/chroma/onnx_models/...) at first use and crashes
+# with PermissionError before the sidecar can notify READY. Override HOME
+# to a systemd-managed cache dir so chromadb's implicit HOME-derived
+# cache path lands somewhere writable.
+CacheDirectory=mempalace
+CacheDirectoryMode=0750
+Environment=HOME=/var/cache/mempalace
+
 # Wipe the prometheus multiproc directory on each start. PROMETHEUS_MULTIPROC_DIR
 # accumulates .db files per worker PID; stale files from a prior run would
 # double-count or report phantom workers to the scrape endpoint.
