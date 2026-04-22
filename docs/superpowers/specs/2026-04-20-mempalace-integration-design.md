@@ -747,7 +747,7 @@ DR hierarchy — derived from §1's "palace is a derived index, conversations ar
 | `xelasphere_mempalace_outbox_depth` | gauge | `status={pending,sent}` | Backpressure |
 | `xelasphere_mempalace_outbox_age_seconds` | histogram | — | Staleness |
 | `xelasphere_mempalace_outbox_rejected_total` | counter | — | 50k cap hits |
-| `xelasphere_mempalace_inserts_dropped_total` | counter | `reason={mode_off,outbox_db_down}` | Silent drops |
+| `xelasphere_mempalace_inserts_dropped_total` | counter | `reason={mode_off,outbox_db_down,duplicate_turn_id}` | Silent drops. `duplicate_turn_id` fires on adapter-level `sqlite3.IntegrityError` (caller passed same `turn_id` twice); disambiguated from `outbox_db_down` so alerts on DB health don't misfire on orchestrator turn_id-generation bugs. |
 | `xelasphere_mempalace_flush_batch_seconds` | histogram | — | Flusher performance |
 | `xelasphere_mempalace_flusher_last_tick_seconds` | gauge | — | Flusher liveness (deadlock detection). **Updated every loop iteration, including the no-work path.** Empty-outbox idle must still tick — otherwise `MempalaceFlusherStalled` false-pages overnight. |
 | `xelasphere_mempalace_client_request_seconds` | histogram | `route`, `status_code` | Round-trip latency |
@@ -756,6 +756,8 @@ DR hierarchy — derived from §1's "palace is a derived index, conversations ar
 | `xelasphere_mempalace_redaction_hits_total` | counter | `rule` | Scrub counts (never the text) |
 | `xelasphere_mempalace_wakeup_skipped_total` | counter | `reason={timeout,circuit_open,shadow_mode,error}` | Injection-skipped reason |
 | `xelasphere_mempalace_mode` | gauge | — | Dashboard indicator (no alert) |
+| `xelasphere_mempalace_shadow_dropped_total` | counter | `reason={queue_full}` | Shadow-sink enqueue drops. `queue_full` fires when the daemon-writer queue is saturated and `put_nowait` raises `queue.Full`; the request path is never blocked. Distinct from `inserts_dropped_total` — different domain (shadow-log path vs outbox insert path) so operator alerts on either can use clean denominators. Added M0.17. |
+| `xelasphere_mempalace_shadow_writer_error_total` | counter | `reason={fs_full,permission_denied,fs_readonly,other}` | Shadow-sink daemon-writer FS errors. Fires when the writer-thread's `_run` loop catches an `OSError`/`PermissionError` around the disk write. Loop continues after catch so a transient FS error does not silently kill the writer thread. `fs_full` = `errno.ENOSPC`; `permission_denied` = `PermissionError`; `fs_readonly` = `errno.EROFS`; `other` = any other exception. Added M0.17. |
 
 ### 8.2 Alerts
 

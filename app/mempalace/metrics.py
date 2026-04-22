@@ -60,6 +60,17 @@ class Metrics:
             "xelasphere_mempalace_mode", "0=off 1=shadow 2=active",
             registry=registry,
         )
+        # M0.17 additions — see spec §8.1 amendment.
+        self._shadow_dropped = Counter(
+            "xelasphere_mempalace_shadow_dropped_total",
+            "Shadow-sink enqueue drops (queue full, etc.)",
+            ["reason"], registry=registry,
+        )
+        self._shadow_writer_error = Counter(
+            "xelasphere_mempalace_shadow_writer_error_total",
+            "Shadow-sink daemon writer FS errors (disk full, permission-denied, fs-readonly)",
+            ["reason"], registry=registry,
+        )
 
     # --- call-site-friendly methods (stable adapter API) ---
 
@@ -94,6 +105,12 @@ class Metrics:
     def mode(self, value: str) -> None:
         mapping = {"off": 0, "shadow": 1, "active": 2}
         self._mode.set(mapping[value])
+
+    def shadow_dropped(self, reason: str) -> None:
+        self._shadow_dropped.labels(reason=reason).inc()
+
+    def shadow_writer_error(self, reason: str) -> None:
+        self._shadow_writer_error.labels(reason=reason).inc()
 
 
 def build_default_metrics() -> Metrics:

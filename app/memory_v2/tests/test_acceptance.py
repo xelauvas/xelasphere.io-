@@ -115,7 +115,10 @@ class TestRetrievalCorrectness:
             key="style",
             value="detailed",
             status=MemoryStatus.PROVISIONAL,  # Invalid: pinned but not ACTIVE
-            pinned=True
+            pinned=True,
+            lifecycle=MemoryLifecycle(
+                expires_at=datetime.utcnow() + timedelta(days=1)
+            ),
         )
 
         is_valid, error = memory.validate_invariants()
