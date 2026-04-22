@@ -212,18 +212,44 @@ fi
 echo "[provision] restarting xelasphere to pick up mempalace group membership"
 systemctl restart xelasphere
 
-# Post-check: verify gunicorn master is now in the mempalace group.
+# Post-check: verify gunicorn can reach the UDS after restart.
+#
+# INTENT: "Flask gunicorn can open /run/mempalace/sidecar.sock after the
+# restart." The spec §7.3 step 8 mechanism assumes Flask runs as
+# User=xelasphere (in group mempalace) and relies on group-membership
+# granting access to a 0660 socket. On a host where Flask runs as root
+# (ad-hoc deployment not yet migrated to spec §7.1 FHS layout), root's
+# DAC bypass grants access regardless of group membership, and the
+# group-membership check returns a false negative.
+#
+# M0.27c: post-check reads xelasphere.service's User= and branches.
+#   - User=root     → DAC bypass, pass with note
+#   - User=xelasphere → require mempalace in supplementary groups
+#   - User=<other>  → unexpected; fail with explicit rationale
+#
+# This is honest-about-mechanism rather than mechanism-pinning, which
+# preserves correctness through the FHS migration (#6) intermediate
+# states as well as before and after.
 sleep 2
+FLASK_USER=$(systemctl show xelasphere.service --property=User --value 2>/dev/null)
 GUNICORN_PID=$(pgrep -f 'gunicorn: master' || true)
+
 if [ -z "$GUNICORN_PID" ]; then
-    echo "[provision] WARN: gunicorn master not found; skipping group-membership post-check" >&2
-else
-    if [ "$(grep -c '^Groups:.*mempalace' "/proc/$GUNICORN_PID/status")" -eq 1 ]; then
+    echo "[provision] WARN: gunicorn master not found; skipping post-check" >&2
+elif [ "$FLASK_USER" = "root" ]; then
+    echo "[provision] verified: xelasphere.service User=root — UDS accessible via DAC bypass"
+    echo "[provision]   (group-membership check is moot for root; see spec §7.3 / FHS issue #6)"
+elif [ "$FLASK_USER" = "xelasphere" ]; then
+    if [ "$(grep -c '^Groups:.*\<mempalace\>' "/proc/$GUNICORN_PID/status")" -eq 1 ]; then
         echo "[provision] verified: gunicorn master has mempalace group membership"
     else
-        echo "[provision] ERROR: gunicorn master missing mempalace group; rollback required" >&2
+        echo "[provision] ERROR: gunicorn master (User=xelasphere) missing mempalace group; rollback required" >&2
         exit 2
     fi
+else
+    echo "[provision] ERROR: xelasphere.service User=$FLASK_USER not handled by post-check" >&2
+    echo "[provision]   Expected root (legacy) or xelasphere (post-FHS). Refine the check." >&2
+    exit 2
 fi
 
 echo "[provision] done."
