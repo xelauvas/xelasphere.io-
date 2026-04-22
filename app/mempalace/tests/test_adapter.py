@@ -199,6 +199,29 @@ async def test_wake_up_posts_to_correct_path(adapter_factory):
     assert client.calls[0]["path"] == "/palace/u-42/wake-up"
 
 
+@pytest.mark.asyncio
+async def test_wake_up_k_parameter_flows_through_to_body(adapter_factory):
+    """Spec I4 fold: k is caller-tunable at the adapter surface,
+    matching sidecar WakeupRequest.k at schemas.py:108. Internal
+    consistency with search() which also exposes k.
+    """
+    adapter, client, _, _, _ = adapter_factory(mode="active")
+    client.response = {"user_id": "u-1", "l0_recent": [], "meta": {"hot": True}}
+    await adapter.wake_up("u-1", "hello", k=12)
+    body = client.calls[0]["body"]
+    assert body["k"] == 12
+
+
+@pytest.mark.asyncio
+async def test_wake_up_k_defaults_to_5(adapter_factory):
+    """Spec I4 fold: default matches sidecar WakeupRequest.k = 5."""
+    adapter, client, _, _, _ = adapter_factory(mode="active")
+    client.response = {"user_id": "u-1", "l0_recent": [], "meta": {"hot": True}}
+    await adapter.wake_up("u-1", "hello")
+    body = client.calls[0]["body"]
+    assert body["k"] == 5
+
+
 # --- search ---
 
 
@@ -301,6 +324,7 @@ def test_record_turn_integrity_error_labels_duplicate_turn_id(adapter_factory):
     )
     adapter.record_turn(**_record_turn_args())
     assert metrics.inserts_dropped_calls == ["duplicate_turn_id"]
+    assert outbox.inserts == []  # Quality M2: no partial insert on D2 path.
 
 
 def test_record_turn_generic_exception_labels_outbox_db_down(adapter_factory):
@@ -313,6 +337,7 @@ def test_record_turn_generic_exception_labels_outbox_db_down(adapter_factory):
     outbox.insert_raise = RuntimeError("disk gone")
     adapter.record_turn(**_record_turn_args())
     assert metrics.inserts_dropped_calls == ["outbox_db_down"]
+    assert outbox.inserts == []  # Quality M2: no partial insert on DB-down path.
 
 
 def test_record_turn_scrubs_text_via_rules(adapter_factory):
@@ -377,20 +402,25 @@ async def test_delete_palace_abandons_user_outbox_first(adapter_factory):
 
 
 @pytest.mark.asyncio
-async def test_delete_palace_proceeds_even_if_abandon_fails(adapter_factory):
+async def test_delete_palace_proceeds_even_if_abandon_fails(monkeypatch):
     """If abandon_user raises (e.g., DB down), the sidecar DELETE still
     fires. The user-intent is 'delete my data'; a Flask-side outbox
     failure must not block the sidecar-side delete. Flusher retry on
     DB recovery would then try to flush rows against a deleted palace
     and be a 404 — acceptable because the user-data-deletion already
     landed.
+
+    Uses monkeypatch.setenv directly (Quality I3 fold): earlier version
+    wrote os.environ["MEMPALACE_MODE"]="active" directly, which
+    persists post-test since pytest's monkeypatch fixture doesn't
+    track direct os.environ writes. Latent cross-test interference.
     """
+    monkeypatch.setenv("MEMPALACE_MODE", "active")
+
     class ExplodingOutbox(FakeOutbox):
         def abandon_user(self, user_id):
             raise RuntimeError("db gone")
 
-    import os
-    os.environ["MEMPALACE_MODE"] = "active"
     client = FakeClient()
     client.response = {"status": "deleted", "bytes_removed": 0}
     adapter = MempalaceAdapter(
@@ -422,11 +452,75 @@ async def test_list_drawers_uses_get(adapter_factory):
 
 
 @pytest.mark.asyncio
-async def test_list_drawers_omits_wing_when_none(adapter_factory):
-    """wing=None must not render as `wing=None` in the query string."""
+async def test_list_drawers_omits_wing_and_room_when_none(adapter_factory):
+    """wing=None + room=None must not render as `wing=None` in the query
+    string — urlencode omits the keys entirely when they're absent from
+    the params dict.
+    """
     adapter, client, _, _, _ = adapter_factory(mode="active")
     client.response = {"drawers": [], "total": 0, "next_offset": None}
     await adapter.list_drawers("u-1", limit=10)
     qs = client.calls[0]["path"]
     assert "wing=" not in qs, f"unexpected wing param in: {qs}"
+    assert "room=" not in qs, f"unexpected room param in: {qs}"
     assert "limit=10" in qs
+
+
+@pytest.mark.asyncio
+async def test_list_drawers_includes_room_when_provided(adapter_factory):
+    """Spec I1 fold: room filter threads through to the sidecar's
+    Query(None) at routes/palace.py:370. Admin callers can scope to
+    a specific wing+room combination via the adapter surface.
+    """
+    adapter, client, _, _, _ = adapter_factory(mode="active")
+    client.response = {"drawers": [], "total": 0, "next_offset": None}
+    await adapter.list_drawers(
+        "u-1", wing="conversations", room="session-x", limit=20
+    )
+    qs = client.calls[0]["path"]
+    assert "wing=conversations" in qs
+    assert "room=session-x" in qs
+
+
+@pytest.mark.asyncio
+async def test_list_drawers_default_limit_is_20_not_100(adapter_factory):
+    """Spec I2 fold: default aligns to sidecar's Query(20, ge=1, le=200)
+    at routes/palace.py:371. Previously defaulted to 100; M0.18 callers
+    needing >20 results must pass limit= explicitly.
+    """
+    adapter, client, _, _, _ = adapter_factory(mode="active")
+    client.response = {"drawers": [], "total": 0, "next_offset": None}
+    await adapter.list_drawers("u-1")
+    assert "limit=20" in client.calls[0]["path"]
+
+
+@pytest.mark.asyncio
+async def test_list_drawers_rejects_limit_out_of_bounds(adapter_factory):
+    """Spec I2 fold: adapter-side bounds mirror sidecar Query(ge=1, le=200).
+    Out-of-range limits raise at the Flask boundary rather than producing
+    a confusing 422 from the sidecar.
+    """
+    adapter, client, _, _, _ = adapter_factory(mode="active")
+    with pytest.raises(ValueError, match="limit must be in"):
+        await adapter.list_drawers("u-1", limit=0)
+    with pytest.raises(ValueError, match="limit must be in"):
+        await adapter.list_drawers("u-1", limit=201)
+    # No sidecar calls made for either rejected invocation.
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_list_drawers_urlencodes_special_chars(adapter_factory):
+    """Spec I3 fold: wing/room with special chars (&, =, spaces) get
+    URL-encoded via urllib.parse.urlencode rather than raw-interpolated.
+    Prevents injection-like corruption of the query string (e.g., a
+    wing named 'a&room=admin' forging a room filter under raw concat).
+    """
+    adapter, client, _, _, _ = adapter_factory(mode="active")
+    client.response = {"drawers": [], "total": 0, "next_offset": None}
+    await adapter.list_drawers("u-1", wing="a&b=c d")
+    qs = client.calls[0]["path"]
+    # Raw '&b=c' must NOT appear (would inject a 'b' param).
+    assert "&b=" not in qs
+    # urlencode renders '&' as '%26', '=' as '%3D', space as '+' or '%20'.
+    assert "wing=a%26b%3Dc" in qs

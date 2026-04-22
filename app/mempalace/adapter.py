@@ -46,6 +46,8 @@ from __future__ import annotations
 import sqlite3
 import time
 from dataclasses import dataclass
+from typing import Literal
+from urllib.parse import urlencode
 
 from app.mempalace.feature_flag import MempalaceMode, mode
 from app.mempalace.redaction.rules import scrub
@@ -57,10 +59,13 @@ class DeletionReceipt:
 
     Mirrors the sidecar's DeletionReceipt response (see
     ``mempalace-sidecar/mempalace_sidecar/schemas.py:124``). Defined
-    Flask-side so callers don't have to import sidecar schemas.
+    Flask-side so callers don't have to import sidecar schemas. Status
+    narrowed to ``Literal["deleted"]`` to match sidecar contract — the
+    sidecar only emits this one value; widening to ``str`` at the
+    Flask boundary would drop type-safety across the UDS.
     """
 
-    status: str
+    status: Literal["deleted"]
     bytes_removed: int
 
 
@@ -90,7 +95,11 @@ class MempalaceAdapter:
     # --- reads ---
 
     async def wake_up(
-        self, user_id: str, query: str, session_id: str | None = None
+        self,
+        user_id: str,
+        query: str,
+        session_id: str | None = None,
+        k: int = 5,
     ):
         """Fetch wake-up context from the sidecar.
 
@@ -100,6 +109,12 @@ class MempalaceAdapter:
         exception (sidecar down, circuit open, timeout, etc.) returns
         None so the caller can skip prompt injection cleanly.
 
+        ``k`` parameterizes the wake-up layer size, matching sidecar
+        ``WakeupRequest.k`` (schemas.py:108). Exposed at the adapter
+        surface so callers can tune for context-hungry vs cost-
+        constrained models; internally consistent with ``search()``
+        which also exposes k.
+
         **SHADOW-mode caller contract.** Orchestrator MUST NOT inject
         the returned context in SHADOW mode (spec §4.2). Shadow
         observability of the wake-up result happens via a separate
@@ -108,7 +123,7 @@ class MempalaceAdapter:
         """
         if mode() == MempalaceMode.OFF:
             return None
-        body: dict = {"query": query, "k": 5}
+        body: dict = {"query": query, "k": k}
         # D4: session_id flows through to sidecar body when present.
         # Sidecar's WakeupRequest.session_id is Optional[str] = None;
         # omitting the key is cleaner than sending null.
@@ -247,21 +262,41 @@ class MempalaceAdapter:
         self,
         user_id: str,
         wing: str | None = None,
-        limit: int = 100,
+        room: str | None = None,
+        limit: int = 20,
         offset: int = 0,
     ):
         """GET-based paginated drawer listing.
 
         Plan review fix #5 (real GET, not POST). Offset-based
         pagination — ChromaDB has no cursor primitive (spec §5.2).
-        Query string construction: wing omitted when None.
+
+        ``limit`` default aligns to sidecar's ``Query(20, ge=1, le=200)``
+        at routes/palace.py:371 (plan-predated-100 corrected at M0.17
+        Stage 4c fold). Caller-visible behavior change — any site
+        relying on the default expecting >20 results must pass ``limit=``
+        explicitly. Adapter-side bounds mirror sidecar validation so
+        out-of-range inputs fail at the Flask boundary rather than
+        producing a confusing 422 from the sidecar.
+
+        Both ``wing`` and ``room`` are optional filters matching sidecar
+        ``Query`` parameters. Query string is built via
+        ``urllib.parse.urlencode`` so special characters in wing/room
+        are escaped correctly rather than corrupting the query.
         """
-        params: list[str] = []
+        if not (1 <= limit <= 200):
+            raise ValueError(
+                f"limit must be in [1, 200]; got {limit}. "
+                "Sidecar contract: routes/palace.py:371 Query(ge=1, le=200)."
+            )
+        if offset < 0:
+            raise ValueError(f"offset must be >= 0; got {offset}")
+        params: dict = {"limit": limit, "offset": offset}
         if wing is not None:
-            params.append(f"wing={wing}")
-        params.append(f"limit={limit}")
-        params.append(f"offset={offset}")
-        qs = "&".join(params)
+            params["wing"] = wing
+        if room is not None:
+            params["room"] = room
+        qs = urlencode(params)
         return await self._client.get_json(
             f"/palace/{user_id}/drawers?{qs}"
         )
