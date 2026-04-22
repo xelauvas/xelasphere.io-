@@ -33,8 +33,8 @@ RuntimeDirectoryMode=0750
 # scopes. Path uses /run/... (not /var/run/...) to match the RuntimeDirectory=
 # created subtree directly.
 Environment=PROMETHEUS_MULTIPROC_DIR=/run/xelasphere/prom
+ExecStartPre=/bin/rm -rf /run/xelasphere/prom
 ExecStartPre=/bin/mkdir -p /run/xelasphere/prom
-ExecStartPre=/bin/rm -rf /run/xelasphere/prom/
 
 ExecStart=/opt/xelasphere/venv/bin/python -m app.mempalace.flusher_main
 

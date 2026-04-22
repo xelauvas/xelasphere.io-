@@ -23,8 +23,11 @@ RuntimeDirectoryMode=0750
 # Wipe the prometheus multiproc directory on each start. PROMETHEUS_MULTIPROC_DIR
 # accumulates .db files per worker PID; stale files from a prior run would
 # double-count or report phantom workers to the scrape endpoint.
+# Order matters: rm first (idempotent with -rf on non-existent path),
+# then mkdir. The reverse order removes the dir we just created — GNU
+# rm with trailing slash does NOT preserve the directory.
+ExecStartPre=/bin/rm -rf /run/mempalace/prom
 ExecStartPre=/bin/mkdir -p /run/mempalace/prom
-ExecStartPre=/bin/rm -rf /run/mempalace/prom/
 
 ExecStart=/opt/mempalace-sidecar/venv/bin/mempalace-sidecar
 KillSignal=SIGTERM
