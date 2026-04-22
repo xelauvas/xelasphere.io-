@@ -110,7 +110,13 @@ jobs:
           print('✓ All 10 action parser tests passed')
           "
 
-      # ── 4. Flask app boot check ─────────────────────────────
+      # ── 4. Legacy memory-import guard ───────────────────────
+      # Warns on new memory_v2/memory_v3 imports outside the allowlist
+      # during P0–P2. Flip to --mode block at P3 entry per spec §7.5.
+      - name: Legacy memory-import guard (warn mode — P0-P2)
+        run: python tools/check-legacy-memory-imports.py --mode warn
+
+      # ── 5. Flask app boot check ─────────────────────────────
       - name: Flask app boot check
         env:
           FLASK_ENV: testing
