@@ -13,6 +13,13 @@ User=mempalace
 Group=mempalace
 EnvironmentFile=/etc/mempalace/sidecar.env
 
+# systemd owns /run/mempalace lifecycle (tmpfs-aware). /run is tmpfs, so a
+# non-systemd-managed directory would vanish on reboot and the mempalace
+# user couldn't recreate it under root-owned /run. RuntimeDirectoryMode
+# matches the 0750 mode from spec §7.1.
+RuntimeDirectory=mempalace
+RuntimeDirectoryMode=0750
+
 # Wipe the prometheus multiproc directory on each start. PROMETHEUS_MULTIPROC_DIR
 # accumulates .db files per worker PID; stale files from a prior run would
 # double-count or report phantom workers to the scrape endpoint.

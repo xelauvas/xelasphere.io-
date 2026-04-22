@@ -20,8 +20,8 @@ PALACES_DIR=/var/mempalace/palaces
 KG_PENDING=/var/mempalace/kg_pending.sqlite
 AUDIT_DB=/var/mempalace/audit.sqlite
 SHADOW_LOGS=/var/mempalace/shadow_logs
-RUN_SOCKET_DIR=/run/mempalace
-PROM_DIR=/run/mempalace/prom
+# /run/mempalace and /run/mempalace/prom are managed by systemd
+# (RuntimeDirectory= in mempalace-sidecar.service), not this script.
 LOG_DIR=/var/log/mempalace
 
 # --- Install locations ---
@@ -47,12 +47,14 @@ else
     echo "[provision] xelasphere already in mempalace group; skip"
 fi
 
-# Step 3 — directories with ownership/mode from spec §7.1
+# Step 3 — directories with ownership/mode from spec §7.1.
+# /run/mempalace and /run/mempalace/prom are intentionally NOT created
+# here: systemd's RuntimeDirectory=mempalace on the sidecar unit owns
+# that tmpfs lifecycle (survives reboots). ExecStartPre in the unit
+# creates /run/mempalace/prom.
 echo "[provision] creating directory tree"
 install -d -o mempalace -g mempalace -m 0750 "$PALACES_DIR"
 install -d -o mempalace -g mempalace -m 0750 "$SHADOW_LOGS"
-install -d -o mempalace -g mempalace -m 0750 "$RUN_SOCKET_DIR"
-install -d -o mempalace -g mempalace -m 0750 "$PROM_DIR"
 install -d -o mempalace -g mempalace -m 0750 "$LOG_DIR"
 install -d -o mempalace -g mempalace -m 0750 "$(dirname "$KG_PENDING")"
 install -d -o root      -g mempalace -m 0750 /etc/mempalace

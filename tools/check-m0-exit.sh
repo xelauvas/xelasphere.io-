@@ -183,6 +183,31 @@ check "sidecar.env.example has MEMPALACE_TOKEN placeholder" \
 check "mempalace.env.example has MEMPALACE_MODE=off default" \
     grep -q "MEMPALACE_MODE=off" deploy/mempalace/mempalace.env.example
 
+# --- 9. Sidecar install artifact -------------------------------------
+#
+# Added M0.26. provision.sh step 5 refuses to install the sidecar without
+# either SIDECAR_WHEEL pointing at a wheel OR an already-installed binary.
+# If neither is true at P0 entry, the unit enable in step 6 fails. This
+# check makes that failure visible before the deploy runs.
+#
+# Accepts either:
+#   (a) SIDECAR_WHEEL env var points at an existing file
+#   (b) mempalace-sidecar/dist/*.whl exists in the repo
+
+say ""
+say "9. Sidecar install artifact"
+if [ -n "${SIDECAR_WHEEL:-}" ] && [ -f "$SIDECAR_WHEEL" ]; then
+    say "  ✓  SIDECAR_WHEEL points at $SIDECAR_WHEEL"
+    PASS_COUNT=$((PASS_COUNT + 1))
+elif compgen -G "mempalace-sidecar/dist/*.whl" >/dev/null 2>&1; then
+    say "  ✓  mempalace-sidecar/dist/*.whl present ($(ls mempalace-sidecar/dist/*.whl | head -1))"
+    PASS_COUNT=$((PASS_COUNT + 1))
+else
+    say "  ✗  no sidecar wheel — set SIDECAR_WHEEL or build with 'python3 -m build --wheel' in mempalace-sidecar/"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    FAIL=1
+fi
+
 # --- Summary ---------------------------------------------------------
 
 say ""

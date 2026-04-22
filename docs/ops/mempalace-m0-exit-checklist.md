@@ -12,7 +12,7 @@ Run before flipping to P0 (dark deploy). This is a verification checklist, not a
 $ tools/check-m0-exit.sh
 ```
 
-26 mechanical checks covering the repo-level M0 artifacts. Current state: **all 26 passing** (as of the M0.24 commit).
+27 mechanical checks covering the repo-level M0 artifacts. Current state: **all 27 passing** (as of the M0.26 commit; the wheel-presence check § 9 was added to close a false-green window where check-m0-exit.sh reported green on state that would fail provision.sh step 5).
 
 Covered categories:
 1. Flask-side test suite (app/mempalace + tests/test_m023_5_smoke).
@@ -23,6 +23,7 @@ Covered categories:
 6. Runbook + logging-privacy doc present with all R-numbers (R1-R15) + explicit STUB markers on R7/R8/R13.
 7. Shadow-rubric harness + docs/mempalace-shadow/ scaffolding.
 8. Environment-file templates with correct defaults.
+9. Sidecar install artifact: `SIDECAR_WHEEL` env points at an existing wheel, or `mempalace-sidecar/dist/*.whl` exists (added M0.26).
 
 If `check-m0-exit.sh` exits non-zero, fix the failing items before proceeding to deployment checks.
 

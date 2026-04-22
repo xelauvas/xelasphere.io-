@@ -15,6 +15,17 @@ set -euo pipefail
 MODE_FILE=/etc/xelasphere/mempalace.env
 NEW_MODE="${1:-}"
 
+# Source the env file to read XELASPHERE_PORT for the post-restart probe.
+# Single source of truth: the file that operators already edit for mempalace
+# config is the file we read Flask's bind port from. Pinning a port literal
+# here would drift silently; env-file read surfaces drift as a red check-6
+# at M0-exit. See M0.26 commit.
+if [ -f "$MODE_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$MODE_FILE"
+fi
+XELASPHERE_PORT="${XELASPHERE_PORT:-5000}"
+
 case "$NEW_MODE" in
   off|shadow|active) ;;
   *)
@@ -37,9 +48,9 @@ echo "[$(date -Is)] mempalace-mode set to $NEW_MODE, restarting xelasphere ..."
 systemctl restart xelasphere
 
 # Verify via the /admin/mempalace-mode probe endpoint (added at M0.19.3).
-# Poll for up to 10s; first success wins.
+# Poll for up to 10s; first success wins. Port from XELASPHERE_PORT above.
 for i in $(seq 1 10); do
-  if curl -sf http://localhost:8080/admin/mempalace-mode 2>/dev/null | grep -q "\"mode\":\"$NEW_MODE\""; then
+  if curl -sf "http://localhost:${XELASPHERE_PORT}/admin/mempalace-mode" 2>/dev/null | grep -q "\"mode\":\"$NEW_MODE\""; then
     echo "verified mode=$NEW_MODE"
     exit 0
   fi
