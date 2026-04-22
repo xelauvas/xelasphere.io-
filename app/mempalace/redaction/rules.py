@@ -18,6 +18,7 @@ Stage 3 GREEN lands real scrub + real Luhn.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Callable
 
@@ -27,11 +28,28 @@ import yaml
 def _luhn(s: str) -> bool:
     """Luhn checksum validator for credit card number candidates.
 
-    Stage 1 RED: raises NotImplementedError. Stage 3 GREEN implements
-    the standard Luhn algorithm (double every second digit from right,
-    subtract 9 if > 9, sum all, mod 10 must equal 0).
+    Standard algorithm: double every second digit from the right (i.e.,
+    positions 1, 3, 5, ... under zero-indexed reversed iteration); subtract
+    9 if the doubled value exceeds 9; sum all digits; pass if sum % 10 == 0.
+
+    Minimum length is 13 digits (Visa 13/16, MasterCard 16, Amex 15, Discover
+    16, etc.); shorter digit sequences are rejected without attempting the
+    checksum. Non-digit characters are filtered via str.isdigit() before the
+    length check.
+
+    Verified against 4532015112830366 (Luhn-valid): sum 50, 50 % 10 == 0.
     """
-    raise NotImplementedError("_luhn: Stage 3 GREEN lands behavior")
+    digits = [int(d) for d in s if d.isdigit()]
+    if len(digits) < 13:
+        return False
+    checksum = 0
+    for i, d in enumerate(reversed(digits)):
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        checksum += d
+    return checksum % 10 == 0
 
 
 VALIDATORS: dict[str, Callable[[str], bool]] = {"luhn": _luhn}
@@ -50,12 +68,32 @@ def load_rules(path: Path) -> list[dict]:
 def scrub(text: str, rules: list[dict], metrics=None) -> str:
     """Scrub `text` by applying each rule in order.
 
-    Stage 1 RED stub: returns empty string. Causes positive tests
-    (assert marker in out) and negative tests (assert out == text) to
-    fail cleanly under stub.
+    For each rule, compile the regex pattern and substitute matches with
+    the rule's `replace` marker. If the rule declares a validator (e.g.,
+    `luhn` for credit_card_luhn), run the validator on the match first;
+    return the match unchanged if the validator rejects it (Luhn-invalid
+    digit sequences pass through untouched).
 
-    Stage 3 GREEN implements the real scrub loop per plan lines
-    3929-3941: for each rule, re.compile(pattern).sub with metric-hook +
-    validator check if configured.
+    When `metrics` is provided, call `metrics.redaction_hit(rule["name"])`
+    on every rule-match that passes validation — one increment per match,
+    not per rule, not per scrub call.
+
+    Rule order is significant: each rule processes the output of prior
+    rules. Per plan-sketch intent, rules with more-specific prefixes
+    (anthropic_key, aws_access_key_id) should precede more-general ones
+    (openai_key) in rules.yaml so specific markers land first.
     """
-    return ""
+    out = text
+    for rule in rules:
+        pat = re.compile(rule["pattern"])
+        validator = VALIDATORS.get(rule.get("validator"))
+
+        def _replace(m, _rule=rule, _validator=validator):
+            if _validator is not None and not _validator(m.group(0)):
+                return m.group(0)
+            if metrics is not None:
+                metrics.redaction_hit(_rule["name"])
+            return _rule["replace"]
+
+        out = pat.sub(_replace, out)
+    return out

@@ -23,7 +23,7 @@ positives:
   # google_api_key (2 variants — 35 chars after AIza)
   - text: "gkey=AIzaabcdefghijklmnopqrstuvwxyz012345678"
     redaction_marker: "[REDACTED:google_api_key]"
-  - text: "token AIzaSyDkWtestkeyExampleGoogleApiK1234 end"
+  - text: "token AIzaSyDkW1234567890testkeyExampleGoogleApiK1234 end"
     redaction_marker: "[REDACTED:google_api_key]"
   # slack_bot_token (2 variants)
   - text: "token=xoxb-12345678-abcdefghijkl"
