@@ -41,6 +41,15 @@ __version__ = "0.1.0"
 _adapter = None
 _lock = Lock()
 
+# Process-level Metrics cache: prometheus_client's default CollectorRegistry
+# is a shared-global singleton. Re-constructing Metrics against the default
+# registry raises `Duplicated timeseries in CollectorRegistry` on the second
+# call. Adapter rebuild (via reset_adapter → get_adapter) must NOT re-create
+# Metrics; Metrics lifecycle is per-process, adapter lifecycle is separate
+# (rebuilds OK for test isolation). Caught at M0.18 Stage 3 (narrow-frame
+# B4-class catch; framework-semantic / prometheus-REGISTRY sub-hazard).
+_metrics_cache = None
+
 
 def get_adapter():
     """Return the process-singleton MempalaceAdapter.
@@ -53,7 +62,12 @@ def get_adapter():
     Returns:
         MempalaceAdapter: the singleton instance.
     """
-    raise NotImplementedError("M0.18 Stage 3 GREEN lands get_adapter")
+    global _adapter
+    if _adapter is None:
+        with _lock:
+            if _adapter is None:
+                _adapter = _build_adapter()
+    return _adapter
 
 
 def _build_adapter():
@@ -64,7 +78,53 @@ def _build_adapter():
     route through sync_client; async routes call adapter.wake_up/search
     which route through client.
     """
-    raise NotImplementedError("M0.18 Stage 3 GREEN lands _build_adapter")
+    import os
+    from pathlib import Path
+
+    from app.mempalace.adapter import MempalaceAdapter
+    from app.mempalace.client import SidecarClient, SyncSidecarClient
+    from app.mempalace.metrics import build_default_metrics
+    from app.mempalace.outbox import Outbox
+    from app.mempalace.redaction.rules import load_rules
+    from app.mempalace.shadow_sink import ShadowSink
+
+    socket = os.getenv("MEMPALACE_SOCKET", "/run/mempalace/sidecar.sock")
+    token = os.getenv("MEMPALACE_TOKEN", "")
+    outbox_path = Path(
+        os.getenv("MEMPALACE_OUTBOX_PATH", "/var/lib/xelasphere/outbox.db")
+    )
+    shadow_dir = Path(
+        os.getenv("MEMPALACE_SHADOW_DIR", "/var/log/mempalace/shadow")
+    )
+    rules = load_rules(
+        Path(__file__).parent / "redaction" / "redaction_rules.yaml"
+    )
+
+    # Process-level Metrics cache (see module-level `_metrics_cache` comment):
+    # reuse the same Metrics across adapter rebuilds so prometheus_client's
+    # default CollectorRegistry doesn't get re-registered.
+    global _metrics_cache
+    if _metrics_cache is None:
+        _metrics_cache = build_default_metrics()
+    metrics = _metrics_cache
+
+    client = SidecarClient(socket_path=socket, token=token)
+    sync_client = SyncSidecarClient(socket_path=socket, token=token)
+    outbox = Outbox(outbox_path)
+    shadow_sink = ShadowSink(
+        log_dir=shadow_dir,
+        drop_metric=metrics.shadow_dropped,
+        error_metric=metrics.shadow_writer_error,
+    )
+
+    return MempalaceAdapter(
+        client=client,
+        sync_client=sync_client,
+        outbox=outbox,
+        shadow_sink=shadow_sink,
+        redaction_rules=rules,
+        metrics=metrics,
+    )
 
 
 def reset_adapter() -> None:
@@ -83,7 +143,17 @@ def reset_adapter() -> None:
 
     Idempotent when no adapter exists (no-op).
     """
-    raise NotImplementedError("M0.18 Stage 3 GREEN lands reset_adapter")
+    global _adapter
+    if _adapter is None:
+        return
+    try:
+        _adapter.teardown()
+    except Exception:
+        # Teardown must never propagate — a reset that raises leaves the
+        # test suite in an ambiguous state. Swallow and continue with
+        # the reference clear; next get_adapter() call reconstructs.
+        pass
+    _adapter = None
 
 
 __all__ = ["__version__", "get_adapter", "reset_adapter"]

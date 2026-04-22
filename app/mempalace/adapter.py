@@ -216,7 +216,15 @@ class MempalaceAdapter:
         is shared, but mode-gating and exception handling are not).
         Grep for both `wake_up` and `wake_up_sync` when editing either.
         """
-        raise NotImplementedError("M0.18 Stage 3 GREEN lands wake_up_sync")
+        if mode() == MempalaceMode.OFF:
+            return None
+        body = self._wake_up_body(query, session_id, k)
+        try:
+            return self._sync_client.post_json(
+                f"/palace/{user_id}/wake-up", body
+            )
+        except Exception:
+            return None
 
     def search_sync(
         self,
@@ -237,7 +245,15 @@ class MempalaceAdapter:
         **Invariant for future editors.** Any behavioral change to
         ``search`` must be mirrored here. Grep for both when editing.
         """
-        raise NotImplementedError("M0.18 Stage 3 GREEN lands search_sync")
+        if mode() == MempalaceMode.OFF:
+            return []
+        try:
+            return self._sync_client.post_json(
+                f"/palace/{user_id}/search",
+                self._search_body(query, wing, k),
+            )
+        except Exception:
+            return []
 
     # --- writes ---
 
@@ -397,7 +413,16 @@ class MempalaceAdapter:
         for test isolation across adapter rebuilds. Secondary use:
         graceful shutdown if a shutdown hook is added later.
         """
-        raise NotImplementedError("M0.18 Stage 3 GREEN lands teardown")
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._shadow.stop()
+        except Exception:
+            # Teardown must never propagate — swallow-and-pass matches
+            # shadow_sink.stop's own pattern (see M0.17 shadow_sink.py
+            # stop() which wraps file-close in try/except/pass).
+            pass
 
 
 __all__ = ["MempalaceAdapter", "DeletionReceipt"]

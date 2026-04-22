@@ -115,6 +115,12 @@ from app.memory_v3 import (
     should_inject_v3, get_v3_cohort, get_rollout_manager,
     generate_v3_signal, record_v3_metrics,
 )
+# M0.18 mempalace adapter wiring (mode-gated; default mode=off is no-op).
+# Every call-site uses the same mode-guarded wrapping template so the two
+# applications (streaming + non-streaming) are behaviorally equivalent
+# under the same mode per M0.18 Stage 4c review invariant.
+from app.mempalace import get_adapter as _mempalace_get_adapter
+from app.mempalace.feature_flag import mode as _mempalace_mode, MempalaceMode as _MempalaceMode
 from app.crypto_api import (
     get_crypto_ai_context, format_crypto_context_for_ai,
     get_stock_ai_context, format_stock_context_for_ai,
@@ -905,6 +911,34 @@ def chat_stream():
 
         except Exception as e:
             logger.warning(f"[Stream] Memory V3 failed (using V2 only): {e}")
+    # ============================================================
+
+    # ============================================================
+    # M0.18: Mempalace adapter wiring (mode-gated; default off is no-op)
+    # ============================================================
+    # Wrapping template (identical at streaming + non-streaming sites):
+    #   mode=off    → no adapter call; legacy long_term_memory_stream used.
+    #   mode=shadow → adapter.wake_up_sync() + log_shadow comparison;
+    #                 legacy still used in prompt.
+    #   mode=active → adapter result would replace legacy (P3+); at M0.18
+    #                 legacy is still used (ACTIVE mode not exercised pre-P3).
+    # Exception-swallowing: any mempalace-side failure must NOT break legacy
+    # chat flow. H9 no-automated-coverage: manual-verification backstop only.
+    try:
+        _mp_mode = _mempalace_mode()
+        if _mp_mode != _MempalaceMode.OFF and user_id:
+            _mp_adapter = _mempalace_get_adapter()
+            _mp_wake = _mp_adapter.wake_up_sync(user_id, display_prompt, session_id=session_id)
+            if _mp_mode == _MempalaceMode.SHADOW:
+                _mp_adapter.log_shadow({
+                    "ts": time.time(),
+                    "user_id": user_id,
+                    "query": display_prompt,
+                    "legacy": long_term_memory_stream,
+                    "mempalace": _mp_wake,
+                })
+    except Exception as _mp_exc:
+        logger.warning(f"[Stream] Mempalace wiring failed (legacy unaffected): {_mp_exc}")
     # ============================================================
 
     # --- Smart Context Window: build prompt via ContextBuilder ---
@@ -2613,6 +2647,28 @@ def chat():
 
             except Exception as e:
                 logger.warning(f"Memory V3 failed (using V2 only): {e}")
+        # ============================================================
+
+        # ============================================================
+        # M0.18: Mempalace adapter wiring (mode-gated; default off is no-op)
+        # ============================================================
+        # Behaviorally-equivalent sibling of the streaming-path wiring above.
+        # See wrapping-template comment at the streaming site for semantics.
+        try:
+            _mp_mode = _mempalace_mode()
+            if _mp_mode != _MempalaceMode.OFF and user_id:
+                _mp_adapter = _mempalace_get_adapter()
+                _mp_wake = _mp_adapter.wake_up_sync(user_id, display_prompt, session_id=session_id)
+                if _mp_mode == _MempalaceMode.SHADOW:
+                    _mp_adapter.log_shadow({
+                        "ts": time.time(),
+                        "user_id": user_id,
+                        "query": display_prompt,
+                        "legacy": long_term_memory,
+                        "mempalace": _mp_wake,
+                    })
+        except Exception as _mp_exc:
+            logger.warning(f"Mempalace wiring failed (legacy unaffected): {_mp_exc}")
         # ============================================================
 
         # Build attachment context (names/types) to keep the model aware of uploaded files
