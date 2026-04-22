@@ -1,0 +1,30 @@
+rules:
+  - name: openai_key
+    pattern: "sk-[A-Za-z0-9]{20,}"
+    replace: "[REDACTED:openai_key]"
+  - name: anthropic_key
+    pattern: "sk-ant-[A-Za-z0-9_-]{20,}"
+    replace: "[REDACTED:anthropic_key]"
+  - name: aws_access_key_id
+    pattern: "AKIA[0-9A-Z]{16}"
+    replace: "[REDACTED:aws_access_key_id]"
+  - name: google_api_key
+    pattern: "AIza[0-9A-Za-z_-]{35}"
+    replace: "[REDACTED:google_api_key]"
+  - name: slack_bot_token
+    pattern: "xoxb-[0-9A-Za-z-]{10,}"
+    replace: "[REDACTED:slack_bot_token]"
+  - name: github_pat
+    pattern: "ghp_[A-Za-z0-9]{20,}"
+    replace: "[REDACTED:github_pat]"
+  - name: jwt
+    pattern: "eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}"
+    replace: "[REDACTED:jwt]"
+  - name: ssn_us
+    pattern: "(?<!\\d)\\d{3}-\\d{2}-\\d{4}(?!\\d)"
+    replace: "[REDACTED:ssn]"
+  - name: credit_card_luhn
+    # Candidate pattern; rules.py applies Luhn check before redacting.
+    pattern: "(?<!\\d)\\d{13,19}(?!\\d)"
+    replace: "[REDACTED:cc]"
+    validator: luhn
