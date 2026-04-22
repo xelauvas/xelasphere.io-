@@ -39,9 +39,16 @@ MemPalace integration M0 milestone completed. Flask app can now be deployed alon
 - `tests/test_m023_5_smoke.py` — 8 smoke tests covering Flask test-client infra + app boot + /admin/mempalace-mode probe.
 - `conftest.py` — firebase_admin.exceptions mock addition (unblocks Flask test_client).
 
-**Exit verification (M0.24):**
+**Exit verification — mechanical gates (M0.24):**
 - `docs/ops/mempalace-m0-exit-checklist.md` — human-facing pre-P0 checklist + known-gaps acknowledgment.
 - `tools/check-m0-exit.sh` — 26 automated checks for the repo-level exit gates.
+- Status at M0.24 commit: 26/26 mechanical checks passing. Remaining M0 work = evidence items (sidecar pytest, STUB issues) + deployment-host checks.
+
+**Exit verification — evidence + pin (M0.25):**
+- GitHub issues filed for runbook STUBs R7/R8/R13 ([#2](https://github.com/xelauvas/xelasphere.io-/issues/2), [#3](https://github.com/xelauvas/xelasphere.io-/issues/3), [#4](https://github.com/xelauvas/xelasphere.io-/issues/4)), all targeting P1 entry. Runbook text updated to cross-reference.
+- Sidecar pytest run against a fresh venv from `mempalace-sidecar/pyproject.toml[dev]`: **118 passed, 1 skipped**. Skip is `test_install_signal_handlers_wires_sigterm_sigint` — permanently skipped per M0.10 close decision (uvicorn owns signal handling via `capture_signals()`; duplicate in-process handlers would risk double invocation).
+- `mempalace-sidecar/requirements.lock` committed — full dependency tree from the venv that passed tests, so staging-host install resolves to the same chromadb and transitive versions.
+- Remaining M0 gate: 8 deployment-environment checks on a staging host (systemd unit starts, `/readyz`, `mempalace-mode` rotation, Grafana dashboard imports). Not completable from a dev workstation; your-turn work.
 
 ### Spec amendments
 
@@ -62,7 +69,7 @@ See `docs/ops/mempalace-m0-exit-checklist.md § Known gaps`:
 
 ### Rollout phases ahead
 
-- **P0** Dark deploy (3 days, mode=off + legacy=on). Entry at M0.24 checklist completion.
+- **P0** Dark deploy (3 days, mode=off + legacy=on). Entry when M0 exit-checklist deployment-environment items clear on the staging host (M0.25 closed the repo-side evidence items).
 - **P1** Shadow writes (14 days).
 - **P2** Shadow reads (21 days).
 - **P3** Active, legacy standby (60 days).
