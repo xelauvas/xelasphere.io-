@@ -668,12 +668,14 @@ Hardening flags (`PrivateTmp`, `ProtectSystem=strict`, `NoNewPrivileges`, `ReadW
 | Phase | `MEMPALACE_MODE` | `LEGACY_MEMORY` | Duration | Entry check | Exit criterion | Approver |
 |---|---|---|---|---|---|---|
 | **P0 Dark deploy** | `off` | `on` | 3 days | Sidecar running, `/readyz` OK, zero app-side errors | No mempalace-attributed errors in 3 days | Unilateral |
-| **P1 Shadow writes** | `shadow` | `on` | 14 days | P0 clean | Outbox steady ≤1k rows p95; ingest success ≥99.5%; shadow log populated; disk growth within forecast; single-user rebuild benchmark measured | Unilateral |
+| **P1 Shadow writes** | `shadow` | `on` | 14 days | P0 clean AND chat-flow integration coverage milestone landed (see below) | Outbox steady ≤1k rows p95; ingest success ≥99.5%; shadow log populated; disk growth within forecast; single-user rebuild benchmark measured | Unilateral |
 | **P2 Shadow reads** | `shadow` | `on` | 21 days | P1 clean | Rubric (2×2) `mempalace_only_hit ≥ v3_only_hit` for 3 consecutive weeks AND `(both + mempalace_only) ≥ 85%` | Unilateral with rubric math attached |
 | **P3 Active, legacy standby** | `active` | `on` | 60 days | P2 flip criterion met + written approval in `docs/mempalace-shadow/phase-log.md` | Zero rollbacks; hot p95 ≤150ms sustained; **day-30 and day-55 rubric re-run confirms mempalace_only ≥ v3_only at both checkpoints**; two monthly capacity reviews | Written approval, committed to phase log |
 | **P4 Legacy removed** | `active` | `off` (deleted) | terminal | P3 clean | N/A | Written approval, committed |
 
 **Rollback** — `/usr/local/bin/mempalace-mode {off|shadow|active}` is a named script that atomically rewrites `/etc/xelasphere/mempalace.env`, runs `systemctl restart xelasphere` (not reload — gunicorn's HUP/USR2 does not re-read systemd EnvironmentFile), and verifies via probe. **No inline sed, ever.** Target rollback wall time < 60s.
+
+**Chat-flow integration-coverage gate for P1 entry (added 2026-04-22).** M0.18 orchestrator-wiring ships the wrapping template for mode=off / shadow / active at `app/blueprints/chat_routes.py` + `app/services/chat_engine.py` without automated regression coverage of the mode=off + legacy=on path. Verified at M0.18 pre-resolution that `tests/integration/` and `tests/services/` are empty; no test imports `chat_routes` or `chat_engine`. Backward-compat for the default-shipped mode=off path is asserted by wrapping-template design but not verified by tests at M0.18 close. **A named integration-coverage milestone (`M0.23.5 chat-flow integration coverage`) is a hard pre-requisite for P1 entry**, landing between `M0.23 CI guard` and `M0.24 Pre-P0 exit checklist`. Scope: Flask test-client + chat_routes / chat_engine fixtures, regression coverage for mode=off + legacy=on flow, mode × flag matrix coverage for the wrapping template. Rationale: P1 adds shadow writes on top of still-live legacy reads; if the wrapping template has a behavioral regression in the legacy path, P1 compounds the risk. Integration coverage at M0.23.5 is the backstop.
 
 ### 7.5 Dormancy → deletion
 

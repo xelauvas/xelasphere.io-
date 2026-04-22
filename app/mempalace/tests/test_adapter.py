@@ -59,6 +59,25 @@ class FakeClient:
         return self.response
 
 
+class FakeSyncClient:
+    """Sync client double. Mirrors FakeClient's post_json shape but sync.
+
+    Per M0.14 D5, SyncSidecarClient exposes only post_json. FakeSyncClient
+    matches that surface — no get_json / delete_json.
+    """
+
+    def __init__(self):
+        self.calls: list[dict] = []
+        self.response: Any = None
+        self.raise_exc: Exception | None = None
+
+    def post_json(self, path, body, headers=None):
+        self.calls.append({"method": "POST", "path": path, "body": body})
+        if self.raise_exc is not None:
+            raise self.raise_exc
+        return self.response
+
+
 class FakeOutbox:
     """In-memory outbox double. Records inserts; abandon_user tallies."""
 
@@ -110,21 +129,36 @@ class FakeMetrics:
 def adapter_factory(monkeypatch):
     """Build a MempalaceAdapter with fake collaborators. Test sets mode
     via `MEMPALACE_MODE` env var (reads env every call per M0.13).
+
+    M0.18 extension: adapter now receives both async `client` and sync
+    `sync_client` (D1). Factory injects FakeClient + FakeSyncClient by
+    default. Tests can reach the sync client via the 3rd-from-last tuple
+    position (see return-tuple signature below).
+
+    Returns (adapter, client, outbox, shadow, metrics, sync_client).
     """
 
-    def _build(mode: str = "active", rules: list[dict] | None = None):
+    def _build(
+        mode: str = "active",
+        rules: list[dict] | None = None,
+        include_sync_client: bool = False,
+    ):
         monkeypatch.setenv("MEMPALACE_MODE", mode)
         client = FakeClient()
+        sync_client = FakeSyncClient()
         outbox = FakeOutbox()
         shadow = FakeShadowSink()
         metrics = FakeMetrics()
         adapter = MempalaceAdapter(
             client=client,
+            sync_client=sync_client,
             outbox=outbox,
             shadow_sink=shadow,
             redaction_rules=rules if rules is not None else [],
             metrics=metrics,
         )
+        if include_sync_client:
+            return adapter, client, outbox, shadow, metrics, sync_client
         return adapter, client, outbox, shadow, metrics
 
     return _build
@@ -524,3 +558,187 @@ async def test_list_drawers_urlencodes_special_chars(adapter_factory):
     assert "&b=" not in qs
     # urlencode renders '&' as '%26', '=' as '%3D', space as '+' or '%20'.
     assert "wing=a%26b%3Dc" in qs
+
+
+# --- M0.18 sync variants (D1 Option γ) ---
+
+
+@pytest.mark.parametrize("test_mode,expected_result,expect_sidecar_call", [
+    ("off", None, False),
+    ("shadow", "sidecar_response", True),
+    ("active", "sidecar_response", True),
+])
+def test_wake_up_sync_mode_gating(
+    adapter_factory, test_mode, expected_result, expect_sidecar_call
+):
+    """D1 sync-variant mode-gating: OFF → None (no sidecar call);
+    SHADOW/ACTIVE → sidecar response unmodified. Mirrors async wake_up
+    semantics per the invariant-comment discipline.
+    """
+    adapter, _, _, _, _, sync_client = adapter_factory(
+        mode=test_mode, include_sync_client=True
+    )
+    sync_client.response = {"user_id": "u-1", "l0_recent": [], "meta": {"hot": True}}
+    result = adapter.wake_up_sync("u-1", "hello")
+    if expected_result is None:
+        assert result is None
+    else:
+        assert result is not None
+    assert bool(sync_client.calls) == expect_sidecar_call
+
+
+def test_wake_up_sync_returns_none_on_sidecar_failure(adapter_factory):
+    """D1: sync variant returns None on any exception, matching async
+    wake_up's fallback contract (spec §4.5).
+    """
+    adapter, _, _, _, _, sync_client = adapter_factory(
+        mode="active", include_sync_client=True
+    )
+    sync_client.raise_exc = RuntimeError("sidecar circuit open")
+    result = adapter.wake_up_sync("u-1", "hello")
+    assert result is None
+
+
+def test_wake_up_sync_passes_session_id_in_body(adapter_factory):
+    """D1: session_id threading through sync variant matches D4 contract
+    on async variant. Body construction is shared via _wake_up_body
+    helper.
+    """
+    adapter, _, _, _, _, sync_client = adapter_factory(
+        mode="active", include_sync_client=True
+    )
+    sync_client.response = {"user_id": "u-1", "l0_recent": [], "meta": {"hot": True}}
+    adapter.wake_up_sync("u-1", "hello", session_id="sess-xyz")
+    body = sync_client.calls[0]["body"]
+    assert body.get("session_id") == "sess-xyz"
+    assert body.get("query") == "hello"
+
+
+def test_wake_up_sync_k_parameter_flows_through(adapter_factory):
+    """D1: k is caller-tunable on sync variant, same as async."""
+    adapter, _, _, _, _, sync_client = adapter_factory(
+        mode="active", include_sync_client=True
+    )
+    sync_client.response = {"user_id": "u-1", "l0_recent": [], "meta": {"hot": True}}
+    adapter.wake_up_sync("u-1", "hello", k=12)
+    body = sync_client.calls[0]["body"]
+    assert body["k"] == 12
+
+
+def test_wake_up_sync_posts_to_correct_path(adapter_factory):
+    """D1: path construction matches async wake_up's."""
+    adapter, _, _, _, _, sync_client = adapter_factory(
+        mode="active", include_sync_client=True
+    )
+    sync_client.response = {"user_id": "u-1", "l0_recent": [], "meta": {"hot": True}}
+    adapter.wake_up_sync("u-42", "hello")
+    assert sync_client.calls[0]["path"] == "/palace/u-42/wake-up"
+
+
+@pytest.mark.parametrize("test_mode,expected_result,expect_sidecar_call", [
+    ("off", [], False),
+    ("active", "sidecar_response", True),
+])
+def test_search_sync_mode_gating(
+    adapter_factory, test_mode, expected_result, expect_sidecar_call
+):
+    """D1 sync-variant mode-gating for search: OFF → [] (no sidecar call);
+    ACTIVE → sidecar response. Mirrors async search semantics.
+    """
+    adapter, _, _, _, _, sync_client = adapter_factory(
+        mode=test_mode, include_sync_client=True
+    )
+    sync_client.response = [{"text": "drawer", "ts": 1.0}]
+    result = adapter.search_sync("u-1", "query")
+    if expected_result == []:
+        assert result == []
+    else:
+        assert result is not None
+    assert bool(sync_client.calls) == expect_sidecar_call
+
+
+def test_search_sync_returns_empty_on_failure(adapter_factory):
+    """D1: sync search returns [] on exception, matching async."""
+    adapter, _, _, _, _, sync_client = adapter_factory(
+        mode="active", include_sync_client=True
+    )
+    sync_client.raise_exc = RuntimeError("sidecar circuit open")
+    result = adapter.search_sync("u-1", "query")
+    assert result == []
+
+
+def test_search_sync_posts_full_body(adapter_factory):
+    """D1: body construction via _search_body helper shared with async."""
+    adapter, _, _, _, _, sync_client = adapter_factory(
+        mode="active", include_sync_client=True
+    )
+    sync_client.response = []
+    adapter.search_sync("u-1", "hello", wing="conversations", k=3)
+    body = sync_client.calls[0]["body"]
+    assert body == {"query": "hello", "wing": "conversations", "k": 3}
+
+
+# --- M0.18 teardown + body-helpers ---
+
+
+def test_teardown_closes_shadow_sink(adapter_factory):
+    """adapter.teardown() stops the shadow_sink's daemon writer thread.
+
+    Test uses FakeShadowSink which records stop() calls; teardown should
+    invoke shadow_sink.stop() so the daemon thread doesn't leak across
+    test cases or across reset_adapter() rebuilds.
+    """
+    adapter, _, _, shadow, _ = adapter_factory(mode="active")
+    # FakeShadowSink needs a stop() method for the assertion.
+    shadow.stop_calls: list[float] = []
+    original_stop = getattr(shadow, "stop", None)
+
+    def _recording_stop(timeout=2.0):
+        shadow.stop_calls.append(timeout)
+        if original_stop is not None:
+            original_stop(timeout=timeout)
+
+    shadow.stop = _recording_stop
+    adapter.teardown()
+    assert shadow.stop_calls, "teardown should call shadow_sink.stop()"
+
+
+def test_teardown_is_idempotent(adapter_factory):
+    """Second teardown call is a no-op (matches M0.3 close-is-idempotent
+    convention).
+    """
+    adapter, _, _, shadow, _ = adapter_factory(mode="active")
+    shadow.stop_calls: list[float] = []
+    shadow.stop = lambda timeout=2.0: shadow.stop_calls.append(timeout)
+    adapter.teardown()
+    adapter.teardown()  # must not raise
+    # Either second call no-ops (preferred) or is safely re-entrant.
+    # Minimum: idempotent = doesn't raise.
+
+
+def test_wake_up_body_omits_session_id_when_none(adapter_factory):
+    """_wake_up_body shared helper: session_id omitted when None.
+    Unit-test on the helper directly.
+    """
+    adapter, *_ = adapter_factory(mode="active")
+    body = adapter._wake_up_body("hello", None, 5)
+    assert "session_id" not in body
+    assert body == {"query": "hello", "k": 5}
+
+
+def test_wake_up_body_includes_session_id_when_present(adapter_factory):
+    """_wake_up_body shared helper: session_id included when set."""
+    adapter, *_ = adapter_factory(mode="active")
+    body = adapter._wake_up_body("hello", "sess-x", 5)
+    assert body == {"query": "hello", "k": 5, "session_id": "sess-x"}
+
+
+def test_search_body_structure(adapter_factory):
+    """_search_body shared helper: passes wing as-is including None."""
+    adapter, *_ = adapter_factory(mode="active")
+    assert adapter._search_body("q", "conversations", 3) == {
+        "query": "q", "wing": "conversations", "k": 3,
+    }
+    assert adapter._search_body("q", None, 5) == {
+        "query": "q", "wing": None, "k": 5,
+    }

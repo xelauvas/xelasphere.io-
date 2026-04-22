@@ -183,6 +183,32 @@ async def test_non_integer_k_returns_no_results_note():
     assert out == {"results": [], "note": "no results"}
 
 
+@pytest.mark.parametrize("mempalace_mode", ["off", "shadow", "active"])
+@pytest.mark.asyncio
+async def test_handle_search_memory_returns_valid_payload_in_every_mode(
+    monkeypatch, mempalace_mode
+):
+    """Spec §3 line 121 contract (D5 / H7 fold): the search_memory tool
+    stays registered in every mode, including `off`. In off mode the
+    adapter's search() returns [] (no sidecar call); the handler still
+    produces a {"results": []} shape — indistinguishable from a genuine
+    empty search.
+
+    This test lock the contract mechanically: no matter the mode, the
+    handler never raises, and the returned payload has the `results`
+    key. Catches regressions where someone conditionalizes the tool
+    handler on mode (forbidden per spec — mid-conversation tool-list
+    changes break some LLM providers).
+    """
+    monkeypatch.setenv("MEMPALACE_MODE", mempalace_mode)
+    adapter = FakeAdapter(result=[])  # simulates either OFF-empty or genuine-empty
+    out = await handle_search_memory(
+        adapter, user_id="u-1", args={"query": "anything"}
+    )
+    assert "results" in out
+    assert isinstance(out["results"], list)
+
+
 @pytest.mark.asyncio
 async def test_model_dump_supported_on_drawer_objects():
     """Plan line 4169: `d.model_dump() if hasattr(d, "model_dump") else d`.

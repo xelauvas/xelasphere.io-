@@ -1,44 +1,43 @@
-"""MempalaceAdapter — stable public surface (M0.17).
+"""MempalaceAdapter — stable public surface (M0.17 + M0.18).
 
 Plan sketch: `docs/superpowers/plans/2026-04-20-mempalace-integration.md`
 lines 4178-4292 (Task M0.17.4). Spec §3: this module is the only one
 the rest of the Flask app imports; everything else in `app/mempalace/`
 is an implementation detail.
 
-**Deviations pinned at M0.17 pre-resolution:**
+**M0.17 Deviations (shipped at M0.17 Stage 4c fold):**
 
   - **D2.** `record_turn` catches `sqlite3.IntegrityError` before the
     generic `Exception` handler, labels `inserts_dropped
-    ("duplicate_turn_id")`. Preserves the `"outbox_db_down"` label for
-    actual DB failures so alert expressions on DB health don't misfire
-    on orchestrator turn_id-generation bugs.
+    ("duplicate_turn_id")`. Idempotency pinned NON-idempotent per spec
+    §4.1 line 183 (sidecar-side `turns.sqlite` is the authority).
+  - **D3.** Mode-off metric fires at the adapter site (spec §3 line 137).
+  - **D4.** `wake_up` passes `session_id` through to the sidecar body.
+  - **H5 (doc-only).** `wake_up` returns sidecar response unmodified in
+    SHADOW mode; orchestrator is responsible for not injecting.
 
-    **Idempotency pinned: `record_turn` is NOT idempotent by contract.**
-    Spec §4.1 line 183 assigns idempotency authority to the sidecar-
-    side `turns.sqlite`, not the Flask adapter. Duplicate-turn_id at
-    adapter level is either a caller bug (orchestrator generated the
-    same uuidv7 twice) or an intentional replay; counting as a drop
-    is accurate in both cases.
+**M0.18 Deviations pinned at pre-resolution (land at Stage 3 GREEN):**
 
-  - **D3.** Mode-off metric fires at the adapter site (not "elsewhere").
-    Spec §3 line 137 contract: OFF-mode `record_turn` increments
-    `inserts_dropped{reason="mode_off"}`. Adapter is the single funnel
-    for every `record_turn` path; orchestrator call-sites must not be
-    expected to remember this counter.
+  - **D1 (Option γ — parallel-methods with extracted body helpers).**
+    `wake_up_sync` and `search_sync` exist as sync variants for Flask
+    sync-worker callers that cannot `await` the async methods. Option γ
+    extracts body construction into `_wake_up_body` and `_search_body`
+    helpers, shared by async and sync variants. Mode-gate + try/except
+    structure duplicates (4 lines each) but is small enough that
+    invariant-comment discipline keeps drift manageable. The
+    alternative — async-via-runner using `asyncio.run` — was rejected
+    because `httpx.AsyncClient` in `self._client` binds to its
+    construction-time loop (M0.14 doctrine); a fresh loop per sync call
+    violates the binding. SyncSidecarClient avoids the issue entirely
+    (sync transport). Only `wake_up` and `search` ship sync variants at
+    M0.18 (only these are called from Flask sync routes); `delete_palace`
+    and `list_drawers` remain async-only until a sync caller surfaces.
 
-  - **D4.** `wake_up` passes `session_id` through to the sidecar body
-    so the sidecar's structured wake-up log at `routes/palace.py:243`
-    can correlate turns. `WakeupRequest.session_id` is `Optional[str]`;
-    the body omits the field when the caller didn't pass a value
-    (cleaner than sending null).
-
-  - **H5 (documentation-only).** `wake_up` returns the sidecar response
-    unmodified in SHADOW mode. The orchestrator is responsible for not
-    injecting the result into the system prompt in SHADOW mode (spec
-    §4.2). The adapter does NOT suppress the fetch in SHADOW mode
-    because shadow-mode observability of wake-up behavior is explicit
-    via `log_shadow`; suppressing the fetch would hide real sidecar
-    latency/health data during the shadow rollout phase.
+  - **Adapter teardown.** `teardown()` method added for test isolation
+    (reset_adapter pattern in `app/mempalace/__init__.py`) and graceful
+    shutdown. Closes `shadow_sink` (which owns a daemon thread), then
+    any sync/async resources the adapter holds references to. Idempotent
+    per M0.3 convention.
 """
 
 from __future__ import annotations
@@ -85,14 +84,43 @@ class MempalaceAdapter:
         shadow_sink,
         redaction_rules: list[dict],
         metrics=None,
+        sync_client=None,
     ) -> None:
         self._client = client
+        self._sync_client = sync_client
         self._outbox = outbox
         self._shadow = shadow_sink
         self._redact = redaction_rules
         self._metrics = metrics
+        self._closed = False
 
-    # --- reads ---
+    # --- body-construction helpers (shared by async + sync variants per D1) ---
+
+    @staticmethod
+    def _wake_up_body(query: str, session_id: str | None, k: int) -> dict:
+        """Build the sidecar /wake-up request body.
+
+        Shared between `wake_up` (async) and `wake_up_sync` (sync) per D1
+        Option γ. session_id omitted when None (sidecar WakeupRequest.
+        session_id is Optional[str] = None; cleaner to omit key than
+        send null).
+        """
+        body: dict = {"query": query, "k": k}
+        if session_id is not None:
+            body["session_id"] = session_id
+        return body
+
+    @staticmethod
+    def _search_body(query: str, wing: str | None, k: int) -> dict:
+        """Build the sidecar /search request body.
+
+        Shared between `search` (async) and `search_sync` (sync) per D1
+        Option γ. wing passed through as Optional[str] matching sidecar
+        SearchRequest.wing semantic.
+        """
+        return {"query": query, "wing": wing, "k": k}
+
+    # --- reads (async variants — from any async caller) ---
 
     async def wake_up(
         self,
@@ -101,7 +129,7 @@ class MempalaceAdapter:
         session_id: str | None = None,
         k: int = 5,
     ):
-        """Fetch wake-up context from the sidecar.
+        """Fetch wake-up context from the sidecar (async variant).
 
         In OFF mode returns None without calling the sidecar. In SHADOW
         and ACTIVE modes, POSTs to /palace/{user_id}/wake-up and returns
@@ -115,6 +143,11 @@ class MempalaceAdapter:
         constrained models; internally consistent with ``search()``
         which also exposes k.
 
+        For sync callers (Flask sync workers), use ``wake_up_sync``
+        which shares body construction via ``_wake_up_body`` but routes
+        through SyncSidecarClient to avoid httpx.AsyncClient loop-
+        binding issues (M0.14 doctrine).
+
         **SHADOW-mode caller contract.** Orchestrator MUST NOT inject
         the returned context in SHADOW mode (spec §4.2). Shadow
         observability of the wake-up result happens via a separate
@@ -123,12 +156,7 @@ class MempalaceAdapter:
         """
         if mode() == MempalaceMode.OFF:
             return None
-        body: dict = {"query": query, "k": k}
-        # D4: session_id flows through to sidecar body when present.
-        # Sidecar's WakeupRequest.session_id is Optional[str] = None;
-        # omitting the key is cleaner than sending null.
-        if session_id is not None:
-            body["session_id"] = session_id
+        body = self._wake_up_body(query, session_id, k)
         try:
             return await self._client.post_json(
                 f"/palace/{user_id}/wake-up", body
@@ -143,21 +171,73 @@ class MempalaceAdapter:
         wing: str | None = None,
         k: int = 5,
     ):
-        """Tool-call search over the user's palace.
+        """Tool-call search over the user's palace (async variant).
 
         In OFF mode returns []. In SHADOW/ACTIVE, POSTs to
         /palace/{user_id}/search and returns the list-of-drawers
         (sidecar returns list[Drawer]). On any exception returns [].
+
+        For sync callers, use ``search_sync`` which shares body
+        construction via ``_search_body`` but routes through
+        SyncSidecarClient.
         """
         if mode() == MempalaceMode.OFF:
             return []
         try:
             return await self._client.post_json(
                 f"/palace/{user_id}/search",
-                {"query": query, "wing": wing, "k": k},
+                self._search_body(query, wing, k),
             )
         except Exception:
             return []
+
+    # --- reads (sync variants — from Flask sync workers per D1) ---
+
+    def wake_up_sync(
+        self,
+        user_id: str,
+        query: str,
+        session_id: str | None = None,
+        k: int = 5,
+    ):
+        """Fetch wake-up context from the sidecar (sync variant).
+
+        D1 sync bridge: Flask sync workers cannot ``await`` async methods,
+        and ``asyncio.run(adapter.wake_up(...))`` would violate httpx.
+        AsyncClient's construction-time loop binding (M0.14 doctrine).
+        This variant routes through ``self._sync_client`` (a SyncSidecarClient
+        instance) using shared body construction from ``_wake_up_body``.
+
+        Semantic mirrors async ``wake_up``: OFF → None, SHADOW/ACTIVE →
+        sidecar response, exception → None.
+
+        **Invariant for future editors.** Any behavioral change to
+        ``wake_up`` must be mirrored here (the body-construction helper
+        is shared, but mode-gating and exception handling are not).
+        Grep for both `wake_up` and `wake_up_sync` when editing either.
+        """
+        raise NotImplementedError("M0.18 Stage 3 GREEN lands wake_up_sync")
+
+    def search_sync(
+        self,
+        user_id: str,
+        query: str,
+        wing: str | None = None,
+        k: int = 5,
+    ):
+        """Tool-call search over the user's palace (sync variant).
+
+        D1 sync bridge for Flask sync workers. Routes through
+        ``self._sync_client`` using shared body construction from
+        ``_search_body``.
+
+        Semantic mirrors async ``search``: OFF → [], SHADOW/ACTIVE →
+        list-of-drawers, exception → [].
+
+        **Invariant for future editors.** Any behavioral change to
+        ``search`` must be mirrored here. Grep for both when editing.
+        """
+        raise NotImplementedError("M0.18 Stage 3 GREEN lands search_sync")
 
     # --- writes ---
 
@@ -300,6 +380,24 @@ class MempalaceAdapter:
         return await self._client.get_json(
             f"/palace/{user_id}/drawers?{qs}"
         )
+
+    # --- lifecycle ---
+
+    def teardown(self) -> None:
+        """Release resources held by this adapter.
+
+        Closes the shadow_sink (stops its daemon writer thread). Does NOT
+        close the injected `client` / `sync_client` / `outbox` — those
+        are caller-owned resources with their own lifecycle per prior-
+        milestone conventions (M0.14 client.aclose, M0.15 outbox close).
+
+        Idempotent per M0.3 convention (second call is a no-op).
+
+        Primary use: `reset_adapter()` in `app/mempalace/__init__.py`
+        for test isolation across adapter rebuilds. Secondary use:
+        graceful shutdown if a shutdown hook is added later.
+        """
+        raise NotImplementedError("M0.18 Stage 3 GREEN lands teardown")
 
 
 __all__ = ["MempalaceAdapter", "DeletionReceipt"]
