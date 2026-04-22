@@ -104,11 +104,21 @@ def _create_mock_firebase_admin():
 # Create the mocks
 _mock_firebase_admin, _mock_db = _create_mock_firebase_admin()
 
+# Mock firebase_admin.exceptions — needed because app/auth.py:11 does
+# `from firebase_admin.exceptions import FirebaseError`, and the bare
+# MagicMock() isn't a "package" so Python can't resolve submodule
+# imports through it. Providing the submodule explicitly in sys.modules
+# bypasses the package-resolution check.
+_mock_firebase_exceptions = MagicMock()
+_mock_firebase_exceptions.FirebaseError = type("FirebaseError", (Exception,), {})
+_mock_firebase_admin.exceptions = _mock_firebase_exceptions
+
 # Patch sys.modules BEFORE any app imports can happen
 sys.modules['firebase_admin'] = _mock_firebase_admin
 sys.modules['firebase_admin.credentials'] = _mock_firebase_admin.credentials
 sys.modules['firebase_admin.firestore'] = _mock_firebase_admin.firestore
 sys.modules['firebase_admin.auth'] = _mock_firebase_admin.auth
+sys.modules['firebase_admin.exceptions'] = _mock_firebase_exceptions
 
 
 @pytest.fixture(scope="session")

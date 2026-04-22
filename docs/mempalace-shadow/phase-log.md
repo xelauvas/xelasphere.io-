@@ -21,7 +21,13 @@ Template for each phase entry below; fill in as phases progress.
 
 - Entered: `<YYYY-MM-DD>`
 - Config: `MEMPALACE_MODE=shadow`, `LEGACY_MEMORY=on`
-- Entry check: P0 clean AND `M0.23.5 chat-flow integration coverage` landed (spec §7.4 gate added 2026-04-22).
+- Entry check: P0 clean. (The M0.23.5 gate added 2026-04-22 was re-examined and closed at Phase 2 — see spec §7.4 "M0.23.5 re-examination.")
+- **P1 entry testing requirement (separate from M0.23.5):** before flipping any user to shadow mode, author tests against actual shadow-mode semantics. Specifically:
+  - `log_shadow` payload shape matches the M0.22 shadow-rubric harness's parser expectations (keys: ts, user_id, query, legacy, mempalace).
+  - `record_turn` is called for both user + assistant halves with a shared pair_id per spec §3 line 122.
+  - `wake_up_sync` is called with the right args and its result is threaded correctly (though not injected in shadow mode — only logged).
+  - Streaming path's user-half `record_turn` fires at the expected point in the SSE flow. (Streaming assistant-half is separately deferred per M0.18-finish commit `af7549a`; P1 may surface that as its own item.)
+  Design the tests against actual shadow-mode behavior as it ships, not pre-imagined behavior.
 - Exit criterion: outbox steady ≤1k rows p95; ingest success ≥99.5%; shadow log populated; disk growth within forecast; single-user rebuild benchmark measured.
 - Approver: Unilateral.
 - Exit verified: `<YYYY-MM-DD, link to data>`
