@@ -96,7 +96,7 @@ Alerts fire at two severities — `page` (on-call response, 24×7) and `warn` (n
 
 **Alerts:** `MempalaceKGCostApproachingCap` (warn), `MempalaceKGCostProjectionBust` (warn), `MempalaceKGQueueStuck` (page), `MempalaceKGQueueSlowlyDying` (warn).
 
-**STUB — expanded in P0.** Issue to file at P0 entry: *"R7 KG cost + queue runbook expansion — detail cost-cap response, queue-stuck diagnosis procedure, rate-limiting levers."*
+**STUB — expansion tracked in [#2](https://github.com/xelauvas/xelasphere.io-/issues/2), target P1 entry.**
 
 Initial fallback (until P0 expansion): treat cost alerts as 24-hour observations (warn only, no page unless stuck). Queue-stuck page → check `mempalace-kg-worker` service health (separate unit if deployed) + verify Anthropic API status via external dashboard.
 
@@ -106,7 +106,7 @@ Initial fallback (until P0 expansion): treat cost alerts as 24-hour observations
 
 **Alerts:** `MempalaceCircuitOpen` (warn), `MempalaceCircuitFlapping` (warn, >20 transitions in 30m).
 
-**STUB — expanded in P0.** Issue to file at P0 entry: *"R8 circuit breaker runbook expansion — detail open-state diagnosis, flapping thresholds, reset procedures."*
+**STUB — expansion tracked in [#3](https://github.com/xelauvas/xelasphere.io-/issues/3), target P1 entry.**
 
 Initial fallback: `MempalaceCircuitOpen` for 5m → escalate to R1 (sidecar is likely the common cause). Flapping → check R5 (intermittent 5xx from sidecar).
 
@@ -156,7 +156,7 @@ Initial fallback: `MempalaceCircuitOpen` for 5m → escalate to R1 (sidecar is l
 
 ## R13 — (reserved STUB)
 
-**STUB — expanded in P0.** Per spec §8.3 R13 is reserved for an incident class expanded at P0 entry. Issue to file at P0 entry: *"R13 runbook definition — identify the alert class this R-number targets and author the response procedure."*
+**STUB — definition + expansion tracked in [#4](https://github.com/xelauvas/xelasphere.io-/issues/4), target P1 entry.** Per spec §8.3 R13 is reserved for an incident class to be identified from P0/P1 observation.
 
 ---
 

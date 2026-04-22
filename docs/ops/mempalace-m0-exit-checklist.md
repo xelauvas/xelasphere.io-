@@ -43,7 +43,7 @@ These require a target host with systemd + Flask install + Grafana access. Walke
 
 The sidecar has its own Python environment under `mempalace-sidecar/` with its own dependencies (chromadb, etc.). The Flask venv doesn't have these. Run sidecar tests in the sidecar's environment:
 
-- [ ] `cd mempalace-sidecar && pytest -v` passes in the sidecar venv.
+- [x] `cd mempalace-sidecar && pytest -v` passes in the sidecar venv. — **118 passed, 1 skipped** (skip: `install_signal_handlers not implemented`, pre-existing) as of 2026-04-22 against locally-created venv (`python3 -m venv .venv && pip install -e '.[dev]'`). Staging-host sidecar venv must repeat this check as part of deployment verification.
 
 If sidecar tests fail in the sidecar venv, that's a sidecar-build issue, not an M0.24 gap per se — but it blocks P0 entry either way (P0 requires sidecar running).
 
@@ -51,9 +51,9 @@ If sidecar tests fail in the sidecar venv, that's a sidecar-build issue, not an 
 
 The runbook has three STUB entries (R7, R8, R13) and one reserved entry (R14). Per plan P0.2, file GitHub issues for each STUB at P0 entry:
 
-- [ ] Issue: "Expand R7 — KG cost + queue runbook section." Target: P1 entry.
-- [ ] Issue: "Expand R8 — Circuit breaker runbook section." Target: P1 entry.
-- [ ] Issue: "Expand R13 — identify incident class + author response procedure." Target: P1 entry.
+- [x] Issue: "Expand R7 — KG cost + queue runbook section." Target: P1 entry. — [#2](https://github.com/xelauvas/xelasphere.io-/issues/2)
+- [x] Issue: "Expand R8 — Circuit breaker runbook section." Target: P1 entry. — [#3](https://github.com/xelauvas/xelasphere.io-/issues/3)
+- [x] Issue: "Expand R13 — identify incident class + author response procedure." Target: P1 entry. — [#4](https://github.com/xelauvas/xelasphere.io-/issues/4)
 - R14 is reserved (no alert currently targets it per spec §8.2); no issue needed until an alert is defined.
 
 After filing, reference issue numbers in `docs/ops/mempalace-runbook.md` at each STUB location.
