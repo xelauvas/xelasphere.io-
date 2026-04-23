@@ -123,9 +123,25 @@ Alerts fire at two severities — `page` (on-call response, 24×7) and `warn` (n
 
 **Alerts:** `MempalaceCircuitOpen` (warn), `MempalaceCircuitFlapping` (warn, >20 transitions in 30m).
 
-**STUB — expansion tracked in [#3](https://github.com/xelauvas/xelasphere.io-/issues/3), target P1 entry.**
+**Model.** `SidecarClient` / `SyncSidecarClient` each maintain their own circuit breaker per gunicorn worker process. Three states (`app/mempalace/client.py:70-72`): `CLOSED` → `OPEN` (after N=5 consecutive outer-call failures) → `HALF_OPEN` (after 30s cooldown, auto-transition). HALF_OPEN is a **re-probe window**, not a single-probe gate — it tolerates up to N-1 failures before re-tripping; one success anywhere in the window transitions back to CLOSED. `_consecutive_failures` resets on OPEN→HALF_OPEN so reprobe starts with a fresh N-count window. Failures that count: `ConnectError`, `TimeoutException`, 5xx `HTTPStatusError`, malformed JSON on 2xx. Failures that don't: 4xx (including 429) — deterministic, no retry, no breaker impact.
 
-Initial fallback: `MempalaceCircuitOpen` for 5m → escalate to R1 (sidecar is likely the common cause). Flapping → check R5 (intermittent 5xx from sidecar).
+**Metric.** `xelasphere_mempalace_circuit_state{worker_pid}` — gauge per gunicorn worker. `0=closed 1=half 2=open`. Multiple worker PIDs → multiple series. One worker's breaker going OPEN doesn't affect the others' requests; each worker's state is independent.
+
+**Response:**
+
+1. **Which alert fired.** `CircuitOpen` is "sustained unavailability"; `CircuitFlapping` is "intermittent unavailability with recovery attempts." Different root causes.
+2. **State per worker.** `xelasphere_mempalace_circuit_state` broken out by `worker_pid`. If *all* workers are OPEN simultaneously, the root cause is shared (sidecar down, UDS socket broken, network partition) — jump to step 3. If *one* worker is OPEN while others are CLOSED, the root cause is worker-local (transport stuck, httpx client wedged, file descriptor exhausted in that process) — jump to step 5.
+3. **All-workers-OPEN → route to R1.** The 5-consecutive-failures threshold is hit by every worker trying and failing the same sidecar. `curl -sf --unix-socket /run/mempalace/sidecar.sock http://localhost/readyz` — if that fails too, the sidecar itself is the problem; follow R1.
+4. **Flapping across workers → route to R5.** 20+ transitions in 30m = sidecar is responding intermittently, not cleanly down. Breaker trips, cools down, one reprobe succeeds, a couple later fail, trips again. Check `rate(mempalace_ingest_total{status="error"}[10m])` split by error class. Intermittent 5xx is the diagnosis; proceed as R5.
+5. **Single-worker-OPEN while sidecar is healthy.** Worker's httpx transport has wedged (rare but possible — long-lived async connection pool with a dead socket). No manual reset API exists for the breaker. Restart the Flask service: `systemctl restart xelasphere`. All workers get fresh breakers in CLOSED state. If the single-worker-OPEN pattern recurs after restart on the *same* PID, the worker is being assigned requests that systematically fail (e.g., long-lived user session with bad state) — investigate request-level correlation, don't chase the breaker.
+6. **Manual close / bypass: there isn't one.** The breaker has no exposed close-by-force endpoint, by design — "force closed despite failures" is the exact shape of "operator self-DOS." Cooldown is 30s; wait for auto-HALF_OPEN and let reprobes converge. If sidecar truly will not come back and mempalace reads must be bypassed: `mempalace-mode off` (universal relief valve). That skips the sidecar call entirely at the adapter level and legacy reads serve the chat path; breakers stay OPEN harmlessly until the next restart.
+7. **Multi-worker interaction.** Because each worker has its own breaker, a sidecar that's up-and-healthy after a blip will see per-worker recovery at different wall-clock times — the metric series "heal" independently over the 30s cooldowns. That's expected; don't interpret "some workers still OPEN at T+30s" as a partial outage. Alert tuning in spec §8.2 accounts for this (alert fires on `max(...) == 2` sustained, not any worker OPEN).
+
+**Authoritative-runbook resolution when multiple alerts fire.**
+
+- If `SidecarDown` + `CircuitOpen` both firing → **R1 is authoritative.** Circuit open is consequent; fixing the sidecar fixes the breaker via cooldown.
+- If `IngestFailureRate` + `CircuitFlapping` both firing → **R5 is authoritative.** Flapping is the breaker correctly oscillating around intermittent sidecar failure; fix the failure rate and flapping resolves.
+- If `CircuitOpen` alone fires with no other alert → this section is authoritative. Almost always means one-off worker-local issue (step 5).
 
 ---
 
