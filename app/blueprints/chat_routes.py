@@ -2687,6 +2687,17 @@ def chat():
                 logger.warning(f"Memory V3 failed (using V2 only): {e}")
         # ============================================================
 
+        # M0.18: pair_id + turn_ids generated orchestrator-side per spec §3
+        # line 122. Must be defined BEFORE the mempalace wiring block below,
+        # because the user-half record_turn site inside that block references
+        # these names. Prior placement after the block caused a silently-caught
+        # NameError under mode=shadow (see issue #9).
+        # Same pair_id is reused for user-turn and assistant-turn record_turn
+        # calls so downstream drawers can be grouped as a turn pair.
+        _mp_pair_id = str(uuid.uuid4())
+        _mp_user_turn_id = str(uuid.uuid4())
+        _mp_assistant_turn_id = str(uuid.uuid4())
+
         # ============================================================
         # M0.18: Mempalace adapter wiring (mode-gated; default off is no-op)
         # ============================================================
@@ -2768,12 +2779,6 @@ def chat():
             logger.info(f"Added {len(url_content)} chars of URL content")
 
         response_message_id = f"msg_{uuid.uuid4().hex}"
-        # M0.18: pair_id generated orchestrator-side per spec §3 line 122.
-        # Same pair_id used for user-turn and assistant-turn record_turn
-        # calls so downstream drawers can be grouped as a turn pair.
-        _mp_pair_id = str(uuid.uuid4())
-        _mp_user_turn_id = str(uuid.uuid4())
-        _mp_assistant_turn_id = str(uuid.uuid4())
 
         # Build the prompt (skip context for stateless questions)
         try:
