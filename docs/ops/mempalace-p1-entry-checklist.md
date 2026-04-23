@@ -44,9 +44,9 @@ Surfaced during Path B authoring: issue [#9](https://github.com/xelauvas/xelasph
 
 ## STUB runbook expansions (P0.2 → P1 entry target, existing work)
 
-- [ ] R7 KG cost + queue runbook section expanded (issue #2).
-- [ ] R8 Circuit breaker runbook section expanded (issue #3).
-- [ ] R13 Incident class identified + author response procedure (issue #4).
+- [x] R7 KG cost + queue runbook section expanded — commit `65fe440`, closes [#2](https://github.com/xelauvas/xelasphere.io-/issues/2).
+- [x] R8 Circuit breaker runbook section expanded — commit `94dd5e1`, closes [#3](https://github.com/xelauvas/xelasphere.io-/issues/3).
+- [x] R13 disposition documented (reserved, no runtime incident class identified during M0.26/M0.27/P0-day-1; re-examine after P1 shadow traffic) — commit `6c23fe5`, closes [#4](https://github.com/xelauvas/xelasphere.io-/issues/4).
 
 ## Sign-off
 
