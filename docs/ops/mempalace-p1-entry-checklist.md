@@ -31,7 +31,12 @@ Tracked in GitHub issue [#6](https://github.com/xelauvas/xelasphere.io-/issues/6
 
 ## Shadow-mode behavior authoring (from M0-exit known-gaps #4)
 
-- [ ] Tests authored against actual shadow-mode semantics (`log_shadow` payload shape, `record_turn` pair_id propagation, `wake_up_sync` call contract). M0.23.5 Path A ruling deferred this authoring to P1 entry.
+Two-layer coverage. Both must be landed before `MEMPALACE_MODE=shadow` rotation.
+
+- [x] **Structural / unit tests (Path B)** — landed at commit `<fill at P1 entry>` (`app/mempalace/tests/test_shadow_mode.py`, 6 tests). Covers: `log_shadow` payload schema via real ShadowSink round-trip + rubric-compatible parse (value-level); `record_turn` use-before-assignment + pair_id variable-name sharing (AST structural, catches the #9 bug class); `wake_up_sync` call-shape + required kwargs on both chat + chat_stream; chat_stream user-half present + assistant-half absent asymmetry with M0.18 `af7549a` reference.
+- [ ] **Integration tests (Path A)** — issue [#10](https://github.com/xelauvas/xelasphere.io-/issues/10). Real execution of `POST /chat` and `POST /chat/stream` under `MEMPALACE_MODE=shadow` with patched adapter to capture calls; asserts value-level pair_id propagation, log_shadow firing under mode=shadow, wake_up_sync → log_shadow payload round-trip. Requires the deferred M0.23.5 Phase 3 mocking scaffold (Groq, OpenRouter, memory_v2 retrieval, memory_v3 rollout, chat_engine, smart_router, ActionParser). **Shadow rotation gates on this item landing, not on Path B alone** — structural checks catch syntactic regressions but not value-level drift.
+
+Surfaced during Path B authoring: issue [#9](https://github.com/xelauvas/xelasphere.io-/issues/9) — latent NameError in non-streaming `chat()` record_turn wiring, silently swallowed under mode != OFF, would have activated on first shadow rotation. Fixed at commit `f6c6906`. Pattern worth naming: test-authoring surfaced the bug before the tests existed to catch it — argument for the sequencing (shadow-mode tests before mode rotation, not after).
 
 ## Streaming assistant-half `record_turn` (from M0-exit known-gaps #2)
 
@@ -54,7 +59,7 @@ Template entry for `docs/mempalace-shadow/phase-log.md`:
 - P0 dark-deploy duration: N days (started YYYY-MM-DD)
 - Flusher functional-drain: verified / deferred with reason: <...>
 - Flask FHS migration: completed at commit <sha>
-- Shadow-mode tests authored: yes / deferred with reason: <...>
+- Shadow-mode tests authored: structural (Path B) landed at <sha>; integration (Path A / #10) landed at <sha>
 - Streaming assistant-half record_turn: wired / accepted-as-orphan per spec §4.4
 - STUB runbook expansions: #2/#3/#4 closed
 - Rotating MEMPALACE_MODE=shadow at <timestamp>
