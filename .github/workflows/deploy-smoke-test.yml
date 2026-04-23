@@ -49,17 +49,18 @@ jobs:
       - name: Install apt baseline
         run: |
           # python3-venv: venv creation for sidecar wheel build.
-          # build-essential: backup for any dep that needs to compile
-          #   (sentence-transformers deps should have manylinux wheels
-          #   on ubuntu-24.04, but provision.sh's pip install has
-          #   --force-reinstall which re-downloads; compile fallback
-          #   is cheap insurance for unexpected non-wheel deps).
+          # build-essential + pkg-config + libsystemd-dev: required to
+          #   build systemd-python from source inside provision.sh's
+          #   pip install step. The mempalace-sidecar wheel declares
+          #   systemd-python>=235 which has no manylinux wheels; it
+          #   compiles against libsystemd headers via pkg-config.
           # openssl: token + salt generation inside provision.sh.
           # curl: /readyz probe.
           # jq: /readyz field assertions.
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            python3-venv build-essential openssl curl jq
+            python3-venv build-essential pkg-config libsystemd-dev \
+            openssl curl jq
 
       - name: Create xelasphere system user (provision.sh precondition)
         run: |
