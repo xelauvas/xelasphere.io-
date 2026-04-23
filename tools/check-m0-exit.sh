@@ -41,15 +41,61 @@ check() {
     fi
 }
 
-# --- Environment ------------------------------------------------------
+# --- Args -------------------------------------------------------------
+#
+# Default behavior: run all nine sections (same as pre-#8 script).
+# `--only 4,8,9` runs just the named sections. CI smoke-test (#8) uses
+# this to skip § 1 (pytest, needs Flask venv + deps) and § 7 (shadow-
+# rubric harness import, likewise) while still catching the template-
+# vs-code drift (§ 8) that is class-3-from-M0.27 and cannot be caught
+# by /readyz alone.
 
-if [ ! -x "$VENV_PY" ]; then
+SECTIONS_TO_RUN=""  # empty = run all
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --only)
+            SECTIONS_TO_RUN="$2"
+            shift 2
+            ;;
+        -h|--help)
+            say "Usage: $0 [--only N[,N...]]"
+            say "  --only    Comma-separated section numbers (1-9) to run."
+            say "            Omit to run all sections."
+            exit 0
+            ;;
+        *)
+            say "Unknown arg: $1" >&2
+            say "Usage: $0 [--only N[,N...]]" >&2
+            exit 64
+            ;;
+    esac
+done
+
+should_run() {
+    local n="$1"
+    if [ -z "$SECTIONS_TO_RUN" ]; then
+        return 0
+    fi
+    echo ",$SECTIONS_TO_RUN," | grep -q ",${n},"
+}
+
+# --- Environment ------------------------------------------------------
+#
+# § 1 is the only section that requires the Flask venv (pytest invoke).
+# Only enforce the venv precondition if § 1 is going to run — this lets
+# CI run `--only 4,8,9` from a fresh checkout without a full Flask deps
+# install.
+
+if should_run 1 && [ ! -x "$VENV_PY" ]; then
     say "venv python not found at $VENV_PY"
     say "Expected a Flask venv at repo_root/venv/. Environment check failed."
     exit 2
 fi
 
 # --- 1. Flask-side tests green ---------------------------------------
+
+if should_run 1; then
 
 say ""
 say "1. Flask-side test suite"
@@ -59,7 +105,11 @@ check "app/mempalace/ tests all pass" \
 check "tests/test_m023_5_smoke.py passes" \
     "$VENV_PY" -m pytest tests/test_m023_5_smoke.py --tb=no -q
 
+fi
+
 # --- 2. Dashboard JSON validity --------------------------------------
+
+if should_run 2; then
 
 say ""
 say "2. Grafana dashboard JSON validity"
@@ -68,7 +118,11 @@ for f in docs/ops/dashboards/mempalace-live.json docs/ops/dashboards/mempalace-r
         "$VENV_PY" -c "import json; json.load(open('$f'))"
 done
 
+fi
+
 # --- 3. Systemd unit file syntax --------------------------------------
+
+if should_run 3; then
 
 say ""
 say "3. Systemd unit file syntax"
@@ -94,7 +148,11 @@ else
     say "  –  systemd-analyze not available; skipping (manual verify at P0 entry)"
 fi
 
+fi
+
 # --- 4. Shell script syntax ------------------------------------------
+
+if should_run 4; then
 
 say ""
 say "4. Deploy script syntax"
@@ -121,7 +179,11 @@ for f in deploy/mempalace/provision.sh deploy/mempalace/mempalace-mode tools/mem
     esac
 done
 
+fi
+
 # --- 5. CI guard configuration ---------------------------------------
+
+if should_run 5; then
 
 say ""
 say "5. CI legacy-import guard"
@@ -134,7 +196,11 @@ check "tools/check-legacy-memory-imports.py passes in warn mode (zero hits)" \
 check ".github/workflows/ci.yml references the guard" \
     grep -q "check-legacy-memory-imports.py" .github/workflows/ci.yml
 
+fi
+
 # --- 6. Runbook + logging-privacy present ----------------------------
+
+if should_run 6; then
 
 say ""
 say "6. Runbook + privacy doc"
@@ -145,7 +211,11 @@ check "docs/ops/mempalace-runbook.md contains all R-numbers (R1-R15)" \
 check "runbook STUBs are explicit (R7, R8, R13)" \
     bash -c 'grep -q "STUB.*R7\|^## R7" docs/ops/mempalace-runbook.md && grep -q "STUB.*R8\|^## R8" docs/ops/mempalace-runbook.md && grep -q "STUB.*R13\|^## R13" docs/ops/mempalace-runbook.md'
 
+fi
+
 # --- 7. Shadow-rubric harness ----------------------------------------
+
+if should_run 7; then
 
 say ""
 say "7. Shadow-rubric harness"
@@ -170,7 +240,11 @@ check "docs/mempalace-shadow/README.md exists" \
 check "docs/mempalace-shadow/phase-log.md exists" \
     test -f docs/mempalace-shadow/phase-log.md
 
+fi
+
 # --- 8. Env-file templates -------------------------------------------
+
+if should_run 8; then
 #
 # M0.27 hardening: § 8 previously only verified template existence + two
 # specific keys. That false-green through the M0.26 deploy attempt when
@@ -277,7 +351,11 @@ for v in $VESTIGIAL_SIDECAR_VARS; do
     fi
 done
 
+fi
+
 # --- 9. Sidecar install artifact -------------------------------------
+
+if should_run 9; then
 #
 # Added M0.26. provision.sh step 5 refuses to install the sidecar without
 # either SIDECAR_WHEEL pointing at a wheel OR an already-installed binary.
@@ -300,6 +378,8 @@ else
     say "  ✗  no sidecar wheel — set SIDECAR_WHEEL or build with 'python3 -m build --wheel' in mempalace-sidecar/"
     FAIL_COUNT=$((FAIL_COUNT + 1))
     FAIL=1
+fi
+
 fi
 
 # --- Summary ---------------------------------------------------------
