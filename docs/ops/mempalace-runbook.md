@@ -187,9 +187,27 @@ Alerts fire at two severities — `page` (on-call response, 24×7) and `warn` (n
 
 ---
 
-## R13 — (reserved STUB)
+## R13 — (reserved; no incident class identified)
 
-**STUB — definition + expansion tracked in [#4](https://github.com/xelauvas/xelasphere.io-/issues/4), target P1 entry.** Per spec §8.3 R13 is reserved for an incident class to be identified from P0/P1 observation.
+Per spec §8.3, R13 is reserved for an incident class to be identified from P0/P1 operational observation. As of P0 day-1 (2026-04-23) **no runtime incident class has emerged that isn't already covered by R1-R11 or R15**, so R13 stays reserved with no alert targets — same disposition as R14.
+
+**What was observed during M0.26/M0.27/P0-entry, and why it doesn't earn R13.** The deploy sequence surfaced six drift classes (documented in the phase-log § "Deploy-time drift classes surfaced this session"):
+
+1. Unit file vs tmpfs lifecycle.
+2. Deploy-script vs environment reality (wheel presence, port probe).
+3. Template vs code contract (env var names, palace dir path, salt generation).
+4. Shell-semantics drift (`ExecStartPre=/bin/rm -rf /dir/` with trailing-slash gotcha).
+5. Implicit-environment-assumption drift (`useradd -r` HOME pointing at unwritable `/home/<user>` vs chromadb's HOME-derived cache).
+6. Deploy-script post-check vs current deployment shape (Flask-as-root vs Flask-as-xelasphere).
+
+All six are **deploy-time** drift — they fire during `provision.sh` or immediately after unit start, not during sustained operational traffic. The response procedure is "deploy time, do it right"; the structural defense is the containerized CI smoke-test tracked at [#8](https://github.com/xelauvas/xelasphere.io-/issues/8). Deploy-time drift doesn't page an on-call at 3am in the same sense that a runtime circuit-breaker trip or a corrupt palace does — the operator is at the keyboard when deploy-time drift surfaces, by definition. Hence not a runtime R-class.
+
+**When to re-examine R13.** Two triggers:
+
+- **P1 shadow-traffic observation.** Once `MEMPALACE_MODE=shadow` rotates and real chat traffic drives the write path, an incident class specific to shadow-mode may emerge (e.g., shadow-sink backpressure pathology, outbox-drain vs ingest-rate coupling, per-user palace growth anomalies). If such a class surfaces and doesn't fit R4-R6/R10-R11, define it as R13 and update this section.
+- **P3 active-mode observation.** The user-visible-impact phase may surface classes tied to wake-up-hot-path latency interactions that the current R3 framing misses. If so, R13 is the home for those.
+
+**No response procedure until a class is identified.** If an operator lands on this section because spec §8.3 mentions R13 and they're hunting a runbook hit, the answer is: R13 has no alerts targeting it today. Whatever page or warn fired is attributable to one of R1-R11 or R15, or it's an undefined class — in which case file an issue describing the observed failure mode and we'll decide if it earns R13 or gets folded into an existing R-section.
 
 ---
 
