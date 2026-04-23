@@ -98,13 +98,53 @@ jobs:
           sudo systemctl daemon-reload
           sudo systemctl enable --now xelasphere.service
 
+      - name: Debug — runner python + sidecar dir state (first-run diagnostics)
+        working-directory: mempalace-sidecar
+        run: |
+          # First-run debugging: the first PR run failed at "Build sidecar
+          # wheel" with `.venv/bin/pip: /root/xelas.io/xelasphere.io-/...
+          # bad interpreter: Permission denied` — a local-absolute path
+          # appearing on a GitHub-hosted ubuntu-24.04 runner. Not
+          # diagnosable from log alone. This step surfaces runner state
+          # before venv creation so the next failure (if any) has
+          # enough context. Remove this step once CI is stable.
+          echo "=== pwd ==="
+          pwd
+          echo "=== ls -la (current dir) ==="
+          ls -la
+          echo "=== ls -la .venv/ (if exists) ==="
+          ls -la .venv/ 2>&1 || true
+          echo "=== which python3 ==="
+          which python3
+          echo "=== python3 binary identity ==="
+          readlink -f "$(which python3)" || true
+          file "$(which python3)" || true
+          echo "=== python3 --version ==="
+          python3 --version
+          echo "=== python3 sys.executable / sys.prefix / sys.base_prefix ==="
+          python3 -c "import sys; print('executable=', sys.executable); print('prefix=', sys.prefix); print('base_prefix=', sys.base_prefix); print('base_executable=', getattr(sys, '_base_executable', '<n/a>'))"
+          echo "=== /root accessible? ==="
+          ls -ld /root 2>&1 || true
+          ls /root/ 2>&1 | head -5 || true
+
       - name: Build sidecar wheel
         working-directory: mempalace-sidecar
         run: |
+          # Defensive wipe of any pre-existing .venv/ before creating a
+          # fresh one. Not a speculative fix for the first-run failure
+          # (root cause still to be determined from the debug step above);
+          # just removing any chance of stale-dir interference so we can
+          # see whether the failure mode is about venv-create-against-
+          # existing-state or about the runner's python3 itself.
+          rm -rf .venv
           python3 -m venv .venv
+          echo "=== post-create .venv/bin/ ==="
+          ls -la .venv/bin/
+          echo "=== post-create pip shebang ==="
+          head -1 .venv/bin/pip
           .venv/bin/pip install --upgrade pip build
           .venv/bin/python -m build --wheel
-          echo "Wheel artifacts:"
+          echo "=== wheel artifacts ==="
           ls -la dist/
 
       - name: Run provision.sh
