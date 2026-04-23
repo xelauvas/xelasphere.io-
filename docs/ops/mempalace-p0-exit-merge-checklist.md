@@ -10,6 +10,20 @@ One-time operational checklist for the P0 → main merge event on 2026-04-25 eve
 
 ---
 
+## Step 0. Cold re-read — 5 min
+
+Before executing anything below, read this entire checklist top-to-bottom as if you didn't write it. Checklists drafted in-context omit things that felt obvious at authoring time but aren't 48 hours later. If anything on the cold re-read is ambiguous, underspecified, or assumes context you no longer have loaded — **fix the checklist first, commit the fix on main, then execute**. An extra 5 minutes of re-read is cheap; discovering mid-merge that step 4 is underspecified is expensive.
+
+Specifically watch for:
+- Commands that assume a shell state (directory, env vars) you haven't set.
+- "Expected" outputs that were pattern-matched from day-2 state but may have drifted.
+- References to issues / commits that have moved since authoring.
+- Any step that reads as "do the obvious thing" without naming what that is.
+
+If the checklist is clean on re-read, proceed to Last-minute abort conditions.
+
+---
+
 ## Last-minute abort conditions
 
 If **ANY** of the following is true on 2026-04-25 evening, **abort the merge** and document the abort reason in `docs/mempalace-shadow/phase-log.md` P0 section. These are binary — no judgment calls, no "just this one."
@@ -204,12 +218,13 @@ If any of these starts feeling urgent during the merge window, **pause the merge
 
 | Step | Budget |
 |---|---|
+| 0. Cold re-read | 5 min |
 | 1. Pre-merge state verification | 5 min |
 | 2. Merge sequence | 5 min |
 | 3. Post-merge host actions | 10 min |
 | 4. Post-merge verification | 5 min |
 | 5. Phase-log entry | 15 min |
 | 6. Cleanup | 2 min |
-| **Total** | **~42 min** |
+| **Total** | **~47 min** |
 
 **If any single step blows past its estimate by >50%, pause.** Document the pause reason in the phase-log entry (step 5), step back, investigate before pushing through. An estimate overrun is a signal the reality has diverged from the plan; it's cheaper to burn an hour understanding the divergence than to force completion and discover the problem post-merge when rollback is more expensive.
