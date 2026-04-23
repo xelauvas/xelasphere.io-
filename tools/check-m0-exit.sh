@@ -168,12 +168,15 @@ for f in deploy/mempalace/provision.sh deploy/mempalace/mempalace-mode tools/mem
             check "$f bash syntax" bash -n "$f"
             ;;
         *.py)
-            check "$f python syntax" "$VENV_PY" -m py_compile "$f"
+            # py_compile is stdlib — system python3 is sufficient, and
+            # using it (rather than $VENV_PY) lets --only 4 work on CI
+            # where the Flask venv doesn't exist.
+            check "$f python syntax" python3 -m py_compile "$f"
             ;;
         *)
             # tools/mempalace-rubric is Python w/o .py extension; check by header
             if head -1 "$f" | grep -q python; then
-                check "$f python syntax" "$VENV_PY" -m py_compile "$f"
+                check "$f python syntax" python3 -m py_compile "$f"
             fi
             ;;
     esac
