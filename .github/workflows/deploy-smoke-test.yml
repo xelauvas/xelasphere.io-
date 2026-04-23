@@ -1,0 +1,196 @@
+name: Deploy smoke test
+
+# Exercises deploy/mempalace/provision.sh on an ubuntu-24.04 runner
+# (matching prod Hetzner noble) and asserts the resulting state is
+# coherent. Catches the deploy-time drift classes documented at
+# M0.27 that /readyz alone does not surface — specifically class 3
+# (template-vs-code contract) via tools/check-m0-exit.sh § 8.
+#
+# Runs on PRs that touch deploy artifacts, sidecar code, the check
+# script itself, or the Flask-side mempalace module. Not on every PR
+# — the provisioning + readyz-wait is ~2 minutes of wall time and
+# should not tax PRs that don't affect mempalace.
+#
+# See issue #8 for scope rationale and what this does NOT cover.
+# Notable non-coverage: mode rotation (needs Flask); flusher drain
+# (blocked by #6 Flask FHS migration); full LLM/memory mocking (at
+# #10, the Phase-3 scaffold).
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/mempalace/**'
+      - 'mempalace-sidecar/**'
+      - 'tools/check-m0-exit.sh'
+      - 'tools/check-legacy-memory-imports.py'
+      - 'app/mempalace/**'
+      - '.github/workflows/deploy-smoke-test.yml'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/mempalace/**'
+      - 'mempalace-sidecar/**'
+      - 'tools/check-m0-exit.sh'
+      - 'app/mempalace/**'
+
+jobs:
+  smoke:
+    # Pin to ubuntu-24.04 (noble) to match prod Hetzner host. Using
+    # ubuntu-latest would silently drift to whatever GitHub promotes
+    # next, and the whole point of this workflow is to catch deploy-
+    # time drift against a specific target.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install apt baseline
+        run: |
+          # python3-venv: venv creation for sidecar wheel build.
+          # build-essential: backup for any dep that needs to compile
+          #   (sentence-transformers deps should have manylinux wheels
+          #   on ubuntu-24.04, but provision.sh's pip install has
+          #   --force-reinstall which re-downloads; compile fallback
+          #   is cheap insurance for unexpected non-wheel deps).
+          # openssl: token + salt generation inside provision.sh.
+          # curl: /readyz probe.
+          # jq: /readyz field assertions.
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            python3-venv build-essential openssl curl jq
+
+      - name: Create xelasphere system user (provision.sh precondition)
+        run: |
+          # provision.sh step 2 requires the xelasphere user to exist
+          # (pre-created by operator per the M0.26 tombstone, tracked
+          # at #6 Flask FHS migration). CI mirrors that precondition.
+          if ! id -u xelasphere >/dev/null 2>&1; then
+            sudo useradd --system --no-create-home \
+              --shell /usr/sbin/nologin xelasphere
+          fi
+
+      - name: Install stub xelasphere.service
+        run: |
+          # provision.sh Step 8 (systemctl restart xelasphere) needs
+          # the unit to exist. A no-op oneshot with User=xelasphere
+          # satisfies that and exercises the provision.sh post-check's
+          # "User=xelasphere branch" without needing gunicorn — the
+          # post-check then correctly prints "gunicorn master not
+          # found; skipping post-check" and continues. That's the
+          # expected shape in CI; the membership assertion itself is
+          # structurally covered by check-m0-exit.sh § 8.
+          sudo tee /etc/systemd/system/xelasphere.service > /dev/null <<'UNIT'
+          [Unit]
+          Description=Stub xelasphere service (CI smoke-test only)
+
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/bin/true
+          User=xelasphere
+          Group=xelasphere
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now xelasphere.service
+
+      - name: Build sidecar wheel
+        working-directory: mempalace-sidecar
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip build
+          .venv/bin/python -m build --wheel
+          echo "Wheel artifacts:"
+          ls -la dist/
+
+      - name: Run provision.sh
+        run: |
+          SIDECAR_WHEEL=$(ls mempalace-sidecar/dist/mempalace_sidecar-*.whl | head -1)
+          echo "Provisioning with wheel: $SIDECAR_WHEEL"
+          sudo SIDECAR_WHEEL="$SIDECAR_WHEEL" bash deploy/mempalace/provision.sh
+
+      - name: Verify /readyz
+        run: |
+          # provision.sh already waits up to 30s for /readyz before
+          # exiting; here we just re-probe to capture the response and
+          # assert key fields. Use jq -e (exits non-zero on false).
+          sudo curl -sf --unix-socket /run/mempalace/sidecar.sock \
+            http://localhost/readyz > /tmp/readyz.json
+          cat /tmp/readyz.json
+          jq -e '.ok == true' /tmp/readyz.json > /dev/null
+          jq -e '.embedding_loaded == true' /tmp/readyz.json > /dev/null
+          jq -e '.db_ok == true' /tmp/readyz.json > /dev/null
+          jq -e '.audit_ok == true' /tmp/readyz.json > /dev/null
+          jq -e '.schema_version == 2' /tmp/readyz.json > /dev/null
+          echo "/readyz OK (all expected fields present and correct)"
+
+      - name: Verify socket ownership + mode
+        run: |
+          OWNER=$(sudo stat -c "%U:%G" /run/mempalace/sidecar.sock)
+          if [ "$OWNER" != "mempalace:mempalace" ]; then
+            echo "ERROR: socket owner is '$OWNER', expected 'mempalace:mempalace'"
+            exit 1
+          fi
+          # Mode: 0666 today (uvicorn default); #7 tombstone tracks
+          # migration to 0660. Accept either until #7 lands.
+          MODE=$(sudo stat -c "%a" /run/mempalace/sidecar.sock)
+          case "$MODE" in
+            660|666)
+              echo "Socket OK: owner=$OWNER mode=$MODE"
+              ;;
+            *)
+              echo "ERROR: socket mode is '$MODE', expected 660 or 666"
+              exit 1
+              ;;
+          esac
+
+      - name: Verify directory ownership + mode (spec §7.1)
+        run: |
+          check_dir() {
+            local path="$1" want_mode="$2" want_owner="$3"
+            local got_mode got_owner
+            got_mode=$(sudo stat -c "%a" "$path")
+            got_owner=$(sudo stat -c "%U:%G" "$path")
+            if [ "$got_mode" != "$want_mode" ] || [ "$got_owner" != "$want_owner" ]; then
+              echo "ERROR: $path  got(mode=$got_mode owner=$got_owner)  expect($want_mode $want_owner)"
+              return 1
+            fi
+            echo "OK: $path  mode=$got_mode owner=$got_owner"
+          }
+          check_dir /etc/mempalace     750 root:mempalace
+          check_dir /etc/xelasphere    750 root:xelasphere
+          check_dir /var/mempalace     750 mempalace:mempalace
+          check_dir /var/log/mempalace 750 mempalace:mempalace
+          check_dir /var/lib/xelasphere 750 xelasphere:xelasphere
+
+      - name: Verify env-file templates (check-m0-exit.sh §4 + §8 + §9)
+        run: |
+          # §1 (pytest) + §7 (shadow-rubric import) are intentionally
+          # skipped — they need Flask deps. The static checks §4/§8/§9
+          # catch the shell-syntax + template-vs-code + wheel-presence
+          # drift classes that ran unnoticed through the M0.26 deploy.
+          #
+          # Explicit --only invocation documents which subset CI runs;
+          # operator running the script manually still gets the full
+          # nine-section sweep by default.
+          bash tools/check-m0-exit.sh --only 4,8,9
+
+      - name: Verify mempalace-sidecar.service state
+        run: |
+          STATE=$(sudo systemctl is-active mempalace-sidecar.service)
+          if [ "$STATE" != "active" ]; then
+            echo "ERROR: mempalace-sidecar.service is '$STATE', expected 'active'"
+            sudo journalctl -u mempalace-sidecar.service --no-pager --since "5 minutes ago"
+            exit 1
+          fi
+          echo "mempalace-sidecar.service: active"
+
+      - name: Surface sidecar journal (diagnostic, always runs)
+        if: always()
+        run: |
+          echo "=== mempalace-sidecar.service journal ==="
+          sudo journalctl -u mempalace-sidecar.service --no-pager --since "10 minutes ago" || true
