@@ -30,9 +30,9 @@ If **ANY** of the following is true on 2026-04-25 evening, **abort the merge** a
 
 - [ ] Day-3 health check (`tools/mempalace-p0-daily-check.sh`) returns any mempalace-attributed error in either journal.
 - [ ] `/readyz` is not `{"ok":true,...}` or `mempalace-sidecar.service` is not `active`.
-- [ ] Flask (xelasphere.com) is not serving — check with a browser or a chat request.
+- [ ] Flask is not serving. From prod: `curl -sf -o /dev/null -w "%{http_code}\n" http://localhost:5000/` should return `200`. If executing from a laptop with SSH access, `curl -sf https://xelasphere.com/` is the external form; if that one fails with a hairpin/DNS issue but localhost works, Flask is fine — the external probe is just the network view, the localhost probe is authoritative.
 - [ ] PR #12's most recent CI run is not green, or its step shape differs from the two reference greens above (duration anomaly, step reordering, silently-skipped step).
-- [ ] Hetzner snapshot #379196442 is no longer listed / available.
+- [ ] Hetzner snapshot #379196442 is no longer listed. **Verification is browser-only** via the Hetzner console → Snapshots. No `hcloud` CLI is installed on prod by default; if operator has set it up separately, `hcloud image describe 379196442` also works. Otherwise, browser.
 - [ ] Any issue has been filed between 2026-04-23 and merge time that materially changes PR #12's "NOT in scope" list (i.e., the new issue should be in-scope or should defer the merge).
 - [ ] The person executing this checklist has not read it end-to-end before starting.
 
@@ -42,11 +42,13 @@ Abort is not failure — it's a signal that one more day of observation or one m
 
 ## Step 1. Pre-merge state verification — 5 min
 
-1.1 [ ] Day-3 P0 health check:
+1.1 [ ] Day-3 P0 health check, **saving output to a file for the phase-log entry at step 5**:
 ```bash
-bash tools/mempalace-p0-daily-check.sh
+bash tools/mempalace-p0-daily-check.sh 2>&1 | tee /tmp/p0-daycheck-day3.log
 ```
 Expected clean: sidecar journal empty at `--priority err` since P0 entry, Flask journal shows only known-INFO chatter (the four #11-repro entries at 2026-04-22 23:17:08 UTC plus any new mempalace-tagged INFO of the same shape), `/readyz` returns `{"ok":true,"embedding_loaded":true,"db_ok":true,"audit_ok":true,"schema_version":2}`, service `active`. New error-priority entries → abort per conditions above.
+
+Day-1 and day-2 outputs were captured during the days they ran (session transcripts from 2026-04-23). If those transcripts aren't available, document in the phase-log entry that day-1 / day-2 summaries are "re-derivable from the P0-entry-anchored journal query" — the cumulative-since-P0-entry window means the day-3 output implicitly contains all prior days' signal.
 
 1.2 [ ] PR #12 CI green:
 ```bash
@@ -75,20 +77,30 @@ git merge feature/mempalace-integration --no-ff
 ```
 No conflicts expected — the feature branch has been rebased on main's auto-backup commits throughout the arc. If there ARE conflicts, stop and triage; don't auto-resolve under merge-event pressure.
 
-2.3 [ ] Verify the merge landed:
+2.3 [ ] Verify the merge landed. Expected parent^2 = current feature branch HEAD (which you can verify at merge time via `git rev-parse origin/feature/mempalace-integration` — that value should match `git log main -1 --format=%P | awk '{print $2}'`):
 ```bash
-git log --oneline -2 main  # latest should be the merge commit; parent^2 = feature branch HEAD (944b2bc or later)
+EXPECTED_FEATURE_HEAD=$(git rev-parse origin/feature/mempalace-integration)
+ACTUAL_FEATURE_HEAD=$(git log main -1 --format=%P | awk '{print $2}')
+[ "$EXPECTED_FEATURE_HEAD" = "$ACTUAL_FEATURE_HEAD" ] && echo "OK parents match" || echo "MISMATCH"
+git log --oneline -2 main   # latest should be the merge commit
 ls app/mempalace/tests/test_shadow_mode.py   # must exist
 ls .github/workflows/deploy-smoke-test.yml   # must exist
 ls tools/mempalace-p0-daily-check.sh         # must exist + executable
 ```
 
-2.4 [ ] Push:
+2.4 [ ] **Capture the merge commit SHA** to a file, so rollback (if needed later) doesn't require git archaeology under stress:
+```bash
+MERGE_SHA=$(git rev-parse HEAD)
+echo "$MERGE_SHA" > /tmp/p0-merge-sha-$(date -I).txt
+echo "Merge commit: $MERGE_SHA (saved to /tmp/p0-merge-sha-$(date -I).txt)"
+```
+
+2.5 [ ] Push:
 ```bash
 git push origin main
 ```
 
-2.5 [ ] Confirm PR #12 auto-closes and the five `Closes #N` trailers fire (#2, #3, #4, #8, #9). Check via `gh pr view 12 --json state` (expect `CLOSED`, `mergeCommit` populated) and `gh issue view 2 --json state closedAt` (etc. for 3/4/8/9 — all should flip to `CLOSED` within ~1 min of the merge push).
+2.6 [ ] Confirm PR #12 auto-closes and the five `Closes #N` trailers fire (#2, #3, #4, #8, #9). Check via `gh pr view 12 --json state` (expect `CLOSED`, `mergeCommit` populated) and `gh issue view 2 --json state closedAt` (etc. for 3/4/8/9 — all should flip to `CLOSED` within ~1 min of the merge push).
 
 ---
 
@@ -103,9 +115,13 @@ git fetch origin main
 git checkout main
 git pull origin main
 ```
-Working tree should be clean. If there are unexpected local modifications on prod (other than submodule `claude-code (untracked content)` which is expected), stop and investigate — those may be in-progress work that will be lost on pull.
+Working tree should be clean of **tracked-file modifications**. Untracked state (`claude-code (untracked content)` submodule-like + any transient `mempalace/` etc.) does not block the pull — git won't touch untracked files. If `git status` shows any *modified* or *staged* tracked files, stop and investigate — those may be in-progress work that would be overwritten by the pull.
 
-3.2 [ ] **Sidecar: no action required.** The sidecar wheel currently installed at `/opt/mempalace-sidecar/venv/` was built and deployed during M0.27c from the same source that's now merging (no sidecar changes between M0.27c and HEAD — verified via `git log origin/main..origin/feature/mempalace-integration -- mempalace-sidecar/` showing no diff). Sidecar stays running, `/readyz` stays green, no restart needed.
+3.2 [ ] **Sidecar: no action required.** The sidecar wheel currently installed at `/opt/mempalace-sidecar/venv/` was built from `mempalace-sidecar/` source at its last-touching commit. That commit is **830ca85** (M0.27 — config-drift audit + check-script hardening). Nothing since then has touched `mempalace-sidecar/` on the feature branch; verify with:
+```bash
+git log 830ca85..HEAD -- mempalace-sidecar/    # must be empty
+```
+(Chose 830ca85 as the anchor, not M0.27c/5eeec9a, because 830ca85 IS the actual last-sidecar-touching commit — robust to future reorderings. M0.27c happens to also work as an anchor only because nothing between 830ca85 and 5eeec9a touched sidecar either.) Sidecar stays running, `/readyz` stays green, no restart needed.
 
 3.3 [ ] **Flask restart** — chat_routes.py changed (today's #9 fix at commit `f6c6906`). Restart to pick up the new code:
 ```bash
@@ -129,7 +145,7 @@ curl -sf http://localhost:5000/admin/mempalace-mode
 
 ---
 
-## Step 4. Post-merge verification — 5 min
+## Step 4. Post-merge verification — 5-7 min
 
 4.1 [ ] Run the daily check script once more (post-merge, post-Flask-restart):
 ```bash
@@ -182,9 +198,11 @@ If anything in steps 3-4 surfaces an error, here's the rollback tree by cost:
 
 **Application-level (fastest, but likely irrelevant):** `/usr/local/bin/mempalace-mode off` + Flask restart. Mode is already `off` post-merge, so this is a no-op — the mempalace-mode valve doesn't relieve this phase because mempalace isn't doing work. Application-level rollback doesn't apply here.
 
-**Code-level (main path):** Revert the merge commit on main:
+**Code-level (main path):** Revert the merge commit on main. The SHA was saved to `/tmp/p0-merge-sha-$(date -I).txt` at step 2.4 — read it rather than hunting via `git log`:
 ```bash
-git revert -m 1 <merge-commit-sha>    # -m 1 selects the mainline parent
+MERGE_SHA=$(cat /tmp/p0-merge-sha-$(date -I).txt)
+# or if the /tmp file is lost: MERGE_SHA=$(git log main -1 --format=%H)
+git revert -m 1 "$MERGE_SHA"    # -m 1 selects the mainline parent
 git push origin main
 
 # Then on prod:
@@ -222,9 +240,9 @@ If any of these starts feeling urgent during the merge window, **pause the merge
 | 1. Pre-merge state verification | 5 min |
 | 2. Merge sequence | 5 min |
 | 3. Post-merge host actions | 10 min |
-| 4. Post-merge verification | 5 min |
+| 4. Post-merge verification | 5-7 min |
 | 5. Phase-log entry | 15 min |
 | 6. Cleanup | 2 min |
-| **Total** | **~47 min** |
+| **Total** | **~47-49 min** |
 
 **If any single step blows past its estimate by >50%, pause.** Document the pause reason in the phase-log entry (step 5), step back, investigate before pushing through. An estimate overrun is a signal the reality has diverged from the plan; it's cheaper to burn an hour understanding the divergence than to force completion and discover the problem post-merge when rollback is more expensive.
