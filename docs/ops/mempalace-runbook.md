@@ -96,9 +96,26 @@ Alerts fire at two severities — `page` (on-call response, 24×7) and `warn` (n
 
 **Alerts:** `MempalaceKGCostApproachingCap` (warn), `MempalaceKGCostProjectionBust` (warn), `MempalaceKGQueueStuck` (page), `MempalaceKGQueueSlowlyDying` (warn).
 
-**STUB — expansion tracked in [#2](https://github.com/xelauvas/xelasphere.io-/issues/2), target P1 entry.**
+**Tombstone (from the former STUB text):** the KG worker is **not** a separate systemd unit. It runs as an asyncio background task inside the sidecar lifespan (`mempalace_sidecar/main.py:168` → `run_kg_worker`, `app.state.kg_worker_task`). Earlier STUB fallback that said "check `mempalace-kg-worker` service health" was wrong — there is no such service. Worker health is sidecar health (R1) plus the metrics below.
 
-Initial fallback (until P0 expansion): treat cost alerts as 24-hour observations (warn only, no page unless stuck). Queue-stuck page → check `mempalace-kg-worker` service health (separate unit if deployed) + verify Anthropic API status via external dashboard.
+**Response:**
+
+1. **Classify which alert fired.** Cost alerts (`ApproachingCap`, `ProjectionBust`) and queue alerts (`QueueStuck`, `QueueSlowlyDying`) have different diagnostic paths. Don't conflate — cap exhaustion legitimately drops queue throughput to zero and will trigger queue alerts downstream; work the cost path first in that case.
+2. **Current spend vs cap.** `mempalace_kg_daily_usd_spent` gauge; cap is `kg_daily_usd_cap` (default $5.0/day, config-driven). When spend ≥ cap, the worker increments `mempalace_kg_extraction_total{status="skipped_cap"}` instead of extracting. That's the correct behavior — cost is bounded. The queue will resume draining at UTC midnight when the daily counter rolls over.
+3. **Queue depth breakdown.** `mempalace_kg_queue_depth{status}` — gauge labeled `pending | running | failed`. Healthy shape: pending > 0 during ingest bursts but draining steadily; running ≤ `kg_worker_concurrency` (config, small single-digit); failed is sticky — see step 5.
+4. **Extraction outcome breakdown.** `rate(mempalace_kg_extraction_total{status}[10m])` labeled `success | failure | skipped_cap`:
+   - `skipped_cap` dominating → cap is exhausted. Confirm with step 2; if intended, wait for UTC midnight. If spending rate was unexpected, see step 6 (cost diagnosis).
+   - `failure` dominating → check sidecar journal for KG provider errors (default `kg_llm_provider=ollama`; if switched to Anthropic, check API status externally). Failures increment the `attempts` column on the `kg_pending` row; at 5 attempts the row flips to `status='failed'` and stops being claimed.
+   - `success` but queue not shrinking → ingest rate exceeds extraction rate. Not a bug, capacity question.
+5. **Queue stuck vs slowly dying.**
+   - `QueueStuck` (page, no progress in N minutes): worker task likely dead or blocked. `systemctl status mempalace-sidecar` + `journalctl -u mempalace-sidecar --since '10 min ago' | grep -i kg`. If the worker task crashed silently (asyncio task exceptions inside the sidecar process don't take the whole sidecar down), the sidecar itself will still be `active` and `/readyz` green — but extraction stops. Restart the sidecar to respawn the worker task: `systemctl restart mempalace-sidecar`.
+   - `QueueSlowlyDying` (warn): queue drain rate trailing ingest rate by a widening margin. Pre-emptive. Could be Anthropic API latency elevated, could be capacity, could be rows piling up in `failed` (check `kg_queue_depth{status="failed"}` separately).
+6. **Cost diagnosis (ApproachingCap / ProjectionBust).** When cap is being consumed faster than expected:
+   - Check extraction volume: `rate(mempalace_kg_extraction_total{status="success"}[1h])` — any single-user spike? Heavy ingest from a single palace → bulk extraction session that wasn't anticipated in the cap sizing.
+   - Provider cost per call: if `kg_llm_provider=anthropic` (non-default), per-call costs are higher than `ollama` (local, free). A recent provider flip + same traffic pattern = cap bust.
+   - **Temporary cap adjustment:** edit `kg_daily_usd_cap` in `/etc/mempalace/sidecar.env` + `systemctl restart mempalace-sidecar`. Prefer temporary increase over cap removal — the cap's purpose is to bound surprise-spending from a runaway ingest.
+   - **Temporary worker pause:** set cap to `0.0` instead of removing/stopping the worker. With cap 0, worker runs but every tick reports `skipped_cap` and no API calls fire. Queue retains pending rows for eventual drain. Cleaner than stopping the sidecar (which takes down the whole mempalace read path).
+7. **Never `DELETE FROM kg_pending`** for queue relief. Same invariant as R4 — the conversation is the system of record, KG extraction is downstream; losing a pending row means that conversation's KG is permanently incomplete. Let failed rows accumulate (they're bounded by attempts-cap) and investigate offline.
 
 ---
 
