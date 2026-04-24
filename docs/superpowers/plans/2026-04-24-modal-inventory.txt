@@ -34,6 +34,44 @@ Step 0.3 Supplemental — broader sweep (modal|dialog|lightbox|overlay|confirm|a
   styles.css:3743:    max-width: var(--share-dialog-max-w);             (inside .share-modal__dialog)
   styles.css:1320:    max-width: min(92vw, 1280px);                     (inside .image-lightbox__content)
 
+Step 0.4 — WHY THE ORIGINAL SWEEP MISSED 3 DECLARATIONS (post-commit supplemental):
+
+  Root cause: Step 0.2 used same-line grep patterns combining selector + width on one line.
+  CSS multi-line rule bodies (selector on line N, width: on line N+2) are invisible to
+  same-line grep. The three missed rules all follow the pattern:
+
+    .selector-name {          ← line N   (grep key)
+        position: ...;        ← line N+1
+        width: min(Xpx, ...); ← line N+2 (NOT matched — not on same line as selector)
+
+  The correct grep form is grep -A <n> to emit context lines after the selector match,
+  then pipe through a second grep for the width pattern.
+
+Step 0.5 — Re-verify grep (run post-commit to confirm completeness):
+
+  Command:
+    grep -rA 20 -nE "^\.(modal|dialog|lightbox)[a-z-]* *\{" app/static/css/*.css \
+      | grep -E "(width|max-width):" \
+      | grep -vE "100%|100vw|calc|var\(|max-content|min-content|fit-content"
+
+  Output (after accounting for already-catalogued items):
+    deleteChat.css:27:    width: 340px;              ← already in inventory #3
+    api-keys.css:388:     width: 60px;               ← .modal-close-btn icon button, NOT a modal size
+    api-keys.css:425:     @media (max-width: 768px)  ← responsive breakpoint, not a width rule (filter artifact)
+    dashboard.css:1560:   width: 46px;               ← icon/button inside modal, not modal container
+
+  All new hits are icon/button widths or breakpoints inside modal rule blocks — none are
+  modal container widths. The 3 missed items below are the only missed modal container rules.
+
+  Additional greps (also clean):
+    grep -rn "^[[:space:]]*\.modal-" app/static/css/*.css | wc -l → 35 selectors
+    grep -rnE "max-width: *[0-9]+(px|rem)" app/static/css/*.css \
+      | grep -E "modal|dialog|lightbox|alert|confirm|card-lg" \
+      | grep -v "^[[:space:]]*@media" → (no output — all fixed max-width modal rules
+      use calc() or var(), not bare px values; the missed items use `width:`, not `max-width:`)
+
+  RE-VERIFY RESULT: CLEAN. No additional modal container widths found.
+
 ═══════════════════════════════════════════════════════════════
 CLASSIFICATION
 ═══════════════════════════════════════════════════════════════
@@ -86,69 +124,130 @@ CLASSIFIED AS MODAL (Task 7 must migrate these)
    Action:   HOLD — already token-driven; evaluate at Task 7
    Token:    NOTE-HOLD (fluid clamp, currently tops at 640px / ~--modal-sm range)
 
+── ITEMS ADDED IN SUPPLEMENTAL PASS (missed by original same-line grep) ──────
+
+5. api-keys.css:366 — .modal-card (API key confirmation modals)
+   Current:  width: min(420px, 100%)
+   Context:  Inside .modal-backdrop { position: fixed; ... } (line 349) — standard
+             full-viewport overlay with rgba background, align-items: center,
+             justify-content: center. This is the confirmation-style modal card
+             (e.g. "Delete API key?"). 420px is below --modal-sm (445px) by 25px.
+             Snaps to --modal-sm; tight confirmation card intent preserved.
+   Action:   width: min(var(--modal-sm), 100%)
+   Token:    --modal-sm  ← 25px drift upward; acceptable for a confirmation card
+
+6. api-keys.css:475 — .modal-card-lg (Memory management modal)
+   Current:  width: min(560px, 100%)
+   Context:  Declared immediately above .memory-modal-header (line 481), confirming
+             this is the memory management overlay. Content is a form-like list UI:
+             header with icon, scrollable memory-item list, delete actions per item.
+             560px sits between --modal-sm (445) and --modal-md (720).
+
+   JUDGMENT CALL → --modal-md:
+     The selector suffix "-lg" signals the author's intent: this is the "large"
+     variant in this file, relative to .modal-card at 420px. Memory management
+     is content-dense (list + per-item actions + empty/loading states) — it
+     benefits from breathing room more than a tight confirmation card does.
+     The 560→720px bump (+160px) is visible but the modal already scrolls
+     (max-height: 80vh; overflow-y: auto inside .modal-list-container), so
+     extra width buys horizontal comfort for long memory strings, not height.
+     "--modal-sm" (445px) would make the lg variant NARROWER than its declared
+     width (560px) — a regression. "--modal-md" (720px) expands it, which is
+     the correct direction for a content-dense list modal.
+   Action:   width: min(var(--modal-md), 100%)
+   Token:    --modal-md  ← 160px expansion; correct direction for lg variant
+
+7. mobile.css:2436 — .modal-content mobile override (delete/rename modal)
+   Current:  max-width: 420px  (inside @media (max-width: 768px), line 2426)
+   Context:  This is the mobile override for the same .modal-content already
+             catalogued at deleteChat.css:27 (desktop: width: 340px). The mobile
+             block at line 2426 sets .modal-overlay to bottom-sheet positioning
+             (align-items: flex-end) and .modal-content gets width: 100% +
+             max-width: 420px for the centered-on-tablet feel. 420px → --modal-sm.
+             IMPORTANT: property differs from the desktop rule:
+               Desktop (deleteChat.css:27):  width: 340px       → width: var(--modal-sm)
+               Mobile  (mobile.css:2436):    max-width: 420px   → max-width: var(--modal-sm)
+             Task 7 must migrate both via their respective properties; do NOT unify
+             them to the same property — they serve different layout roles.
+   Action:   max-width: var(--modal-sm)
+   Token:    --modal-sm  ← 25px drift downward from 420px; acceptable for mobile cap
+
 ────────────────────────────────────────────────────────────────
-CLASSIFIED AS SKIP (not modals — inline blocks, layout tokens, responsive breakpoints)
+CLASSIFIED AS SKIP (not modals — inline blocks, layout tokens, responsive breakpoints, safety constraints)
 ────────────────────────────────────────────────────────────────
 
-5. profile-edit.css:306 — @media (max-width: 640px)
-   Reason:   Responsive breakpoint targeting .photo-grid column layout.
+S1. profile-edit.css:306 — @media (max-width: 640px)
+    Reason:  Responsive breakpoint targeting .photo-grid column layout.
              Not a modal width. SKIP.
 
-6. dashboard.css:461 — .dashboard-subtitle  max-width: 520px
-   Reason:   Prose subtitle text constraint — not a modal or dialog. SKIP.
+S2. dashboard.css:461 — .dashboard-subtitle  max-width: 520px
+    Reason:  Prose subtitle text constraint — not a modal or dialog. SKIP.
 
-7. code-window.css:14 — .code-window  max-width: 760px
-   Reason:   Inline code block rendered inside the chat stream. Not a dialog,
+S3. code-window.css:14 — .code-window  max-width: 760px
+    Reason:  Inline code block rendered inside the chat stream. Not a dialog,
              no overlay, no backdrop. SKIP.
 
-8. artifact-panel.css:2240 — @media (max-width: 520px) inside commented-out CSS block
-   Reason:   Block is commented out (/* ... */). Dead code. SKIP.
+S4. artifact-panel.css:2240 — @media (max-width: 520px) inside commented-out CSS block
+    Reason:  Block is commented out (/* ... */). Dead code. SKIP.
 
-9. artifact-panel.css:2374 — @media (max-width: 520px) inside .artifact-chat-pill__preview
-   Reason:   Responsive breakpoint for an inline chat pill preview thumbnail.
+S5. artifact-panel.css:2374 — @media (max-width: 520px) inside .artifact-chat-pill__preview
+    Reason:  Responsive breakpoint for an inline chat pill preview thumbnail.
              Not a modal. SKIP.
 
-10. tree-view.css:12 — .tree-view-window  max-width: 760px
+S6. tree-view.css:12 — .tree-view-window  max-width: 760px
     Reason:  Inline tree-view block rendered in chat stream. No overlay, no backdrop.
              Analogous to .code-window. SKIP.
 
-11. terminal-window.css:29 — .terminal-window  max-width: 760px
+S7. terminal-window.css:29 — .terminal-window  max-width: 760px
     Reason:  Inline terminal block rendered in chat stream. No overlay, no backdrop.
              Analogous to .code-window. SKIP.
 
-12. styles.css:68 — --chat-stage-max-width: 1200px
+S8. styles.css:68 — --chat-stage-max-width: 1200px
     Reason:  Layout CSS custom property for the chat stage column width.
              Not a modal. SKIP.
 
-13. styles.css:1500 — @media (max-width: 640px) inside .image-lightbox
+S9. styles.css:1500 — @media (max-width: 640px) inside .image-lightbox
     Reason:  Responsive breakpoint; the primary lightbox width is fluid:
              .image-lightbox__content { max-width: min(92vw, 1280px) } — no fixed token.
              Lightbox is a valid overlay but uses a fluid expression already. SKIP from
              fixed-token migration. Task 7 note: if a --modal-lg token (1165px) is
              added, evaluate whether lightbox should cap at --modal-lg instead of 1280px.
 
-14. styles.css:3563 — @media (max-width: 640px) inside .image-layer__actions
-    Reason:  Responsive breakpoint for action button visibility inside an image overlay.
-             Not a dialog width. SKIP.
+S10. styles.css:3563 — @media (max-width: 640px) inside .image-layer__actions
+     Reason:  Responsive breakpoint for action button visibility inside an image overlay.
+              Not a dialog width. SKIP.
 
-15. upgrade.css:359 — @media (max-width: 720px) inside .pricing-card / .upgrade-frame
-    Reason:  Responsive layout breakpoint for the pricing page. Not a modal. SKIP.
+S11. upgrade.css:359 — @media (max-width: 720px) inside .pricing-card / .upgrade-frame
+     Reason:  Responsive layout breakpoint for the pricing page. Not a modal. SKIP.
+
+S12. responsive-foundation.css:261 — .modal, .dialog, [role="dialog"] { max-width: calc(100vw - var(--space-4) * 2) }
+    Reason:  This is a SAFETY CONSTRAINT — prevents modals from overflowing the
+             viewport on any screen size. It uses a fluid expression (calc with 100vw)
+             and applies to all modal-like elements as a universal guard.
+             This is intentionally fluid and correct as-is. Task 7 must NOT touch it.
+             It is listed here explicitly so implementers don't mistake it for a
+             size-assignment rule requiring token migration.
 
 ═══════════════════════════════════════════════════════════════
 SUMMARY FOR TASK 7
 ═══════════════════════════════════════════════════════════════
 
-  Total raw hits (sweep 0.1 + 0.2 + supplemental): 17 lines
-  Classified as modal: 4
-  Skipped (non-modal): 13 (responsive breakpoints, inline blocks, layout tokens)
+  Total raw hits (all sweeps including supplemental): 20 lines
+  Classified as modal (migrate): 7
+  Skipped (non-modal): 13 (responsive breakpoints, inline blocks, layout tokens, safety constraints)
 
   Confirmed migrations:
-    --modal-sm (445px):  1 hit
-      • deleteChat.css:27  .modal-content  width:340px → var(--modal-sm)
+    --modal-sm (445px):  3 CSS rules (2 target same element via different properties)
+      • deleteChat.css:27   .modal-content      width:340px           → width: var(--modal-sm)             [desktop]
+      • mobile.css:2436     .modal-content      max-width:420px       → max-width: var(--modal-sm)         [mobile override]
+      • api-keys.css:366    .modal-card         width:min(420px,100%) → width: min(var(--modal-sm), 100%)
+      NOTE: deleteChat.css and mobile.css target the same .modal-content element;
+            they use DIFFERENT properties (width vs max-width) — both rules must migrate.
 
-    --modal-md (720px):  2 hits
-      • sidebarContent.css:321  .history-search-dialog  max-width:740px → var(--modal-md)  [20px drift]
-      • dashboard.css:1435      .profile-modal-dialog   max-width:720px → var(--modal-md)  [exact]
+    --modal-md (720px):  3 hits
+      • sidebarContent.css:321  .history-search-dialog   max-width:740px → var(--modal-md)  [20px drift]
+      • dashboard.css:1435      .profile-modal-dialog    max-width:720px → var(--modal-md)  [exact]
+      • api-keys.css:475        .modal-card-lg           width:min(560px,100%) → width: min(var(--modal-md), 100%)  [160px expansion, correct direction]
 
     --modal-lg (1165px): 0 hits
       (no existing fixed-width modals in this range found)
@@ -157,10 +256,18 @@ SUMMARY FOR TASK 7
     • styles.css:3743  .share-modal__dialog  already uses fluid clamp via --share-dialog-max-w;
       decide whether to align with --modal-md or keep fluid at Task 7
 
+  DO NOT TOUCH (safety constraints, fluid, already tokenised):
+    • responsive-foundation.css:261  .modal, .dialog, [role="dialog"]  max-width: calc(100vw - var(--space-4) * 2)
+      → viewport safety guard, fluid expression, correct as-is
+
   Edge cases / judgment calls:
-    • .modal-content (deleteChat.css) uses `width:` not `max-width:` — Task 7 must replace
-      `width: 340px` with `width: var(--modal-sm)` (not max-width) to preserve the existing
-      `max-width: calc(100% - 40px)` responsive guard.
+    • .modal-content has TWO rules (desktop + mobile) with DIFFERENT properties.
+      Task 7 must replace BOTH but preserve each property:
+        deleteChat.css:27  → width: var(--modal-sm)      (keep existing max-width: calc guard)
+        mobile.css:2436    → max-width: var(--modal-sm)  (keep existing width: 100%)
+    • .modal-card-lg 560→720px is a 160px expansion. Documented as correct direction
+      for the "large" memory management variant. If designer disagrees, --modal-sm is
+      defensible but would regress from current 560px width.
     • .history-search-dialog 740px → 720px is a 20px snap. Visually imperceptible;
       flagged in case the designer wants to preserve the original intent.
     • .share-modal is already tokenised (fluid clamp). Not a regression risk but Task 7
@@ -169,8 +276,12 @@ SUMMARY FOR TASK 7
       If --modal-lg lands at 1165px, evaluate capping at --modal-lg (currently 1280px cap).
 
   Files with zero modal hits (confirmed clean, no action needed):
-    api-keys.css, context-menu.css, crypto-chart.css, debug.css, design-tokens.css,
+    context-menu.css, crypto-chart.css, debug.css, design-tokens.css,
     email-composer.css, email-edit-toolbar.css, ghost-model.css, login.css,
-    message-styles.css, mobile.css, onlineSearch.css, options-btn.css, prism.css,
-    recipe-card.css, register.css, responsive-foundation.css, search-results.css,
+    message-styles.css, onlineSearch.css, options-btn.css, prism.css,
+    recipe-card.css, register.css, search-results.css,
     sidebarToggle.css, stream-blocks.css, text-selection-quote.css, theme-toggle.css
+
+  NOTE: api-keys.css and mobile.css were originally listed as "zero modal hits" — corrected
+  by supplemental pass. responsive-foundation.css has a modal rule but it's a safety
+  constraint (skip), so correctly requires no migration.
