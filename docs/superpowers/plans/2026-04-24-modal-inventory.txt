@@ -1,0 +1,176 @@
+Modal Inventory — φ Pass Batch 1 Task 0
+Generated: 2026-04-24
+Branch: feature/phi-pass-batch-1
+Purpose: Pre-flight reference for Task 7 (modal consumer migration to --modal-sm/md/lg tokens)
+
+═══════════════════════════════════════════════════════════════
+RAW SWEEP OUTPUT (Steps 0.1 + 0.2)
+═══════════════════════════════════════════════════════════════
+
+Step 0.1 — grep max-width: (445|520|640|720|740|760|800|900|1000|1100|1165|1200)px, exclude pricing/chart/container/hero/shell/card/page:
+
+  sidebarContent.css:321:    max-width: 740px;
+  profile-edit.css:306:@media (max-width: 640px) {
+  dashboard.css:461:    max-width: 520px;
+  dashboard.css:1435:    max-width: 720px;
+  code-window.css:14:    max-width: 760px;
+  artifact-panel.css:2240:@media (max-width: 520px) {
+  artifact-panel.css:2374:@media (max-width: 520px) {
+  tree-view.css:12:    max-width: 760px !important;
+  terminal-window.css:29:    max-width: 760px;
+  styles.css:68:    --chat-stage-max-width: 1200px;
+  styles.css:1500:@media (max-width: 640px) {
+  styles.css:3563:@media (max-width: 640px) {
+  upgrade.css:359:@media (max-width: 720px) {
+
+Step 0.2 — grep .modal|[role="dialog"]|.dialog|.popover|.overlay + width: (no additional hits):
+
+  (no new lines — grep found no matches combining those selectors with a width property)
+
+Step 0.3 Supplemental — broader sweep (modal|dialog|lightbox|overlay|confirm|alert + width):
+
+  deleteChat.css:27:    width: 340px;          (inside .modal-content — delete confirmation)
+  styles.css:3696:  --share-dialog-max-w: clamp(19rem, 92vw, 40rem);  (inside .share-modal)
+  styles.css:3743:    max-width: var(--share-dialog-max-w);             (inside .share-modal__dialog)
+  styles.css:1320:    max-width: min(92vw, 1280px);                     (inside .image-lightbox__content)
+
+═══════════════════════════════════════════════════════════════
+CLASSIFICATION
+═══════════════════════════════════════════════════════════════
+
+TOKEN TARGETS:
+  --modal-sm  = 445px  — alerts, confirmations, small prompts
+  --modal-md  = 720px  — forms, settings, profile-like dialogs, search dialogs
+  --modal-lg  = 1165px — rich previews, artifact share, large content
+
+────────────────────────────────────────────────────────────────
+CLASSIFIED AS MODAL (Task 7 must migrate these)
+────────────────────────────────────────────────────────────────
+
+1. sidebarContent.css:321 — .history-search-dialog
+   Current:  max-width: 740px
+   Context:  Full dialog with .history-search-backdrop (position:absolute, rgba overlay).
+             Name and backdrop confirm this is a dialog over page content.
+             740px → snaps to --modal-md (720px), 20px drift.
+   Action:   max-width: var(--modal-md)
+   Token:    --modal-md  ← 20px drift, note in commit
+
+2. dashboard.css:1435 — .profile-modal-dialog (inside .profile-modal)
+   Current:  max-width: 720px
+   Context:  .profile-modal has position:fixed overlay; .profile-modal-dialog is the
+             inner panel with border-radius:24px, padding:2rem. Full profile-edit form.
+             720px is exact token value.
+   Action:   max-width: var(--modal-md)
+   Token:    --modal-md  ← exact match, no drift
+
+3. deleteChat.css:27 — .modal-content (delete / rename confirmation)
+   Current:  width: 340px; max-width: calc(100% - 40px)
+   Context:  .modal-overlay is position:fixed, full-viewport backdrop with blur.
+             .modal-content is the confirmation card — "Delete this chat?" type prompt.
+             340px is below --modal-sm (445px). It is intentionally narrow — a tight
+             confirmation pill, not a form. Snap to --modal-sm and let CSS handle
+             narrower viewports via max-width: calc(100% - 40px) (already present).
+   Action:   width: var(--modal-sm)   [replace fixed width; keep max-width calc]
+   Token:    --modal-sm  ← current 340px is below sm; deliberate choice for tight confirm
+
+4. styles.css:3743 — .share-modal__dialog (artifact share modal)
+   Current:  max-width: var(--share-dialog-max-w)
+             where --share-dialog-max-w: clamp(19rem, 92vw, 40rem)  (≈ 304px–640px)
+   Context:  .share-modal has position:fixed full-screen scrim, backdrop-filter:blur.
+             Share flow is a rich interactive panel (QR, copy-link, platform buttons).
+             Currently uses a fluid clamp token. 40rem = 640px cap → closest fixed token
+             is --modal-md (720px), but the existing clamp is intentionally narrower.
+             Recommendation: leave --share-dialog-max-w as-is for now (it's already
+             tokenised and fluid). Add a NOTE for Task 7 to evaluate whether to align
+             with --modal-md or keep the fluid clamp.
+   Action:   HOLD — already token-driven; evaluate at Task 7
+   Token:    NOTE-HOLD (fluid clamp, currently tops at 640px / ~--modal-sm range)
+
+────────────────────────────────────────────────────────────────
+CLASSIFIED AS SKIP (not modals — inline blocks, layout tokens, responsive breakpoints)
+────────────────────────────────────────────────────────────────
+
+5. profile-edit.css:306 — @media (max-width: 640px)
+   Reason:   Responsive breakpoint targeting .photo-grid column layout.
+             Not a modal width. SKIP.
+
+6. dashboard.css:461 — .dashboard-subtitle  max-width: 520px
+   Reason:   Prose subtitle text constraint — not a modal or dialog. SKIP.
+
+7. code-window.css:14 — .code-window  max-width: 760px
+   Reason:   Inline code block rendered inside the chat stream. Not a dialog,
+             no overlay, no backdrop. SKIP.
+
+8. artifact-panel.css:2240 — @media (max-width: 520px) inside commented-out CSS block
+   Reason:   Block is commented out (/* ... */). Dead code. SKIP.
+
+9. artifact-panel.css:2374 — @media (max-width: 520px) inside .artifact-chat-pill__preview
+   Reason:   Responsive breakpoint for an inline chat pill preview thumbnail.
+             Not a modal. SKIP.
+
+10. tree-view.css:12 — .tree-view-window  max-width: 760px
+    Reason:  Inline tree-view block rendered in chat stream. No overlay, no backdrop.
+             Analogous to .code-window. SKIP.
+
+11. terminal-window.css:29 — .terminal-window  max-width: 760px
+    Reason:  Inline terminal block rendered in chat stream. No overlay, no backdrop.
+             Analogous to .code-window. SKIP.
+
+12. styles.css:68 — --chat-stage-max-width: 1200px
+    Reason:  Layout CSS custom property for the chat stage column width.
+             Not a modal. SKIP.
+
+13. styles.css:1500 — @media (max-width: 640px) inside .image-lightbox
+    Reason:  Responsive breakpoint; the primary lightbox width is fluid:
+             .image-lightbox__content { max-width: min(92vw, 1280px) } — no fixed token.
+             Lightbox is a valid overlay but uses a fluid expression already. SKIP from
+             fixed-token migration. Task 7 note: if a --modal-lg token (1165px) is
+             added, evaluate whether lightbox should cap at --modal-lg instead of 1280px.
+
+14. styles.css:3563 — @media (max-width: 640px) inside .image-layer__actions
+    Reason:  Responsive breakpoint for action button visibility inside an image overlay.
+             Not a dialog width. SKIP.
+
+15. upgrade.css:359 — @media (max-width: 720px) inside .pricing-card / .upgrade-frame
+    Reason:  Responsive layout breakpoint for the pricing page. Not a modal. SKIP.
+
+═══════════════════════════════════════════════════════════════
+SUMMARY FOR TASK 7
+═══════════════════════════════════════════════════════════════
+
+  Total raw hits (sweep 0.1 + 0.2 + supplemental): 17 lines
+  Classified as modal: 4
+  Skipped (non-modal): 13 (responsive breakpoints, inline blocks, layout tokens)
+
+  Confirmed migrations:
+    --modal-sm (445px):  1 hit
+      • deleteChat.css:27  .modal-content  width:340px → var(--modal-sm)
+
+    --modal-md (720px):  2 hits
+      • sidebarContent.css:321  .history-search-dialog  max-width:740px → var(--modal-md)  [20px drift]
+      • dashboard.css:1435      .profile-modal-dialog   max-width:720px → var(--modal-md)  [exact]
+
+    --modal-lg (1165px): 0 hits
+      (no existing fixed-width modals in this range found)
+
+  On-hold (evaluate at Task 7):
+    • styles.css:3743  .share-modal__dialog  already uses fluid clamp via --share-dialog-max-w;
+      decide whether to align with --modal-md or keep fluid at Task 7
+
+  Edge cases / judgment calls:
+    • .modal-content (deleteChat.css) uses `width:` not `max-width:` — Task 7 must replace
+      `width: 340px` with `width: var(--modal-sm)` (not max-width) to preserve the existing
+      `max-width: calc(100% - 40px)` responsive guard.
+    • .history-search-dialog 740px → 720px is a 20px snap. Visually imperceptible;
+      flagged in case the designer wants to preserve the original intent.
+    • .share-modal is already tokenised (fluid clamp). Not a regression risk but Task 7
+      should audit whether --modal-md alignment is desirable once that token exists.
+    • .image-lightbox__content uses `min(92vw, 1280px)` — fluid, no migration needed.
+      If --modal-lg lands at 1165px, evaluate capping at --modal-lg (currently 1280px cap).
+
+  Files with zero modal hits (confirmed clean, no action needed):
+    api-keys.css, context-menu.css, crypto-chart.css, debug.css, design-tokens.css,
+    email-composer.css, email-edit-toolbar.css, ghost-model.css, login.css,
+    message-styles.css, mobile.css, onlineSearch.css, options-btn.css, prism.css,
+    recipe-card.css, register.css, responsive-foundation.css, search-results.css,
+    sidebarToggle.css, stream-blocks.css, text-selection-quote.css, theme-toggle.css
