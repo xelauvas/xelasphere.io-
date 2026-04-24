@@ -217,3 +217,35 @@ Explicit exclusions, same reasoning as Batch 1:
 3. **Change 2 composer icon inventory.** The spec lists "send button, attachment icon, any composer chrome icons." The plan needs an inventory step (similar to Batch 1 Task 0) to find every composer icon button that currently uses 30px sizing: check `styles.css` (composer section), `dictationModule.js` / related CSS if any, and any per-feature button files. Migration is per-button; missing one ships with inconsistent icon sizing.
 
 4. **Change 3 existing transition timing.** Acceptance says "transitions use existing artifact panel transition timing (don't introduce a new duration token)." The current rule at `artifact-panel.css:289` is `transition: background 0.12s ease, height 0.12s ease, opacity 0.12s ease`. The plan step should confirm this 120ms value is reused and not silently bumped.
+
+---
+
+## Plan-time resolutions (author-approved 2026-04-24)
+
+All four flags above are ACCEPTED. The implementation plan for Batch 2 must apply the following resolutions. Each is directive, not advisory — the planner should NOT re-ask these questions.
+
+**Flag 1 — Change 1 rationale correction.**
+Rewrite the Change 1 rationale sentence from "preserves radius:padding-x proportion" to "introduces radius:padding-x = 1/φ proportion (32/φ = 19.78 ≈ 19.8)". The numerical values in Change 1 (padding-y 20, padding-x 32, radius 19.8) are correct and stand. Only the rationale text is wrong.
+
+**Flag 2 — No token split needed.**
+Verified by Batch 1 audit: user bubble uses the hard-coded rule `.user-message .message-content { padding: 0.7rem 1.1rem; border-radius: 1.1rem; }`, and only the `.ai-message .message-content` rule consumes `--message-padding-y/x` and `--message-radius`. Plan: change the token values directly. Do NOT introduce `--assistant-padding-x` / `--user-padding-x`. The user-bubble rule remains untouched. Regression check: after the change, grep the tree to confirm the tokens still have exactly one consumer (the ai-message rule).
+
+**Flag 3 — Composer icon inventory (Task 0).**
+Add a Task 0 inventory step to the Batch 2 plan, modeled on Batch 1's modal inventory. Sweep targets:
+- `app/static/css/styles.css` (composer section — tokens around lines 70–120, but grep the whole file for `30px` inside composer-related rules)
+- `app/static/js/dictationModule.js` + any associated CSS (dictation button is composer chrome)
+- Any per-feature composer button CSS (attach, emoji, or other chrome icons)
+
+For each match, classify: is it a composer icon button? If yes, migrate to the 24×24 visible icon + 44×44 hit-area pattern specified in Change 2. No match in the inventory can be skipped. Commit the inventory as a reference file (same pattern as Batch 1's `2026-04-24-modal-inventory.txt`) before the migration commits.
+
+**Flag 4 — Pin the transition value.**
+Change 3's transition MUST reuse the exact existing rule at `artifact-panel.css:289`: `transition: background 0.12s ease, height 0.12s ease, opacity 0.12s ease`. Do NOT introduce a new duration token, a new ease function, or round the 0.12s to a different value. If the plan needs to add a new property to the transition list, it uses the same 0.12s ease timing.
+
+---
+
+## Notes for the planner
+
+- The spec body above is authoritative for numerical values and intent.
+- The "Ambiguity flags" section documents the review that happened during brainstorming.
+- This "Plan-time resolutions" section is the author's ruling. Follow it.
+- If implementation surfaces a conflict with any resolution, STOP and ask — do not improvise.
