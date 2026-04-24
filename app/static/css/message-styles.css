@@ -644,10 +644,12 @@ h1 {
     color: var(--text-primary, #fdfdfd);
 }
 
-.ai-message .text-message h3 + p,
-.ai-message .text-message h2 + p {
-    margin-top: 0.1rem;
-}
+/* Removed: .ai-message .text-message h2/h3 + p adjacent-sibling rule.
+   Dead since the StreamRenderer migration — prose.js wraps each block
+   in its own <div class="stream-block">, so adjacent headings and
+   paragraphs are never raw siblings; the h2+p / h3+p combinators never
+   match. Inter-block spacing is now handled by
+   .stream-block + .stream-block rules in stream-blocks.css. */
 
 .ai-message .text-message ul,
 .ai-message .text-message ol {
