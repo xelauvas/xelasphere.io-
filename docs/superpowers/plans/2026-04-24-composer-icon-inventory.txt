@@ -1,0 +1,225 @@
+Composer Icon Inventory — Golden Ratio Frontend Pass Batch 2
+Generated: 2026-04-24
+Branch: feature/phi-pass-batch-2
+Purpose: Pre-flight sweep for Task 1 migration (30 → 24 visible icon / 44 tap target)
+
+Refs: docs/superpowers/specs/2026-04-24-golden-ratio-frontend-pass-batch-2-design.md
+
+═══════════════════════════════════════════════════════════════════
+TOKEN STRATEGY (as planned)
+═══════════════════════════════════════════════════════════════════
+
+Currently:
+  --composer-icon-size: 30px   (declared styles.css:106 — ZERO consumers)
+  --send-button-size:   30px   (declared styles.css:107 — 8 consumers)
+
+After Batch 2 Task 1:
+  --composer-icon-size → 24px  (visible icon dimension, SVG/i elements)
+  --send-button-size   → 44px  (button container, WCAG 2.5.5 tap target)
+                                migration adds padding: 10px; box-sizing: border-box
+                                to all container consumers
+
+Critical finding: --composer-icon-size is DECLARED but never consumed.
+It is a dormant token. Task 1 must also wire up the icon consumers
+(send-button i/svg, microphone-button i/svg) to var(--composer-icon-size)
+as part of the migration — otherwise the token remains cosmetic.
+
+═══════════════════════════════════════════════════════════════════
+RAW SWEEP COUNTS
+═══════════════════════════════════════════════════════════════════
+
+Step 0.1 — 30px hardcoded dimension rules:            11 lines / 3 hit groups
+Step 0.2 — var(--send-button-size) consumers:          8 lines / 2 hit groups
+           var(--composer-icon-size) consumers:         0 (token is dormant)
+Step 0.3 — dictation/composer button width/height:     0 new hits (all already
+           captured by 0.1 or separate hardcoded sizes, see notes below)
+
+Total unique hit groups to classify: 7
+(3 from Step 0.1 + 2 from Step 0.2 + 2 additional found in context reads)
+
+═══════════════════════════════════════════════════════════════════
+CLASSIFICATION DETAIL
+═══════════════════════════════════════════════════════════════════
+
+── [A] TOKEN DECLARATIONS ─────────────────────────────────────────
+
+styles.css:106   --composer-icon-size: 30px
+  Classification: DECLARATION
+  Action: Change value to 24px
+  Note: Zero consumers exist — token is dormant. Task 1 must wire
+        icon inner elements to var(--composer-icon-size) to activate it.
+
+styles.css:107   --send-button-size: 30px
+  Classification: DECLARATION
+  Action: Change value to 44px
+  Note: 8 consumers in 2 selector blocks (A-block and B-block below).
+
+── [B] var(--send-button-size) CONSUMER — Block 1 ─────────────────
+
+styles.css:1847-1854  .microphone-button
+  Lines: height/width/min-width/min-height: var(--send-button-size)
+  Classification: CONTAINER
+  Evidence: HTML index.html:784 — <button class="microphone-button">
+            Positioned absolute inside .textarea-container (composer pill).
+            Has border-radius, background, flex centering — classic button
+            wrapper. The icon inside (.microphone-button i) is not sized here.
+  Action: Token update is automatic when --send-button-size → 44px.
+          Add padding: 10px; box-sizing: border-box to keep icon centered.
+          Wire inner icon: .microphone-button i { font-size: var(--composer-icon-size); }
+
+── [C] var(--send-button-size) CONSUMER — Block 2 ─────────────────
+
+styles.css:2089-2097  .send-button
+  Lines: height/width/min-width/min-height: var(--send-button-size)
+  Classification: CONTAINER
+  Evidence: HTML index.html:800 — <button class="send-button">
+            Positioned absolute inside .textarea-container. Has border,
+            border-radius, flex centering — button wrapper.
+  Action: Token update is automatic when --send-button-size → 44px.
+          Add padding: 10px; box-sizing: border-box.
+          Wire inner icon: .send-button i, .send-button svg { width: var(--composer-icon-size); height: var(--composer-icon-size); }
+
+── [D] HARDCODED 30px — styles.css:2190-2197 ─────────────────────
+
+styles.css:2190-2197  .voice-mode-button
+  Lines: height: 30px; width: 30px; min-width: 30px; min-height: 30px
+  Classification: CONTAINER
+  Evidence: HTML index.html:788 — <button class="voice-mode-button">
+            Positioned absolute inside .textarea-container (right: 10px,
+            bottom: 4px). Has border-radius: 50%, background, flex centering.
+            Rendered alongside .microphone-button and .send-button inside
+            the composer pill; hidden during voice-active mode.
+  Action: Replace hardcoded 30px with var(--send-button-size).
+          Add padding: 10px; box-sizing: border-box.
+          Wire inner icon: .voice-mode-button i, .voice-mode-button svg {
+            font-size: var(--composer-icon-size); }
+
+── [E] HARDCODED 30px — styles.css:2337-2340 ─────────────────────
+
+styles.css:2337-2340  .voice-bar-end
+  Lines: width: 30px; height: 30px; min-width: 30px
+  (Note: no min-height here — grep only captured 3 of the 3 lines present)
+  Classification: CONTAINER — UNCERTAIN flag on sizing target
+  Evidence: voiceModeModule.js:124 — _voiceBarEnd.className = 'voice-bar-end'
+            It is a <button> (inferred from border, border-radius: 50%, cursor: pointer,
+            padding: 0). Lives inside .voice-bar-row, which replaces the normal
+            composer content during voice-active mode (.textarea-container.voice-active).
+            So it IS a composer-context button — correct to migrate.
+  Uncertainty: .voice-bar-end has a ::before pseudo-element that draws a 12×12px
+               square icon inside it (not a font icon, not an SVG — pure CSS).
+               The pseudo uses width: 12px; height: 12px directly. That inner
+               element is NOT a candidate for var(--composer-icon-size) — leave
+               the ::before dimensions untouched. Only the container gets the
+               token swap.
+  Action: Replace hardcoded 30px with var(--send-button-size).
+          padding: 0 is intentional (icon is CSS pseudo) — do NOT add 10px padding.
+          The ::before 12px square is fine as-is; it scales naturally within the
+          larger container since it uses absolute centering (top/left 50% translate).
+          EXCEPTION: do not add padding/box-sizing here. The pseudo-icon is not
+          tied to composer-icon-size. Flag for Task 1 implementer to verify
+          visually after resize.
+
+── [F] HARDCODED 30px — mobile.css:3888-3895 ─────────────────────
+
+mobile.css:3892-3895  .message.ai-message .action-btn,
+                      .message.ai-message .edit-button,
+                      .message.ai-message .copy-message-button
+  Lines: width: 30px !important; height: 30px !important;
+         min-width: 30px !important; min-height: 30px !important;
+  Classification: SKIP — NOT a composer icon
+  Evidence: Selector is scoped to .message.ai-message — these are action buttons
+            on AI message bubbles (copy, edit, etc.), not inside the composer
+            input pill. Section comment at mobile.css:3851 reads
+            "=== Action Buttons on Messages ===". No relationship to composer
+            token strategy.
+  Action: Do not touch. Out of scope for Batch 2 Change 2.
+
+── [G] DICTATION BUTTONS — styles.css:1992-2005 ──────────────────
+
+styles.css:1992-2005  .dictation-cancel-btn, .dictation-confirm-btn
+  Lines: width: 32px; height: 32px  (NOT 30px — did not surface in grep)
+  Classification: CONTAINER (noted for completeness, not in scope of 30→24 migration)
+  Evidence: dictationModule.js:141,144 — dynamically injected <button> elements
+            inside a recording overlay within .textarea-container. These are
+            composer-context buttons.
+  Note: These are 32px, not 30px — they did NOT appear in the Step 0.1 sweep.
+        They are not currently token-driven. They are a gap: composer buttons
+        should all use --send-button-size for consistency, but that is a
+        separate decision from the current migration scope (30 → 24).
+        Flagged for Task 1 awareness: if Task 1 also wants to normalize these
+        to 44px tap targets, add width/height: var(--send-button-size) here
+        with padding: 10px; box-sizing: border-box.
+        If left at 32px, they will be the only composer buttons not on the token.
+        Recommendation: migrate in Task 1 for consistency; the change is trivial.
+
+═══════════════════════════════════════════════════════════════════
+SEMANTIC CONFLICT ANALYSIS
+═══════════════════════════════════════════════════════════════════
+
+No semantic conflict found.
+
+--composer-icon-size has zero consumers, so there is no case of
+a container accidentally bound to the icon token. The planned split
+(icon token → 24px, container token → 44px) is clean to implement.
+
+═══════════════════════════════════════════════════════════════════
+DICTATION MODULE STATUS
+═══════════════════════════════════════════════════════════════════
+
+The dictation module (dictationModule.js) has its OWN hardcoded sizing:
+- .dictation-cancel-btn / .dictation-confirm-btn: 32px (styles.css:1994-1995)
+- Does NOT inherit from --send-button-size or --composer-icon-size
+
+The microphone-button (the trigger for dictation) IS token-driven via
+--send-button-size (styles.css:1847-1854). So the entry point is on the
+token; the dictation overlay buttons are NOT.
+
+═══════════════════════════════════════════════════════════════════
+CLASSIFICATION SUMMARY
+═══════════════════════════════════════════════════════════════════
+
+DECLARATION:  2  (styles.css:106-107 — both tokens)
+CONTAINER:    4  (.microphone-button, .send-button, .voice-mode-button, .voice-bar-end)
+SKIP:         1  (mobile.css:3892-3895 — AI message action buttons, non-composer)
+OUT-OF-SCOPE: 1  (.dictation-cancel/confirm-btn — 32px, not 30px; flagged for
+                   optional Task 1 normalization)
+UNCERTAIN:    0
+ICON:         0  (no sizing rule found for inner icon elements — they are not
+                   sized in CSS today; Task 1 must ADD these rules)
+
+═══════════════════════════════════════════════════════════════════
+TASK 1 MIGRATION CHECKLIST (derived from above)
+═══════════════════════════════════════════════════════════════════
+
+1. styles.css:106  --composer-icon-size: 30px → 24px
+2. styles.css:107  --send-button-size: 30px   → 44px
+
+3. styles.css:~1847  .microphone-button
+   - Token update is automatic (already uses var(--send-button-size))
+   - ADD: padding: 10px; box-sizing: border-box
+   - ADD icon rule: .microphone-button i { font-size: var(--composer-icon-size); }
+
+4. styles.css:~2090  .send-button
+   - Token update is automatic (already uses var(--send-button-size))
+   - ADD: padding: 10px; box-sizing: border-box
+   - ADD icon rule: .send-button i, .send-button svg { width: var(--composer-icon-size); height: var(--composer-icon-size); font-size: var(--composer-icon-size); }
+
+5. styles.css:~2190  .voice-mode-button
+   - REPLACE: 30px hardcoded → var(--send-button-size)
+   - ADD: padding: 10px; box-sizing: border-box
+   - ADD icon rule: .voice-mode-button i, .voice-mode-button svg { font-size: var(--composer-icon-size); }
+
+6. styles.css:~2337  .voice-bar-end
+   - REPLACE: 30px hardcoded → var(--send-button-size)
+   - DO NOT add padding (CSS pseudo-icon, not font/svg)
+   - DO NOT change the ::before 12×12px dimensions
+   - Verify visually after resize
+
+7. (Optional) styles.css:~1994  .dictation-cancel-btn, .dictation-confirm-btn
+   - Currently 32px, not token-driven
+   - Recommend: set width/height: var(--send-button-size), add padding: 10px; box-sizing: border-box
+   - Task 1 implementer decides whether to include this scope
+
+DO NOT TOUCH:
+- mobile.css:3892-3895  (.message.ai-message action buttons — non-composer)
+- voice-bar-end ::before dimensions (12px square CSS pseudo-icon)
