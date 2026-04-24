@@ -228,7 +228,7 @@ input:checked + .slider:before {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
-    min-height: 520px;
+    aspect-ratio: 1 / 1.618;   /* φ portrait — golden rectangle */
 }
 
 .plus-card {
