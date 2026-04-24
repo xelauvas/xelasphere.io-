@@ -292,13 +292,13 @@ body.artifact-panel-resizing .chat-container {
 
 .artifact-panel__resize-handle:hover::after {
   background: var(--accent-muted, rgba(124, 106, 239, 0.15));
-  height: 48px;
+  height: 52px;                 /* φ × 32 (idle) */
   opacity: 1;
 }
 
 .artifact-panel__resize-handle:active::after {
   background: var(--accent, #7c6aef);
-  height: 64px;
+  height: 84px;                 /* φ × 52 (hover), ≈ φ² × 32 */
   opacity: 1;
 }
 
