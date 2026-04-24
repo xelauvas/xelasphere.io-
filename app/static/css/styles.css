@@ -3285,7 +3285,7 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
 }
 
 /* ==================== Simple Pulsing Dot (non-DeepSeek) ==================== */
-/* Uses streaming-cursor class for visual consistency with streaming text cursor */
+/* Contains a .stream-cursor so the pre-stream dot and the in-stream cursor share one style. */
 .simple-pulsing-dot {
     display: flex;
     align-items: center;

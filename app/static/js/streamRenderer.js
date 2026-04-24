@@ -39,6 +39,14 @@ const MAX_PENDING_CHARS = 4096;
 const PACE_FLOOR_CHARS_PER_FRAME = 3;     // ~180 cps — natural read speed
 const PACE_CATCHUP_FRAMES = 30;           // clear backlog in ~500ms
 const PACE_FINALIZE_CHARS_PER_FRAME = 40; // accelerate after network ends
+// Cap the catchup formula during live streaming. Without this, a large
+// burst (cached response, ACTION-buffer flush, fast provider like Groq)
+// gets drained at ceil(qlen/30) chars per frame — e.g. 1500 chars → 50
+// chars/frame, which reads as visible "chunks" instead of smooth streaming.
+// 10 chars/frame @ 60fps ≈ 600 cps: fast reader pace, still feels like
+// streaming. Finalize path ignores this cap (network already ended, the
+// user wants it done) — it uses PACE_FINALIZE_CHARS_PER_FRAME as floor.
+const PACE_CEILING_CHARS_PER_FRAME = 10;
 
 /**
  * Content-profile classification — walks the finalized block list and
@@ -235,7 +243,11 @@ class StreamRenderer {
             ? PACE_FINALIZE_CHARS_PER_FRAME
             : PACE_FLOOR_CHARS_PER_FRAME;
         const catchup = Math.ceil(qlen / PACE_CATCHUP_FRAMES);
-        const charsThisFrame = Math.max(floor, catchup);
+        let charsThisFrame = Math.max(floor, catchup);
+        if (!this._finalizing) {
+            // Cap live streaming so bursts feel like streaming, not chunks.
+            charsThisFrame = Math.min(charsThisFrame, PACE_CEILING_CHARS_PER_FRAME);
+        }
         const slice = this._paintQueue.slice(0, charsThisFrame);
         this._paintQueue = this._paintQueue.slice(charsThisFrame);
         this.sm.append(slice);

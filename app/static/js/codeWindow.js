@@ -679,48 +679,72 @@ const ThinkingIndicator = (() => {
 window.ThinkingIndicator = ThinkingIndicator;
 
 // ==================== Simple Pulsing Dot (for non-DeepSeek models) ====================
-// Uses the same streaming-cursor style for visual consistency
+// Claude-style pre-stream indicator. A single .stream-cursor pulsing dot
+// lives INSIDE a pre-created AI message bubble at the exact spot where
+// streamed text will start. When the first token arrives, the same
+// cursor element is reparented into the StreamRenderer's text-message
+// (animation state preserved via appendChild), so the dot effectively
+// stays put as text accumulates before it — no spatial jump between
+// thinking and typing phases.
+const STREAM_PLACEHOLDER_CLASS = 'stream-placeholder';
 let simplePulsingDotElement = null;
 
 function showSimplePulsingDot() {
     const chatDisplay = document.getElementById('chat-display');
     if (!chatDisplay) return;
 
-    // Remove existing dot if any
+    // Remove any stale placeholder first (show-after-show is a no-op except
+    // for the fresh instance).
     hideSimplePulsingDot();
 
-    // Use streaming-cursor class so it looks identical to the cursor that leads text
-    simplePulsingDotElement = document.createElement('div');
-    simplePulsingDotElement.className = 'simple-pulsing-dot';
-    simplePulsingDotElement.innerHTML = '<span class="streaming-cursor"></span>';
-    chatDisplay.appendChild(simplePulsingDotElement);
+    // Pre-create the AI bubble. Adopted by the stream-start path when the
+    // first content chunk arrives (see sendMessage flow below) — the
+    // bubble stays in place, only its id and placeholder marker change.
+    const bubble = createMessageDiv('', 'ai');
+    bubble.classList.add(STREAM_PLACEHOLDER_CLASS);
+    chatDisplay.appendChild(bubble);
+    createHeader('ai', bubble);
+    const mc = document.createElement('div');
+    mc.className = 'message-content';
+    bubble.appendChild(mc);
+
+    const cursor = document.createElement('span');
+    cursor.className = 'stream-cursor';
+    mc.appendChild(cursor);
+
+    simplePulsingDotElement = bubble;
 }
 
 function hideSimplePulsingDot() {
+    // Save scroll position before removing (even if the tracked ref is
+    // null, defensive DOM cleanup below may still mutate layout).
+    const scrollContainer = document.getElementById('chat-scroll-region');
+    const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+    const keepAtTop = window._keepMessageAtTop;
+
+    // Remove synchronously — no fade. The dot is a block-level element
+    // (~40px tall) occupying layout; a 130ms opacity fade used to keep it
+    // in the flow while the new StreamRenderer bubble appeared below with
+    // its own seeded cursor. Users saw TWO cursors stacked during the
+    // fade window. The new message bubble's contentFadeIn (300ms) is the
+    // visual smoothness; killing the dot instantly is correct.
     if (simplePulsingDotElement) {
-        // Save scroll position before removing
-        const scrollContainer = document.getElementById('chat-scroll-region');
-        const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
-        const keepAtTop = window._keepMessageAtTop;
-
-        // Quick fade before removing so the handoff from pre-stream dot
-        // to in-stream cursor is a fade-through, not a hard cut. The
-        // new StreamRenderer bubble underneath is also fading in via
-        // contentFadeIn 0.3s — overlapping fades = smooth crossfade.
-        const dotToRemove = simplePulsingDotElement;
+        simplePulsingDotElement.remove();
         simplePulsingDotElement = null;
-        dotToRemove.style.transition = 'opacity 120ms ease-out';
-        dotToRemove.style.opacity = '0';
-        setTimeout(() => {
-            if (dotToRemove && dotToRemove.parentNode) {
-                dotToRemove.remove();
-            }
-        }, 130);
+    }
 
-        // Restore scroll position if keeping message at top
-        if (keepAtTop && scrollContainer) {
-            scrollContainer.scrollTop = savedScrollTop;
-        }
+    // Defensive: nuke any stray .simple-pulsing-dot nodes that might have
+    // been orphaned by a previous stream (error path, session switch
+    // mid-stream). Runs even when simplePulsingDotElement is null so we
+    // clean up after a crash or a DOM mutation that dropped the tracked ref.
+    const chatDisplay = document.getElementById('chat-display');
+    if (chatDisplay) {
+        chatDisplay.querySelectorAll('.simple-pulsing-dot').forEach(el => el.remove());
+    }
+
+    // Restore scroll position if keeping message at top
+    if (keepAtTop && scrollContainer) {
+        scrollContainer.scrollTop = savedScrollTop;
     }
 }
 
@@ -2584,8 +2608,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                         }
                                         var targetContent = targetEl?.querySelector('.message-content');
                                         if (targetContent) {
-                                            // Kill any existing streaming cursor
-                                            var oldCursor = targetContent.querySelector('.streaming-cursor');
+                                            // Kill any existing stream cursor inside this message (defensive;
+                                            // hideSimplePulsingDot already scrubbed the pre-stream dot).
+                                            var oldCursor = targetContent.querySelector('.stream-cursor');
                                             if (oldCursor) oldCursor.remove();
                                             // Remove everything EXCEPT the search banner in
                                             // place. Detaching and re-inserting the banner
@@ -4161,7 +4186,7 @@ function abortMessage() {
     }
 
     // Remove all cursors from the DOM
-    document.querySelectorAll('.streaming-cursor, .stream-cursor').forEach(el => el.remove());
+    document.querySelectorAll('.stream-cursor').forEach(el => el.remove());
 
     // Hide thinking indicator and pulsing dot
     if (typeof ThinkingIndicator !== 'undefined') ThinkingIndicator.hide();

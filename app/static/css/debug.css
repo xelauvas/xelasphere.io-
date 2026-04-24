@@ -44,17 +44,13 @@ button:active {
     transform: translateY(1px);
 }
 
-/* Streaming cursor visuals live in stream-blocks.css (shared rule
-   for both .streaming-cursor and .stream-cursor so the pre-stream dot
-   and the in-stream cursor are literally the same element style). We
-   keep only scroll-margin-bottom here — that's layout, not visual. */
-.streaming-cursor,
+/* Stream cursor visuals live in stream-blocks.css. Here we keep only
+   scroll-margin-bottom — that's layout, not visual. */
 .stream-cursor {
     scroll-margin-bottom: calc(var(--composer-reserved-height, 150px) + 40px);
 }
 
 @media (max-width: 768px) {
-    .streaming-cursor,
     .stream-cursor {
         scroll-margin-bottom: calc(var(--composer-reserved-height, 120px) + 60px + env(safe-area-inset-bottom, 0px));
     }

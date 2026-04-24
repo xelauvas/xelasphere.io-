@@ -918,3 +918,96 @@ def strip_html_from_response(text: str) -> str:
         logging.info(f"HTML stripped successfully. Result (first 100 chars): {text[:100]}")
 
     return text.strip()
+
+
+# Mirror of app/static/js/stream/renderers/prose.js' AI_PREAMBLE_TAIL_RE.
+# Applied server-side to persisted full_content so the stored text matches
+# the post-finalize DOM (client prose.js still applies the same transform
+# idempotently on replay). Keep regexes in lockstep with prose.js.
+_AI_PREAMBLE_TAIL_RE = re.compile(
+    r'\s+(?:'
+    r'how\s+(?:can|may|might)\s+(?:i|we)\s+(?:help|assist)\s+you(?:\s+today)?\s*\??'
+    r'|what\s+can\s+i\s+(?:help\s+you\s+with|do\s+for\s+you)(?:\s+today)?\s*\??'
+    r'|is\s+there\s+(?:anything|something)(?:\s+else)?\s+i\s+can\s+(?:help|assist)(?:\s+you)?\s+with\s*\??'
+    r'|let\s+me\s+know\s+if\s+(?:you|there\s+is)[^.?!]*[.?!]?'
+    r')\s*$',
+    re.IGNORECASE,
+)
+
+
+def strip_trailing_ai_preamble(text: str) -> str:
+    """Strip the classic instruction-tuning tail ("How can I help you today?").
+
+    The server prompt asks the model not to emit these; this is the belt
+    for the models that emit them anyway. Mirrors prose.js stripTrailingPreamble.
+    """
+    if not text or not isinstance(text, str):
+        return text
+    stripped = _AI_PREAMBLE_TAIL_RE.sub('', text).rstrip()
+    # Clean up trailing punctuation left dangling (e.g. "Hello," after
+    # stripping "how can I assist you today?"). Convert lone trailing
+    # comma to a period for cleaner reading.
+    return re.sub(r',\s*$', '.', stripped)
+
+
+# Mirror of prose.js MIN_QUOTE_LEN.
+_MIN_QUOTE_LEN = 35
+_INLINE_QUOTE_RE = re.compile(r'"([^"\n]+?)"')
+
+
+def wrap_inline_quotes_as_blockquotes(text: str) -> str:
+    """Promote a long inline "…" span inside a paragraph to a ``> `` blockquote.
+
+    Llama-family models emit long literary quotations inline with straight
+    double quotes instead of using ``> `` blockquote syntax. This heuristic
+    finds a substantial quoted span in a paragraph and splits it into
+    prose-before / blockquote / prose-after so the existing blockquote CSS
+    kicks in. Mirrors prose.js wrapInlineQuotesAsBlockquotes.
+
+    Idempotent: paragraphs already starting with ``>`` are skipped. Applying
+    the transform to already-transformed text is a no-op for typical inputs.
+    """
+    if not text or not isinstance(text, str):
+        return text
+
+    out = []
+    for para in re.split(r'\n\n+', text):
+        # Skip paragraphs that already start with '>' (already a blockquote)
+        # or are code fences (defensive; stream state machine handles these).
+        if re.match(r'^\s*>', para) or re.match(r'^\s*```', para):
+            out.append(para)
+            continue
+
+        quotes = [
+            (m.group(0), m.group(1), m.start(), len(m.group(1)))
+            for m in _INLINE_QUOTE_RE.finditer(para)
+        ]
+        if not quotes:
+            out.append(para)
+            continue
+
+        eligible = [q for q in quotes if q[3] >= _MIN_QUOTE_LEN]
+        if not eligible:
+            out.append(para)
+            continue
+        eligible.sort(key=lambda q: q[3], reverse=True)
+        full, inner, idx, qlen = eligible[0]
+
+        # Guard against long prose with a medium-length quoted phrase being
+        # hijacked — require surrounding prose ≤3× the quote length.
+        non_quote_len = len(para) - len(full)
+        if non_quote_len > qlen * 3:
+            out.append(para)
+            continue
+
+        before = para[:idx].strip()
+        after = para[idx + len(full):].strip()
+        parts = []
+        if before:
+            parts.append(before)
+        parts.append('> ' + inner)
+        if after:
+            parts.append(after)
+        out.append('\n\n'.join(parts))
+
+    return '\n\n'.join(out)

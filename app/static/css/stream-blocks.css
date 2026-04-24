@@ -69,12 +69,11 @@
     50%      { opacity: 1; }
 }
 
-/* Cursor — ChatGPT-style pulsing dot. Must match .streaming-cursor
-   (debug.css) exactly so the pre-stream dot and the in-stream cursor
-   look like the SAME cursor — no visible swap when streaming starts. */
+/* Cursor — ChatGPT-style pulsing dot. One class, .stream-cursor, used
+   by both the pre-stream pulsing dot (codeWindow showSimplePulsingDot)
+   and the in-stream cursor (seeded by StreamRenderer). */
 
-.stream-cursor,
-.streaming-cursor {
+.stream-cursor {
     display: inline-block;
     width: 12px;
     height: 12px;

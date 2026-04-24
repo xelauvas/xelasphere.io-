@@ -156,12 +156,36 @@ export function createProseRenderer() {
         update(block) {
             if (!block.el) return;
             if (typeof window.marked?.parse !== 'function') {
-                // marked hasn't loaded yet (replay can race page init).
-                // Render as preformatted text; mark the node so the next
-                // successful parse knows to upgrade it rather than assume
-                // the previous DOM is already a parsed tree.
+                // marked hasn't loaded yet (replay can race page init, or
+                // the CDN failed). Render as preformatted text; mark the
+                // node so the next successful parse knows to upgrade it.
                 block.el.textContent = block.text;
                 block.el.dataset.proseFallback = '1';
+                // Fallback upgrade poller — replay finalizes sync and won't
+                // trigger update() again on its own. Without this, CDN-late
+                // marked leaves the block as plaintext forever. One watcher
+                // per block, bounded retries, cleared once upgraded.
+                if (!block.meta._markedWatcherId) {
+                    let attempts = 0;
+                    const MAX_ATTEMPTS = 240; // ~4s at 60fps — covers slow CDN
+                    const watcher = () => {
+                        if (!block.el || block.el.dataset.proseFallback !== '1') {
+                            block.meta._markedWatcherId = null;
+                            return;
+                        }
+                        if (typeof window.marked?.parse === 'function') {
+                            block.meta._markedWatcherId = null;
+                            this.update(block);
+                            return;
+                        }
+                        if (++attempts >= MAX_ATTEMPTS) {
+                            block.meta._markedWatcherId = null;
+                            return;
+                        }
+                        block.meta._markedWatcherId = requestAnimationFrame(watcher);
+                    };
+                    block.meta._markedWatcherId = requestAnimationFrame(watcher);
+                }
                 return;
             }
             const rawHTML = window.marked.parse(block.text);

@@ -2,11 +2,12 @@
 import pytest
 import sys
 import os
+from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from app.services.stream_normalizer import StreamNormalizer
+from app.services.stream_normalizer import StreamNormalizer, normalize_paragraph_breaks
 
 
 class TestBasicLineBuffering:
@@ -147,3 +148,46 @@ class TestAllModelFamilies:
             full = ''.join(output)
             assert "ACTION: web_search" in full, f"Failed for {family}"
             assert "query: test query" in full, f"Failed for {family}"
+
+
+class TestParagraphNormalizationDivergence:
+    """Guards against stream-vs-refresh render divergence.
+
+    Background: chat_routes.py used to wrap per-chunk SSE yields in
+    normalize_paragraph_breaks(), which converts single \\n → \\n\\n.
+    The persisted response_text is raw joined chunks (no normalization),
+    so stream DOM and refresh DOM diverged. Worse, the regex operates
+    per-chunk without cross-chunk context, so chunk boundaries in the
+    middle of a sentence could inject spurious paragraph breaks.
+
+    The fix removed normalize_paragraph_breaks() from the yield sites
+    so stream and refresh both consume raw chunks. The utility still
+    exists for callers that want it one-shot on a complete buffer.
+    """
+
+    def test_utility_still_works_one_shot(self):
+        # One-shot on a complete buffer — the regex has the context it needs.
+        result = normalize_paragraph_breaks("Hello world.\nSecond paragraph.")
+        assert result == "Hello world.\n\nSecond paragraph."
+
+    def test_utility_preserves_list_breaks(self):
+        # Per docstring: single \n before list items is preserved.
+        result = normalize_paragraph_breaks("Intro.\n- item 1\n- item 2")
+        assert result == "Intro.\n- item 1\n- item 2"
+
+    def test_chat_routes_does_not_normalize_per_chunk(self):
+        """Source-level guard: yield sites must not wrap chunks in normalize_paragraph_breaks.
+
+        If a refactor re-introduces the call at a yield site, the stream
+        render will diverge from the persisted (refresh) render again.
+        """
+        chat_routes = Path(__file__).parent.parent / "app" / "blueprints" / "chat_routes.py"
+        source = chat_routes.read_text(encoding="utf-8")
+
+        # The import must be gone — presence implies someone's calling it here.
+        assert "normalize_paragraph_breaks" not in source, (
+            "normalize_paragraph_breaks re-introduced in chat_routes.py — "
+            "this causes stream-vs-refresh DOM divergence. Apply the transform "
+            "one-shot elsewhere, or drop it entirely (refresh uses raw text "
+            "and renders correctly via markdown-it breaks:false)."
+        )
