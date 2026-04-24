@@ -454,6 +454,7 @@ h1 {
     margin: 0;
     text-align: left;
     text-justify: var(--text-justify);
+    animation: contentFadeIn 0.3s ease-out;
     -webkit-font-smoothing: var(--font-smoothing-webkit);
     -moz-osx-font-smoothing: var(--font-smoothing-moz);
     text-rendering: var(--text-rendering);
@@ -1242,7 +1243,12 @@ h1 {
     font-weight: 500;
 }
 
-/* Override Prism overflow in messages - pre scrolls, code doesn't */
+/* Override Prism overflow in messages — pre scrolls horizontally, code
+   inside doesn't independently scroll. These !important declarations are
+   required because prism.css sets overflow on pre[class*="language-"] at
+   the same specificity (0,0,1,1); without !important the source-order
+   cascade would be brittle (order depends on link order in base.html).
+   DO NOT REMOVE without also removing the competing Prism defaults. */
 .text-message pre[class*="language-"] {
     overflow: auto !important;
 }
@@ -2187,10 +2193,7 @@ h1 {
     }
 }
 
-/* Message appear animation */
-.text-message {
-    animation: contentFadeIn 0.3s ease-out;
-}
+/* Message appear animation defined inline on .text-message (line 440+) */
 
 /* Heading hover effect */
 /* Headings are passive content — no hover effect. */
