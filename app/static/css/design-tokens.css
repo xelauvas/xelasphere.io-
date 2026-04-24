@@ -287,6 +287,16 @@
   --syntax-type: #22d3ee;
   --syntax-operator: #f472b6;
   --syntax-punctuation: rgba(255, 255, 255, 0.6);
+
+  /* ==================== */
+  /* MODAL SIZE SCALE — φ-keyed three-tier */
+  /* sm = md / φ, lg = md × φ. Baseline md = 720. */
+  /* Use: alerts/confirmations → sm; forms/settings → md; rich previews → lg. */
+  /* ==================== */
+
+  --modal-sm: 445px;    /* 720 / φ */
+  --modal-md: 720px;    /* baseline */
+  --modal-lg: 1165px;   /* 720 × φ */
 }
 
 /* ==================== */
