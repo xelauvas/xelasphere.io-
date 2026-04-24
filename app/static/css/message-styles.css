@@ -30,7 +30,7 @@
 
     /* ChatGPT-inspired typography + spacing constants */
     --chat-font-size: 15px;
-    --chat-line-height: 1.7;
+    --chat-line-height: 1.618;   /* φ — golden-ratio reading rhythm for assistant markdown */
     --chat-letter-spacing: 0.01em;
     --chat-max-line-width: 72ch;
 

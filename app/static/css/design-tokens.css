@@ -144,7 +144,7 @@
   --leading-tight: 1.25;
   --leading-snug: 1.375;
   --leading-normal: 1.5;
-  --leading-relaxed: 1.625;
+  --leading-relaxed: 1.618;   /* φ — golden-ratio reading rhythm */
   --leading-loose: 2;
 
   /* Letter Spacing */
