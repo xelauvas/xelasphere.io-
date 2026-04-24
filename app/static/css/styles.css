@@ -87,7 +87,7 @@
     --composer-max-lines: 6;
     --composer-line-height-em: calc(var(--composer-line-height) * 1em);
     --composer-single-line-height: 34px;
-    --composer-locked-height: 48px;
+    --composer-locked-height: 72px;   /* φ × --send-button-size (44 × 1.618) — restores button:composer at φ */
     --composer-min-height: var(--composer-locked-height);
     --composer-max-height: calc(var(--composer-line-height-em) * var(--composer-max-lines) + 12px);
     --composer-white-space: pre-wrap;
