@@ -2727,8 +2727,8 @@ window.addEventListener('load', function() {
                 console.warn('Unable to read split percentage', error);
             }
 
-            // Default to 50%
-            return 50;
+            // Default to 61.8% — φ split, chat-primary (1.618 : 1)
+            return 61.8;
         }
 
         loadSavedSplit() {

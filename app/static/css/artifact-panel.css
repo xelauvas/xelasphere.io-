@@ -113,7 +113,7 @@ body.artifact-panel-resizing .chat-container {
 @media (min-width: 769px) {
   body.artifact-panel-open .content-wrapper {
     display: grid !important;
-    grid-template-columns: var(--artifact-split-left, 1fr) var(--artifact-split-right, 1fr);
+    grid-template-columns: var(--artifact-split-left, 1.618fr) var(--artifact-split-right, 1fr);   /* φ default: chat-primary */
     gap: 0;
     transition: none; /* No transition on grid to prevent lag during resize */
   }
