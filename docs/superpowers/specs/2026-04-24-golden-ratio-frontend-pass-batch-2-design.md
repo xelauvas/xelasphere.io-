@@ -1,10 +1,20 @@
 # Spec: Golden Ratio Frontend Pass — Batch 2
 
-**Status:** Ready for implementation after Batch 1 has shipped and been visually verified
-**Scope:** Chat bubble geometry + composer icon sizing + artifact panel resize grip
-**Estimated effort:** 45 min implementation + visual/accessibility QA
+**Status:** Ready for implementation — Change 1 retracted 2026-04-24
+**Scope:** ~~Chat bubble geometry~~ + composer icon sizing + artifact panel resize grip
+**Estimated effort:** 30 min implementation + visual/accessibility QA
 **Date:** 2026-04-24
 **Author:** Xela Uvas
+
+---
+
+> ### ⚠️ CHANGE 1 RETRACTED — 2026-04-24
+>
+> Change 1 ("Assistant bubble padding → φ") was retracted during implementation state-gathering after a trace-to-consumer check showed the current `.ai-message .text-message` rule at `message-styles.css:490` zeroes out padding and border-radius entirely. Assistant messages have no bubble — they flow as raw text on the chat canvas (deliberate Claude Desktop parity).
+>
+> The Batch 1 audit reported "assistant bubble 20×24 padding" by reading `--message-padding-x/y` token declarations without tracing whether any rule actually applies them to AI messages. That was a factual audit error, propagated into this spec.
+>
+> **Effective Batch 2 scope is now Changes 2 + 3 only.** See "Change 1 — Retracted (full detail)" addendum at the end of this spec for full reasoning and the process lesson.
 
 ---
 
@@ -245,7 +255,71 @@ Change 3's transition MUST reuse the exact existing rule at `artifact-panel.css:
 
 ## Notes for the planner
 
-- The spec body above is authoritative for numerical values and intent.
+- The spec body above is authoritative for numerical values and intent — **except Change 1, retracted**.
 - The "Ambiguity flags" section documents the review that happened during brainstorming.
 - This "Plan-time resolutions" section is the author's ruling. Follow it.
 - If implementation surfaces a conflict with any resolution, STOP and ask — do not improvise.
+- **Change 1 is retracted — see addendum below for full reasoning. Implementation covers only Changes 2 and 3.**
+
+---
+
+## Change 1 — Retracted (full detail, author-approved 2026-04-24)
+
+### What was retracted
+
+Change 1 proposed bumping `--message-padding-x` from 1.5rem → 2rem and `--message-radius` from 1.2rem → 1.2375rem to give assistant bubbles "more landscape feel" (32px horizontal padding, 20px vertical, 19.8px radius = 32/φ).
+
+### Why it was retracted
+
+Implementation state-gathering traced the cascade for `.ai-message .text-message`:
+
+```
+message-styles.css:440  .text-message                 → padding: var(--message-padding-y) var(--message-padding-x);
+                                                         border-radius: var(--message-radius);
+                                                         (uses tokens)
+message-styles.css:469  .user-message .text-message   → padding: 0.7rem 1.1rem;
+                                                         border-radius: 1.1rem;
+                                                         (hard override, ignores tokens)
+message-styles.css:490  .ai-message .text-message     → padding: 0;
+                                                         border-radius: 0;
+                                                         background: transparent;
+                                                         (zeroes everything — no bubble at all)
+```
+
+Verified on live production CSS by fetching `https://xelasphere.com/static/css/message-styles.css` and confirming the zeroing rule ships unchanged.
+
+**Consequence:** changing `--message-padding-x/y` and `--message-radius` has no visible effect on AI messages. The tokens feed only the base `.text-message` rule, which is overridden everywhere it actually renders (user bubble + AI "bubble"). The proposed change would be a no-op commit.
+
+### Why giving AI messages a bubble is wrong here
+
+The `.ai-message .text-message` zero-out is not a bug — it's a deliberate design choice matching Claude Desktop's asymmetric message styling:
+
+- **User messages:** bounded card ("your input, contained")
+- **AI messages:** raw text into canvas ("reaching out to you, unbounded")
+
+Adding a bubble to AI messages would be a design philosophy reversal, not a φ-proportion tweak. Assistant replies currently have maximal breathing room — the whole content column — so the spec's stated intent ("more breathing room around assistant text") is already satisfied.
+
+If a future change introduces AI-message bubbles, it's a standalone design conversation with mockups, not a φ-polish batch item.
+
+### Process lesson
+
+The Batch 1 audit reported "assistant bubble 20×24 padding" by reading token declarations without tracing whether any rule actually consumes them for AI messages. The error propagated through:
+
+- Batch 1 audit table
+- Batch 2 spec authoring
+- Brainstorming review
+- Spec self-review (mine and author's)
+
+All four layers missed it. Would have shipped a no-op commit labeled as "feat(chat): assistant bubble padding → φ."
+
+**Methodology fix:** CSS audits that inform spec decisions must trace claimed proportions to a rendered consumer, not stop at token declarations. Saved to `feedback_audit_trace_to_computed.md` memory.
+
+### Effective Batch 2 scope
+
+| # | Change | Status |
+|---|--------|--------|
+| 1 | ~~Assistant bubble padding → φ~~ | **Retracted** — see above |
+| 2 | Composer icon 30 → 24 with ≥44×44 touch target | Active |
+| 3 | Artifact panel resize grip → φ progression | Active |
+
+The implementation plan covers only Changes 2 and 3 plus the Task 0 composer icon inventory (Flag 3 resolution).
