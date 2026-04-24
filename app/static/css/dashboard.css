@@ -668,7 +668,7 @@
 /* Panels */
 .dashboard-main-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 1.618fr 1fr;   /* φ split */
     gap: 1rem;
     flex-wrap: wrap;
 }
@@ -847,7 +847,7 @@
 /* --- Main Content Grid --- */
 .main-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr; /* Default for desktop */
+    grid-template-columns: 1.618fr 1fr;   /* φ split */ /* Default for desktop */
     gap: 1.5rem;
 }
 
