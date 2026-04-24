@@ -363,7 +363,7 @@ body.api-keys-page {
 
 .modal-card {
     position: relative;
-    width: min(420px, 100%);
+    width: min(var(--modal-sm), 100%);
     background: rgba(16, 18, 30, 0.98);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 20px;
@@ -472,7 +472,7 @@ body.api-keys-page {
 }
 
 .modal-card-lg {
-    width: min(560px, 100%);
+    width: min(var(--modal-md), 100%);
     max-height: 80vh;
     display: flex;
     flex-direction: column;

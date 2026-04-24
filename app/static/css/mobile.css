@@ -2434,7 +2434,7 @@ body.is-ios .arrow-down {
 
     .modal-content {
         width: 100%;
-        max-width: 420px;
+        max-width: var(--modal-sm);
         padding: 0; /* inner sections own their padding */
         margin: 0 auto;
         /* Match the app's neutral dark theme (same tone as the profile dropdown)

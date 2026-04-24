@@ -318,7 +318,7 @@ body.sidebar-collapsed .sidebar-brand-text {
 .history-search-dialog {
     position: relative;
     width: 100%;
-    max-width: 740px;
+    max-width: var(--modal-md);   /* was 740px — snapped to baseline */
     max-height: calc(100vh - 4rem);
     background: var(--bg-secondary, #1a1a22);
     border: 0.5px solid var(--border-primary, rgba(255, 255, 255, 0.08));
