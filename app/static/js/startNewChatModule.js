@@ -4008,7 +4008,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
         const modalOverlay = document.createElement('div');
         modalOverlay.className = 'modal-overlay';
         modalOverlay.innerHTML = `
-            <div class="modal-content">
+            <div class="modal-content delete-modal">
                 <h2>Delete chat?</h2>
                 <p>This will delete <strong>${safeName}.</strong></p>
                 <p>Visit <a href="/settings" target="_blank" rel="noopener">settings</a> to delete any memories saved during this chat.</p>
