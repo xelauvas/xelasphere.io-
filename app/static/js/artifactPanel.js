@@ -3389,9 +3389,17 @@ window.addEventListener('load', function() {
             const isDesktop = window.DeviceDetector ? !DeviceDetector.isMobile() : (window.innerWidth > 768);
             try {
                 if (isDesktop) {
-                    // Save split percentage for desktop
-                    const splitPercent = this.getSplitPercentage();
+                    // Snap-to-φ on drag release: if within ±2% of 38.2 or 61.8, snap to exactly that target.
+                    // Supports chat-primary (61.8) and code-primary (38.2) workflows.
+                    let splitPercent = this.getSplitPercentage();
                     if (splitPercent) {
+                        const SNAP_TOLERANCE = 2;  // percentage points
+                        const SNAP_TARGETS = [38.2, 61.8];
+                        const snapTarget = SNAP_TARGETS.find(t => Math.abs(splitPercent - t) <= SNAP_TOLERANCE);
+                        if (snapTarget !== undefined) {
+                            splitPercent = snapTarget;
+                            this.applySplitPercentage(snapTarget, 100 - snapTarget);
+                        }
                         localStorage.setItem('artifactPanel:splitPercent', String(splitPercent));
                     }
                 } else {
