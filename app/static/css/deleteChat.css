@@ -37,21 +37,6 @@
     animation: delCardIn 0.18s ease 0.02s forwards;
 }
 
-/* Delete confirmation — golden rectangle (width : height = φ : 1).
-   Widened to 420px and forced to landscape golden (420 × 260) so the
-   ratio is visibly obvious, not a subtle 30px nudge. Flex centering
-   distributes the extra ~90px vertical breathing room evenly above and
-   below the content stack — destructive confirmations feel deliberate
-   rather than rushed. Scoped to .delete-modal so rename (which also
-   uses .modal-content) stays at its natural content height. */
-.modal-content.delete-modal {
-    width: 420px;
-    aspect-ratio: 1.618 / 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
 @keyframes delCardIn {
     to {
         transform: scale(1);
