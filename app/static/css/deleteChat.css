@@ -38,13 +38,14 @@
 }
 
 /* Delete confirmation — golden rectangle (width : height = φ : 1).
-   Forces a 340 × 210 card (landscape golden), giving ~30px of breathing
-   room beyond the natural content height so destructive confirmations
-   feel deliberate rather than rushed. Flex centering distributes the
-   extra vertical space evenly above and below the content stack.
-   Scoped to .delete-modal so rename (shared .modal-content selector)
-   stays at its natural content height. */
+   Widened to 420px and forced to landscape golden (420 × 260) so the
+   ratio is visibly obvious, not a subtle 30px nudge. Flex centering
+   distributes the extra ~90px vertical breathing room evenly above and
+   below the content stack — destructive confirmations feel deliberate
+   rather than rushed. Scoped to .delete-modal so rename (which also
+   uses .modal-content) stays at its natural content height. */
 .modal-content.delete-modal {
+    width: 420px;
     aspect-ratio: 1.618 / 1;
     display: flex;
     flex-direction: column;
