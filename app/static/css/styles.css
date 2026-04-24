@@ -103,8 +103,8 @@
     --composer-scrollbar-width: thin;
     --composer-scrollbar-opacity: 0.3;
     --composer-gap: 0.18rem;
-    --composer-icon-size: 30px;
-    --send-button-size: 30px;
+    --composer-icon-size: 24px;   /* φ — visible icon (15 × φ rounded) */
+    --send-button-size: 44px;     /* WCAG 2.5.5 AAA / iOS HIG tap target — 44×44 container around 24px icon */
     --composer-text-pad-right: 84px;
     --composer-text-pad-bottom: 34px;
     --send-button-radius: 999px;
@@ -1864,6 +1864,15 @@ img.composer-attachment-thumb--empty {
     color: var(--text-secondary, rgba(255, 255, 255, 0.7));
     font-size: 1rem;
     transition: background-color 0.15s ease, color 0.15s ease;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.microphone-button i,
+.microphone-button svg {
+    width: var(--composer-icon-size);
+    height: var(--composer-icon-size);
+    font-size: var(--composer-icon-size);
 }
 
 /* Tooltip for microphone button — matches standard [data-tooltip] tooltips */
@@ -1991,8 +2000,8 @@ img.composer-attachment-thumb--empty {
 
 .dictation-cancel-btn,
 .dictation-confirm-btn {
-    width: 32px;
-    height: 32px;
+    width: var(--send-button-size);
+    height: var(--send-button-size);
     border-radius: 50%;
     border: none;
     cursor: pointer;
@@ -2002,6 +2011,17 @@ img.composer-attachment-thumb--empty {
     font-size: 14px;
     transition: background 0.15s ease, transform 0.1s ease;
     position: relative;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.dictation-cancel-btn i,
+.dictation-cancel-btn svg,
+.dictation-confirm-btn i,
+.dictation-confirm-btn svg {
+    width: var(--composer-icon-size);
+    height: var(--composer-icon-size);
+    font-size: var(--composer-icon-size);
 }
 
 .dictation-cancel-btn {
@@ -2104,6 +2124,15 @@ img.composer-attachment-thumb--empty {
     justify-content: center;
     overflow: hidden;
     z-index: 2;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.send-button i,
+.send-button svg {
+    width: var(--composer-icon-size);
+    height: var(--composer-icon-size);
+    font-size: var(--composer-icon-size);
 }
 
 .send-button:hover {
@@ -2191,10 +2220,10 @@ img.composer-attachment-thumb--empty {
     position: absolute;
     right: 10px;
     bottom: 4px;
-    height: 30px;
-    width: 30px;
-    min-width: 30px;
-    min-height: 30px;
+    height: var(--send-button-size);
+    width: var(--send-button-size);
+    min-width: var(--send-button-size);
+    min-height: var(--send-button-size);
     background-color: var(--text-primary, #ffffff);
     border: none;
     border-radius: 50%;
@@ -2204,6 +2233,15 @@ img.composer-attachment-thumb--empty {
     justify-content: center;
     z-index: 3;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.voice-mode-button i,
+.voice-mode-button svg {
+    width: var(--composer-icon-size);
+    height: var(--composer-icon-size);
+    font-size: var(--composer-icon-size);
 }
 
 .voice-mode-button:hover {
@@ -2335,9 +2373,9 @@ img.composer-attachment-thumb--empty {
 
 /* End button inside the voice bar */
 .voice-bar-end {
-    width: 30px;
-    height: 30px;
-    min-width: 30px;
+    width: var(--send-button-size);
+    height: var(--send-button-size);
+    min-width: var(--send-button-size);
     padding: 0;
     background: transparent;
     border: 2px solid var(--border-primary, rgba(255, 255, 255, 0.25));
