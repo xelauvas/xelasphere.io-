@@ -172,7 +172,7 @@ body.artifact-panel-resizing .chat-container {
     width: 6px;
     background: transparent;
     cursor: ew-resize;
-    z-index: 10000;
+    /* z-index inherited from global .artifact-panel__resize-handle rule (9999) */
     transition: background 0.2s ease;
   }
 
@@ -796,6 +796,7 @@ body.artifact-panel-resizing .chat-container {
 
 .artifact-panel__body {
   flex: 1;
+  min-height: 0;   /* allows flex child to shrink below content size */
   overflow: hidden;
   position: relative;
 }
@@ -1923,32 +1924,7 @@ body.artifact-panel-resizing .chat-container {
 
 /* ==================== */
 /* IN-MESSAGE ARTIFACT PILLS - CLAUDE STYLE */
-/* ==================== */
-/* OLD STYLES - COMMENTED OUT - SEE BOTTOM OF FILE FOR ACTIVE STYLES */
-
-/*
-.artifact-chat-pill {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: min(720px, 100%);
-  padding: 14px 16px;
-  margin: 12px 0;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
-    0 10px 28px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(10px);
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  text-align: left;
-}
-*/
-
-/* Active styles moved to bottom of file - line 1668+ */
+/* Active styles defined further down in this file. */
 
 /* ==================== */
 /* INLINE SNIPPETS */
@@ -2202,49 +2178,7 @@ button.artifact-chat-pill:hover {
   opacity: 0.6;
 }
 
-/* OLD STYLES - COMMENTED OUT - ACTIVE STYLES AT BOTTOM OF FILE */
-/*
-.artifact-chat-pill__preview {
-  flex: 0 0 auto !important;
-  width: 86px !important;
-  height: 64px !important;
-  border-radius: 12px !important;
-  overflow: hidden !important;
-  padding: 8px !important;
-
-  background: #0f1115 !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
-  position: relative !important;
-}
-
-.artifact-chat-pill__preview pre,
-.artifact-chat-pill__preview code {
-  margin: 0;
-  padding: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 9px;
-  line-height: 1.4;
-  color: #e4e4e7;
-  white-space: pre;
-  overflow: hidden;
-}
-
-.artifact-chat-pill__preview::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0.0));
-  pointer-events: none;
-}
-
-@media (max-width: 520px) {
-  .artifact-chat-pill__preview {
-    width: 80px !important;
-    height: 60px !important;
-  }
-}
-*/
-/* ACTIVE PREVIEW STYLES ARE AT THE BOTTOM OF THIS FILE (line 1691+) */
+/* Active .artifact-chat-pill__preview styles defined further down in this file. */
 
 /* ===========================
    FORCE WIDTH OVERRIDES
@@ -2597,13 +2531,8 @@ button.artifact-chat-pill,
   display: none !important;
 }
 
-/* --- Panel Body --- */
-.artifact-panel__body {
-  flex: 1;
-  min-height: 0; /* Critical: allows flex child to shrink below content size */
-  overflow: hidden;
-  position: relative;
-}
+/* Panel body rules consolidated into the primary .artifact-panel__body
+   declaration earlier in this file. */
 
 /* --- Preview section: full-bleed iframe --- */
 .artifact-preview-frame {

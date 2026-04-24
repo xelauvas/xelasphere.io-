@@ -1,25 +1,13 @@
 :root {
-    /* --- Color Variables --- */
-    --background-dark: var(--bg-primary);  /* legacy alias */
-    --background-darker: var(--bg-primary);  /* legacy alias */
-    --text-color-light: var(--text-primary);  /* legacy alias */
-    --text-color-secondary: var(--text-secondary);  /* legacy alias */
-    --primary-text-color: var(--text-primary);  /* legacy alias */
-    --link-color: var(--accent);  /* legacy alias */
+    /* --- Color Variables (legacy aliases — kept only where still consumed) --- */
+    --text-color-light: var(--text-primary);
+    --text-color-secondary: var(--text-secondary);
+    --primary-text-color: var(--text-primary);
     --link-text-decoration: underline;
-    --icon-color: var(--text-primary);  /* legacy alias */
-    --table-border-color: var(--border-primary);  /* legacy alias */
-
-    /* Header Colors */
-    --header-bg-color: var(--bg-secondary);  /* legacy alias */
-    --header-border-color: var(--border-primary);  /* legacy alias */
-
-    /* Content Colors */
-    --content-bg-color: var(--bg-primary);  /* legacy alias */
+    --icon-color: var(--text-primary);
 
     /* Scrollbar Colors */
     --scrollbar-track-color: transparent;
-    --scrollbar-thumb-color: var(--border-primary);  /* legacy alias */
 
     /* Border and Radius */
     --border-radius-standard: 4px;

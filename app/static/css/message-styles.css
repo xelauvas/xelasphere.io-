@@ -487,6 +487,13 @@ h1 {
     background: #f3efe7;
     color: var(--text-primary, #1f1d1a);
 }
+/* Assistant messages are intentionally UNBOUNDED — raw text flowing into the
+   chat canvas, matching Claude Desktop's asymmetric message styling (user
+   message = bounded card, AI message = borderless). This rule nullifies the
+   token-based padding / radius / background from the generic .text-message
+   rule above. If you later want to introduce an AI bubble, that is a design
+   philosophy change (not a proportion tweak) — retract this zero-out
+   explicitly rather than adding !important elsewhere. */
 .ai-message .text-message {
     background: transparent;
     border-radius: 0;
