@@ -73,7 +73,35 @@ Clean = all three return nothing surprising (sidecar journal empty at --priority
 
 If anything surprises: paste the output into a new session for triage. Do not rotate `MEMPALACE_MODE` while anomalous signal is unresolved; spec §7.4 rollback path is `mempalace-mode off` (already the current mode, so effectively a no-op safety net).
 
-- Exit verified: `<YYYY-MM-DD, link to final clean-journal paste + final /readyz snapshot>`
+- Exit verified: 2026-04-25 17:15:27 UTC (merge-commit timestamp). Exited on day-3 evening (cumulative clean window satisfied), ~6h before the literal 23:16:26 UTC wallclock anchor.
+
+### Exit record
+
+**Status framing (per task #16):** P0 cleared at 2026-04-25 17:15:27 UTC. Mempalace integration lands on `main` at `MEMPALACE_MODE=off`. **Shadow rotation remains gated on #10 (Path A integration scaffold). Mode stays at `off` post-merge. Rotation to `shadow` is a separate gate, not implied by this exit.**
+
+**Day-3 final daily-check** (cumulative window since P0 entry covers Days 1–3):
+
+```
+=== P0 daily health check (anchored to 2026-04-22 23:16:26 UTC) ===
+
+--- 1. Sidecar journal errors since P0 entry ---
+-- No entries --
+
+--- 2. Flask mempalace-tagged journal since P0 entry ---
+
+--- 3. Sidecar /readyz ---
+{"ok":true,"embedding_loaded":true,"db_ok":true,"audit_ok":true,"schema_version":2}
+--- 4. mempalace-sidecar.service state ---
+active
+```
+
+**Merge commit:** `0b08e5936ed78cbbe994b11607e16a2064967419` ("Merge branch 'feature/mempalace-integration' (P0 exit)"). Pushed 2026-04-25 17:15:27 UTC. PR #12 auto-closed; trailers fired closing #2, #3, #4, #8, #9 within ~3 seconds of push.
+
+**Drift caught at Step 0 (cold re-read):** Two unpushed contamination commits on the local feature branch were dropped before merge — `75bcf1e` (auto-backup with unrelated frontend/streaming work; issue #13 mechanism in action) and `1e2565e` (φ-pass batch-1 design doc; atmospheric noise from the reverted 2026-04-24 experiment). Local-ref move; no force-push (commits had never been on origin). Cold-re-read earned its keep — without it, both would have ridden into main as part of the P0-exit merge, undermining the very ritual designed to be clean.
+
+**Smoke test (Step 3.6):** Authenticated chat round-trip produced a complete coherent response. Journal during the request: zero mempalace activity (mode=off short-circuit firing as designed); one `app/memory_v2/store.py` warning — positive confirmation that the LEGACY memory path is carrying the load. Post-merge journal pattern matches pre-merge baseline plus mempalace-loaded-but-silent — the intended invariant for P0 exit at mode=off.
+
+**P1-entry queue going forward:** #6 (Flask FHS migration), #7 (socket mode 0660), #10 (shadow integration scaffold), #11 (memory_v2 message logging at INFO). The first three gate rotation to `shadow`. #11 is severity-medium / privacy and stands independent of mempalace rotation.
 
 ---
 
