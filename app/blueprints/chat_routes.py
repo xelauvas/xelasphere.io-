@@ -115,6 +115,12 @@ from app.memory_v3 import (
     should_inject_v3, get_v3_cohort, get_rollout_manager,
     generate_v3_signal, record_v3_metrics,
 )
+# M0.18 mempalace adapter wiring (mode-gated; default mode=off is no-op).
+# Every call-site uses the same mode-guarded wrapping template so the two
+# applications (streaming + non-streaming) are behaviorally equivalent
+# under the same mode per M0.18 Stage 4c review invariant.
+from app.mempalace import get_adapter as _mempalace_get_adapter
+from app.mempalace.feature_flag import mode as _mempalace_mode, MempalaceMode as _MempalaceMode
 from app.crypto_api import (
     get_crypto_ai_context, format_crypto_context_for_ai,
     get_stock_ai_context, format_stock_context_for_ai,
@@ -364,6 +370,21 @@ def orchestrator_dashboard():
     """Orchestrator status dashboard — quota, models, cache, quality scores."""
     from app.orchestrator import get_full_status
     return jsonify(get_full_status())
+
+
+@chat_bp.route('/admin/mempalace-mode', methods=['GET'])
+def mempalace_mode_probe():
+    """Probe endpoint for /usr/local/bin/mempalace-mode verification
+    (deploy/mempalace/mempalace-mode script).
+
+    Returns the current MEMPALACE_MODE as read from env. Not
+    @login_required because the probe runs locally as root via the
+    mode-rotation script without a session cookie. Exposes only which
+    mode is currently set — already public info via the systemd env
+    file at /etc/xelasphere/mempalace.env.
+    """
+    from app.mempalace.feature_flag import mode
+    return jsonify({"mode": mode().value})
 
 
 @chat_bp.route('/api/images/create', methods=['POST'])
@@ -905,6 +926,57 @@ def chat_stream():
 
         except Exception as e:
             logger.warning(f"[Stream] Memory V3 failed (using V2 only): {e}")
+    # ============================================================
+
+    # ============================================================
+    # M0.18: Mempalace adapter wiring (mode-gated; default off is no-op)
+    # ============================================================
+    # Wrapping template (identical at streaming + non-streaming sites):
+    #   mode=off    → no adapter call; legacy long_term_memory_stream used.
+    #   mode=shadow → adapter.wake_up_sync() + log_shadow comparison;
+    #                 legacy still used in prompt.
+    #   mode=active → adapter result would replace legacy (P3+); at M0.18
+    #                 legacy is still used (ACTIVE mode not exercised pre-P3).
+    # Exception-swallowing: any mempalace-side failure must NOT break legacy
+    # chat flow. H9 no-automated-coverage: manual-verification backstop only.
+    try:
+        _mp_mode = _mempalace_mode()
+        if _mp_mode != _MempalaceMode.OFF and user_id:
+            _mp_adapter = _mempalace_get_adapter()
+            _mp_wake = _mp_adapter.wake_up_sync(user_id, display_prompt, session_id=session_id)
+            if _mp_mode == _MempalaceMode.SHADOW:
+                _mp_adapter.log_shadow({
+                    "ts": time.time(),
+                    "user_id": user_id,
+                    "query": display_prompt,
+                    "legacy": long_term_memory_stream,
+                    "mempalace": _mp_wake,
+                })
+    except Exception as _mp_exc:
+        logger.warning(f"[Stream] Mempalace wiring failed (legacy unaffected): {_mp_exc}")
+
+    # M0.18: record_turn for the user half (mode-gated; off = no-op).
+    # Streaming-path note: assistant-half record_turn is NOT wired in this
+    # path. The stream assembles assistant text across multiple SSE exit
+    # branches (search path, cache hit, main path, done-event) and a clean
+    # single assistant-finalization point doesn't exist without a wrapper
+    # pattern. Deferred to a follow-up commit that introduces a streaming-
+    # completion hook. At mode=off default this is a no-op; at mode=shadow+
+    # the streaming path will record user-halves without assistant-halves
+    # until the wrapper lands (orphan pair_ids per spec §4.4 tolerated).
+    _mp_stream_pair_id = str(uuid.uuid4())
+    try:
+        if user_id and session_id:
+            _mempalace_get_adapter().record_turn(
+                user_id=user_id,
+                session_id=session_id,
+                turn_id=str(uuid.uuid4()),
+                pair_id=_mp_stream_pair_id,
+                role="user",
+                text=display_prompt,
+            )
+    except Exception as _mp_exc:
+        logger.warning(f"[Stream] Mempalace record_turn (user) failed: {_mp_exc}")
     # ============================================================
 
     # --- Smart Context Window: build prompt via ContextBuilder ---
@@ -2615,6 +2687,54 @@ def chat():
                 logger.warning(f"Memory V3 failed (using V2 only): {e}")
         # ============================================================
 
+        # M0.18: pair_id + turn_ids generated orchestrator-side per spec §3
+        # line 122. Must be defined BEFORE the mempalace wiring block below,
+        # because the user-half record_turn site inside that block references
+        # these names. Prior placement after the block caused a silently-caught
+        # NameError under mode=shadow (see issue #9).
+        # Same pair_id is reused for user-turn and assistant-turn record_turn
+        # calls so downstream drawers can be grouped as a turn pair.
+        _mp_pair_id = str(uuid.uuid4())
+        _mp_user_turn_id = str(uuid.uuid4())
+        _mp_assistant_turn_id = str(uuid.uuid4())
+
+        # ============================================================
+        # M0.18: Mempalace adapter wiring (mode-gated; default off is no-op)
+        # ============================================================
+        # Behaviorally-equivalent sibling of the streaming-path wiring above.
+        # See wrapping-template comment at the streaming site for semantics.
+        try:
+            _mp_mode = _mempalace_mode()
+            if _mp_mode != _MempalaceMode.OFF and user_id:
+                _mp_adapter = _mempalace_get_adapter()
+                _mp_wake = _mp_adapter.wake_up_sync(user_id, display_prompt, session_id=session_id)
+                if _mp_mode == _MempalaceMode.SHADOW:
+                    _mp_adapter.log_shadow({
+                        "ts": time.time(),
+                        "user_id": user_id,
+                        "query": display_prompt,
+                        "legacy": long_term_memory,
+                        "mempalace": _mp_wake,
+                    })
+        except Exception as _mp_exc:
+            logger.warning(f"Mempalace wiring failed (legacy unaffected): {_mp_exc}")
+
+        # M0.18: record_turn for the user half (mode-gated; off = no-op).
+        # pair_id/turn_id generated above at response_message_id block.
+        try:
+            if user_id and session_id:
+                _mempalace_get_adapter().record_turn(
+                    user_id=user_id,
+                    session_id=session_id,
+                    turn_id=_mp_user_turn_id,
+                    pair_id=_mp_pair_id,
+                    role="user",
+                    text=display_prompt,
+                )
+        except Exception as _mp_exc:
+            logger.warning(f"Mempalace record_turn (user) failed: {_mp_exc}")
+        # ============================================================
+
         # Build attachment context (names/types) to keep the model aware of uploaded files
         attachment_lines = []
         if attachments:
@@ -3146,6 +3266,21 @@ def chat():
                 logger.debug(f"Stored list with {len(stored_list.items)} items for pointer resolution")
         except Exception as e:
             logger.debug(f"List extraction failed: {e}")
+
+        # M0.18: record_turn for the assistant half (mode-gated; off = no-op).
+        # Paired with the user-turn record_turn above via shared pair_id.
+        try:
+            if user_id and session_id and response_text:
+                _mempalace_get_adapter().record_turn(
+                    user_id=user_id,
+                    session_id=session_id,
+                    turn_id=_mp_assistant_turn_id,
+                    pair_id=_mp_pair_id,
+                    role="assistant",
+                    text=response_text,
+                )
+        except Exception as _mp_exc:
+            logger.warning(f"Mempalace record_turn (assistant) failed: {_mp_exc}")
 
         # Validate recipe response format
         if is_recipe_request and response_text:

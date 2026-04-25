@@ -1,0 +1,230 @@
+from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+from fastapi import FastAPI
+from mempalace_sidecar.auth import TokenAuthMiddleware
+from mempalace_sidecar.config import Settings
+
+
+def _package_version() -> str:
+    try:
+        return _pkg_version("mempalace-sidecar")
+    except PackageNotFoundError:
+        # Editable install w/o metadata, or running from source tree
+        # without a wheel installed. Fall back to a marker string so the
+        # FastAPI /openapi.json reflects the gap rather than a false pin.
+        return "0.0.0+src"
+from mempalace_sidecar.logging_middleware import StructuredLoggingMiddleware
+from mempalace_sidecar.routes import lifecycle as lifecycle_router
+from mempalace_sidecar.routes import ops
+from mempalace_sidecar.routes import palace as palace_router
+from mempalace_sidecar.shutdown import InFlightCounter, InFlightCounterMiddleware
+
+
+def _sd_notify(message: str) -> None:
+    try:
+        import systemd.daemon as sd  # type: ignore
+    except ImportError:
+        return
+    try:
+        sd.notify(message)
+    except OSError:  # NOTIFY_SOCKET missing or dead
+        pass
+
+
+def _sd_notify_ready() -> None:
+    _sd_notify("READY=1")
+
+
+def _sd_notify_stopping() -> None:
+    _sd_notify("STOPPING=1")
+
+
+@asynccontextmanager
+async def _lifespan(app):
+    """App startup/shutdown — pre-warm embeddings, construct
+    PalaceRegistry, launch KG worker, drain on exit.
+
+    Startup order (spec §5.3 + §5.5):
+
+    1. ``prime_embedding_function`` forces ChromaDB's default
+       sentence-transformers model to resolve + load before any
+       real wake-up can hit /wake-up. ~2-5 s cold; shifts the
+       cost off the first user turn. Runs BEFORE registry
+       construction so ``app.state.embedding_ready = True`` can
+       gate /readyz (M0.11).
+
+    2. ``PalaceRegistry`` is attached to ``app.state.registry``
+       for route handlers to pull via ``request.app.state``.
+
+    3. ``KGQueue`` is initialised at
+       ``settings.data_dir / "kg_pending.sqlite"`` (M0.7,
+       deviation #4). ``run_kg_worker`` starts as a background
+       task on ``app.state.kg_worker_task``. Extractor is
+       ``NullExtractor`` for now (deviation #2: real LLM provider
+       deferred; wiring driven by ``settings.kg_llm_provider``
+       lands in a later milestone).
+
+    Shutdown order (spec §5.7):
+
+    1. Cancel the KG worker task and await its completion. This
+       MUST run BEFORE ``registry.close_all`` — the worker holds
+       palace handles via ``registry.open``, and closing the
+       registry first would yank handles out from under an
+       in-flight triple write. Integration test
+       ``test_worker_lifecycle_cancels_cleanly_on_shutdown``
+       enforces this ordering (deviation #3).
+
+    2. ``registry.close_all`` drains resident palaces (two-phase
+       eviction per §5.4).
+
+    3. ``STOPPING=1`` notifies systemd. systemd sees STOPPING only
+       after every resident palace has flushed sqlite / popped its
+       Chroma backend client.
+    """
+    # Deferred imports: spec §5.4 and registry.py's module docstring
+    # both call out that PalaceRegistry.__init__ creates the palaces
+    # dir and opens no handles, so importing it at module top would
+    # be fine — but keeping the imports local mirrors the plan
+    # pseudo-code and makes the lifespan's contract visually
+    # self-contained.
+    from mempalace_sidecar.audit import AuditLog
+    from mempalace_sidecar.kg_queue import KGQueue
+    from mempalace_sidecar.kg_worker import NullExtractor, run_kg_worker
+    from mempalace_sidecar.registry import PalaceRegistry
+    from mempalace_sidecar.warmup import prime_embedding_function
+
+    settings: Settings = app.state.settings
+
+    # Step 1: embedding pre-warm. We do this in a worker thread so
+    # the event-loop startup stays responsive — a 2-5s synchronous
+    # call in the lifespan would block every other startup hook.
+    # Every subsequent /wake-up hits a hot embedding model.
+    import asyncio as _asyncio
+
+    await _asyncio.to_thread(
+        prime_embedding_function, settings.data_dir / "_warmup"
+    )
+    app.state.embedding_ready = True
+
+    # Step 2: registry.
+    app.state.registry = PalaceRegistry(
+        data_dir=settings.data_dir,
+        max_bytes=settings.cache_max_bytes,
+        idle_ttl_sec=settings.idle_ttl_sec,
+    )
+
+    # Step 2b: audit log (plan M0.8). Sidecar-level sqlite at
+    # settings.data_dir / "audit.sqlite" — append-only record of
+    # deletions, included in backups per spec §7.8. Init here so
+    # the DELETE route (Stage 3 GREEN) can write audit rows via
+    # app.state.audit without further wiring.
+    app.state.audit = AuditLog(settings.data_dir / "audit.sqlite")
+    await app.state.audit.ensure()
+
+    # Step 2c: reap stale migration artifacts (plan M0.9, spec §5.6).
+    # Clean up .replaced_<ts> dirs older than 24h + orphan .migrating
+    # dirs where the primary still exists. Skips .migrating where
+    # primary is missing — those are recovery-in-progress states that
+    # PalaceHandle.open's _recover_if_interrupted will promote on
+    # next open for that user.
+    #
+    # **Order is not strictly load-bearing** (M0.9 spec-review M1
+    # correction). reap_stale runs AFTER PalaceRegistry construction
+    # and audit init, NOT before as an earlier version of this comment
+    # claimed. Functionally safe because PalaceRegistry.__init__ is
+    # pure filesystem (creates palaces_dir, opens no handles), and
+    # no palace is opened until a route handler fires — which only
+    # happens after lifespan yields. reap_stale → palace-open
+    # ordering is therefore guaranteed by the lifespan-vs-route-
+    # traffic boundary, not by any particular step order within
+    # lifespan.
+    #
+    # Wrapped in to_thread because reap_stale walks the palaces
+    # directory (sync) which can be slow under large palace counts
+    # — acceptable at v1 scale (<5k users); monitor at M1 scale
+    # review (could push startup into minutes for 10k+ users).
+    from mempalace_sidecar.migrations.runner import reap_stale
+
+    palaces_dir = settings.data_dir / "palaces"
+    if palaces_dir.exists():
+        await _asyncio.to_thread(reap_stale, palaces_dir, 24 * 3600)
+
+    # Step 3: KG queue + worker (plan M0.7).
+    # TODO(M0.16-ish): swap NullExtractor for a real LLM-backed
+    # extractor driven by ``settings.kg_llm_provider`` (ollama /
+    # groq / anthropic). The worker body and queue schema are
+    # provider-agnostic; plugging a real extractor in is a
+    # drop-in replacement per the KGExtractor Protocol.
+    kg_queue = KGQueue(settings.data_dir / "kg_pending.sqlite")
+    await kg_queue.ensure()
+    # Crash-recovery: reset any rows stuck in 'running' from a
+    # previous process that died mid-tick. Runs BEFORE the worker
+    # launches so there's no race between the UPDATE here and the
+    # worker's first claim(). Threshold 180s protects against
+    # false-positive resets of legitimate in-flight ticks. M0.8.
+    await kg_queue.reset_stale_running(threshold_sec=180.0)
+    app.state.kg_queue = kg_queue
+    app.state.kg_worker_task = _asyncio.create_task(
+        run_kg_worker(
+            queue=kg_queue,
+            registry=app.state.registry,
+            extractor=NullExtractor(),
+            cap_usd=settings.kg_daily_usd_cap,
+            user_id_hash_salt=settings.user_id_hash_salt,
+        )
+    )
+
+    _sd_notify_ready()
+    try:
+        yield
+    finally:
+        # M0.10: full six-phase shutdown protocol (spec §5.7) runs
+        # here. Replaces the earlier ad-hoc "cancel worker → close
+        # registry → notify stopping" trio. ``shutdown_sequence``
+        # is idempotent via ``app.state._shutdown_done`` so
+        # integration tests that call it explicitly inside the
+        # lifespan context still get a clean lifespan exit.
+        from mempalace_sidecar.shutdown import shutdown_sequence
+
+        await shutdown_sequence(
+            app, drain_timeout_sec=settings.drain_timeout_sec
+        )
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or Settings()
+    app = FastAPI(title="mempalace-sidecar", version=_package_version(), lifespan=_lifespan)
+    app.state.settings = settings
+    # M0.10: InFlightCounter tracks request depth so shutdown_sequence
+    # can drain cleanly (spec §5.7). Instantiated in create_app (not
+    # lifespan startup) so ``app.state.in_flight`` is already live when
+    # the middleware dispatches its first request — Starlette processes
+    # middleware before the lifespan finishes.
+    app.state.in_flight = InFlightCounter()
+    app.state.accepting = True
+    # Middleware order (Starlette: last-added runs first / outermost):
+    #   StructuredLoggingMiddleware → InFlightCounterMiddleware →
+    #   TokenAuthMiddleware → route. Logging wraps everything so it
+    #   captures latency including auth failures, and shutdown's
+    #   InFlightCounter sits between logging and auth so unauthorised
+    #   requests never increment the drain counter.
+    app.add_middleware(TokenAuthMiddleware, expected_token=settings.token)
+    app.add_middleware(InFlightCounterMiddleware, counter=app.state.in_flight)
+    app.add_middleware(
+        StructuredLoggingMiddleware, salt=settings.user_id_hash_salt
+    )
+    app.include_router(ops.router)
+    app.include_router(palace_router.router)
+    app.include_router(lifecycle_router.router)
+    return app
+
+
+def run() -> None:  # entrypoint referenced by pyproject scripts
+    import uvicorn
+    settings = Settings()
+    uvicorn.run(
+        create_app(settings),
+        uds=settings.socket_path,
+        log_level=settings.log_level.lower(),
+    )

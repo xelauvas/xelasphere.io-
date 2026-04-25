@@ -9,7 +9,17 @@ This feature went through brainstorming with seven sections of pushback, a cross
 
 **Goal:** Integrate MemPalace as XelaSphere's long-term memory backend, running as a localhost-only sidecar behind a Unix domain socket, with a staged five-phase rollout that preserves `memory_v2`/`memory_v3` as dormant-but-callable through P3 and deletes them at P4.
 
-**Architecture:** Two processes on one host. The sidecar (`mempalace-sidecar`) is a FastAPI app that wraps the `mempalace.Palace` Python API with per-user directories and a size-weighted LRU. Flask calls it over UDS via an adapter whose only public surface is `app/mempalace/adapter.py`. A durable SQLite outbox makes writes at-least-once; a disk-backed idempotency log on the sidecar makes them effectively exactly-once.
+**Standing dispatch discipline — applies to every milestone.** These rules override per-milestone defaults; dispatch prompts should reinforce them rather than drop them.
+
+1. **Red-commit-first TDD, always.** The first commit of each dispatch MUST be red: tests written, target module stubbed or absent, verified failing by running `pytest -v`. The second commit makes them green. Single-commit submissions where tests and implementation land together are REJECTED at review regardless of test pass rate — we can't verify the tests would have failed against the pre-implementation state. If the subagent's local workflow is single-commit for speed, they can split via `git reset --soft HEAD~1` + `git add <tests> && git commit` + `git add <impl> && git commit` before pushing. M0.3.0's `ad70de0` → `b0c583f` is the model.
+2. **Mandatory "Deviations from spec" note at end of every dispatch report.** If the count is zero, the subagent MUST list at least three small gaps they considered and rejected, one sentence each. Zero deviations with no gaps-considered means the subagent didn't engage deeply — re-dispatch with "you didn't find anything worth mentioning; that's usually a sign of shallow review, try again."
+3. **Stop on ambiguity, don't decide.** If the subagent hits anything the spec or plan doesn't anticipate — a library quirk, an unexpected error shape, an arg the spec didn't name — they stop and file a `NEEDS_CONTEXT` report. They do NOT make the design decision unilaterally. This rule is what caught the mempalace-3.3.1 API mismatch at M0.3 dispatch time rather than at M0.5 integration time.
+4. **Read-before-specifying for library-coupled milestones.** When a milestone involves a library whose behavior the spec is guessing at (as opposed to one we've already read), the dispatch prompt should ask the subagent to read the relevant library modules first, produce a findings note naming any mismatch with the spec, THEN implement. Cheaper than discovering at integration-test time. M0.5 is the next milestone where this applies — `mempalace.layers`, `mempalace.searcher.search_memories`, `mempalace.miner.add_drawer` are all involved in the wake-up composition. M0.7 applies — `mempalace.knowledge_graph.KnowledgeGraph`. M0.9 applies — `mempalace.migrate`.
+5. **Teeth-bearing tests are non-skippable.** When a milestone has a named test that enforces an invariant mechanically (e.g. `test_close_pops_backend_cache`, `test_eviction_drains_readers`, `test_registry_eviction_bounds_backend_cache`, `test_wakeup_concurrent_faster_than_sum_of_parts`), review WILL fail if the test is missing, skipped, or mocked past its assertion. Named in each milestone's plan section; flagged again in each dispatch prompt.
+
+
+
+**Architecture:** Two processes on one host. The sidecar (`mempalace-sidecar`) is a FastAPI app that wraps the `mempalace` 3.3.1 functional API with per-user directories and a size-weighted LRU. The library-isolation boundary is `PalaceHandle` (spec §5.3); Flask calls the sidecar over UDS via an adapter whose only public surface is `app/mempalace/adapter.py`. A durable SQLite outbox makes writes at-least-once; a disk-backed idempotency log on the sidecar (the handle-owned `turns.sqlite`) makes them effectively exactly-once.
 
 **Tech Stack:** Python 3.11 + Flask 3.1 (app) • FastAPI + uvicorn + aiorwlock + pydantic 2 (sidecar) • `mempalace==3.3.1` (ChromaDB-backed) • `httpx` over UDS (transport) • SQLite outbox (Flask) + SQLite idempotency+audit+KG-queue (sidecar) • `prometheus_client` (already in repo) • `sentence-transformers==3.4.1` (already in repo, reused for embedding) • `systemd` + `logrotate` • `restic` for backup.
 
@@ -832,6 +842,267 @@ git commit -m "docs(sidecar): clarify shadow logs are Flask-side"
 
 ### M0.3 — PalaceRegistry + per-user RWLock
 
+> **Library-reality reconciliation (2026-04-20).** The original draft of this section assumed `from mempalace import Palace; p = Palace.open(path)` returning an OOP handle with `.knowledge_graph`, `.close()`, `.add_drawer()`, `.search()`, etc. The installed `mempalace==3.3.1` ships a functional-module API instead (path-threaded helpers in `mempalace.palace`, `mempalace.miner`, `mempalace.searcher`, `mempalace.knowledge_graph`, `mempalace.layers`). The sidecar owns the OOP wrapper via `PalaceHandle` (spec §5.3) — the library-isolation boundary. Every `palace.foo(...)` reference in the draft becomes `handle.foo(...)` on the sidecar-owned wrapper, and a new sub-task M0.3.0 builds `PalaceHandle` before the registry uses it. See deltas file entry "2026-04-20 M0.3 library isolation" for the full lineage.
+>
+> **Dispatch boundary:** M0.3.0 (PalaceHandle) is its own implementer dispatch + spec+quality review gate. M0.3.1 through M0.3.5 (PalaceRegistry) is a second dispatch that consumes the reviewed PalaceHandle.
+
+#### Task M0.3.0: `palace_handle.py` — library isolation wrapper
+
+**Files:**
+- Create: `mempalace-sidecar/mempalace_sidecar/palace_handle.py`
+- Create: `mempalace-sidecar/mempalace_sidecar/schemas.py` additions (`DrawerDict`, `AddDrawerResult`, `ListDrawersResult` — TypedDicts or dataclasses, whichever is already in use)
+- Create: `mempalace-sidecar/tests/unit/test_palace_handle.py`
+- Create: `mempalace-sidecar/tests/integration/test_palace_handle_real.py` (marked `integration`)
+
+**Scope:** implement the full v1 surface specified in spec §5.3 — constructor, `open()`, `add_drawer`, `recent_drawers`, `session_drawers`, `topic_search`, `semantic_search`, `search`, `list_drawers`, `kg_add_triple`, `kg_query_entity`, `kg_timeline`, `close`, `col` property, plus the `turns.sqlite` schema and operations. Read spec §5.3 end-to-end before starting — the method surface, cache-eviction contract, and source_file encoding trick are all specified there.
+
+- [ ] **Step 1: Pin `mempalace==3.3.1` exactly in `pyproject.toml`.**
+  Plan's existing pin is `mempalace==3.3.1`. Confirm it stays `==`, not `>=`. The source_file encoding trick depends on the library's drawer-ID derivation (`sha256(source_file + str(chunk_index))[:24]`); any future version that changes this silently breaks idempotency. Pin hard.
+
+- [ ] **Step 2: Write failing tests first.** The test file specifies behavior; implementation follows. At minimum:
+  - `test_open_creates_palace_dir_and_child_state` — palace dir, `kg.sqlite`, `turns.sqlite`, `config/`, `meta.json` all present after `open()`.
+  - `test_add_drawer_idempotent_by_turn_id` — call twice with same `turn_id`; assert `collection.count() == 1` and second call returns `status="duplicate"`.
+  - `test_add_drawer_deterministic_drawer_id` — two separate handles on the same palace, both calling `add_drawer` with the same `turn_id`, produce the same `drawer_id` (confirms the `source_file=f"turn:{turn_id}"` trick holds).
+  - `test_session_drawers_returns_by_session` — add 3 turns in session A and 2 in session B; assert `handle.session_drawers("A")` returns exactly the 3 A-drawers in reverse-time order.
+  - `test_semantic_search_returns_search_memories_shape` — mock `mempalace.searcher.search_memories` to return a fixed dict; assert the return shape matches `DrawerDict` after our unwrap.
+  - `test_list_drawers_offset_pagination` — 25 drawers in, `list_drawers(limit=10, offset=0)` returns first 10, `offset=10` returns next 10, `offset=20` returns last 5 + `next_offset=None`.
+  - **`test_close_pops_backend_cache`** — after `handle.close()`, assert `palace_path not in mempalace.palace._DEFAULT_BACKEND._clients`. This is the teeth-bearing cache-contract test required by spec §5.3.
+  - `test_close_is_idempotent` — calling `close()` twice must not raise.
+  - `test_no_mcp_server_import` — grep the package source for `mempalace.mcp_server`; fails if any import surfaces (spec §5.3 "upstream issue" rule).
+  - **`test_turns_authoritative_when_library_id_derivation_changes`** — the failure mode we most fear: a future `mempalace` release changes how `miner.add_drawer` derives `drawer_id` from `source_file`. If `turns.sqlite` is authoritative (spec §4.1), the test passes. If we'd relied on library-derived ID uniqueness, duplicates appear silently. Simulate by monkey-patching `mempalace.miner.add_drawer` to prefix the drawer_id with a salt string, thereby producing a DIFFERENT drawer_id for the same `turn_id`. Call `handle.add_drawer(turn_id="T1", ...)`, then under the monkey-patch call it again with the same `turn_id="T1"`. Assert:
+    1. Second call returns `status="duplicate"` (blocked by `turns.sqlite` PK, not library dedup).
+    2. `collection.count() == 1` (library did not file a second drawer, because `handle.add_drawer` short-circuited before calling the library).
+
+    This test is the empirical proof that `turns.sqlite` — not the library — is the authority.
+
+- [ ] **Step 3: Implement `palace_handle.py`.** Roughly:
+
+```python
+# mempalace-sidecar/mempalace_sidecar/palace_handle.py
+import json
+import sqlite3
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from mempalace.config import MempalaceConfig
+from mempalace.knowledge_graph import KnowledgeGraph
+from mempalace.layers import Layer0, Layer1, Layer2, Layer3  # imported if we use them; see §5.3 notes
+from mempalace.miner import add_drawer as _library_add_drawer
+from mempalace.palace import _DEFAULT_BACKEND, get_collection
+from mempalace.searcher import build_where_filter, search_memories
+
+CURRENT_SCHEMA_VERSION = 1
+
+
+@dataclass
+class AddDrawerResult:
+    status: str           # "accepted" | "duplicate"
+    drawer_id: str
+
+
+# See spec §5.3 for turns.sqlite schema. Keep this constant colocated so the
+# invariant "drawer_id derivation lives exactly one place" holds.
+_TURNS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS turns (
+    turn_id TEXT PRIMARY KEY,
+    drawer_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    pair_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('user','assistant')),
+    ts REAL NOT NULL,
+    filed_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS turns_session_ts ON turns(session_id, ts);
+CREATE INDEX IF NOT EXISTS turns_pair ON turns(pair_id);
+"""
+
+
+class PalaceHandle:
+    def __init__(self, palace_path: Path, collection, kg: KnowledgeGraph, config: MempalaceConfig,
+                 turns: sqlite3.Connection, meta: dict):
+        self.palace_path = Path(palace_path)
+        self._collection = collection
+        self.kg = kg
+        self.config = config
+        self.turns = turns
+        self.meta = meta
+        self._closed = False
+
+    @classmethod
+    def open(cls, palace_path: str | Path) -> "PalaceHandle":
+        palace_path = Path(palace_path)
+        palace_path.mkdir(parents=True, exist_ok=True)
+
+        meta_path = palace_path / "meta.json"
+        if meta_path.exists():
+            meta = json.loads(meta_path.read_text())
+        else:
+            meta = {"schema_version": CURRENT_SCHEMA_VERSION, "created_at": time.time()}
+            meta_path.write_text(json.dumps(meta))
+
+        # Chroma format migration check (spec §5.6 dimension 1)
+        # Done lazily on first open to keep the hot path fast.
+        _maybe_migrate_chromadb_format(palace_path)
+
+        collection = get_collection(str(palace_path), create=True)
+
+        kg = KnowledgeGraph(db_path=str(palace_path / "kg.sqlite"))
+
+        config_dir = palace_path / "config"
+        config_dir.mkdir(exist_ok=True)
+        config = MempalaceConfig(config_dir=config_dir)
+
+        turns = sqlite3.connect(str(palace_path / "turns.sqlite"), check_same_thread=False)
+        turns.executescript(_TURNS_SCHEMA)
+        turns.commit()
+
+        return cls(palace_path, collection, kg, config, turns, meta)
+
+    def add_drawer(self, *, turn_id: str, session_id: str, pair_id: str,
+                   role: str, text: str, ts: float,
+                   wing: str = "conversations", room: str = "session",
+                   agent: str = "xelasphere") -> AddDrawerResult:
+        # Idempotency: turns.sqlite PK gate
+        cur = self.turns.execute("SELECT drawer_id FROM turns WHERE turn_id = ?", (turn_id,))
+        row = cur.fetchone()
+        if row is not None:
+            return AddDrawerResult(status="duplicate", drawer_id=row[0])
+
+        source_file = f"turn:{turn_id}"
+        # Library deterministically derives drawer_id from (source_file, chunk_index=0, wing, room).
+        # We compute the same value locally so turns.sqlite has a row even in the
+        # race where another process files the same turn between our SELECT and INSERT.
+        import hashlib
+        drawer_id = (
+            f"drawer_{wing}_{room}_"
+            + hashlib.sha256((source_file + str(0)).encode()).hexdigest()[:24]
+        )
+        _library_add_drawer(self._collection, wing, room, text, source_file, 0, agent)
+        self.turns.execute(
+            "INSERT OR IGNORE INTO turns (turn_id, drawer_id, session_id, pair_id, role, ts, filed_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (turn_id, drawer_id, session_id, pair_id, role, ts, time.time()),
+        )
+        self.turns.commit()
+        return AddDrawerResult(status="accepted", drawer_id=drawer_id)
+
+    def recent_drawers(self, limit: int = 10) -> list:
+        # Over-fetch 4x and sort in Python since Chroma has no ORDER BY.
+        # Budget check happens in M0.5 integration test.
+        over = max(limit * 4, 40)
+        got = self._collection.get(limit=over, include=["documents", "metadatas"])
+        rows = [
+            {"text": d, "metadata": m}
+            for d, m in zip(got.get("documents") or [], got.get("metadatas") or [])
+        ]
+        rows.sort(key=lambda r: r["metadata"].get("filed_at", ""), reverse=True)
+        return rows[:limit]
+
+    def session_drawers(self, session_id: str, limit: int = 10) -> list:
+        rows = self.turns.execute(
+            "SELECT drawer_id FROM turns WHERE session_id = ? ORDER BY ts DESC LIMIT ?",
+            (session_id, limit),
+        ).fetchall()
+        drawer_ids = [r[0] for r in rows]
+        if not drawer_ids:
+            return []
+        got = self._collection.get(ids=drawer_ids, include=["documents", "metadatas"])
+        out = []
+        for d, m in zip(got.get("documents") or [], got.get("metadatas") or []):
+            out.append({"text": d, "metadata": m})
+        return out
+
+    def semantic_search(self, query: str, k: int = 5) -> list:
+        result = search_memories(query, str(self.palace_path), n_results=k)
+        return result.get("results", [])
+
+    # topic_search v1 == semantic_search. Open question §10.x in spec.
+    topic_search = semantic_search
+
+    def search(self, query: str, *, wing: str | None = None, k: int = 5) -> list:
+        result = search_memories(query, str(self.palace_path), wing=wing, n_results=k)
+        return result.get("results", [])
+
+    def list_drawers(self, *, wing: str | None = None, room: str | None = None,
+                     limit: int = 20, offset: int = 0):
+        where = build_where_filter(wing, room)
+        kwargs = {"limit": limit, "offset": offset, "include": ["documents", "metadatas"]}
+        if where:
+            kwargs["where"] = where
+        got = self._collection.get(**kwargs)
+        drawers = [
+            {"text": d, "metadata": m}
+            for d, m in zip(got.get("documents") or [], got.get("metadatas") or [])
+        ]
+        # Chroma.count() is cheap; include for the next-offset calculation.
+        total = self._collection.count()
+        next_offset = offset + limit if offset + limit < total else None
+        return {"drawers": drawers, "total": total, "next_offset": next_offset}
+
+    def kg_add_triple(self, *args, **kwargs):
+        return self.kg.add_triple(*args, **kwargs)
+
+    def kg_query_entity(self, *args, **kwargs):
+        return self.kg.query_entity(*args, **kwargs)
+
+    def kg_timeline(self, *args, **kwargs):
+        return self.kg.timeline(*args, **kwargs)
+
+    @property
+    def col(self):
+        return self._collection
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        try:
+            self.kg.close()
+        except Exception:
+            pass
+        try:
+            self.turns.close()
+        except Exception:
+            pass
+        # Spec §5.3 cache-eviction contract — MUST pop from the library's
+        # backend cache, otherwise ChromaDB PersistentClients leak forever.
+        _DEFAULT_BACKEND._clients.pop(str(self.palace_path), None)
+        self._closed = True
+
+
+def _maybe_migrate_chromadb_format(palace_path: Path) -> None:
+    """If the on-disk Chroma format predates the installed chromadb,
+    call mempalace.migrate.migrate() BEFORE the first collection open."""
+    from mempalace.backends.chroma import ChromaBackend
+    from mempalace.migrate import detect_chromadb_version, migrate
+
+    try:
+        on_disk = detect_chromadb_version(str(palace_path))
+    except Exception:
+        return
+    installed = ChromaBackend.backend_version()
+    if on_disk and on_disk != installed:
+        migrate(str(palace_path), dry_run=False, confirm=True)
+```
+
+- [ ] **Step 4: Run tests, confirm all pass.** Expected count: 9 unit + 1 integration (the integration test uses a real palace directory on `tmp_path`).
+
+- [ ] **Step 5: Commit:**
+
+```bash
+git add mempalace-sidecar/mempalace_sidecar/palace_handle.py \
+        mempalace-sidecar/mempalace_sidecar/schemas.py \
+        mempalace-sidecar/tests/unit/test_palace_handle.py \
+        mempalace-sidecar/tests/integration/test_palace_handle_real.py \
+        mempalace-sidecar/pyproject.toml
+git commit -m "feat(sidecar): PalaceHandle — library isolation boundary for mempalace 3.3.1"
+```
+
+**Dispatch review gate:** spec + quality review here, BEFORE M0.3.1 dispatches. The PalaceHandle surface is load-bearing for every downstream milestone; review catches any method-mapping miss before it compounds.
+
+**Dispatch prompt MUST ask for a deviations-from-spec-§5.3 note.** Writing the class almost always reveals gaps in the spec that only surface under implementation: exact error types for missing-palace/corrupt-meta cases, default argument values that weren't specified, library return shapes that differ slightly from the spec's description, method signatures the spec left open. The implementer should produce a short "Deviations from spec §5.3" section at the end of its report listing each such decision. During the review gate we fold them back into §5.3 (amending the spec so reality matches the document) before M0.3.1 begins — otherwise the spec lags reality and subsequent milestones implement against the stale version.
+
 #### Task M0.3.1: `PalaceEntry` dataclass
 
 **Files:**
@@ -851,8 +1122,7 @@ def test_palace_entry_fields(tmp_path):
     now = time.monotonic()
     e = PalaceEntry(
         user_id="u1",
-        palace=object(),
-        kg=object(),
+        handle=object(),            # stand-in for PalaceHandle; registry doesn't care about type
         path=tmp_path / "u1",
         size_bytes=1024,
         schema_version=1,
@@ -877,14 +1147,15 @@ from typing import Any
 @dataclass
 class PalaceEntry:
     user_id: str
-    palace: Any
-    kg: Any
+    handle: Any               # PalaceHandle at runtime; Any to avoid the circular import at module load
     path: Path
     size_bytes: int
     schema_version: int
     opened_at: float
     last_used_at: float
 ```
+
+> **Note on the consolidated field.** The earlier draft had separate `palace: Any` and `kg: Any` fields because it assumed `palace.knowledge_graph` was an attribute accessible from outside. With `PalaceHandle` as the library-isolation boundary, the KG instance lives at `handle.kg` and the registry only holds one reference. The registry doesn't care about internals — it caches, LRU-evicts, and calls `handle.close()` on eviction.
 
 - [ ] **Step 4: Run → passes**
 
@@ -929,7 +1200,7 @@ async def test_registry_evicts_by_size(monkeypatch, registry):
         path = registry._data_dir / "palaces" / uid
         path.mkdir(parents=True, exist_ok=True)
         return PalaceEntry(
-            user_id=uid, palace=object(), kg=object(), path=path,
+            user_id=uid, handle=object(), path=path,
             size_bytes=600, schema_version=1, opened_at=now, last_used_at=now,
         )
     monkeypatch.setattr(registry, "_construct_entry", fake_open)
@@ -978,36 +1249,102 @@ class PalaceRegistry:
         return lock
 
     async def _construct_entry(self, user_id: str) -> "PalaceEntry":
-        # Minimal for unit tests; M0.3.3 replaces this with real mempalace.Palace open.
+        # Minimal for unit tests; M0.3.4 replaces this with PalaceHandle.open().
         path = self._palaces_dir / user_id
         path.mkdir(parents=True, exist_ok=True)
         import time
         now = time.monotonic()
         return PalaceEntry(
-            user_id=user_id, palace=None, kg=None, path=path, size_bytes=0,
+            user_id=user_id, handle=None, path=path, size_bytes=0,
             schema_version=1, opened_at=now, last_used_at=now,
         )
 
     async def open(self, user_id: str) -> "PalaceEntry":
+        # Two-phase eviction (see _evict_to_fit_unlocked below). Phase 1 runs
+        # inside _registry_lock and returns the list of entries to close.
+        # Phase 2 runs after lock release, under each user's write lock, so
+        # in-flight readers drain before handle.close() touches their state.
+        to_close_after = []
         async with self._registry_lock:
             if user_id in self._cache:
                 self._cache.move_to_end(user_id)
                 entry = self._cache[user_id]
                 import time
                 entry.last_used_at = time.monotonic()
-                return entry
-            entry = await self._construct_entry(user_id)
-            self._cache[user_id] = entry
-            await self._evict_to_fit_unlocked()
-            return entry
+            else:
+                entry = await self._construct_entry(user_id)
+                self._cache[user_id] = entry
+                to_close_after = await self._evict_to_fit_unlocked()
+        for evicted_uid, evicted_entry in to_close_after:
+            await self._close_evicted(evicted_uid, evicted_entry)
+        return entry
 
     def _total_bytes(self) -> int:
         return sum(e.size_bytes for e in self._cache.values())
 
-    async def _evict_to_fit_unlocked(self) -> None:
+    async def _evict_to_fit_unlocked(self) -> list:
+        # Two-phase eviction (review-fix #7, 2026-04-20):
+        # Phase 1 (inside _registry_lock): select candidates and remove them
+        # from self._cache so no new requests can find them.
+        # Phase 2 (OUTSIDE the registry lock, in the caller): acquire each
+        # evicted user's WRITE lock (draining in-flight readers), then call
+        # handle.close().
+        #
+        # Why split phases: if close() ran while we still held _registry_lock,
+        # a concurrent reader that acquired its per-user reader_lock BEFORE
+        # we grabbed _registry_lock could still be mid-call with the handle's
+        # collection in its stack frame. Closing underneath it hits a
+        # garbage-collected Chroma client. See test_eviction_drains_readers.
+        #
+        # Invariant: every evicted entry still has handle.close() called on it
+        # eventually (spec §5.3 cache-eviction contract). Phase 2 guarantees
+        # this; the returned list is what Phase 2 iterates.
+        to_close = []
         while self._total_bytes() > self._max_bytes and len(self._cache) > 1:
-            uid, _ = next(iter(self._cache.items()))
+            uid, evicted = next(iter(self._cache.items()))
             self._cache.pop(uid)
+            to_close.append((uid, evicted))
+        return to_close
+```
+
+Callers of `_evict_to_fit_unlocked` must do Phase 2 themselves. The pattern (used by both `open` and `sweep_idle`):
+
+```python
+async def open(self, user_id: str, *, track_cold: bool = False):
+    to_close_after = []
+    async with self._registry_lock:
+        was_cold = user_id not in self._cache
+        if was_cold:
+            entry = await self._construct_entry(user_id)
+            self._cache[user_id] = entry
+            to_close_after = await self._evict_to_fit_unlocked()
+        else:
+            self._cache.move_to_end(user_id)
+            entry = self._cache[user_id]
+            import time
+            entry.last_used_at = time.monotonic()
+    # Phase 2 — registry lock released. Close evicted handles under each
+    # user's write lock so in-flight readers drain first.
+    for evicted_uid, evicted_entry in to_close_after:
+        await self._close_evicted(evicted_uid, evicted_entry)
+    return (entry, was_cold) if track_cold else entry
+
+
+async def _close_evicted(self, uid: str, evicted_entry) -> None:
+    lock = self._locks.get(uid)
+    handle = getattr(evicted_entry, "handle", None)
+    if handle is None:
+        return
+    async def _do_close():
+        try:
+            handle.close()
+        except Exception:
+            pass
+    if lock is None:
+        await _do_close()
+        return
+    async with lock.writer_lock:
+        await _do_close()
 ```
 
 - [ ] **Step 4: Run → passes**
@@ -1048,7 +1385,8 @@ async def test_total_bytes_accurate(ops, tmp_path):
             path.mkdir(parents=True, exist_ok=True)
             import time
             now = time.monotonic()
-            return PalaceEntry(uid, None, None, path, size, 1, now, now)
+            # Field order: user_id, handle, path, size_bytes, schema_version, opened_at, last_used_at
+            return PalaceEntry(uid, None, path, size, 1, now, now)
         return inner
 
     for op in ops:
@@ -1068,12 +1406,14 @@ git add mempalace-sidecar/tests/unit/test_registry.py
 git commit -m "test(sidecar): hypothesis property test for registry byte accounting"
 ```
 
-#### Task M0.3.4: `_construct_entry` opens real `mempalace.Palace`
+#### Task M0.3.4: `_construct_entry` opens real `PalaceHandle`
 
 **Files:**
 - Modify: `mempalace-sidecar/mempalace_sidecar/registry.py`
 - Create: `mempalace-sidecar/tests/integration/__init__.py`
 - Create: `mempalace-sidecar/tests/integration/test_registry_real.py`
+
+> **Dependency:** this task consumes `PalaceHandle` as implemented in M0.3.0. Don't dispatch this before M0.3.0's review gate has passed.
 
 - [ ] **Step 1: Write integration test (marked `integration`)**
 
@@ -1085,45 +1425,117 @@ async def test_opens_real_palace(tmp_path):
     from mempalace_sidecar.registry import PalaceRegistry
     r = PalaceRegistry(data_dir=tmp_path, max_bytes=2**31, idle_ttl_sec=3600)
     e = await r.open("alice")
-    assert e.palace is not None
+    assert e.handle is not None
     assert e.path.exists()
     assert (e.path / "meta.json").exists()
+    assert (e.path / "kg.sqlite").exists()
+    assert (e.path / "turns.sqlite").exists()
+
+
+async def test_registry_eviction_bounds_backend_cache(tmp_path):
+    """Spec §5.3 teeth-bearing test: eviction must pop the library's
+    ChromaBackend._clients dict. If a refactor drops handle.close() from
+    _evict_to_fit_unlocked, this test fails."""
+    from mempalace_sidecar.registry import PalaceRegistry
+    from mempalace.palace import _DEFAULT_BACKEND
+
+    # Size cap small enough that 2 palaces can't both fit
+    r = PalaceRegistry(data_dir=tmp_path, max_bytes=1024, idle_ttl_sec=3600)
+    e1 = await r.open("alice")
+    e1.size_bytes = 800  # simulated
+    assert str(e1.path) in _DEFAULT_BACKEND._clients
+
+    e2 = await r.open("bob")
+    e2.size_bytes = 800
+    # Registry should have evicted alice — assert her client was popped
+    assert str(e1.path) not in _DEFAULT_BACKEND._clients
+    assert str(e2.path) in _DEFAULT_BACKEND._clients
+
+
+async def test_eviction_drains_readers(tmp_path):
+    """Review-fix #7 (2026-04-20): two-phase eviction must acquire the
+    evicted user's writer_lock before calling handle.close(), so concurrent
+    readers finish cleanly without seeing a closed Chroma client.
+
+    Setup: user A is hot. Reader on A enters its method body (holds
+    reader_lock, has self._collection in its frame). In parallel, user B
+    arrives and forces eviction of A. The test asserts:
+      1. Reader's col.get() completes without exception.
+      2. After reader releases, A is no longer in registry._cache AND
+         A's palace_path is no longer in _DEFAULT_BACKEND._clients.
+
+    If a future refactor moves handle.close() back inside _registry_lock
+    (single-phase eviction), this test fails because the reader's
+    col.get() races against client GC.
+    """
+    import asyncio
+    from mempalace_sidecar.registry import PalaceRegistry
+    from mempalace.palace import _DEFAULT_BACKEND
+
+    r = PalaceRegistry(data_dir=tmp_path, max_bytes=1024, idle_ttl_sec=3600)
+    a = await r.open("alice")
+    a.size_bytes = 800
+    alice_path = str(a.path)
+    assert alice_path in _DEFAULT_BACKEND._clients
+
+    reader_started = asyncio.Event()
+    reader_may_finish = asyncio.Event()
+    reader_exc = []
+
+    async def slow_reader():
+        lock = r._lock_for("alice")
+        async with lock.reader_lock:
+            reader_started.set()
+            try:
+                # simulate an in-flight col.get while eviction is attempted
+                _ = a.handle.list_drawers(limit=1)
+                await reader_may_finish.wait()
+                _ = a.handle.list_drawers(limit=1)
+            except Exception as e:
+                reader_exc.append(e)
+
+    async def evicter():
+        await reader_started.wait()
+        # force eviction: open bob, size_bytes trips cap, alice gets evicted
+        b = await r.open("bob")
+        b.size_bytes = 800
+        # Let reader finish its second library call BEFORE we check invariants
+        reader_may_finish.set()
+
+    await asyncio.gather(slow_reader(), evicter())
+    assert reader_exc == [], f"Reader raised: {reader_exc}"
+    # Eviction must have completed Phase 2 by now (evicter awaited it).
+    assert "alice" not in r._cache
+    assert alice_path not in _DEFAULT_BACKEND._clients
 ```
 
-- [ ] **Step 2: Run → fails (palace is None)**
+- [ ] **Step 2: Run → fails (stub `_construct_entry` sets `handle=None`)**
 
 Run: `pytest tests/integration/test_registry_real.py -v -m integration`
 
-- [ ] **Step 3: Replace `_construct_entry`**
+- [ ] **Step 3: Replace `_construct_entry` to use `PalaceHandle.open`**
 
 ```python
-import json
+import os
 import time
-from mempalace import Palace  # type: ignore
+from pathlib import Path
 
-
-CURRENT_SCHEMA_VERSION = 1
+from mempalace_sidecar.palace_handle import PalaceHandle
 
 
 async def _construct_entry(self, user_id: str) -> "PalaceEntry":
     path = self._palaces_dir / user_id
-    path.mkdir(parents=True, exist_ok=True)
-    meta_path = path / "meta.json"
-    if meta_path.exists():
-        meta = json.loads(meta_path.read_text())
-        schema_version = int(meta.get("schema_version", 1))
-    else:
-        schema_version = CURRENT_SCHEMA_VERSION
-        meta_path.write_text(json.dumps({
-            "schema_version": schema_version,
-            "created_at": time.time(),
-        }))
-    palace = Palace.open(path)  # mempalace Palace API
+    handle = PalaceHandle.open(path)           # opens dir + Chroma + KG + turns.sqlite + meta.json
     size = _dir_size_bytes(path)
     now = time.monotonic()
     return PalaceEntry(
-        user_id=user_id, palace=palace, kg=palace.knowledge_graph, path=path,
-        size_bytes=size, schema_version=schema_version, opened_at=now, last_used_at=now,
+        user_id=user_id,
+        handle=handle,
+        path=path,
+        size_bytes=size,
+        schema_version=handle.meta.get("schema_version", 1),
+        opened_at=now,
+        last_used_at=now,
     )
 
 
@@ -1139,20 +1551,19 @@ def _dir_size_bytes(p: Path) -> int:
     return total
 ```
 
-Add at top:
-```python
-import os
-```
+Key differences from the original draft:
+- No `from mempalace import Palace` — that class does not exist in mempalace 3.3.1. `PalaceHandle.open()` is the sidecar-owned wrapper that opens the functional-API resources (Chroma collection, KnowledgeGraph, turns.sqlite, MempalaceConfig) against `palace_path`.
+- No `kg=palace.knowledge_graph` field — the KG lives at `handle.kg`, one reference per palace.
+- `meta.json` read/write is inside `PalaceHandle.open()`; the registry doesn't need to duplicate it.
+- ChromaDB format-version migration check is inside `PalaceHandle.open()` (spec §5.6 dimension 1) — the registry stays ignorant of format versioning.
 
-Replace class body's `_construct_entry` stub reference accordingly.
-
-- [ ] **Step 4: Run → passes**
+- [ ] **Step 4: Run → both integration tests pass**
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add mempalace-sidecar/mempalace_sidecar/registry.py mempalace-sidecar/tests/integration/
-git commit -m "feat(sidecar): PalaceRegistry opens real mempalace.Palace"
+git commit -m "feat(sidecar): PalaceRegistry opens real PalaceHandle"
 ```
 
 #### Task M0.3.5: Idle-TTL eviction task
@@ -1187,23 +1598,32 @@ Add to `PalaceRegistry`:
 
 ```python
 async def sweep_idle(self) -> int:
-    """Close palaces idle longer than idle_ttl_sec. Returns count evicted."""
+    """Close palaces idle longer than idle_ttl_sec. Returns count evicted.
+
+    Two-phase eviction (see _evict_to_fit_unlocked):
+      Phase 1 (inside _registry_lock): pop idle entries so no new requests find them.
+      Phase 2 (after lock release): under each user's write lock, close the handle
+      so any in-flight reader drains before the close touches handle state.
+
+    Spec §5.3 cache-eviction contract: handle.close() MUST run on every
+    eviction path so the library's ChromaBackend._clients dict doesn't
+    grow unbounded. Both phases together preserve that invariant.
+    """
     import time
     now = time.monotonic()
+    evicted = []
     async with self._registry_lock:
-        to_evict = [
+        idle = [
             uid for uid, e in self._cache.items()
             if (now - e.last_used_at) > self._idle_ttl_sec
         ]
-        for uid in to_evict:
+        for uid in idle:
             entry = self._cache.pop(uid)
-            # Close mempalace handle if present (real palaces implement close())
-            if entry.palace is not None and hasattr(entry.palace, "close"):
-                try:
-                    entry.palace.close()
-                except Exception:
-                    pass
-        return len(to_evict)
+            evicted.append((uid, entry))
+    # Phase 2
+    for uid, entry in evicted:
+        await self._close_evicted(uid, entry)
+    return len(evicted)
 ```
 
 - [ ] **Step 4: Run → passes**
@@ -1308,6 +1728,7 @@ class WakeupRequest(BaseModel):
     query: str = ""
     k: int = 5
     layers: Optional[list[str]] = None
+    session_id: Optional[str] = None   # drives L1 session_drawers lookup when present
 
 
 class SearchRequest(BaseModel):
@@ -1335,10 +1756,13 @@ git add mempalace-sidecar/mempalace_sidecar/schemas.py mempalace-sidecar/tests/u
 git commit -m "feat(sidecar): request/response schemas"
 ```
 
-#### Task M0.4.2: `ingest_log` SQLite with UNIQUE(turn_id) + ingest route
+#### Task M0.4.2: Ingest route + idempotency via `PalaceHandle.turns.sqlite`
+
+> **Design consolidation (2026-04-20).** The original draft created a separate `ingest_log.py` module with its own `ingest_log.sqlite` table keyed on `turn_id`. After the PalaceHandle rewrite (spec §5.3), `PalaceHandle.add_drawer` already owns a handle-local `turns.sqlite` with `PRIMARY KEY(turn_id)` for exactly this purpose — duplicate prevention, pair/session lookup, and drawer-id reverse mapping in one table. Two tables with overlapping purpose would be strictly worse. The route now delegates idempotency to `handle.add_drawer` and checks the returned `AddDrawerResult.status`.
+
+> **Schema bump required (2026-04-20 review fix #3).** This task lands the first new route beyond the M0.2 scaffolding (`/healthz`), which changes the FastAPI-generated OpenAPI output. Per spec §5.2 "schema change without `schema_version` bump = PR failure." **Bump `SCHEMA_VERSION = 1` → `SCHEMA_VERSION = 2` in `mempalace_sidecar/routes/ops.py` as part of this task's commit.** `/healthz` will report `{"schema_version": 2, ...}` after deploy. The OpenAPI snapshot test that enforces this invariant ships in M0.12; until then, the bump is a documentation/honesty discipline rather than CI-enforced. M0.12's first snapshot will be taken at v2.
 
 **Files:**
-- Create: `mempalace-sidecar/mempalace_sidecar/ingest_log.py`
 - Create: `mempalace-sidecar/mempalace_sidecar/routes/palace.py`
 - Modify: `mempalace-sidecar/mempalace_sidecar/main.py` (register router + dependencies)
 - Create: `mempalace-sidecar/tests/integration/test_ingest_idempotency.py`
@@ -1391,60 +1815,12 @@ async def test_ingest_twice_returns_duplicate(app, auth):
 
 - [ ] **Step 2: Run → fails**
 
-- [ ] **Step 3: Create `ingest_log.py`**
+- [ ] **Step 3: Create `routes/palace.py`**
 
 ```python
-import aiosqlite
-from pathlib import Path
+from fastapi import APIRouter, Request
 
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS ingest_log (
-  turn_id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  pair_id TEXT NOT NULL,
-  inserted_at REAL NOT NULL
-);
-"""
-
-
-class IngestLog:
-    def __init__(self, palace_dir: Path):
-        self._db_path = palace_dir / "ingest_log.sqlite"
-
-    async def ensure(self) -> None:
-        async with aiosqlite.connect(self._db_path) as db:
-            await db.execute(_SCHEMA)
-            await db.commit()
-
-    async def exists(self, turn_id: str) -> bool:
-        async with aiosqlite.connect(self._db_path) as db:
-            cur = await db.execute(
-                "SELECT 1 FROM ingest_log WHERE turn_id=? LIMIT 1", (turn_id,)
-            )
-            return (await cur.fetchone()) is not None
-
-    async def record(self, turn_id: str, user_id: str, pair_id: str, ts: float) -> bool:
-        """Return True if inserted, False on duplicate."""
-        import time
-        async with aiosqlite.connect(self._db_path) as db:
-            try:
-                await db.execute(
-                    "INSERT INTO ingest_log (turn_id, user_id, pair_id, inserted_at) VALUES (?, ?, ?, ?)",
-                    (turn_id, user_id, pair_id, time.time()),
-                )
-                await db.commit()
-                return True
-            except aiosqlite.IntegrityError:
-                return False
-```
-
-- [ ] **Step 4: Create `routes/palace.py`**
-
-```python
-from fastapi import APIRouter, Depends, Request
 from mempalace_sidecar.schemas import IngestRequest, IngestResponse
-from mempalace_sidecar.ingest_log import IngestLog
 
 router = APIRouter(prefix="/palace", tags=["palace"])
 
@@ -1456,42 +1832,36 @@ def _registry(request: Request):
 @router.post("/{user_id}/ingest", response_model=IngestResponse)
 async def ingest(user_id: str, body: IngestRequest, request: Request) -> IngestResponse:
     """
-    Ordering discipline (see plan review, fix #1):
-      1. Check idempotency FIRST (read-only) to short-circuit duplicates.
-      2. Append drawer to palace. Must succeed before we commit the idempotency row.
-      3. Record idempotency row. If this fails, the drawer exists but not the log —
-         retry will re-append, and palace-level dedup on metadata.turn_id handles it.
+    Idempotency comes from PalaceHandle.turns.sqlite (spec §5.3). Ordering:
+      1. Acquire the user's write lock (registry-level).
+      2. Call handle.add_drawer(turn_id=...). The handle does:
+         a. SELECT on turns.sqlite by turn_id. If row exists → return duplicate.
+         b. Otherwise call mempalace.miner.add_drawer with source_file=f"turn:{turn_id}"
+            (deterministic drawer_id derivation — same turn_id, same drawer_id across
+            processes and runs).
+         c. INSERT OR IGNORE into turns.sqlite.
+      3. Map AddDrawerResult.status → IngestResponse.status.
 
-    The guarantee we care about: a successful response implies the drawer is durable
-    in the palace. Rare double-append (drawer written, log write failed) is strictly
-    preferable to silent loss (log written, drawer append raised).
+    Guarantee: a 200 response with status="accepted" implies the drawer is durable
+    in Chroma AND recorded in turns.sqlite. status="duplicate" implies the drawer
+    was already durable from a prior request. No intermediate state is observable.
     """
     registry = _registry(request)
     entry = await registry.open(user_id)
     lock = registry._lock_for(user_id)
     async with lock.writer_lock:
-        log = IngestLog(entry.path)
-        await log.ensure()
-        if await log.exists(body.turn_id):
-            return IngestResponse(status="duplicate")
-        # Palace-level dedup: add_drawer must be no-op on pre-existing turn_id.
-        # mempalace 3.3.1's Palace.add_drawer() dedupes on metadata.turn_id when
-        # provided; verify on install and add a thin shim if not.
-        entry.palace.add_drawer(
+        result = entry.handle.add_drawer(
+            turn_id=body.turn_id,
+            session_id=body.session_id,
+            pair_id=body.pair_id,
+            role=body.role,
             text=body.text,
-            metadata={
-                "session_id": body.session_id,
-                "pair_id": body.pair_id,
-                "role": body.role,
-                "ts": body.ts,
-                "turn_id": body.turn_id,
-            },
+            ts=body.ts,
         )
-        await log.record(body.turn_id, user_id, body.pair_id, body.ts)
-        return IngestResponse(status="accepted")
+    return IngestResponse(status=result.status)
 ```
 
-- [ ] **Step 5: Wire registry into `main.py` lifespan**
+- [ ] **Step 4: Wire registry into `main.py` lifespan**
 
 In `main.py`, replace `_lifespan`:
 
@@ -1520,62 +1890,81 @@ from mempalace_sidecar.routes import palace as palace_router
 app.include_router(palace_router.router)
 ```
 
-- [ ] **Step 6: Run integration test → passes**
+- [ ] **Step 5: Run integration test → passes**
 
 Run: `pytest tests/integration/test_ingest_idempotency.py -v -m integration`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add mempalace-sidecar/
-git commit -m "feat(sidecar): /ingest endpoint with disk-backed idempotency log"
+git commit -m "feat(sidecar): /ingest endpoint backed by PalaceHandle.turns.sqlite"
 ```
-
-> **Task note for the executor:** `Palace.add_drawer()` and `Palace.open()` are the canonical mempalace 3.3.1 APIs. If the installed version differs, adapt and make the adaptation a separate commit — do not skip the test.
 
 ---
 
 ### M0.5 — Wake-up endpoint (concurrent L0/L1/L2/L3)
 
-#### Task M0.5.1: Embedding model warmup in lifespan
+#### Task M0.5.1: Embedding model pre-warm in lifespan
+
+> **Scope change (2026-04-20).** The original draft had `Embedder` as the primary embedding API, with `embedder.embed(query)` called once in `build_wakeup` and the vector passed to every retrieval layer. The reality (spec §5.3 bridges) is that `mempalace.searcher.search_memories` embeds internally via ChromaDB's default embedding function — we do not call our own embedder during wake-up. However, ChromaDB loads the sentence-transformers model lazily on first query, which would push a ~2-5 s cold-model load onto the first /wake-up of the sidecar process. To keep `/readyz` honest ("embedding_loaded") we still pre-warm — just via a throwaway Chroma query against a dedicated `_warmup` palace instead of a standalone Embedder class.
 
 **Files:**
-- Modify: `mempalace-sidecar/mempalace_sidecar/main.py`
-- Create: `mempalace-sidecar/mempalace_sidecar/embed.py`
-- Create: `mempalace-sidecar/tests/unit/test_embed.py`
+- Modify: `mempalace-sidecar/mempalace_sidecar/main.py` (lifespan pre-warms)
+- Create: `mempalace-sidecar/mempalace_sidecar/warmup.py`
+- Create: `mempalace-sidecar/tests/integration/test_warmup.py`
 
-- [ ] **Step 1: Write failing test for embed helper**
+- [ ] **Step 1: Write failing integration test for warmup**
 
 ```python
-# tests/unit/test_embed.py
+# tests/integration/test_warmup.py
 import pytest
+pytestmark = pytest.mark.integration
 
-@pytest.mark.integration
-def test_embed_loads_once_and_returns_vector():
-    from mempalace_sidecar.embed import Embedder
-    e = Embedder("all-MiniLM-L6-v2")
-    v1 = e.embed("hello")
-    v2 = e.embed("hello")
-    assert len(v1) > 0
-    assert v1 == v2  # deterministic
+async def test_warmup_primes_chroma_embedding(monkeypatch, tmp_path):
+    from mempalace_sidecar.warmup import prime_embedding_function
+
+    # Record how long the first real query takes before and after warmup.
+    # After warmup we expect the query to not re-load the model.
+    import time
+    before = time.monotonic()
+    prime_embedding_function(tmp_path / "_warmup")
+    warmup_elapsed = time.monotonic() - before
+
+    before_first = time.monotonic()
+    from mempalace.palace import get_collection
+    col = get_collection(str(tmp_path / "_warmup"), create=False)
+    _ = col.query(query_texts=["probe"], n_results=1)
+    first_elapsed = time.monotonic() - before_first
+
+    # After warmup, a second query should not incur the model-load cost.
+    # Weak assertion: the second query is much faster than warmup itself.
+    assert first_elapsed < warmup_elapsed / 2 or first_elapsed < 0.5
 ```
 
-- [ ] **Step 2: Create `embed.py`**
+- [ ] **Step 2: Create `warmup.py`**
 
 ```python
-from sentence_transformers import SentenceTransformer
+from pathlib import Path
+
+from mempalace.palace import get_collection
 
 
-class Embedder:
-    """Thin wrapper around sentence-transformers kept reusable across requests."""
+def prime_embedding_function(warmup_palace_path: Path) -> None:
+    """Force ChromaDB's default embedding function to load its sentence-transformers model.
 
-    def __init__(self, model_name: str):
-        self._model = SentenceTransformer(model_name)
-
-    def embed(self, text: str) -> list[float]:
-        vec = self._model.encode([text], normalize_embeddings=True)[0]
-        return vec.tolist()
+    Chroma loads the model lazily on first query. Calling this at sidecar startup
+    shifts the ~2-5s cold-model load off the first user /wake-up. Uses a dedicated
+    palace at `warmup_palace_path` which is created if absent; it is never used
+    for real user data.
+    """
+    warmup_palace_path = Path(warmup_palace_path)
+    warmup_palace_path.mkdir(parents=True, exist_ok=True)
+    col = get_collection(str(warmup_palace_path), create=True)
+    # query_texts forces the embedding function to resolve and load.
+    # n_results=1 keeps the query cheap; an empty palace returns no rows.
+    col.query(query_texts=["warmup"], n_results=1)
 ```
 
 - [ ] **Step 3: Wire into lifespan**
@@ -1583,12 +1972,13 @@ class Embedder:
 Modify `main.py`:
 
 ```python
-from mempalace_sidecar.embed import Embedder
+from mempalace_sidecar.warmup import prime_embedding_function
 ...
 @asynccontextmanager
 async def _lifespan(app):
     settings: Settings = app.state.settings
-    app.state.embedder = Embedder(settings.embed_model)
+    prime_embedding_function(settings.data_dir / "_warmup")
+    app.state.embedding_ready = True
     from mempalace_sidecar.registry import PalaceRegistry
     app.state.registry = PalaceRegistry(
         data_dir=settings.data_dir,
@@ -1602,13 +1992,15 @@ async def _lifespan(app):
         _sd_notify_stopping()
 ```
 
+The boolean `app.state.embedding_ready` is what `/readyz` will check (M0.11).
+
 - [ ] **Step 4: Run integration test → passes**
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add mempalace-sidecar/mempalace_sidecar/embed.py mempalace-sidecar/mempalace_sidecar/main.py mempalace-sidecar/tests/unit/test_embed.py
-git commit -m "feat(sidecar): load sentence-transformers embedder at startup"
+git add mempalace-sidecar/mempalace_sidecar/warmup.py mempalace-sidecar/mempalace_sidecar/main.py mempalace-sidecar/tests/integration/test_warmup.py
+git commit -m "feat(sidecar): pre-warm Chroma embedding function at startup"
 ```
 
 #### Task M0.5.2: Concurrent wake-up composition (layers in parallel)
@@ -1619,39 +2011,61 @@ git commit -m "feat(sidecar): load sentence-transformers embedder at startup"
 - Create: `mempalace-sidecar/tests/unit/test_wakeup_concurrency.py`
 - Create: `mempalace-sidecar/tests/integration/test_wakeup_layers.py`
 
-- [ ] **Step 1: Write failing unit test — asserts all four layers run via a single `asyncio.gather` and the embedding is shared**
+> **Composition-level rewrite (2026-04-20).** The original draft passed a pre-computed query vector into every layer and ran all four layers via `asyncio.gather`. Reality:
+> - `mempalace.searcher.search_memories` takes a `query: str` and embeds internally via ChromaDB. We do not own the embedding.
+> - `handle.recent_drawers`, `handle.session_drawers`, `handle.topic_search`, `handle.semantic_search` are **synchronous** Python function bodies.
+> - `asyncio.gather` over sync bodies does NOT parallelize — it runs them sequentially on the event loop. Real concurrency requires wrapping each call in `asyncio.to_thread`, which dispatches to the default thread pool.
+> - **Whether we need that concurrency is a measurement question** (spec §5.3 concurrency model). On modest palaces four serial sync calls may total <100 ms. If so, `asyncio.to_thread` adds overhead without benefit. Integration measurement in Step 6 below decides.
+>
+> Shipping stance: implement with `asyncio.to_thread` so concurrency is available from day one. If M0.5.3 measurement shows serial is within budget, swap back to serial in a follow-up commit and record the measurement in the deltas file.
+
+- [ ] **Step 1: Write failing unit test — asserts all four layers run via the build_wakeup composer and return the expected WakeupContext shape**
 
 ```python
 # tests/unit/test_wakeup_concurrency.py
-import asyncio
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 
-async def test_layers_run_concurrently_single_embedding():
+
+async def test_build_wakeup_populates_all_layers():
     from mempalace_sidecar.wakeup import build_wakeup
-    palace = MagicMock()
-    palace.recent_drawers = MagicMock(return_value=[])
-    palace.session_drawers = MagicMock(return_value=[])
-    palace.semantic_search = MagicMock(return_value=[])
-    palace.topic_search = MagicMock(return_value=[])
-
-    embedder = MagicMock()
-    embed_calls = {"n": 0}
-    def embed(q):
-        embed_calls["n"] += 1
-        return [0.0] * 384
-    embedder.embed = embed
+    handle = MagicMock()
+    handle.recent_drawers.return_value = [{"text": "r", "metadata": {"ts": 1.0}}]
+    handle.session_drawers.return_value = [{"text": "s", "metadata": {"ts": 2.0}}]
+    handle.topic_search.return_value = [{"text": "t", "similarity": 0.7}]
+    handle.semantic_search.return_value = [{"text": "d", "similarity": 0.9}]
 
     ctx = await build_wakeup(
         user_id="u",
         query="hi",
-        palace=palace,
-        embedder=embedder,
-        session_id="s",
+        handle=handle,
+        session_id="s1",
+        hot=True,
+        k=5,
     )
-    # Query embedded once, shared across L2 + L3
-    assert embed_calls["n"] == 1
+
     assert ctx.user_id == "u"
-    assert ctx.meta.hot is True or ctx.meta.hot is False  # present
+    assert len(ctx.l0_recent) == 1 and ctx.l0_recent[0].text == "r"
+    assert len(ctx.l1_session) == 1 and ctx.l1_session[0].text == "s"
+    assert len(ctx.l2_topic) == 1 and ctx.l2_topic[0].text == "t"
+    assert len(ctx.l3_semantic) == 1 and ctx.l3_semantic[0].text == "d"
+    assert ctx.meta.hot is True
+
+
+async def test_build_wakeup_empty_query_skips_search_layers():
+    from mempalace_sidecar.wakeup import build_wakeup
+    handle = MagicMock()
+    handle.recent_drawers.return_value = []
+    handle.session_drawers.return_value = []
+    handle.topic_search.return_value = []
+    handle.semantic_search.return_value = []
+
+    ctx = await build_wakeup(user_id="u", query="", handle=handle, session_id="s", hot=True, k=5)
+
+    # L2/L3 never called with empty query
+    handle.topic_search.assert_not_called()
+    handle.semantic_search.assert_not_called()
+    assert ctx.l2_topic == []
+    assert ctx.l3_semantic == []
 ```
 
 - [ ] **Step 2: Run → fails**
@@ -1664,57 +2078,89 @@ import time
 from mempalace_sidecar.schemas import Drawer, WakeupContext, WakeupMeta
 
 
-async def _to_drawer(raw) -> Drawer:
+def _to_drawer(raw) -> Drawer:
+    """Normalize the several shapes our handle methods return into schemas.Drawer.
+
+    - handle.recent_drawers / session_drawers return {text, metadata: {ts, wing, room, pair_id}}
+    - handle.semantic_search / topic_search / search return {text, wing, room, similarity, ...}
+      (shape of mempalace.searcher.search_memories hits)
+    """
+    if isinstance(raw, dict):
+        meta = raw.get("metadata") or {}
+        return Drawer(
+            text=raw.get("text", ""),
+            wing=raw.get("wing") or meta.get("wing"),
+            room=raw.get("room") or meta.get("room"),
+            ts=float(raw.get("ts", meta.get("ts", 0.0)) or 0.0),
+            pair_id=raw.get("pair_id") or meta.get("pair_id"),
+            score=raw.get("similarity") or raw.get("score"),
+        )
+    # tolerant fallback for object-shaped rows
     return Drawer(
-        text=raw.get("text", "") if isinstance(raw, dict) else getattr(raw, "text", ""),
-        wing=raw.get("wing") if isinstance(raw, dict) else getattr(raw, "wing", None),
-        room=raw.get("room") if isinstance(raw, dict) else getattr(raw, "room", None),
-        ts=raw.get("ts", 0.0) if isinstance(raw, dict) else getattr(raw, "ts", 0.0),
-        pair_id=raw.get("pair_id") if isinstance(raw, dict) else getattr(raw, "pair_id", None),
-        score=raw.get("score") if isinstance(raw, dict) else getattr(raw, "score", None),
+        text=getattr(raw, "text", ""),
+        wing=getattr(raw, "wing", None),
+        room=getattr(raw, "room", None),
+        ts=float(getattr(raw, "ts", 0.0) or 0.0),
+        pair_id=getattr(raw, "pair_id", None),
+        score=getattr(raw, "similarity", None) or getattr(raw, "score", None),
     )
 
 
-async def build_wakeup(*, user_id: str, query: str, palace, embedder, session_id: str | None, hot: bool = True, k: int = 5) -> WakeupContext:
+async def build_wakeup(
+    *,
+    user_id: str,
+    query: str,
+    handle,
+    session_id: str | None,
+    hot: bool = True,
+    k: int = 5,
+) -> WakeupContext:
+    """Compose L0-L3 into a WakeupContext.
+
+    All four layer calls are synchronous Python bodies inside PalaceHandle.
+    We run them via asyncio.to_thread to get real parallelism across the
+    default thread pool. If M0.5.3 integration measurement shows serial is
+    within §4.2's latency budget on our typical palaces, a follow-up commit
+    may swap back to serial with the reason recorded in deltas. See spec
+    §5.3 "Concurrency model inside PalaceHandle" for the rationale.
+    """
     t0 = time.monotonic()
-    embed_t0 = time.monotonic()
-    # L0 and L1 do not require embedding.
-    # L2 and L3 share one embedding.
-    vec = embedder.embed(query) if query else None
-    embed_ms = (time.monotonic() - embed_t0) * 1000
 
-    async def l0():
-        raws = palace.recent_drawers(limit=k) or []
-        return [await _to_drawer(r) for r in raws]
+    def _l0():
+        return handle.recent_drawers(limit=k) or []
 
-    async def l1():
+    def _l1():
         if session_id is None:
             return []
-        raws = palace.session_drawers(session_id=session_id, limit=k) or []
-        return [await _to_drawer(r) for r in raws]
+        return handle.session_drawers(session_id, limit=k) or []
 
-    async def l2():
-        if vec is None:
+    def _l2():
+        if not query:
             return []
-        raws = palace.topic_search(vector=vec, k=k) or []
-        return [await _to_drawer(r) for r in raws]
+        return handle.topic_search(query, k=k) or []
 
-    async def l3():
-        if vec is None:
+    def _l3():
+        if not query:
             return []
-        raws = palace.semantic_search(vector=vec, k=k) or []
-        return [await _to_drawer(r) for r in raws]
+        return handle.semantic_search(query, k=k) or []
 
-    l0r, l1r, l2r, l3r = await asyncio.gather(l0(), l1(), l2(), l3())
+    l0r, l1r, l2r, l3r = await asyncio.gather(
+        asyncio.to_thread(_l0),
+        asyncio.to_thread(_l1),
+        asyncio.to_thread(_l2),
+        asyncio.to_thread(_l3),
+    )
 
     total_ms = (time.monotonic() - t0) * 1000
     return WakeupContext(
         user_id=user_id,
-        l0_recent=l0r,
-        l1_session=l1r,
-        l2_topic=l2r,
-        l3_semantic=l3r,
-        meta=WakeupMeta(hot=hot, embed_ms=embed_ms, total_ms=total_ms),
+        l0_recent=[_to_drawer(r) for r in l0r],
+        l1_session=[_to_drawer(r) for r in l1r],
+        l2_topic=[_to_drawer(r) for r in l2r],
+        l3_semantic=[_to_drawer(r) for r in l3r],
+        # embed_ms retained in WakeupMeta for schema stability; always 0.0
+        # because Chroma handles embedding internally and doesn't surface a timing.
+        meta=WakeupMeta(hot=hot, embed_ms=0.0, total_ms=total_ms),
     )
 ```
 
@@ -1730,7 +2176,6 @@ from mempalace_sidecar.wakeup import build_wakeup
 @router.post("/{user_id}/wake-up", response_model=WakeupContext)
 async def wake_up(user_id: str, body: WakeupRequest, request: Request, warmup: bool = False) -> WakeupContext:
     registry = _registry(request)
-    embedder = request.app.state.embedder
     # Per plan review fix #14: open() reports its own was_cold atomically.
     # No TOCTOU peek into registry._cache from caller.
     entry, was_cold = await registry.open(user_id, track_cold=True)
@@ -1745,18 +2190,18 @@ async def wake_up(user_id: str, body: WakeupRequest, request: Request, warmup: b
         return await build_wakeup(
             user_id=user_id,
             query=body.query,
-            palace=entry.palace,
-            embedder=embedder,
-            session_id=None,
+            handle=entry.handle,
+            session_id=getattr(body, "session_id", None),
             hot=(not was_cold),
             k=body.k,
         )
 ```
 
-Registry contract update (amend `PalaceRegistry.open` from M0.3.2 / M0.3.4): the method now takes a keyword-only `track_cold: bool = False` argument. When `True`, it returns `(entry, was_cold)` instead of just `entry`. `was_cold` is computed under `_registry_lock` — no TOCTOU.
+Registry contract update (amend `PalaceRegistry.open` from M0.3.2 / M0.3.4): the method now takes a keyword-only `track_cold: bool = False` argument. When `True`, it returns `(entry, was_cold)` instead of just `entry`. `was_cold` is computed under `_registry_lock` — no TOCTOU. The two-phase eviction pattern introduced in M0.3.2 is preserved (see the "two-phase eviction" note in M0.3.2 Step 3): Phase 1 selects candidates inside the registry lock, Phase 2 closes them outside the lock under each user's write lock so in-flight readers drain first.
 
 ```python
 async def open(self, user_id: str, *, track_cold: bool = False):
+    to_close_after = []
     async with self._registry_lock:
         was_cold = user_id not in self._cache
         if not was_cold:
@@ -1767,8 +2212,11 @@ async def open(self, user_id: str, *, track_cold: bool = False):
         else:
             entry = await self._construct_entry(user_id)
             self._cache[user_id] = entry
-            await self._evict_to_fit_unlocked()
-        return (entry, was_cold) if track_cold else entry
+            to_close_after = await self._evict_to_fit_unlocked()
+    # Phase 2: close evicted handles with reader-drain discipline (see M0.3.2).
+    for evicted_uid, evicted_entry in to_close_after:
+        await self._close_evicted(evicted_uid, evicted_entry)
+    return (entry, was_cold) if track_cold else entry
 ```
 
 Update any existing callers in `routes/palace.py` and tests accordingly — they continue working because `track_cold=False` returns the same shape as before.
@@ -1779,7 +2227,7 @@ Update any existing callers in `routes/palace.py` and tests accordingly — they
 
 ```bash
 git add mempalace-sidecar/
-git commit -m "feat(sidecar): concurrent L0-L3 wake-up with shared embedding"
+git commit -m "feat(sidecar): L0-L3 wake-up composition via PalaceHandle layers"
 ```
 
 #### Task M0.5.3: Integration test — full wake-up with seeded palace
@@ -1808,12 +2256,141 @@ async def test_wake_up_returns_all_four_layers(app, auth):
                 "text": f"message {i}",
                 "ts": 1_700_000_000.0 + i,
             })
-        r = await c.post("/palace/u/wake-up", headers=auth, json={"query": "message 5", "k": 5})
+        r = await c.post("/palace/u/wake-up", headers=auth, json={
+            "query": "message 5", "k": 5, "session_id": "s1",
+        })
     assert r.status_code == 200
     ctx = r.json()
     assert ctx["user_id"] == "u"
     for layer in ("l0_recent", "l1_session", "l2_topic", "l3_semantic"):
         assert layer in ctx
+    # L1 exercised via session_id — must return at least one of the seeded session turns
+    assert len(ctx["l1_session"]) > 0
+```
+
+- [ ] **Step 1a: Measurement test — serial vs to_thread composition**
+
+```python
+async def test_wakeup_composition_within_latency_budget(app, auth):
+    """Spec §4.2 budget: p95 wake-up ≤ 500 ms hot, ≤ 2 s cold.
+    Measure total_ms across 10 wake-ups against a 100-drawer palace;
+    assert p95 under hot budget. If this fails, either (a) drop back to
+    serial composition and re-measure, or (b) profile the individual
+    layers to find which is blowing budget. Record the outcome as a delta.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        # seed 100 drawers
+        for i in range(100):
+            await c.post("/palace/perf/ingest", headers=auth, json={
+                "turn_id": f"perf{i:040d}",
+                "session_id": "s1",
+                "pair_id": f"perf_p{i:040d}",
+                "role": "user" if i % 2 == 0 else "assistant",
+                "text": f"turn {i} — some conversational content for retrieval",
+                "ts": 1_700_000_000.0 + i,
+            })
+        # one warmup, then 10 measured
+        await c.post("/palace/perf/wake-up", headers=auth, json={"query": "content", "k": 5})
+        times_ms = []
+        for _ in range(10):
+            r = await c.post("/palace/perf/wake-up", headers=auth, json={
+                "query": "content", "k": 5, "session_id": "s1",
+            })
+            assert r.status_code == 200
+            times_ms.append(r.json()["meta"]["total_ms"])
+        times_ms.sort()
+        p95 = times_ms[int(len(times_ms) * 0.95)]
+        assert p95 < 500, f"p95={p95:.1f}ms exceeds 500ms hot budget — see spec §4.2"
+
+
+async def test_wakeup_concurrent_faster_than_sum_of_parts(app, auth):
+    """Review-fix #4 (2026-04-20) — mechanical enforcement of the
+    parallelism architectural decision. The plan specifies asyncio.to_thread
+    wrapping so the four layer calls run concurrently in the default thread
+    pool (spec §5.3). A subagent that implements M0.5.2 with a naked
+    asyncio.gather over sync bodies would silently get sequential execution
+    — tests like test_layers_run and test_p95_latency pass on tiny seed
+    data, and the budget blows in production on 10k-drawer palaces.
+
+    Assertion: wake-up wall time is strictly less than the sum of each
+    layer's wall time when called standalone. A 0.7× threshold gives slack
+    for thread-pool overhead. If the test fails, the implementation is
+    running layers serially — fix by wrapping each call in asyncio.to_thread.
+    """
+    import time
+    import asyncio
+    from httpx import ASGITransport, AsyncClient
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        # Seed: a non-trivial palace so each layer has real work to do.
+        for i in range(300):
+            await c.post("/palace/par/ingest", headers=auth, json={
+                "turn_id": f"par{i:040d}",
+                "session_id": "s1",
+                "pair_id": f"par_p{i:040d}",
+                "role": "user" if i % 2 == 0 else "assistant",
+                "text": f"content turn {i} with a variety of retrievable words and phrases",
+                "ts": 1_700_000_000.0 + i,
+            })
+
+        # Warm up palace cache and Chroma query-path.
+        await c.post("/palace/par/wake-up", headers=auth, json={
+            "query": "content", "k": 5, "session_id": "s1",
+        })
+
+        # Exercise the route directly to get individual layer timings.
+        # The wakeup_seconds histogram labels record per-layer t; here we
+        # approximate by calling the build_wakeup helper with all-but-one
+        # layers stubbed in a separate test. For integration granularity,
+        # rely on the fact that total_ms < sum(component routes) is a strong
+        # signal of parallelism. Component calls:
+        t0 = time.monotonic()
+        _ = await c.get("/palace/par/drawers", headers=auth, params={"limit": 5})
+        l0_like = time.monotonic() - t0
+
+        t0 = time.monotonic()
+        _ = await c.post("/palace/par/search", headers=auth, json={"query": "content", "k": 5})
+        l3_like = time.monotonic() - t0
+
+        t0 = time.monotonic()
+        r = await c.post("/palace/par/wake-up", headers=auth, json={
+            "query": "content", "k": 5, "session_id": "s1",
+        })
+        total = time.monotonic() - t0
+        assert r.status_code == 200
+
+    # Lower bound on the "sum of parts": L0+L3 (the two we measured).
+    # Wake-up also does L1 (cheap sqlite+get) and L2 (same cost as L3);
+    # a serial implementation would total ≥ l0_like + l3_like + l3_like.
+    #
+    # Coefficient choice — 0.7 is load-bearing, not arbitrary.
+    # Ideal parallelism over four equal-cost layers is ratio ≈ 0.33
+    # (max(l0, l1, l2, l3) / sum). Real parallelism lands higher because:
+    #   - thread-pool scheduling has ~1-5 ms overhead per dispatch
+    #   - GIL contention on the sync bodies (each Python-heavy) caps speedup
+    #   - 2-core CI boxes hit true-parallelism ceiling fast
+    # Setting threshold at 0.7 catches "pure serial" (ratio ~1.0) with wide
+    # margin, while tolerating the overhead envelope of real thread-pool
+    # parallelism on modest hardware. If this test flakes on CI, read the
+    # logged layer times below and investigate; DO NOT loosen the coefficient
+    # without matching evidence that the overhead has fundamentally changed.
+    serial_bound = l0_like + 2 * l3_like
+    ratio = total / serial_bound if serial_bound else 1.0
+    # Log component times on every run so a flake comes with diagnosis, not
+    # just "assertion failed". Use pytest -s (or read captured stderr) to see.
+    import sys
+    print(
+        f"[wakeup-parallelism] l0={l0_like*1000:.1f}ms l3={l3_like*1000:.1f}ms "
+        f"total={total*1000:.1f}ms serial_bound={serial_bound*1000:.1f}ms "
+        f"ratio={ratio:.2f} (threshold 0.70)",
+        file=sys.stderr,
+    )
+    assert total < 0.7 * serial_bound, (
+        f"Wake-up took {total*1000:.0f} ms; serial bound {serial_bound*1000:.0f} ms. "
+        f"Ratio {ratio:.2f} ≥ 0.7 — layers may be running sequentially. "
+        f"Ensure build_wakeup wraps each layer in asyncio.to_thread. "
+        f"Component times: l0={l0_like*1000:.1f}ms l3={l3_like*1000:.1f}ms."
+    )
 ```
 
 - [ ] **Step 2: Reuse `app` and `auth` fixtures from conftest.py** — add to `tests/integration/conftest.py`:
@@ -1892,12 +2469,13 @@ async def search(user_id: str, body: SearchRequest, request: Request) -> list[Dr
     registry = _registry(request)
     entry = await registry.open(user_id)
     lock = registry._lock_for(user_id)
-    embedder = request.app.state.embedder
-    vec = embedder.embed(body.query)
     async with lock.reader_lock:
-        raws = entry.palace.search(vector=vec, wing=body.wing, k=body.k) or []
+        # handle.search bridges to mempalace.searcher.search_memories
+        # which does hybrid BM25+vector+closet-boost internally. We do not
+        # own the embedding; Chroma does.
+        raws = entry.handle.search(body.query, wing=body.wing, k=body.k) or []
     from mempalace_sidecar.wakeup import _to_drawer
-    return [await _to_drawer(r) for r in raws]
+    return [_to_drawer(r) for r in raws]
 ```
 
 - [ ] **Step 4: Run → passes**
@@ -1905,21 +2483,29 @@ async def search(user_id: str, body: SearchRequest, request: Request) -> list[Dr
 
 #### Task M0.6.2: `/palace/{uid}/drawers` paginated list
 
+> **Pagination model (2026-04-20).** Original draft used cursor-based pagination; reality is that ChromaDB's `col.get()` takes `limit` and `offset` with no cursor concept. The spec table (§5.2) was amended to offset-based. Route returns `{drawers, total, next_offset}` where `next_offset=None` signals end-of-pagination.
+
 Identical TDD structure. Implementation:
 
 ```python
 @router.get("/{user_id}/drawers")
-async def drawers(user_id: str, request: Request, wing: str | None = None, limit: int = 100, cursor: str | None = None):
+async def drawers(user_id: str, request: Request,
+                  wing: str | None = None, room: str | None = None,
+                  limit: int = 100, offset: int = 0):
     registry = _registry(request)
     entry = await registry.open(user_id)
     lock = registry._lock_for(user_id)
     async with lock.reader_lock:
-        raws, next_cursor = entry.palace.list_drawers(wing=wing, limit=limit, cursor=cursor)
+        result = entry.handle.list_drawers(wing=wing, room=room, limit=limit, offset=offset)
     from mempalace_sidecar.wakeup import _to_drawer
-    return {"drawers": [await _to_drawer(r) for r in raws], "next_cursor": next_cursor}
+    return {
+        "drawers": [_to_drawer(r) for r in result["drawers"]],
+        "total": result["total"],
+        "next_offset": result["next_offset"],
+    }
 ```
 
-Test: ingest 5 drawers, request with `limit=2`, assert `next_cursor` present; second request with cursor continues pagination; final call returns `next_cursor=None`. Commit.
+Test: ingest 5 drawers, request with `limit=2, offset=0`, assert `next_offset=2`; second request with `offset=2` continues pagination; final call (offset≥total) returns `next_offset=None` and an empty drawers list. Commit.
 
 ---
 
@@ -1927,7 +2513,7 @@ Test: ingest 5 drawers, request with `limit=2`, assert `next_cursor` present; se
 
 Five small tasks:
 
-1. **`kg_queue.py` SQLite schema** — matches spec §5.4 exactly; unit test asserts unique-constraint rejection of duplicates.
+1. **`kg_queue.py` SQLite schema** — matches spec §5.5 exactly; unit test asserts unique-constraint rejection of duplicates.
 2. **`enqueue(user_id, drawer_ids)` helper** — wired into `/ingest` as a fire-and-forget call (wrapped in a try/except to never fail ingest).
 3. **Batched worker loop** — `async def run_kg_worker(app)` pulls `LIMIT 4` rows every 30s, batches by user, `kg_llm_provider.extract(texts)` returns triples, writes to per-palace `kg.sqlite`. Failure path: increment `attempts`, backoff, eventually `status=failed`.
 4. **Cost ceiling** — worker polls a `daily_spend_usd` counter (file-based or SQLite) and skips batches when cap hit.
@@ -2074,10 +2660,10 @@ Tests for each function, committed separately.
 
 ### M0.8 — Lifecycle: DELETE palace + rebuild
 
-1. `DELETE /palace/{uid}` — two-phase: acquire write-lock, close handle, `os.replace(dir, dir + ".pending_delete." + ts)`, record audit row, `shutil.rmtree` asynchronously, return `DeletionReceipt`.
-2. `POST /palace/{uid}/rebuild` — accepts `{"conversations": [...]}` body; iterates and calls `/ingest` semantics internally under write-lock; returns `{"ingested": N, "skipped": M, "job_id": "..."}`.
+1. `DELETE /palace/{uid}` — two-phase: acquire write-lock, **`entry.handle.close()`** (this calls `kg.close()`, closes `turns.sqlite`, and pops the library backend cache per spec §5.3 cache-eviction contract), remove the entry from registry cache, `os.replace(dir, dir + ".pending_delete." + ts)`, record audit row, `shutil.rmtree` asynchronously, return `DeletionReceipt`. The registry-cache entry MUST be removed before the directory rename — otherwise a concurrent request for the same user_id gets a handle whose `palace_path` no longer exists.
+2. `POST /palace/{uid}/rebuild` — accepts `{"conversations": [...]}` body; iterates the conversations and invokes `entry.handle.add_drawer(turn_id=..., session_id=..., pair_id=..., role=..., text=..., ts=...)` for each under the user's write-lock. Because `add_drawer` is idempotent on `turn_id`, re-runs are safe. Returns `{"ingested": N, "skipped": M, "job_id": "..."}` where `skipped` counts the `status="duplicate"` results.
 
-Each is its own task with failing test → implementation → commit.
+Each is its own task with failing test → implementation → commit. The integration test for DELETE MUST include `assert str(palace_path) not in mempalace.palace._DEFAULT_BACKEND._clients` after the delete completes — same teeth-bearing check as the eviction test in M0.3.4.
 
 Audit log is its own module:
 
@@ -2120,6 +2706,8 @@ class AuditLog:
 ---
 
 ### M0.9 — Migration framework
+
+> **Scope reminder (2026-04-20).** Spec §5.6 names three orthogonal version dimensions: Chroma on-disk format (library-managed via `mempalace.migrate.migrate`), drawer `normalize_version` (library-managed via `file_already_mined` auto-rebuild), and our sidecar's `meta.json schema_version` (this milestone). The migration runner below operates only on dimension 3. Dimension 1 (Chroma format) is handled inside `PalaceHandle.open()` as part of M0.3.0 and does NOT go through the runner here. Dimension 2 heals lazily on next mine; no action needed.
 
 Three tasks:
 
@@ -2289,6 +2877,12 @@ Test uses `asyncio.wait_for` with a mock in-flight handler and asserts shutdown 
 
 Prometheus multiprocess is already in the env (`PROMETHEUS_MULTIPROC_DIR`). Register every metric listed in spec §8.1.
 
+> **Benchmark task added during M0.3.1-5 sign-off (2026-04-20):** M0.3's `PalaceRegistry._construct_entry` runs inside `_registry_lock`, which serialises all cold palace opens across the whole sidecar. Per-open cost is 50-200ms (Chroma init + KG sqlite + dir walk); 10 concurrent first-touch opens queue for 0.5-2s total. This shows up as a latency tail at warm startup (post-restart / post-deploy) and during traffic bursts to cold users.
+>
+> **M0.11 adds a synthetic load test** that deliberately triggers the bottleneck — N concurrent `open()` calls for distinct cold user_ids — and measures queueing delay. Output: a documented threshold at which the sentinel-pattern fix (release the registry lock across `_construct_entry` using a per-user "open-in-progress" event) becomes warranted. If the measured p95 at realistic N stays under the wake-up budget, defer the fix. If it blows the budget, the fix lands under M0.11 rather than as an emergency under P1 traffic.
+>
+> Add `test_benchmark_concurrent_cold_opens` to the M0.11 task list.
+
 **Files:**
 - Create: `mempalace-sidecar/mempalace_sidecar/metrics.py`
 - Modify: `mempalace-sidecar/mempalace_sidecar/routes/ops.py`
@@ -2300,7 +2894,7 @@ from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry, mult
 ingest_total = Counter("mempalace_ingest_total", "Ingest outcomes", ["status"])
 wakeup_seconds = Histogram("mempalace_wakeup_seconds", "Wake-up layer latency", ["layer", "hot"])
 search_seconds = Histogram("mempalace_search_seconds", "Search latency", ["hot"])
-embedding_seconds = Histogram("mempalace_embedding_seconds", "Embedding call latency")
+chroma_query_seconds = Histogram("mempalace_chroma_query_seconds", "Chroma embed+search (library-internal)", ["layer"])
 palace_cache_size = Gauge("mempalace_palace_cache_size", "Hot palace count", multiprocess_mode="livesum")
 palace_cache_bytes = Gauge("mempalace_palace_cache_bytes", "Total resident bytes", multiprocess_mode="livesum")
 palace_cache_hits_total = Counter("mempalace_palace_cache_hits_total", "Hot palace hits")
@@ -2340,7 +2934,9 @@ Wire `/readyz`:
 @router.get("/readyz")
 async def readyz(request: Request):
     app = request.app
-    ok_embed = hasattr(app.state, "embedder") and app.state.embedder is not None
+    # embedding_ready flag is set by the lifespan after prime_embedding_function (M0.5.1).
+    # Chroma owns the actual sentence-transformers model — we don't hold a direct reference.
+    ok_embed = bool(getattr(app.state, "embedding_ready", False))
     ok_registry = hasattr(app.state, "registry") and app.state.registry is not None
     return {
         "ok": ok_embed and ok_registry and not getattr(app.state, "shutting_down", False),
@@ -2359,7 +2955,7 @@ async def readyz(request: Request):
 import time as _time
 from mempalace_sidecar.metrics import (
     ingest_total, wakeup_seconds, search_seconds,
-    embedding_seconds, palace_cache_hits_total, palace_cache_misses_total,
+    chroma_query_seconds, palace_cache_hits_total, palace_cache_misses_total,
 )
 
 
@@ -2408,22 +3004,17 @@ async def _timed(label: str, hot_label: str, coro):
     wakeup_seconds.labels(layer=label, hot=hot_label).observe(time.monotonic() - t)
     return r
 
-# In build_wakeup, replace asyncio.gather(l0(), l1(), l2(), l3()) with:
+# In build_wakeup, each layer call is already wrapped in asyncio.to_thread (M0.5.2).
+# Wrap the to_thread awaitable with _timed for per-layer timing:
 l0r, l1r, l2r, l3r = await asyncio.gather(
-    _timed("l0", hot_label, l0()),
-    _timed("l1", hot_label, l1()),
-    _timed("l2", hot_label, l2()),
-    _timed("l3", hot_label, l3()),
+    _timed("l0", hot_label, asyncio.to_thread(_l0)),
+    _timed("l1", hot_label, asyncio.to_thread(_l1)),
+    _timed("l2", hot_label, asyncio.to_thread(_l2)),
+    _timed("l3", hot_label, asyncio.to_thread(_l3)),
 )
 ```
 
-And wrap the embedding call:
-
-```python
-t_e = time.monotonic()
-vec = embedder.embed(query) if query else None
-embedding_seconds.observe(time.monotonic() - t_e)
-```
+> **Note on embedding timer.** The original draft wrapped a standalone `embedder.embed(query)` call in its own Prometheus histogram. After the PalaceHandle rewrite (spec §5.3), embedding happens inside ChromaDB as part of `col.query(query_texts=...)` — we no longer hold a direct reference to the sentence-transformers model. The `wakeup_seconds{layer="l3"}` and `wakeup_seconds{layer="l2"}` timers capture the Chroma-internal embed + search time together; that composition is what our p95 budget is defined against, and having a separate embedding timer would overcount. No standalone `embedding_seconds` metric in v1. If p95 regression investigation ever needs embed-vs-search decomposition, swap to `col.query(query_embeddings=[vec])` and time the two phases explicitly — that's a measurement-driven follow-up, not a v1 concern.
 
 Unit tests:
 - `test_ingest_increments_accepted_on_success`
@@ -2431,7 +3022,6 @@ Unit tests:
 - `test_ingest_increments_error_on_raise`
 - `test_wakeup_records_layer_timers`
 - `test_search_records_hot_cold_label`
-- `test_embedding_timer_observed`
 - `test_cache_hit_miss_counters_increment`
 
 ---
@@ -3686,14 +4276,14 @@ class MempalaceAdapter:
         )
         return DeletionReceipt(status=resp["status"], bytes_removed=resp["bytes_removed"])
 
-    async def list_drawers(self, user_id: str, wing: str | None = None, limit: int = 100, cursor: str | None = None):
+    async def list_drawers(self, user_id: str, wing: str | None = None, limit: int = 100, offset: int = 0):
         # Plan review fix #5: GET, not POST.
+        # Pagination: offset-based — ChromaDB has no cursor primitive (see spec §5.2).
         params = []
         if wing:
             params.append(f"wing={wing}")
         params.append(f"limit={limit}")
-        if cursor:
-            params.append(f"cursor={cursor}")
+        params.append(f"offset={offset}")
         qs = "&".join(params)
         return await self._client.get_json(f"/palace/{user_id}/drawers?{qs}")
 ```

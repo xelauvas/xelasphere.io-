@@ -1,0 +1,58 @@
+[Unit]
+Description=MemPalace sidecar for XelaSphere
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Type=notify — sidecar MUST sd_notify(READY=1) after the embedding model
+# finishes loading (see mempalace-sidecar/main.py lifespan hook). systemd
+# waits for READY before marking the unit active, so /readyz can be
+# polled by Flask workers once the unit reports active.
+Type=notify
+User=mempalace
+Group=mempalace
+EnvironmentFile=/etc/mempalace/sidecar.env
+
+# systemd owns /run/mempalace lifecycle (tmpfs-aware). /run is tmpfs, so a
+# non-systemd-managed directory would vanish on reboot and the mempalace
+# user couldn't recreate it under root-owned /run. RuntimeDirectoryMode
+# matches the 0750 mode from spec §7.1.
+RuntimeDirectory=mempalace
+RuntimeDirectoryMode=0750
+
+# The mempalace system user has HOME=/home/mempalace by default (set by
+# useradd at Step 1 of provision.sh even without -m), but /home is
+# root:root 0755 — unwritable. chromadb's onnx embedding function calls
+# os.makedirs(~/.cache/chroma/onnx_models/...) at first use and crashes
+# with PermissionError before the sidecar can notify READY. Override HOME
+# to a systemd-managed cache dir so chromadb's implicit HOME-derived
+# cache path lands somewhere writable.
+CacheDirectory=mempalace
+CacheDirectoryMode=0750
+Environment=HOME=/var/cache/mempalace
+
+# Wipe the prometheus multiproc directory on each start. PROMETHEUS_MULTIPROC_DIR
+# accumulates .db files per worker PID; stale files from a prior run would
+# double-count or report phantom workers to the scrape endpoint.
+# Order matters: rm first (idempotent with -rf on non-existent path),
+# then mkdir. The reverse order removes the dir we just created — GNU
+# rm with trailing slash does NOT preserve the directory.
+ExecStartPre=/bin/rm -rf /run/mempalace/prom
+ExecStartPre=/bin/mkdir -p /run/mempalace/prom
+
+ExecStart=/opt/mempalace-sidecar/venv/bin/mempalace-sidecar
+KillSignal=SIGTERM
+# 10s drain budget from spec §4 (graceful shutdown) + 5s grace for
+# in-flight requests to complete.
+TimeoutStopSec=15s
+
+# Memory caps match MEMPALACE_CACHE_MAX_BYTES (2G cache) + 1G working-set
+# headroom. Exceeding MemoryHigh throttles; exceeding MemoryMax kills.
+MemoryHigh=2G
+MemoryMax=3G
+
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

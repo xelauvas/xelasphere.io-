@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""Weekly 2×2 rubric harness for mempalace vs legacy memory quality.
+
+Usage (per spec §6):
+    mempalace-rubric [--log-dir PATH] [--sample N] [--output DIR]
+
+Reads shadow-log records from `/var/log/mempalace/shadow/shadow-*.jsonl[.gz]`,
+samples N random records (default 20), prompts the rater for each outcome
+(both_hit / mempalace_only / v3_only / both_miss / skip), and writes a
+weekly tally to `docs/mempalace-shadow/YYYY-WW.md`.
+
+Shadow payload schema (produced by adapter.log_shadow at M0.18):
+    {"ts": float, "user_id": str, "query": str,
+     "legacy": str|dict, "mempalace": dict|None}
+
+Rater convention (spec §6): single rater (Xela, v1). Web UI deferred
+until >1 rater.
+
+P2 exit criterion (spec §7.4):
+    mempalace_only_hit >= v3_only_hit for 3 consecutive weeks
+    AND (both_hit + mempalace_only) >= 85% of rated samples.
+
+This script reports the weekly value of `mempalace_only_hit >= v3_only_hit`;
+operator consults docs/mempalace-shadow/phase-log.md for multi-week state.
+"""
+import datetime
+import gzip
+import json
+import random
+from pathlib import Path
+
+import click
+
+
+@click.command()
+@click.option(
+    "--log-dir",
+    type=click.Path(exists=True),
+    default="/var/log/mempalace/shadow",
+    help="Shadow log directory (default: /var/log/mempalace/shadow).",
+)
+@click.option(
+    "--sample",
+    default=20,
+    help="Number of records to sample (default: 20).",
+)
+@click.option(
+    "--output",
+    type=click.Path(),
+    default="docs/mempalace-shadow/",
+    help="Output directory for weekly tally (default: docs/mempalace-shadow/).",
+)
+def main(log_dir, sample, output):
+    paths = list(Path(log_dir).glob("shadow-*.jsonl*"))
+    records = []
+    for p in paths:
+        opener = gzip.open if p.suffix == ".gz" else open
+        with opener(p, "rt") as f:
+            for line in f:
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    # Skip malformed lines; logrotate can mid-line-truncate
+                    # under copytruncate (spec §8.4). Silent skip is
+                    # acceptable for a rating tool.
+                    continue
+
+    if not records:
+        click.echo("No shadow records found.")
+        return
+
+    picked = random.sample(records, min(sample, len(records)))
+    tally = {"both_hit": 0, "mempalace_only": 0, "v3_only": 0, "both_miss": 0}
+    rated = 0
+    skipped = 0
+
+    for i, r in enumerate(picked, 1):
+        click.echo(f"\n--- Sample {i}/{len(picked)} ---")
+        click.echo(f"Query: {r.get('query')}")
+        legacy_blob = json.dumps(r.get("legacy"), indent=2)[:500]
+        mempalace_blob = json.dumps(r.get("mempalace"), indent=2)[:500]
+        click.echo(f"\nLegacy result:\n{legacy_blob}")
+        click.echo(f"\nMemPalace result:\n{mempalace_blob}")
+
+        while True:
+            ans = click.prompt(
+                "Outcome [b=both_hit, m=mempalace_only, v=v3_only, "
+                "n=both_miss, s=skip]"
+            ).strip().lower()
+            if ans in ("b", "m", "v", "n", "s"):
+                break
+
+        if ans == "b":
+            tally["both_hit"] += 1
+            rated += 1
+        elif ans == "m":
+            tally["mempalace_only"] += 1
+            rated += 1
+        elif ans == "v":
+            tally["v3_only"] += 1
+            rated += 1
+        elif ans == "n":
+            tally["both_miss"] += 1
+            rated += 1
+        else:
+            skipped += 1
+
+    iso = datetime.date.today().isocalendar()
+    out_dir = Path(output)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"{iso.year}-{iso.week:02d}.md"
+
+    mempalace_ge_v3 = tally["mempalace_only"] >= tally["v3_only"]
+    hit_coverage_num = tally["both_hit"] + tally["mempalace_only"]
+    hit_coverage_pct = (
+        hit_coverage_num / rated * 100 if rated else 0.0
+    )
+
+    content = (
+        f"# Rubric Week {iso.year}-W{iso.week:02d}\n\n"
+        f"- Samples presented: {len(picked)}\n"
+        f"- Rated: {rated}\n"
+        f"- Skipped: {skipped}\n"
+        f"- both_hit: {tally['both_hit']}\n"
+        f"- mempalace_only: {tally['mempalace_only']}\n"
+        f"- v3_only: {tally['v3_only']}\n"
+        f"- both_miss: {tally['both_miss']}\n"
+        f"- mempalace_only_ge_v3_only: {mempalace_ge_v3}\n"
+        f"- hit_coverage (both_hit + mempalace_only) / rated: "
+        f"{hit_coverage_num}/{rated} = {hit_coverage_pct:.1f}%\n"
+    )
+    out.write_text(content)
+    click.echo(f"\nWrote {out}  (rated={rated}, skipped={skipped})")
+
+
+if __name__ == "__main__":
+    main()

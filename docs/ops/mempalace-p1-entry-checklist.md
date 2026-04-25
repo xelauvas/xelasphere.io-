@@ -1,0 +1,66 @@
+# MemPalace P1 pre-entry checklist
+
+Run before flipping `MEMPALACE_MODE=off → shadow` (P0 → P1 transition). Created at M0.26 to house checks that M0-exit was incorrectly scoped to cover. Scope discipline: everything in this file verifies behavior that requires `MEMPALACE_MODE != off` or a deployment shape the M0 phase did not require.
+
+## Pass criteria
+
+**Every item either green or explicitly deferred-with-reason.** Same framing as the M0-exit checklist.
+
+## Moved from M0-exit at M0.26
+
+### Flusher functional drain
+
+- [ ] With `MEMPALACE_MODE=shadow`, generate a turn via a chat request. Confirm `MEMPALACE_OUTBOX_PATH` SQLite shows a row added (`SELECT COUNT(*) FROM outbox`).
+- [ ] Within `poll_interval_s + post_json budget` (default 1s + 6.3s worst-case = ~8s), confirm the row's `status` transitions to `sent` (or `failed` with a specific error — that's still the flusher doing work, not dormancy).
+- [ ] Confirm `xelasphere_mempalace_flush_batch_seconds` Prometheus metric fires (flusher's per-batch histogram observation, only emitted when rows are processed).
+
+Why this lives here and not M0-exit: flusher functional drain requires a non-empty outbox, which requires `mode != off`, which does not happen during P0 dark-deploy. See the M0.26 amendment in `docs/ops/mempalace-m0-exit-checklist.md` § "Why the flusher check was split at M0.26" for the reasoning chain.
+
+## Prerequisite: Flask FHS migration
+
+P1 entry is blocked on moving Flask from the ad-hoc `/root/xelas.io/xelasphere.io-` deployment to spec §7.1's `/opt/xelasphere` layout with `User=xelasphere`. The flusher unit's `User=xelasphere` cannot execute anything under `/root` (0700 mode, non-root users cannot traverse), so flusher-as-xelasphere is infeasible without the migration.
+
+- [ ] Codebase relocated to `/opt/xelasphere/` with appropriate ownership.
+- [ ] State directories under `/var/lib/xelasphere/` (outbox, etc.) chowned to `xelasphere:xelasphere`.
+- [ ] `xelasphere.service` updated: `User=xelasphere`, `WorkingDirectory=/opt/xelasphere`, `ExecStart=/opt/xelasphere/venv/bin/gunicorn ...`, `EnvironmentFile=/etc/xelasphere/xelasphere.env` (or equivalent FHS location).
+- [ ] `xelasphere` user already exists from M0.26 forward-prep; confirm it is a member of `mempalace` group (provision.sh step 2 handles this).
+- [ ] Flask boots cleanly from the new layout; all M0.25 app-side tests green against the new venv path.
+- [ ] Flusher starts as `User=xelasphere` without `exec: permission denied`.
+
+Tracked in GitHub issue [#6](https://github.com/xelauvas/xelasphere.io-/issues/6).
+
+## Shadow-mode behavior authoring (from M0-exit known-gaps #4)
+
+Two-layer coverage. Both must be landed before `MEMPALACE_MODE=shadow` rotation.
+
+- [x] **Structural / unit tests (Path B)** — landed at commit `<fill at P1 entry>` (`app/mempalace/tests/test_shadow_mode.py`, 6 tests). Covers: `log_shadow` payload schema via real ShadowSink round-trip + rubric-compatible parse (value-level); `record_turn` use-before-assignment + pair_id variable-name sharing (AST structural, catches the #9 bug class); `wake_up_sync` call-shape + required kwargs on both chat + chat_stream; chat_stream user-half present + assistant-half absent asymmetry with M0.18 `af7549a` reference.
+- [ ] **Integration tests (Path A)** — issue [#10](https://github.com/xelauvas/xelasphere.io-/issues/10). Real execution of `POST /chat` and `POST /chat/stream` under `MEMPALACE_MODE=shadow` with patched adapter to capture calls; asserts value-level pair_id propagation, log_shadow firing under mode=shadow, wake_up_sync → log_shadow payload round-trip. Requires the deferred M0.23.5 Phase 3 mocking scaffold (Groq, OpenRouter, memory_v2 retrieval, memory_v3 rollout, chat_engine, smart_router, ActionParser). **Shadow rotation gates on this item landing, not on Path B alone** — structural checks catch syntactic regressions but not value-level drift.
+
+Surfaced during Path B authoring: issue [#9](https://github.com/xelauvas/xelasphere.io-/issues/9) — latent NameError in non-streaming `chat()` record_turn wiring, silently swallowed under mode != OFF, would have activated on first shadow rotation. Fixed at commit `f6c6906`. Pattern worth naming: test-authoring surfaced the bug before the tests existed to catch it — argument for the sequencing (shadow-mode tests before mode rotation, not after).
+
+## Streaming assistant-half `record_turn` (from M0-exit known-gaps #2)
+
+- [ ] Decision: either wire assistant-half `record_turn` on the streaming SSE path (closes orphan pair_id window), or accept orphan assistant-halves per spec §4.4 tolerance and document the acceptance decision.
+
+## STUB runbook expansions (P0.2 → P1 entry target, existing work)
+
+- [x] R7 KG cost + queue runbook section expanded — commit `65fe440`, closes [#2](https://github.com/xelauvas/xelasphere.io-/issues/2).
+- [x] R8 Circuit breaker runbook section expanded — commit `94dd5e1`, closes [#3](https://github.com/xelauvas/xelasphere.io-/issues/3).
+- [x] R13 disposition documented (reserved, no runtime incident class identified during M0.26/M0.27/P0-day-1; re-examine after P1 shadow traffic) — commit `6c23fe5`, closes [#4](https://github.com/xelauvas/xelasphere.io-/issues/4).
+
+## Sign-off
+
+Template entry for `docs/mempalace-shadow/phase-log.md`:
+
+```markdown
+## P1 entry
+
+- Date: YYYY-MM-DD
+- P0 dark-deploy duration: N days (started YYYY-MM-DD)
+- Flusher functional-drain: verified / deferred with reason: <...>
+- Flask FHS migration: completed at commit <sha>
+- Shadow-mode tests authored: structural (Path B) landed at <sha>; integration (Path A / #10) landed at <sha>
+- Streaming assistant-half record_turn: wired / accepted-as-orphan per spec §4.4
+- STUB runbook expansions: #2/#3/#4 closed
+- Rotating MEMPALACE_MODE=shadow at <timestamp>
+```

@@ -1,0 +1,54 @@
+[Unit]
+Description=MemPalace outbox flusher for XelaSphere
+# Start after sidecar is up: flusher sends ingest requests; sidecar must
+# be listening on the UDS. Requires= (not Wants=) propagates sidecar
+# failure to flusher — if sidecar can't start, flusher shouldn't either.
+After=mempalace-sidecar.service
+Requires=mempalace-sidecar.service
+
+[Service]
+# Type=simple — no sd_notify; the flusher is ready as soon as the Python
+# process starts constructing its thread. Minimal lifecycle surface.
+Type=simple
+
+# User/Group: xelasphere (matches Flask) has read/write on outbox.db at
+# /var/lib/xelasphere/outbox.db; mempalace group grants read on the UDS
+# socket at /run/mempalace/sidecar.sock.
+User=xelasphere
+Group=mempalace
+
+# Reuses /etc/xelasphere/mempalace.env for MEMPALACE_TOKEN + _SOCKET
+# + _OUTBOX_PATH. Single source of truth with the Flask systemd unit;
+# no duplication.
+EnvironmentFile=/etc/xelasphere/mempalace.env
+
+# systemd owns /run/xelasphere lifecycle (tmpfs-aware). Same fix applied
+# to the sidecar unit at M0.26a; same rationale — /run is tmpfs and the
+# xelasphere user cannot mkdir under root-owned /run on reboot.
+RuntimeDirectory=xelasphere
+RuntimeDirectoryMode=0750
+
+# Prometheus multiproc directory. Separate from the sidecar's /run/mempalace
+# /prom because flusher + Flask + sidecar are distinct Prometheus aggregation
+# scopes. Path uses /run/... (not /var/run/...) to match the RuntimeDirectory=
+# created subtree directly.
+Environment=PROMETHEUS_MULTIPROC_DIR=/run/xelasphere/prom
+ExecStartPre=/bin/rm -rf /run/xelasphere/prom
+ExecStartPre=/bin/mkdir -p /run/xelasphere/prom
+
+ExecStart=/opt/xelasphere/venv/bin/python -m app.mempalace.flusher_main
+
+# SIGTERM → Flusher.stop() (signal handler in flusher_main); 10s drain
+# budget per spec §4 + 5s grace.
+KillSignal=SIGTERM
+TimeoutStopSec=15s
+
+Restart=on-failure
+RestartSec=2s
+
+# Single-instance semantics come from systemd (one PID per unit), not
+# from application-level locking. This is the whole point of the
+# separate-unit pattern vs in-worker thread.
+
+[Install]
+WantedBy=multi-user.target
