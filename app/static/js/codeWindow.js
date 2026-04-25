@@ -2012,7 +2012,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
     } = options || {};
 
     // Get session ID at the START of the request - this is the session we're responding to
-    const requestSessionId = window.chatManager?.activeSessionId || null;
+    let requestSessionId = window.chatManager?.activeSessionId || null;
 
     // Helper to check if this session is still the active one
     // Defined here (before try) so it's accessible in finally block
@@ -2024,13 +2024,6 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         const currentActive = window.chatManager?.activeSessionId;
         return currentActive === requestSessionId;
     };
-
-    // Check if THIS session already has an active request (per-session, not global)
-    // Allow starting requests in other sessions even if one is running
-    if (requestSessionId && BackgroundRequestManager.hasActiveRequest(requestSessionId)) {
-        console.log('Session already has active request:', requestSessionId);
-        return;
-    }
 
     // Also check global typing stopped flag (for abort scenarios)
     if (isTypingStopped) {
@@ -2124,7 +2117,20 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         }
 
         if (typeof window !== 'undefined' && window.chatManager?.ensureActiveSession) {
-            await window.chatManager.ensureActiveSession();
+            const ensuredSessionId = await window.chatManager.ensureActiveSession();
+            if (ensuredSessionId) {
+                requestSessionId = ensuredSessionId;
+            } else if (window.chatManager?.activeSessionId) {
+                requestSessionId = window.chatManager.activeSessionId;
+            }
+        }
+
+        // Re-check after ensureActiveSession(). The first message of a new chat
+        // used to snapshot a null session id before creation, which disabled
+        // per-session dedupe and allowed double-send races.
+        if (requestSessionId && BackgroundRequestManager.hasActiveRequest(requestSessionId)) {
+            console.log('Session already has active request:', requestSessionId);
+            return;
         }
 
         if (typeof window !== 'undefined' && window.chatManager?.handleTemporaryPromptSent) {
@@ -2324,6 +2330,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         if (isStreamable) {
             // Use streaming endpoint for DeepSeek and Moonshot/Kimi models
             try {
+                let streamHasVisibleOutput = false;
                 // SL-1: ensure streamRenderer.js ES module is loaded before attempting to
                 // use window.StreamRenderer. Short timeout so slow loads fall back gracefully.
                 if (window._streamRendererReadyPromise && typeof window.StreamRenderer !== 'function') {
@@ -2468,6 +2475,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         const chunk = JSON.parse(jsonStr);
 
                         if (chunk.type === 'reasoning') {
+                            streamHasVisibleOutput = true;
                             streamedReasoning += chunk.text || '';
                             // Buffer in BackgroundRequestManager
                             if (bgRequest) {
@@ -2478,6 +2486,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             // If not, ThinkingIndicator is hidden anyway, so this is harmless
                             ThinkingIndicator.appendReasoning(chunk.text || '');
                         } else if (chunk.type === 'content') {
+                            if (chunk.text) {
+                                streamHasVisibleOutput = true;
+                            }
                             const chunkText = chunk.text || '';
                             // Array push is O(1) vs string concat O(n)
                             _contentChunks.push(chunkText);
@@ -2772,6 +2783,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 }
                             }
                         } else if (chunk.type === 'image_generating') {
+                            streamHasVisibleOutput = true;
                             // Explicit image request: show placeholder immediately
                             console.log('[Stream] image_generating:', chunk.description);
                             if (isSessionActive()) {
@@ -2806,6 +2818,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 } catch (e) { /* storage unavailable — skip */ }
                             }
                         } else if (chunk.type === 'image_confirm') {
+                            streamHasVisibleOutput = true;
                             // Inferred image request: show confirmation UI
                             console.log('[Stream] image_confirm:', chunk.description);
                             if (isSessionActive()) {
@@ -2834,6 +2847,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         } else if (chunk.type === 'search_started' || chunk.type === 'search_web_results' ||
                                    chunk.type === 'search_images' || chunk.type === 'search_videos' ||
                                    chunk.type === 'search_content' || chunk.type === 'search_complete') {
+                            streamHasVisibleOutput = true;
                             if (isSessionActive()) {
                                 ThinkingIndicator.hide(); hideSimplePulsingDot();
                                 // Destroy StreamRenderer that has ACTION text from 1st LLM call
@@ -3610,6 +3624,24 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     return null;
                 }
                 console.error('Streaming error:', streamError);
+                if (streamHasVisibleOutput) {
+                    // Do not issue a second /chat request after the live stream
+                    // has already started rendering. Keep the partial answer
+                    // instead of duplicating the turn with a fallback request.
+                    if (_streamRenderer) {
+                        _streamRenderer.finalize();
+                        _streamRenderer = null;
+                        window._activeStreamRenderer = null;
+                    }
+                    if (bgRequest) {
+                        BackgroundRequestManager.errorRequest(requestSessionId, streamError.message || 'Streaming error');
+                        BackgroundRequestManager.clearRequest(requestSessionId);
+                    }
+                    if (isSessionActive() && window.Toast) {
+                        window.Toast.warning('Connection interrupted. Partial response shown.', 3500);
+                    }
+                    return _streamMsgId ? document.getElementById(_streamMsgId) : null;
+                }
                 // Tear down any partial StreamRenderer before the fallback path
                 // writes into the same container — otherwise the legacy
                 // displayMessage path double-renders on top of stale block DOM.
@@ -4290,4 +4322,3 @@ function copyCode(codeText, button) {
             setTimeout(() => button.innerHTML = '<i class="fas fa-copy"></i> ', 2000);
         });
 }
-
