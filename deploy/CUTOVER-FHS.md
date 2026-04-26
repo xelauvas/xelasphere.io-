@@ -46,6 +46,20 @@ under the existing flusher unit and is unaffected by this cutover.
    `feature/mempalace-p1-6-fhs-migration`. Diff against the version
    in the open PR if you want belt-and-braces verification.
 
+## Pre-flight dry run (recommended)
+
+Before committing to the cutover, run the script's pre-flight stage in
+isolation. This validates the environment (xelasphere user exists,
+`/etc/xelasphere/` in place, `/opt/xelasphere/` empty, current shell
+not inside the source tree) without changing any state:
+
+```bash
+sudo bash /root/xelas.io/xelasphere.io-/deploy/migrate-fhs.sh --check-only
+```
+
+Re-run as needed. If pre-flight fails, fix the underlying condition
+and re-check before proceeding.
+
 ## The cutover
 
 ```bash
