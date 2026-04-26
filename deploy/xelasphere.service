@@ -25,11 +25,31 @@ WorkingDirectory=/opt/xelasphere
 # system override (e.g. `mempalace-mode`) wins over a stale venv shim.
 Environment=PATH=/opt/xelasphere/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Single source of truth for Flask env. Permissions: root:xelasphere
-# 0640 so operators need sudo to edit but the service user can read.
-# Mirrors the pattern used by /etc/xelasphere/mempalace.env (already
-# in place, owned by the flusher unit) and /etc/mempalace/sidecar.env.
+# Two env files load in declaration order; later values override earlier
+# (systemd standard EnvironmentFile multiplicity).
+#
+# 1. xelasphere.env — Flask app config (firebase creds, API keys,
+#    SESSION_FILE_DIR, etc.). Migrated from .env at cutover.
+# 2. mempalace.env — MEMPALACE_MODE + LEGACY_MEMORY + token + socket
+#    paths. Already in place from the flusher unit; Flask MUST also
+#    load it so /usr/local/bin/mempalace-mode rotation actually flips
+#    Flask's mode. The rotation script restarts xelasphere and probes
+#    /admin/mempalace-mode for verification — without this second file
+#    Flask never sees the new MEMPALACE_MODE value, defaults to "off"
+#    via app/mempalace/feature_flag.py:85, and the rotation reports a
+#    verify-fail WARN every time.
+#
+# This was a pre-existing drift in the live unit (the prior
+# /root/xelas.io/...env did not contain MEMPALACE_MODE either; the
+# live unit only loaded that file). Fixing it as part of the FHS
+# migration so shadow rotation works on the first try post-cutover.
+#
+# Permissions on both files: root:xelasphere 0640 so operators need
+# sudo to edit but the service user can read. Mirrors the pattern used
+# by mempalace-flusher.service (mempalace.env) and the sidecar unit
+# (/etc/mempalace/sidecar.env).
 EnvironmentFile=/etc/xelasphere/xelasphere.env
+EnvironmentFile=/etc/xelasphere/mempalace.env
 
 # Coverage instrumentation flag carried over verbatim from the prior
 # unit. Removing it would change observability shape during the
