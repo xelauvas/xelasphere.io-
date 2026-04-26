@@ -30,6 +30,24 @@
 
 set -euo pipefail
 
+# --check-only: run Stage 1 (pre-flight) and exit before any state
+# changes happen. Useful for the operator to confirm the environment
+# is ready (xelasphere user exists, /etc/xelasphere/ in place,
+# /opt/xelasphere/ empty/absent, current shell isn't inside the source
+# tree) without committing to the production downtime window. Safe to
+# run as many times as you like.
+CHECK_ONLY=0
+case "${1:-}" in
+  --check-only)
+    CHECK_ONLY=1
+    shift
+    ;;
+  -h|--help)
+    sed -n '1,/^set -e/p' "$0" | sed 's|^# \?||;1d;$d'
+    exit 0
+    ;;
+esac
+
 OLD_DIR="/root/xelas.io/xelasphere.io-"
 NEW_DIR="/opt/xelasphere"
 SERVICE_USER="xelasphere"
@@ -93,6 +111,12 @@ else
 fi
 
 log "pre-flight OK"
+
+if [[ "${CHECK_ONLY}" -eq 1 ]]; then
+  log "--check-only: environment is ready for cutover. No state changed."
+  log "Re-run without --check-only to perform the actual migration."
+  exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # Stage 2 — stop service (production downtime begins here)
