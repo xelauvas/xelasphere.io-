@@ -243,6 +243,22 @@ def mempalace_shadow_env(monkeypatch):
     llm_post = MagicMock(return_value=canned_response)
     monkeypatch.setattr("app.utilities.requests.post", llm_post)
 
+    # Streaming path (chat_stream uses utilities.stream_deepseek_response,
+    # a generator). Patch the generator to yield a minimum-viable
+    # content + done sequence so chat_stream's generate() exits cleanly.
+    # The mempalace call sites at chat_routes.py:945-977 fire BEFORE the
+    # generate() inner function is invoked (lines 942-979 are in the
+    # outer chat_stream body), so even a no-yield stream still exercises
+    # the user-half record_turn assertions.
+    def _fake_stream_deepseek(*args, **kwargs):
+        yield {"type": "content", "text": _LLM_RESPONSE_TEXT}
+        yield {"type": "done"}
+
+    monkeypatch.setattr(
+        "app.utilities.stream_deepseek_response",
+        _fake_stream_deepseek,
+    )
+
     fake_memory_ctx = MagicMock()
     fake_memory_ctx.context_block = ""
     fake_memory_ctx.eval_metadata = MagicMock()
