@@ -11,6 +11,11 @@ Requires=mempalace-sidecar.service
 # process starts constructing its thread. Minimal lifecycle surface.
 Type=simple
 
+# WorkingDirectory required for `python -m app.mempalace.flusher_main`
+# to resolve the `app` package on sys.path. Matches xelasphere.service.
+# Without this the unit ModuleNotFoundError-loops (surfaced 2026-04-27).
+WorkingDirectory=/opt/xelasphere
+
 # User/Group: xelasphere (matches Flask) has read/write on outbox.db at
 # /var/lib/xelasphere/outbox.db; mempalace group grants read on the UDS
 # socket at /run/mempalace/sidecar.sock.
@@ -21,6 +26,13 @@ Group=mempalace
 # + _OUTBOX_PATH. Single source of truth with the Flask systemd unit;
 # no duplication.
 EnvironmentFile=/etc/xelasphere/mempalace.env
+
+# FIREBASE_CRED_PATH override: the flusher's `app.config` import path
+# requires it at module load even though the flusher doesn't use Firebase
+# itself. Setting it here avoids pulling all of xelasphere.env's secret
+# bundle into the flusher process. Path matches what migrate-fhs.sh
+# Stage 5 writes into xelasphere.env (2026-04-27 fix).
+Environment=FIREBASE_CRED_PATH=/opt/xelasphere/firebase-creds.json
 
 # systemd owns /run/xelasphere lifecycle (tmpfs-aware). Same fix applied
 # to the sidecar unit at M0.26a; same rationale — /run is tmpfs and the

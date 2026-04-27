@@ -163,6 +163,34 @@ chmod 0750 "${NEW_DIR}"
 log "chown complete"
 
 # ---------------------------------------------------------------------------
+# Stage 4b — venv shebang rewrite
+# ---------------------------------------------------------------------------
+# Python venvs hardcode the interpreter path in script shebangs at
+# venv-creation time. After rsync those shebangs still point at OLD_DIR;
+# any service running as SERVICE_USER (which can't traverse /root 0700)
+# fails to exec gunicorn/pip/etc. with status 203/EXEC. Sweep all venv
+# bin/ subtrees uniformly. Surfaced during the 2026-04-27 cutover.
+log "Stage 4b: rewrite venv script shebangs (${OLD_DIR} -> ${NEW_DIR})"
+hits="$(grep -rl "${OLD_DIR}" "${NEW_DIR}" 2>/dev/null | grep -E '/(\.?venv)/' || true)"
+if [[ -n "${hits}" ]]; then
+  printf '%s\n' "${hits}" | xargs sed -i "s|${OLD_DIR}|${NEW_DIR}|g"
+  log "  rewrote $(printf '%s\n' "${hits}" | wc -l) venv file(s)"
+else
+  log "  no stale venv shebangs found"
+fi
+
+# ---------------------------------------------------------------------------
+# Stage 4c — tighten firebase-creds.json mode
+# ---------------------------------------------------------------------------
+# rsync preserves source mode; the in-tree firebase-creds.json was 0644
+# (world-readable). With the new in-tree path becoming the canonical
+# credentials location (see Stage 5 sed), tighten to 0640.
+if [[ -f "${NEW_DIR}/firebase-creds.json" ]]; then
+  chmod 0640 "${NEW_DIR}/firebase-creds.json"
+  log "Stage 4c: tightened firebase-creds.json to 0640"
+fi
+
+# ---------------------------------------------------------------------------
 # Stage 5 — env file relocation + path rewrite
 # ---------------------------------------------------------------------------
 log "Stage 5: install ${ENV_TARGET} (root:${SERVICE_GROUP} 0640)"
@@ -173,9 +201,16 @@ if [[ ! -f "${SRC_ENV}" ]]; then
   err "${SRC_ENV} not found (rsync should have copied it)"
   exit 1
 fi
-# Path rewrite: any /root/xelas.io/xelasphere.io- → /opt/xelasphere.
-# Only known hit is FIREBASE_CRED_PATH; sed handles any others uniformly.
-sed "s|${OLD_DIR}|${NEW_DIR}|g" "${SRC_ENV}" > "${ENV_TARGET}.new"
+# Path rewrites:
+#   1. ${OLD_DIR} → ${NEW_DIR} (catches any source-tree-relative paths).
+#   2. /root/.config/xelas/firebase.json → ${NEW_DIR}/firebase-creds.json
+#      The user-home creds path is unreachable by xelasphere (root home
+#      is 0700); the in-tree copy is md5-identical and reachable. This
+#      regression broke production for ~2.5h on the 2026-04-27 cutover
+#      until the in-tree path was hand-applied — bake into the script.
+sed -e "s|${OLD_DIR}|${NEW_DIR}|g" \
+    -e "s|/root/.config/xelas/firebase.json|${NEW_DIR}/firebase-creds.json|g" \
+    "${SRC_ENV}" > "${ENV_TARGET}.new"
 chmod 0640 "${ENV_TARGET}.new"
 chown "root:${SERVICE_GROUP}" "${ENV_TARGET}.new"
 mv "${ENV_TARGET}.new" "${ENV_TARGET}"
