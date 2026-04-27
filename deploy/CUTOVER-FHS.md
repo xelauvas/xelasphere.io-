@@ -194,8 +194,8 @@ sudo mv /root/xelas.io/xelasphere.io- /root/xelas.io/xelasphere.io-.archived-$(d
 ## Defects surfaced on the 2026-04-27 cutover (now fixed in source)
 
 The first run of this cutover took the Flask app down for ~2.5h
-(18:34 → 21:00 UTC) while four latent defects were patched in runtime.
-All four are now baked into the script + units; this section is here
+(18:34 → 21:00 UTC) while five latent defects were patched in runtime.
+All five are now baked into the script + units; this section is here
 so future readers know what those changes are *for* without grepping
 git history.
 
@@ -232,6 +232,15 @@ git history.
    still in place; reworking it to wait for bind is a future-issue
    item, but the systemd-side chmod is sufficient for the security
    posture #7 was opened to fix.
+5. **State file ownership (Stage 4d).** `/var/lib/xelasphere/outbox.db`
+   and `/var/log/mempalace/shadow/` were created when Flask ran as
+   `root` (pre-cutover). After the user flip, `xelasphere` could read
+   the outbox but couldn't write — `record_turn` silently failed and
+   the flusher's purge logged "attempt to write a readonly database"
+   every 10 minutes. The shadow log dir was `root:root 0755`, blocking
+   every shadow event with `PermissionError`. Surfaced ~30min into
+   shadow rotation when no shadow JSONL had been created. Stage 4d
+   now chowns both to `xelasphere`.
 
-If you re-run this script on a fresh host, all four are handled
+If you re-run this script on a fresh host, all five are handled
 automatically. None of these need operator intervention.

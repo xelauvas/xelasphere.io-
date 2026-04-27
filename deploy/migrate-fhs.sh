@@ -191,6 +191,30 @@ if [[ -f "${NEW_DIR}/firebase-creds.json" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Stage 4d — chown state files created under the old root deployment
+# ---------------------------------------------------------------------------
+# State files in /var/lib/xelasphere/ and /var/log/mempalace/ were created
+# when Flask ran as root (pre-cutover). After the user flip, xelasphere
+# can read them but not write — outbox.db opens read-only (record_turn
+# silently fails) and the shadow log JSONL hits PermissionError on rotate.
+# Surfaced 2026-04-27 ~30min after rotation to shadow.
+if [[ -f /var/lib/xelasphere/outbox.db ]]; then
+  chown "${SERVICE_USER}:${SERVICE_GROUP}" \
+    /var/lib/xelasphere/outbox.db \
+    /var/lib/xelasphere/outbox.db-wal \
+    /var/lib/xelasphere/outbox.db-shm 2>/dev/null || true
+  chmod 0640 /var/lib/xelasphere/outbox.db 2>/dev/null || true
+  log "Stage 4d: chowned outbox.db (+wal/shm) to ${SERVICE_USER}:${SERVICE_GROUP}"
+fi
+if [[ -d /var/log/mempalace/shadow ]]; then
+  # Owner xelasphere (writes via shadow_sink); group mempalace (readable
+  # by sidecar / rubric harness running as mempalace).
+  chown "${SERVICE_USER}:mempalace" /var/log/mempalace/shadow
+  chmod 0750 /var/log/mempalace/shadow
+  log "Stage 4d: chowned /var/log/mempalace/shadow to ${SERVICE_USER}:mempalace"
+fi
+
+# ---------------------------------------------------------------------------
 # Stage 5 — env file relocation + path rewrite
 # ---------------------------------------------------------------------------
 log "Stage 5: install ${ENV_TARGET} (root:${SERVICE_GROUP} 0640)"
