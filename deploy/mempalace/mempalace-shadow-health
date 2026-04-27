@@ -1,0 +1,163 @@
+#!/bin/bash
+#
+# mempalace-shadow-health — daily P1 shadow phase health check.
+#
+# Five checks, scored as RED (broken) / YELLOW (degraded) / GREEN (healthy):
+#   1. Outbox depth — total/pending/sent breakdown + oldest-pending lag
+#   2. Shadow JSONL — today's file exists + grew (vs. zero with chat traffic)
+#   3. Error scan — xelasphere/sidecar/flusher journals last 24h, ex. noise
+#   4. Service health — all 3 active, restart count in last 24h
+#   5. Sidecar UDS — socket exists, mode=0660 per spec §7.1 / issue #7
+#
+# Output: green = one-line summary; yellow/red = structured breakdown.
+# Exit:   0 = green, 1 = yellow, 2 = red.
+# State file at /var/log/mempalace/shadow-health.last (last run, queryable).
+#
+# Run as root (needs journal + outbox.db + xelasphere venv access).
+# Designed to be invoked by mempalace-shadow-health.timer.
+
+set -uo pipefail
+
+OUTBOX_DB=/var/lib/xelasphere/outbox.db
+SHADOW_DIR=/var/log/mempalace/shadow
+SOCKET_PATH=/run/mempalace/sidecar.sock
+STATE_FILE=/var/log/mempalace/shadow-health.last
+PYTHON=/opt/xelasphere/venv/bin/python
+TODAY=$(date -u +%Y-%m-%d)
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+red=()
+yellow=()
+
+# ---------------------------------------------------------------------------
+# (1) Outbox depth + lag
+# ---------------------------------------------------------------------------
+read -r outbox_total outbox_pending outbox_sent oldest_pending_age <<< "$(
+  sudo -u xelasphere "${PYTHON}" - <<'PY' 2>/dev/null
+import sqlite3, time
+try:
+    c = sqlite3.connect('/var/lib/xelasphere/outbox.db')
+    total   = c.execute('SELECT COUNT(*) FROM outbox').fetchone()[0]
+    pending = c.execute("SELECT COUNT(*) FROM outbox WHERE status='pending'").fetchone()[0]
+    sent    = c.execute("SELECT COUNT(*) FROM outbox WHERE status='sent'").fetchone()[0]
+    oldest  = c.execute("SELECT MIN(enqueued_at) FROM outbox WHERE status='pending'").fetchone()[0]
+    age = int(time.time() - oldest) if oldest else 0
+    print(total, pending, sent, age)
+except Exception as e:
+    print(f"-1 -1 -1 -1")  # signal: outbox unreadable
+PY
+)"
+
+if [[ "${outbox_total}" == "-1" ]]; then
+  red+=("outbox.db unreadable (xelasphere user can't open ${OUTBOX_DB})")
+fi
+if (( outbox_pending > 1000 )); then
+  red+=("outbox pending=${outbox_pending} > 1000 (P1 exit gate is ≤1k p95 per spec §7.4)")
+fi
+if (( oldest_pending_age > 300 )); then
+  yellow+=("oldest pending row age=${oldest_pending_age}s (>5min lag — flusher may be slow)")
+fi
+
+# ---------------------------------------------------------------------------
+# (2) Shadow JSONL growth
+# ---------------------------------------------------------------------------
+today_jsonl="${SHADOW_DIR}/shadow-${TODAY}.jsonl"
+today_lines=0
+if [[ -f "${today_jsonl}" ]]; then
+  today_lines=$(wc -l < "${today_jsonl}")
+fi
+
+# If no JSONL today AND there was chat traffic in last 24h, that's a red flag
+# (the writer is broken — same regression class as 2026-04-27 22:08 PermissionError).
+chat_events_24h=$(
+  journalctl -u xelasphere.service --since '24 hours ago' --no-pager 2>/dev/null \
+    | grep -c 'Memory V3: Shadow mode' || true
+)
+if [[ ! -f "${today_jsonl}" ]] && (( chat_events_24h > 0 )); then
+  red+=("no shadow JSONL for ${TODAY} despite ${chat_events_24h} chat events in last 24h")
+elif (( today_lines == 0 )) && (( chat_events_24h > 0 )); then
+  red+=("shadow JSONL for ${TODAY} is empty despite ${chat_events_24h} chat events in last 24h")
+fi
+
+# ---------------------------------------------------------------------------
+# (3) Error scan, last 24h, excluding known noise
+# ---------------------------------------------------------------------------
+err_total=0
+err_summary=""
+for svc in xelasphere mempalace-sidecar mempalace-flusher; do
+  count=$(
+    journalctl -u "${svc}.service" --since '24 hours ago' --no-pager 2>/dev/null \
+      | grep -iE 'error|exception|critical' \
+      | grep -vE 'CoverageWarning|no-data-collected|brave|429' \
+      | wc -l
+  )
+  if (( count > 0 )); then
+    err_total=$((err_total + count))
+    err_summary="${err_summary} ${svc}=${count}"
+  fi
+done
+if (( err_total > 50 )); then
+  yellow+=("error count=${err_total} in last 24h:${err_summary} — review with journalctl -u <svc> --since 24h")
+elif (( err_total > 0 )); then
+  yellow+=("${err_total} errors in last 24h:${err_summary}")
+fi
+
+# ---------------------------------------------------------------------------
+# (4) Services active + restart counters
+# ---------------------------------------------------------------------------
+for svc in xelasphere mempalace-sidecar mempalace-flusher; do
+  active=$(systemctl is-active "${svc}.service" 2>/dev/null || echo "unknown")
+  if [[ "${active}" != "active" ]]; then
+    red+=("${svc}.service is ${active} (expected active)")
+  fi
+  # Count "Started <unit>" lines in the last 24h. >1 means the unit restarted.
+  starts=$(
+    journalctl -u "${svc}.service" --since '24 hours ago' --no-pager 2>/dev/null \
+      | grep -c "Started ${svc}.service" || true
+  )
+  if (( starts > 1 )); then
+    yellow+=("${svc}.service restarted $((starts - 1)) time(s) in last 24h")
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# (5) Socket mode
+# ---------------------------------------------------------------------------
+if [[ -S "${SOCKET_PATH}" ]]; then
+  mode=$(stat -c '%a' "${SOCKET_PATH}" 2>/dev/null || echo "?")
+  if [[ "${mode}" != "660" ]]; then
+    red+=("${SOCKET_PATH} mode=${mode} (expected 660 per spec §7.1 / issue #7)")
+  fi
+else
+  red+=("${SOCKET_PATH} does not exist or is not a socket — sidecar likely down")
+fi
+
+# ---------------------------------------------------------------------------
+# Result
+# ---------------------------------------------------------------------------
+green_msg="✓ shadow healthy — outbox=${outbox_total}(${outbox_pending} pending/${outbox_sent} sent), JSONL=${today_lines} lines today, errors=${err_total}"
+
+if (( ${#red[@]} > 0 )); then
+  exit_code=2
+  marker="✗ shadow broken"
+elif (( ${#yellow[@]} > 0 )); then
+  exit_code=1
+  marker="⚠ shadow degraded"
+else
+  exit_code=0
+  marker="${green_msg}"
+fi
+
+# Compose output (and write state file). On non-green, include all context.
+{
+  echo "[${TS}] ${marker}"
+  if (( exit_code != 0 )); then
+    echo "  outbox: total=${outbox_total} pending=${outbox_pending} sent=${outbox_sent} oldest_pending_age=${oldest_pending_age}s"
+    echo "  JSONL:  ${today_jsonl} = ${today_lines} lines (chat events 24h: ${chat_events_24h})"
+    echo "  errors_24h: total=${err_total}${err_summary}"
+    for r in ${red[@]+"${red[@]}"}; do echo "  RED:    ${r}"; done
+    for y in ${yellow[@]+"${yellow[@]}"}; do echo "  YELLOW: ${y}"; done
+  fi
+} | tee "${STATE_FILE}"
+
+exit ${exit_code}
