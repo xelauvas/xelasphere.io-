@@ -1,9 +1,15 @@
+import logging
+import os
+import stat
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
+from pathlib import Path
 
 from fastapi import FastAPI
 from mempalace_sidecar.auth import TokenAuthMiddleware
 from mempalace_sidecar.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 def _package_version() -> str:
@@ -174,6 +180,28 @@ async def _lifespan(app):
             user_id_hash_salt=settings.user_id_hash_salt,
         )
     )
+
+    # Spec §7.1 + runbook R1 — tighten UDS to 0660 (owner+group, no
+    # world access). Uvicorn's UDS bind leaves the socket at the
+    # process umask-derived default (often 0666). Must run AFTER bind
+    # (lifespan startup is post-bind by ASGI contract) and BEFORE
+    # sd_notify(READY=1) so any Flask-side probe never observes a
+    # pre-chmod state. Closes #7.
+    #
+    # The .exists() guard tolerates in-process tests where the
+    # ``app.router.lifespan_context(app)`` path runs without a real
+    # uvicorn UDS bind. In production uvicorn will have bound the
+    # socket by the time this hook fires, so the chmod always lands.
+    sock_path = Path(settings.socket_path)
+    if sock_path.exists():
+        os.chmod(sock_path, 0o660)
+        logger.info(
+            "uds_socket_mode_tightened",
+            extra={
+                "path": str(sock_path),
+                "mode": oct(stat.S_IMODE(os.stat(sock_path).st_mode)),
+            },
+        )
 
     _sd_notify_ready()
     try:
