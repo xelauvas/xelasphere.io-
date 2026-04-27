@@ -41,6 +41,19 @@ ExecStartPre=/bin/rm -rf /run/mempalace/prom
 ExecStartPre=/bin/mkdir -p /run/mempalace/prom
 
 ExecStart=/opt/mempalace-sidecar/venv/bin/mempalace-sidecar
+
+# Belt-and-suspenders chmod 0660 on the UDS. Issue #7 ships an in-process
+# chmod inside the lifespan startup hook (main.py around line 197), but
+# in uvicorn 0.45 the lifespan startup task runs concurrently with the
+# UDS bind — the `if sock_path.exists()` guard then loses the race and
+# the chmod silently no-ops, leaving the socket at 0666. Confirmed
+# 2026-04-27. Until the in-process chmod is reworked to wait for bind,
+# the systemd-side chmod here guarantees the socket lands at 0660 before
+# any external client can connect. Polls up to 5s for the socket to
+# appear; exits 1 if it doesn't (which would indicate a deeper bind
+# failure, not a chmod race).
+ExecStartPost=/bin/sh -c "for i in $(seq 1 50); do [ -S /run/mempalace/sidecar.sock ] && exec /bin/chmod 0660 /run/mempalace/sidecar.sock; sleep 0.1; done; exit 1"
+
 KillSignal=SIGTERM
 # 10s drain budget from spec §4 (graceful shutdown) + 5s grace for
 # in-flight requests to complete.

@@ -107,9 +107,10 @@ active
 
 ## P1 — Shadow writes
 
-- Entered: `<YYYY-MM-DD>`
+- Entered: 2026-04-27 21:48:20 UTC (`mempalace-mode shadow` round-trip verified: `/admin/mempalace-mode` returns `{"mode":"shadow"}`)
 - Config: `MEMPALACE_MODE=shadow`, `LEGACY_MEMORY=on`
 - Entry check: P0 clean. (The M0.23.5 gate added 2026-04-22 was re-examined and closed at Phase 2 — see spec §7.4 "M0.23.5 re-examination.")
+- **Entry-day deploy notes:** P1-entry rotation followed the FHS cutover (`migrate-fhs.sh`, 2026-04-27 18:34 UTC) and bundled #7 sidecar deploy (wheel rebuild + force-reinstall + sidecar restart, 2026-04-27 21:45 UTC). The cutover surfaced four latent defects, all patched in runtime and queued for a follow-up source PR: (1) gunicorn venv shebangs in `/opt/xelasphere/venv/bin/*` retained `/root/...` paths after rsync — swept via `sed`; (2) `FIREBASE_CRED_PATH` in `/etc/xelasphere/xelasphere.env` pointed at `/root/.config/xelas/firebase.json` (xelasphere user can't traverse `/root` 0700) — rewritten to `/opt/xelasphere/firebase-creds.json`; (3) `mempalace-flusher.service` unit was missing `WorkingDirectory=/opt/xelasphere` and `FIREBASE_CRED_PATH` (its `app.config` import requires it) — both added; (4) sidecar's in-process `os.chmod(socket, 0o660)` hook silently no-ops because `sock_path.exists()` loses the race against uvicorn 0.45's lifespan-startup-vs-bind ordering — `ExecStartPost` retry-chmod added to the sidecar unit as belt-and-suspenders. Production was unavailable during defects (1)–(3) for ~2.5h (18:34 → 21:00 UTC) before recovery. Socket `0660` lockdown verified post-fix.
 - **P1 entry testing requirement (separate from M0.23.5):** before flipping any user to shadow mode, author tests against actual shadow-mode semantics. Specifically:
   - `log_shadow` payload shape matches the M0.22 shadow-rubric harness's parser expectations (keys: ts, user_id, query, legacy, mempalace).
   - `record_turn` is called for both user + assistant halves with a shared pair_id per spec §3 line 122.

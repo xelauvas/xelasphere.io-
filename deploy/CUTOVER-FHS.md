@@ -190,3 +190,57 @@ sudo mv /root/xelas.io/xelasphere.io- /root/xelas.io/xelasphere.io-.archived-$(d
 - [ ] Update any operator runbooks / wikis that reference the old
       path.
 - [ ] Close issue #6 with a link to the cutover commit.
+
+## Defects surfaced on the 2026-04-27 cutover (now fixed in source)
+
+The first run of this cutover took the Flask app down for ~2.5h
+(18:34 → 21:00 UTC) while five latent defects were patched in runtime.
+All five are now baked into the script + units; this section is here
+so future readers know what those changes are *for* without grepping
+git history.
+
+1. **Venv shebang sweep (Stage 4b).** Python venvs hardcode the
+   interpreter path in script shebangs at venv-creation time. After
+   `rsync`, every `*/bin/*` script under `/opt/xelasphere/venv/` and
+   `/opt/xelasphere/mempalace-sidecar/.venv/` still pointed at
+   `/root/xelas.io/xelasphere.io-` — unreachable by the
+   `User=xelasphere` service. Manifested as `status=203/EXEC` on
+   `gunicorn` startup. Stage 4b now sed-rewrites all venv files
+   uniformly.
+2. **Firebase creds path translation (Stage 5).** `FIREBASE_CRED_PATH`
+   in the source `.env` pointed at `/root/.config/xelas/firebase.json`
+   — a user-home path the `xelasphere` user can't traverse (`/root` is
+   `0700`). Stage 5's sed now also rewrites that path to the in-tree
+   `${NEW_DIR}/firebase-creds.json` (md5-identical copy, present in
+   the migrated tree).
+3. **Flusher unit `WorkingDirectory`.** `mempalace-flusher.service`
+   ran `python -m app.mempalace.flusher_main` with an empty
+   `WorkingDirectory` (default `/`), so `app` was unimportable —
+   the unit ModuleNotFoundError-looped. Now sets
+   `WorkingDirectory=/opt/xelasphere` (matching `xelasphere.service`).
+   Also adds `Environment=FIREBASE_CRED_PATH=…` because the flusher's
+   transitive `app.config` import requires it at module load even
+   though the flusher itself doesn't use Firebase.
+4. **Sidecar UDS chmod via `ExecStartPost` (issue #7 follow-up).**
+   The in-process `os.chmod(socket, 0o660)` hook in
+   `mempalace_sidecar/main.py` lifespan loses a race against
+   uvicorn 0.45's bind ordering — the `sock_path.exists()` guard
+   returns `False` when the lifespan startup runs before bind,
+   silently skipping the chmod and leaving the socket at `0666`.
+   `mempalace-sidecar.service` now polls for the socket and chmods
+   from systemd as a belt-and-suspenders. The in-process hook is
+   still in place; reworking it to wait for bind is a future-issue
+   item, but the systemd-side chmod is sufficient for the security
+   posture #7 was opened to fix.
+5. **State file ownership (Stage 4d).** `/var/lib/xelasphere/outbox.db`
+   and `/var/log/mempalace/shadow/` were created when Flask ran as
+   `root` (pre-cutover). After the user flip, `xelasphere` could read
+   the outbox but couldn't write — `record_turn` silently failed and
+   the flusher's purge logged "attempt to write a readonly database"
+   every 10 minutes. The shadow log dir was `root:root 0755`, blocking
+   every shadow event with `PermissionError`. Surfaced ~30min into
+   shadow rotation when no shadow JSONL had been created. Stage 4d
+   now chowns both to `xelasphere`.
+
+If you re-run this script on a fresh host, all five are handled
+automatically. None of these need operator intervention.
