@@ -2,12 +2,15 @@
 #
 # mempalace-shadow-health — daily P1 shadow phase health check.
 #
-# Five checks, scored as RED (broken) / YELLOW (degraded) / GREEN (healthy):
+# Six checks. (1)-(5) gate green/yellow/red; (6) records a trend.
 #   1. Outbox depth — total/pending/sent breakdown + oldest-pending lag
 #   2. Shadow JSONL — today's file exists + grew (vs. zero with chat traffic)
 #   3. Error scan — xelasphere/sidecar/flusher journals last 24h, ex. noise
 #   4. Service health — all 3 active, restart count in last 24h
 #   5. Sidecar UDS — socket exists, mode=0660 per spec §7.1 / issue #7
+#   6. Disk growth — daily measurement to CSV; anomaly yellow if total
+#      exceeds 3× rolling 7-day median (P1 exit gate per spec §7.4
+#      "disk growth within forecast"; needs ≥8 days of CSV data first)
 #
 # Output: green = one-line summary; yellow/red = structured breakdown.
 # Exit:   0 = green, 1 = yellow, 2 = red.
@@ -20,8 +23,10 @@ set -uo pipefail
 
 OUTBOX_DB=/var/lib/xelasphere/outbox.db
 SHADOW_DIR=/var/log/mempalace/shadow
+PALACE_DATA_DIR=/var/mempalace
 SOCKET_PATH=/run/mempalace/sidecar.sock
 STATE_FILE=/var/log/mempalace/shadow-health.last
+GROWTH_CSV=/var/log/mempalace/disk-growth.csv
 PYTHON=/opt/xelasphere/venv/bin/python
 TODAY=$(date -u +%Y-%m-%d)
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -133,9 +138,47 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# (6) Disk growth — record + anomaly check
+# ---------------------------------------------------------------------------
+# Daily measurement of shadow log + palace data dir + outbox sizes.
+# Appended to a CSV so by P1 exit (week 3) we have a trend curve.
+# Spec §7.4 P1 exit gate: "disk growth within forecast" — without a
+# baseline this is ungated, but with 7+ days of data we can flag any
+# day whose delta exceeds 3× the rolling 7-day median.
+shadow_bytes=$(du -sb "${SHADOW_DIR}" 2>/dev/null | awk '{print $1}')
+palace_bytes=$(du -sb "${PALACE_DATA_DIR}" 2>/dev/null | awk '{print $1}')
+outbox_bytes=$(stat -c '%s' "${OUTBOX_DB}" 2>/dev/null || echo 0)
+disk_total_bytes=$((${shadow_bytes:-0} + ${palace_bytes:-0} + ${outbox_bytes:-0}))
+
+# Initialize CSV header if file doesn't exist
+if [[ ! -f "${GROWTH_CSV}" ]]; then
+  echo "ts,shadow_bytes,palace_bytes,outbox_bytes,total_bytes" > "${GROWTH_CSV}"
+fi
+echo "${TS},${shadow_bytes:-0},${palace_bytes:-0},${outbox_bytes:-0},${disk_total_bytes}" \
+  >> "${GROWTH_CSV}"
+
+# Anomaly detection: only meaningful with ≥8 rows (7-day median + today).
+# Compare today's TOTAL to the 7-day median; yellow if >3×.
+disk_lines=$(wc -l < "${GROWTH_CSV}" 2>/dev/null || echo 0)
+disk_growth_note=""
+if (( disk_lines >= 9 )); then  # header + 8 rows
+  # Rolling median of the prior 7 days' total_bytes, vs today's
+  median_prior_7=$(
+    tail -n 8 "${GROWTH_CSV}" | head -n 7 | awk -F, '{print $5}' \
+      | sort -n | awk 'NR==4 {print; exit}'
+  )
+  if (( median_prior_7 > 0 )) && (( disk_total_bytes > median_prior_7 * 3 )); then
+    yellow+=("disk total=${disk_total_bytes}B is >3× 7-day median (${median_prior_7}B) — sudden growth spike")
+  fi
+  disk_growth_note=" disk=${disk_total_bytes}B (7d median ${median_prior_7}B)"
+else
+  disk_growth_note=" disk=${disk_total_bytes}B (baselining: ${disk_lines}/9 rows)"
+fi
+
+# ---------------------------------------------------------------------------
 # Result
 # ---------------------------------------------------------------------------
-green_msg="✓ shadow healthy — outbox=${outbox_total}(${outbox_pending} pending/${outbox_sent} sent), JSONL=${today_lines} lines today, errors=${err_total}"
+green_msg="✓ shadow healthy — outbox=${outbox_total}(${outbox_pending} pending/${outbox_sent} sent), JSONL=${today_lines} lines today, errors=${err_total},${disk_growth_note}"
 
 if (( ${#red[@]} > 0 )); then
   exit_code=2
@@ -155,6 +198,7 @@ fi
     echo "  outbox: total=${outbox_total} pending=${outbox_pending} sent=${outbox_sent} oldest_pending_age=${oldest_pending_age}s"
     echo "  JSONL:  ${today_jsonl} = ${today_lines} lines (chat events 24h: ${chat_events_24h})"
     echo "  errors_24h: total=${err_total}${err_summary}"
+    echo "  disk:   shadow=${shadow_bytes}B palace=${palace_bytes}B outbox=${outbox_bytes}B total=${disk_total_bytes}B"
     for r in ${red[@]+"${red[@]}"}; do echo "  RED:    ${r}"; done
     for y in ${yellow[@]+"${yellow[@]}"}; do echo "  YELLOW: ${y}"; done
   fi
