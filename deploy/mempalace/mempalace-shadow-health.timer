@@ -1,0 +1,25 @@
+[Unit]
+Description=Daily mempalace P1 shadow phase health check timer
+# Don't fire before the units we check are up. Same Wants= approach as
+# the .service unit — soft dependency.
+Wants=mempalace-sidecar.service
+
+[Timer]
+# 09:00 UTC daily. Picked so the report lands before the user's likely
+# work-day window across most timezones, and after a full overnight
+# soak window has accumulated.
+OnCalendar=*-*-* 09:00:00 UTC
+
+# Persistent=true: if the host was off when the timer should have fired,
+# run as soon as it comes back up. Catches the post-reboot case where
+# we'd otherwise miss a day's check.
+Persistent=true
+
+# Small randomization to avoid all daily timers stampeding at exactly
+# 09:00:00 if other systems share this convention.
+RandomizedDelaySec=120
+
+Unit=mempalace-shadow-health.service
+
+[Install]
+WantedBy=timers.target

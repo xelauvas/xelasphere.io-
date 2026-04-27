@@ -1,0 +1,28 @@
+[Unit]
+Description=Daily mempalace P1 shadow phase health check
+# Don't run if any of the units we're checking are down — the script
+# would just report what we already know. Wants= (not Requires=) so a
+# missing unit doesn't hard-fail the timer.
+Wants=xelasphere.service mempalace-sidecar.service mempalace-flusher.service
+
+[Service]
+# Type=oneshot — runs the check once and exits. Timer triggers it daily.
+Type=oneshot
+
+# Root: needs journal access (for the 24h error scan + restart counts),
+# stat on the UDS socket, and `sudo -u xelasphere` to read outbox.db.
+# Health checks at this scope are conventionally root.
+User=root
+
+# Standard streams go to journal; the script also writes a state file
+# at /var/log/mempalace/shadow-health.last for ad-hoc inspection.
+StandardOutput=journal
+StandardError=journal
+
+ExecStart=/usr/local/bin/mempalace-shadow-health
+
+# Exit codes: 0=green, 1=yellow, 2=red. systemd will mark the unit
+# failed on non-zero, which surfaces in `systemctl list-units --failed`
+# — operator can `journalctl -u mempalace-shadow-health` for the last
+# run's structured output.
+SuccessExitStatus=0

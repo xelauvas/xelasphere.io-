@@ -38,6 +38,9 @@ SIDECAR_WHEEL=${SIDECAR_WHEEL:-}  # path to wheel if installing; optional
 UNIT_SRC="$(dirname "$0")/mempalace-sidecar.service"
 FLUSHER_UNIT_SRC="$(dirname "$0")/mempalace-flusher.service"
 MODE_SCRIPT_SRC="$(dirname "$0")/mempalace-mode"
+HEALTH_SCRIPT_SRC="$(dirname "$0")/mempalace-shadow-health"
+HEALTH_SERVICE_SRC="$(dirname "$0")/mempalace-shadow-health.service"
+HEALTH_TIMER_SRC="$(dirname "$0")/mempalace-shadow-health.timer"
 
 # Step 1 — mempalace system user (spec §7.3 step 1)
 if ! id -u mempalace >/dev/null 2>&1; then
@@ -176,12 +179,27 @@ fi
 if [ -f "$MODE_SCRIPT_SRC" ]; then
     install -m 0755 -o root -g root "$MODE_SCRIPT_SRC" /usr/local/bin/mempalace-mode
 fi
+# Daily P1 shadow health check (script + service + timer).
+if [ -f "$HEALTH_SCRIPT_SRC" ]; then
+    install -m 0755 -o root -g root "$HEALTH_SCRIPT_SRC" /usr/local/bin/mempalace-shadow-health
+fi
+if [ -f "$HEALTH_SERVICE_SRC" ]; then
+    install -m 0644 "$HEALTH_SERVICE_SRC" /etc/systemd/system/mempalace-shadow-health.service
+fi
+if [ -f "$HEALTH_TIMER_SRC" ]; then
+    install -m 0644 "$HEALTH_TIMER_SRC" /etc/systemd/system/mempalace-shadow-health.timer
+fi
 
 # Step 6 — enable + start sidecar
 echo "[provision] systemctl daemon-reload + enable sidecar"
 systemctl daemon-reload
 systemctl enable mempalace-sidecar
 systemctl restart mempalace-sidecar
+# Enable the daily health timer if its unit installed cleanly.
+if [ -f /etc/systemd/system/mempalace-shadow-health.timer ]; then
+    echo "[provision] enabling mempalace-shadow-health.timer"
+    systemctl enable --now mempalace-shadow-health.timer || true
+fi
 
 # Step 7 — wait for /readyz OK
 echo "[provision] waiting for sidecar /readyz ..."
