@@ -792,37 +792,37 @@ const CryptoChartModule = (function() {
                 <div class="crypto-chart-footer">
                     <div class="crypto-chart-stats">
                         <div class="stat-item tier-primary">
-                            <span class="stat-label">${assetType === 'stock' ? 'Exchange' : 'Market Cap'}</span>
+                            <span class="stat-label">Market Cap</span>
                             <span class="stat-value market-cap shimmer-loading">&nbsp;</span>
                         </div>
                         <div class="stat-item tier-primary">
-                            <span class="stat-label">${assetType === 'stock' ? 'Market Status' : '24h Volume'}</span>
+                            <span class="stat-label">${assetType === 'stock' ? 'Volume' : '24h Volume'}</span>
                             <span class="stat-value volume shimmer-loading">&nbsp;</span>
                         </div>
                         <div class="stat-item tier-secondary">
-                            <span class="stat-label">24h High</span>
+                            <span class="stat-label">${assetType === 'stock' ? "Day's High" : '24h High'}</span>
                             <span class="stat-value high-24h shimmer-loading">&nbsp;</span>
                         </div>
                         <div class="stat-item tier-secondary">
-                            <span class="stat-label">24h Low</span>
+                            <span class="stat-label">${assetType === 'stock' ? "Day's Low" : '24h Low'}</span>
                             <span class="stat-value low-24h shimmer-loading">&nbsp;</span>
                         </div>
                     </div>
                     <div class="crypto-chart-stats stats-row-2">
                         <div class="stat-item tier-tertiary">
-                            <span class="stat-label">All-Time High</span>
+                            <span class="stat-label">${assetType === 'stock' ? '52-Week High' : 'All-Time High'}</span>
                             <span class="stat-value ath shimmer-loading">&nbsp;</span>
                         </div>
                         <div class="stat-item tier-tertiary">
-                            <span class="stat-label">ATH Change</span>
+                            <span class="stat-label">${assetType === 'stock' ? '52-Week Low' : 'ATH Change'}</span>
                             <span class="stat-value ath-change shimmer-loading">&nbsp;</span>
                         </div>
                         <div class="stat-item tier-tertiary">
-                            <span class="stat-label">Circulating Supply</span>
+                            <span class="stat-label">${assetType === 'stock' ? 'Exchange' : 'Circulating Supply'}</span>
                             <span class="stat-value circulating-supply shimmer-loading">&nbsp;</span>
                         </div>
                         <div class="stat-item tier-tertiary">
-                            <span class="stat-label">Max Supply</span>
+                            <span class="stat-label">${assetType === 'stock' ? 'Market Status' : 'Max Supply'}</span>
                             <span class="stat-value max-supply shimmer-loading">&nbsp;</span>
                         </div>
                     </div>
@@ -1185,18 +1185,29 @@ const CryptoChartModule = (function() {
                 const maxSupplyEl = cardElement.querySelector('.max-supply');
 
                 if (instance.assetType === 'stock') {
-                    // Stocks: show exchange and market state
-                    setLoadedContent(marketCapEl, data.exchange || '--');
-                    setLoadedContent(volumeEl, data.market_state || '--');
+                    // Stocks: populate with Yahoo Finance fields. Layout:
+                    //   Tier 1: Market Cap + Volume
+                    //   Tier 2: Day's High + Day's Low
+                    //   Tier 3: 52-Week High + Low + Exchange + Market Status
+                    setLoadedContent(marketCapEl, data.market_cap ? '$' + formatLargeNumber(data.market_cap) : '--');
+                    setLoadedContent(volumeEl, data.volume ? formatLargeNumber(data.volume) : '--');
+                    setLoadedContent(high24hEl, data.day_high ? formatPrice(data.day_high) : '--');
+                    setLoadedContent(low24hEl, data.day_low ? formatPrice(data.day_low) : '--');
 
-                    // Hide crypto-specific stat items for stocks
-                    [high24hEl, low24hEl].forEach(el => {
-                        if (el?.parentElement) el.parentElement.style.display = 'none';
-                    });
-
-                    // Hide the entire second stats row for stocks
-                    const statsRow2 = cardElement.querySelector('.stats-row-2');
-                    if (statsRow2) statsRow2.style.display = 'none';
+                    // Tier 3 — repurpose the same DOM slots that crypto
+                    // uses for ATH/ATH Change/Supply. Element selectors
+                    // (.ath, .ath-change, .circulating-supply, .max-supply)
+                    // are shared because the slots are visually identical;
+                    // only the labels (set in the template) and the values
+                    // (set here) differ.
+                    const fiftyTwoHighEl = athEl;
+                    const fiftyTwoLowEl  = athChangeEl;
+                    const exchangeEl     = circulatingSupplyEl;
+                    const marketStateEl  = maxSupplyEl;
+                    setLoadedContent(fiftyTwoHighEl, data.fifty_two_week_high ? formatPrice(data.fifty_two_week_high) : '--');
+                    setLoadedContent(fiftyTwoLowEl, data.fifty_two_week_low ? formatPrice(data.fifty_two_week_low) : '--');
+                    setLoadedContent(exchangeEl, data.exchange || '--');
+                    setLoadedContent(marketStateEl, data.market_state || '--');
                 } else {
                     // Crypto: show market cap and volume
                     setLoadedContent(marketCapEl, data.market_cap ? '$' + formatLargeNumber(data.market_cap) : '--');

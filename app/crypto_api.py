@@ -2180,6 +2180,16 @@ def get_stock_price():
             change = current_price - previous_close
             change_pct = (change / previous_close * 100) if previous_close else 0
 
+            # Pull richer fields directly from Yahoo's meta object.
+            # All optional — frontend handles missing/null gracefully.
+            day_high = meta.get('regularMarketDayHigh')
+            day_low = meta.get('regularMarketDayLow')
+            fifty_two_high = meta.get('fiftyTwoWeekHigh')
+            fifty_two_low = meta.get('fiftyTwoWeekLow')
+            volume = meta.get('regularMarketVolume')
+            market_cap = meta.get('marketCap')  # not always populated
+            day_open = meta.get('regularMarketOpen')
+
             return jsonify({
                 'success': True,
                 'symbol': symbol,
@@ -2190,7 +2200,15 @@ def get_stock_price():
                 'is_positive': change >= 0,
                 'currency': meta.get('currency', 'USD'),
                 'exchange': meta.get('exchangeName', 'Unknown'),
-                'market_state': meta.get('marketState', 'CLOSED')
+                'market_state': meta.get('marketState', 'CLOSED'),
+                'day_high': round(day_high, 2) if day_high else None,
+                'day_low': round(day_low, 2) if day_low else None,
+                'day_open': round(day_open, 2) if day_open else None,
+                'previous_close': round(previous_close, 2) if previous_close else None,
+                'fifty_two_week_high': round(fifty_two_high, 2) if fifty_two_high else None,
+                'fifty_two_week_low': round(fifty_two_low, 2) if fifty_two_low else None,
+                'volume': volume,
+                'market_cap': market_cap,
             })
 
         return jsonify({'error': 'Failed to fetch stock price'}), 500
