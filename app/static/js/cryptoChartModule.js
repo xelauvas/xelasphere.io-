@@ -27,13 +27,21 @@ const CryptoChartModule = (function() {
                 fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
             },
             // Prefix all prices on the right axis with "$" so the user knows
-            // the unit at a glance. Uses toLocaleString for thousands
-            // separators (e.g., $76,359.50 instead of $76359.5).
+            // the unit at a glance. Decimal precision adapts to magnitude
+            // so sub-cent tokens (SHIB, PEPE, etc.) don't show as $0.00.
             localization: {
-                priceFormatter: (price) => '$' + Number(price).toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                }),
+                priceFormatter: (price) => {
+                    const abs = Math.abs(Number(price));
+                    let maxFrac, minFrac;
+                    if (abs >= 1) { minFrac = 2; maxFrac = 2; }
+                    else if (abs >= 0.01) { minFrac = 4; maxFrac = 4; }
+                    else if (abs >= 0.0001) { minFrac = 6; maxFrac = 6; }
+                    else { minFrac = 8; maxFrac = 8; }
+                    return '$' + Number(price).toLocaleString('en-US', {
+                        minimumFractionDigits: minFrac,
+                        maximumFractionDigits: maxFrac,
+                    });
+                },
             },
             grid: {
                 vertLines: { visible: false },
@@ -100,7 +108,9 @@ const CryptoChartModule = (function() {
             return configLoading;
         }
 
-        // Start fetching config
+        // Start fetching config. Resets configLoading on completion (success
+        // or failure) so a transient network error doesn't permanently
+        // prevent retries.
         configLoading = (async () => {
             try {
                 const response = await fetch('/api/crypto/config', {
@@ -126,6 +136,12 @@ const CryptoChartModule = (function() {
                 }
             } catch (error) {
                 console.warn('[CryptoChart] Config fetch error:', error);
+            } finally {
+                // Clear the in-flight promise so the next fetchConfig() call
+                // can retry. Without this, configCache stays null and
+                // configLoading stays as the dead resolved-to-null promise
+                // forever, locking us into the fallback TIME_RANGES.
+                configLoading = null;
             }
             return null;
         })();
@@ -198,6 +214,11 @@ const CryptoChartModule = (function() {
      * Format large numbers (market cap, volume)
      */
     function formatLargeNumber(num) {
+        // Defensive guard: callers pass null/undefined occasionally
+        // (missing market_cap on new tokens, NaN from arithmetic). Rather
+        // than throwing on .toFixed of null, return '--' which the UI
+        // already treats as a valid placeholder.
+        if (num == null || !Number.isFinite(num)) return '--';
         if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
         if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
         if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
@@ -874,17 +895,9 @@ const CryptoChartModule = (function() {
             },
         });
 
-        // Store chart instance
-        chartInstances.set(chartId, {
-            chart,
-            series: areaSeries,
-            asset,
-            assetType,
-            currency,
-            currentRange: initialRange
-        });
-
-        // Handle window resize
+        // Handle window resize. Stored on chartInstances so destroyChart
+        // can disconnect it — without this, observers leak each time a
+        // chart is destroyed and the container removed from DOM.
         const resizeObserver = new ResizeObserver(entries => {
             for (const entry of entries) {
                 const { width } = entry.contentRect;
@@ -892,6 +905,17 @@ const CryptoChartModule = (function() {
             }
         });
         resizeObserver.observe(chartContainer);
+
+        // Store chart instance (resizeObserver included for cleanup)
+        chartInstances.set(chartId, {
+            chart,
+            series: areaSeries,
+            asset,
+            assetType,
+            currency,
+            currentRange: initialRange,
+            resizeObserver
+        });
 
         // Setup range button handlers with rate limiting
         const rangeButtons = cardElement.querySelectorAll('.range-btn');
@@ -1171,15 +1195,10 @@ const CryptoChartModule = (function() {
                     }
                 }
 
-                // 24h price change (from basic price data — labeled "1D" since
-                // this stats path always fetches the 24-hour change regardless
-                // of the chart's selected range).
-                const change24hEl = cardElement.querySelector('.price-change');
-                if (change24hEl) {
-                    const changeValue = data.change_24h || data.change_percent || 0;
-                    const isPositive = changeValue >= 0;
-                    setLoadedContent(change24hEl, formatChange(changeValue, '1D'), `price-change ${isPositive ? 'positive' : 'negative'}`);
-                }
+                // 24h price change SKIPPED here (used to write to .price-change,
+                // which was clobbering the range-aware label loadChartData
+                // had already set with the correct timeframe). loadChartData
+                // owns .price-change exclusively now.
 
                 // Fetch and display Fear & Greed Index (crypto only)
                 if (instance.assetType !== 'stock') {
@@ -1349,12 +1368,18 @@ const CryptoChartModule = (function() {
                     // Duplicate content for seamless infinite scroll
                     // We duplicate the items so when the first set scrolls out, the second set appears
                     const fullContent = whaleItems + '<span class="whale-separator">•</span>';
+                    // Re-enable scroll animation in case empty-state added the no-scroll guard.
+                    whaleTickerContent.classList.remove('no-scroll');
                     whaleTickerContent.innerHTML = fullContent + fullContent;
 
                     // Setup tooltips for whale items
                     setupNewsTooltips(whaleTickerContent);
                 } else {
-                    // Show "no activity" message
+                    // Show "no activity" message. Add 'no-scroll' class
+                    // so the whale-scroll animation doesn't leave the
+                    // ticker blank for half each cycle (the animation
+                    // moves -50% which only works for duplicated content).
+                    whaleTickerContent.classList.add('no-scroll');
                     whaleTickerContent.innerHTML = '<span class="whale-item whale-empty">No whale activity in last 10 min</span>';
                 }
             }
@@ -1386,6 +1411,11 @@ const CryptoChartModule = (function() {
     function destroyChart(chartId) {
         const instance = chartInstances.get(chartId);
         if (instance) {
+            // Disconnect ResizeObserver before removing chart so the
+            // observer doesn't keep a reference to a detached DOM node.
+            if (instance.resizeObserver) {
+                instance.resizeObserver.disconnect();
+            }
             instance.chart.remove();
             chartInstances.delete(chartId);
         }
@@ -1507,17 +1537,33 @@ const CryptoChartModule = (function() {
      * Calculate RSI (Relative Strength Index)
      */
     function calculateRSI(prices, period = 14) {
+        // Wilder's smoothing (the canonical RSI). Seed with simple
+        // average of the first 14-period gains/losses, then apply
+        // exponential-style smoothing for every subsequent bar:
+        //   avgGain = (prevAvgGain * (period - 1) + currentGain) / period
+        // Was previously a simple average over the trailing 14 bars,
+        // which under-reports RSI extremes on trending data and produced
+        // wrong overbought/oversold signals on parabolic moves.
         if (prices.length < period + 1) return 50;
 
-        let gains = 0, losses = 0;
-        for (let i = prices.length - period; i < prices.length; i++) {
+        // Initial averages over the first `period` price changes.
+        let avgGain = 0, avgLoss = 0;
+        for (let i = 1; i <= period; i++) {
             const change = prices[i] - prices[i - 1];
-            if (change > 0) gains += change;
-            else losses -= change;
+            if (change > 0) avgGain += change;
+            else avgLoss -= change;
         }
+        avgGain /= period;
+        avgLoss /= period;
 
-        const avgGain = gains / period;
-        const avgLoss = losses / period;
+        // Wilder smoothing for all subsequent bars.
+        for (let i = period + 1; i < prices.length; i++) {
+            const change = prices[i] - prices[i - 1];
+            const gain = change > 0 ? change : 0;
+            const loss = change < 0 ? -change : 0;
+            avgGain = (avgGain * (period - 1) + gain) / period;
+            avgLoss = (avgLoss * (period - 1) + loss) / period;
+        }
 
         if (avgLoss === 0) return 100;
         const rs = avgGain / avgLoss;
