@@ -332,13 +332,21 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
 
             # Binance kline format: [open_time, open, high, low, close, volume, ...]
             chart_data = []
-            for kline in klines:
+            volume_data = []
+            for i, kline in enumerate(klines):
                 timestamp_ms = kline[0]
                 close_price = float(kline[4])
-                chart_data.append({
-                    'time': int(timestamp_ms / 1000),
-                    'value': close_price
-                })
+                volume = float(kline[5])
+                ts = int(timestamp_ms / 1000)
+                chart_data.append({'time': ts, 'value': close_price})
+                # Volume in BASE currency * close price ≈ USD value
+                # (klines volume[5] is base-asset units, e.g., BTC; for
+                # consistency with CoinGecko which returns USD volume,
+                # multiply by close price to get USD-equivalent).
+                vol_usd = volume * close_price
+                prev_close = float(klines[i - 1][4]) if i > 0 else close_price
+                color = 'rgba(34, 197, 94, 0.4)' if close_price >= prev_close else 'rgba(239, 68, 68, 0.4)'
+                volume_data.append({'time': ts, 'value': vol_usd, 'color': color})
 
             # Reject empty/single-point responses. Binance can return a
             # valid 200 with [] klines for symbols that don't trade or
@@ -363,6 +371,7 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
                 'currency': 'USD',
                 'days': days,
                 'data': chart_data,
+                'volume_data': volume_data,
                 'current_price': chart_data[-1]['value'] if chart_data else 0,
                 'change_percent': round(change_pct, 2),
                 'is_positive': change_pct >= 0,
@@ -1906,15 +1915,27 @@ def get_crypto_chart():
         if response.status_code == 200:
             data = response.json()
             prices = data.get('prices', [])
+            volumes = data.get('total_volumes', [])
+            # CoinGecko returns total_volumes as parallel array of
+            # [timestamp_ms, volume_usd]. Index by timestamp for fast lookup
+            # so the volume entry matches each price's exact timestamp.
+            volume_by_ts = {int(v[0] / 1000): v[1] for v in volumes} if volumes else {}
 
-            # Format for Lightweight Charts: [{time: unix_timestamp, value: price}, ...]
+            # Format for Lightweight Charts: [{time, value}, ...] for price
+            # series + parallel volume_data array for the histogram pane.
             chart_data = []
-            for point in prices:
+            volume_data = []
+            for i, point in enumerate(prices):
                 timestamp_ms, price = point
-                chart_data.append({
-                    'time': int(timestamp_ms / 1000),  # Convert to seconds
-                    'value': price
-                })
+                ts = int(timestamp_ms / 1000)
+                chart_data.append({'time': ts, 'value': price})
+                vol = volume_by_ts.get(ts)
+                if vol is not None:
+                    # Color volume bar by per-bar price direction (vs the
+                    # previous bar). Green on up-move, red on down.
+                    prev_price = prices[i - 1][1] if i > 0 else price
+                    color = 'rgba(34, 197, 94, 0.4)' if price >= prev_price else 'rgba(239, 68, 68, 0.4)'
+                    volume_data.append({'time': ts, 'value': vol, 'color': color})
 
             # Calculate price change
             if len(chart_data) >= 2:
@@ -1931,6 +1952,7 @@ def get_crypto_chart():
                 'currency': currency.upper(),
                 'days': days,
                 'data': chart_data,
+                'volume_data': volume_data,
                 'current_price': chart_data[-1]['value'] if chart_data else 0,
                 'change_percent': round(change_pct, 2),
                 'is_positive': change_pct >= 0,

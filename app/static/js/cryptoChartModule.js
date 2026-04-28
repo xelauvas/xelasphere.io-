@@ -906,11 +906,32 @@ const CryptoChartModule = (function() {
             topColor: 'rgba(34, 197, 94, 0.18)',
             bottomColor: 'rgba(34, 197, 94, 0.0)',
             lineWidth: 2,
+            // Allocate top 75% of chart space to price (bottom 25% to volume)
+            // via the price scale's scaleMargins. Volume series gets its own
+            // overlay scale below (see volumeSeries declaration).
             priceFormat: {
                 type: 'price',
                 precision: 2,
                 minMove: 0.01,
             },
+        });
+
+        // Reserve top 75% of vertical space for the price area. Bottom
+        // 25% becomes the volume strip.
+        areaSeries.priceScale().applyOptions({
+            scaleMargins: { top: 0.05, bottom: 0.25 },
+        });
+
+        // Volume bars (HistogramSeries) overlaid in the bottom 25%.
+        // priceScaleId='' makes it an overlay (no separate axis label
+        // on the right) — keeps the right axis showing only price.
+        const volumeSeries = chart.addSeries(LightweightCharts.HistogramSeries, {
+            priceFormat: { type: 'volume' },
+            priceScaleId: '',
+            color: 'rgba(38, 166, 154, 0.4)',
+        });
+        volumeSeries.priceScale().applyOptions({
+            scaleMargins: { top: 0.78, bottom: 0 },
         });
 
         // Handle window resize. Stored on chartInstances so destroyChart
@@ -928,6 +949,7 @@ const CryptoChartModule = (function() {
         chartInstances.set(chartId, {
             chart,
             series: areaSeries,
+            volumeSeries,
             asset,
             assetType,
             currency,
@@ -1065,6 +1087,14 @@ const CryptoChartModule = (function() {
 
             if (data.success && data.data.length > 0) {
                 instance.series.setData(data.data);
+                // Volume bars: backend sends per-bar volume + color (green
+                // on up-bar, red on down) under data.volume_data. Stocks
+                // currently don't ship volume_data — series stays empty.
+                if (instance.volumeSeries && Array.isArray(data.volume_data)) {
+                    instance.volumeSeries.setData(data.volume_data);
+                } else if (instance.volumeSeries) {
+                    instance.volumeSeries.setData([]);
+                }
                 instance.chart.timeScale().fitContent();
                 instance.currentPrice = data.current_price;
 
