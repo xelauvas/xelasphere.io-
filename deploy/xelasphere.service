@@ -51,10 +51,13 @@ Environment=PATH=/opt/xelasphere/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sb
 EnvironmentFile=/etc/xelasphere/xelasphere.env
 EnvironmentFile=/etc/xelasphere/mempalace.env
 
-# Coverage instrumentation flag carried over verbatim from the prior
-# unit. Removing it would change observability shape during the
-# cutover; defer that decision to a follow-up.
-Environment=COVERAGE_ENABLED=1
+# (Removed 2026-04-28 per issue #26.) The previous unit carried
+# Environment=COVERAGE_ENABLED=1 as a development-time toggle. It
+# instrumented every request, generated journal noise on every restart,
+# and produced ~4000 stale .coverage.* data files in /var/log/xelasphere/coverage/
+# without anyone consuming them. Production should not run with coverage
+# instrumentation hot. If coverage is ever needed for a specific
+# investigation, set it temporarily via `systemctl edit xelasphere`.
 
 # /run/xelasphere is tmpfs-managed by systemd (RuntimeDirectory). The
 # Prometheus multiproc dir lives under it. Same fix M0.26a applied
