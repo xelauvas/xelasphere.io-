@@ -571,6 +571,38 @@
     color: #f87171;
 }
 
+/* ==================== Stat Tier Hierarchy ==================== */
+/* Three tiers reduce cognitive overload by guiding the eye:
+   - Primary (Market Cap, Volume): largest, brightest — the "where is this
+     coin trading at right now" numbers a trader looks at first.
+   - Secondary (24h High/Low): default size — intraday range context.
+   - Tertiary (ATH, Supply): smaller and dimmer — historical/fundamental
+     anchors the eye registers but doesn't focus on. */
+
+.stat-item.tier-primary .stat-value {
+    font-size: 15px;
+    color: var(--text-primary, #ffffff);
+}
+
+.stat-item.tier-primary .stat-label {
+    font-size: 11px;
+    color: var(--text-secondary, #9ca3af);
+}
+
+/* tier-secondary uses the default styles defined above (13px / #e8e8f0) */
+
+.stat-item.tier-tertiary .stat-value {
+    font-size: 11px;
+    color: var(--text-secondary, #9ca3af);
+    font-weight: 500;
+}
+
+.stat-item.tier-tertiary .stat-label {
+    font-size: 9px;
+    color: var(--text-tertiary, #5a5a70);
+    opacity: 0.85;
+}
+
 .crypto-chart-source {
     font-size: 10px;
     color: var(--text-tertiary, #5a5a70);
