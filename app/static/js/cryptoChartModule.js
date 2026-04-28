@@ -183,7 +183,8 @@ const CryptoChartModule = (function() {
         '1W': '7d',
         '1M': '30d',
         '1Y': '1y',
-        'ALL': 'ALL'
+        'MAX': 'all-time',
+        'ALL': 'all-time'
     };
 
     function formatChange(change, rangeLabel) {
@@ -689,11 +690,11 @@ const CryptoChartModule = (function() {
                     </div>
                     <div class="crypto-chart-actions">
                         <div class="crypto-chart-ranges">
-                            <button class="range-btn active" data-range="1D">1D</button>
+                            <button class="range-btn" data-range="1D">1D</button>
                             <button class="range-btn" data-range="1W">1W</button>
                             <button class="range-btn" data-range="1M">1M</button>
                             <button class="range-btn" data-range="1Y">1Y</button>
-                            <button class="range-btn" data-range="MAX">ALL</button>
+                            <button class="range-btn active" data-range="MAX">ALL</button>
                         </div>
                         <button class="chart-action-btn chart-predict-btn" data-tooltip="Price Prediction" onclick="window.CryptoChart?.showPrediction('${chartId}')">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -806,7 +807,7 @@ const CryptoChartModule = (function() {
 
         const chartId = `crypto-chart-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const currency = options.currency || 'usd';
-        const initialRange = options.range || '1D';
+        const initialRange = options.range || 'MAX';
         const assetType = options.assetType || 'crypto';
 
         // Insert chart card HTML
