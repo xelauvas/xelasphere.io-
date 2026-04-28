@@ -967,10 +967,15 @@ const CryptoChartModule = (function() {
         // Volume bars (HistogramSeries) overlaid in the bottom 25%.
         // priceScaleId='' makes it an overlay (no separate axis label
         // on the right) — keeps the right axis showing only price.
+        // lastValueVisible:false + priceLineVisible:false hide the
+        // ugly volume value label that would otherwise stick to the
+        // right axis with the raw volume number.
         const volumeSeries = chart.addSeries(LightweightCharts.HistogramSeries, {
             priceFormat: { type: 'volume' },
             priceScaleId: '',
             color: 'rgba(38, 166, 154, 0.4)',
+            lastValueVisible: false,
+            priceLineVisible: false,
         });
         volumeSeries.priceScale().applyOptions({
             scaleMargins: { top: 0.78, bottom: 0 },
