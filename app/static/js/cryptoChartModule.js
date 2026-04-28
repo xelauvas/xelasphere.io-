@@ -2075,6 +2075,7 @@ const CryptoChartModule = (function() {
                     background: { type: 'solid', color: 'transparent' },
                     textColor: 'rgba(255, 255, 255, 0.5)',
                     fontFamily: "'Inter', -apple-system, sans-serif",
+                    attributionLogo: false,
                 },
                 grid: { vertLines: { visible: false }, horzLines: { visible: false } },
                 rightPriceScale: { visible: false },
