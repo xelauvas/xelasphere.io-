@@ -427,6 +427,82 @@ const CryptoChartModule = (function() {
     }
 
     /**
+     * Fetch a historical chunk of chart data ending at `beforeMs`.
+     * Used by the lazy-load-on-pan extension: each call returns one
+     * page of klines at the same resolution as the current range.
+     */
+    async function fetchChartHistory(coin, days, currency, beforeMs, signal) {
+        const url = `/api/crypto/chart?coin=${encodeURIComponent(coin)}&days=${days}&currency=${currency}&before=${beforeMs}`;
+        const response = await fetch(url, {
+            headers: { 'X-CSRFToken': getCsrfToken() },
+            signal
+        });
+        if (!response.ok) {
+            throw new Error(`History fetch failed: ${response.status}`);
+        }
+        return await response.json();
+    }
+
+    /**
+     * Prepend an older history chunk to the chart's loaded data.
+     * Called when the user pans within ~30 bars of the left edge.
+     * Idempotent + concurrency-safe via instance.loadingMore flag.
+     */
+    async function loadOlderHistory(chartId) {
+        const inst = chartInstances.get(chartId);
+        if (!inst || inst.loadingMore || inst.historyExhausted) return;
+        if (!inst.dataArray || inst.dataArray.length === 0) return;
+        if (inst.assetType !== 'crypto') return;
+
+        inst.loadingMore = true;
+        const range = inst.currentRange || '1D';
+        let days = TIME_RANGES[range]?.days || '1';
+        if (days === 'ytd') {
+            const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+            days = Math.ceil((Date.now() - startOfYear) / 86400000);
+        }
+        // firstLoadedTime is in seconds; backend wants ms. -1ms to
+        // strictly precede the earliest loaded bar so we don't fetch
+        // a duplicate of it.
+        const beforeMs = (inst.firstLoadedTime * 1000) - 1;
+
+        try {
+            const data = await fetchChartHistory(inst.asset, days, inst.currency, beforeMs);
+            if (data && data.history_exhausted) {
+                inst.historyExhausted = true;
+            }
+            if (data && Array.isArray(data.data) && data.data.length > 0) {
+                // Prepend, drop any timestamps that overlap the loaded
+                // range (defensive — Binance kline endTime is exclusive
+                // but caches/clock skew can produce edge collisions).
+                const cutoff = inst.firstLoadedTime;
+                const olderData = data.data.filter(p => p.time < cutoff);
+                const olderVol = (data.volume_data || []).filter(v => v.time < cutoff);
+                if (olderData.length > 0) {
+                    inst.dataArray = olderData.concat(inst.dataArray);
+                    inst.volumeArray = olderVol.concat(inst.volumeArray);
+                    inst.firstLoadedTime = inst.dataArray[0].time;
+                    inst.series.setData(inst.dataArray);
+                    if (inst.volumeSeries) {
+                        inst.volumeSeries.setData(inst.volumeArray);
+                    }
+                    // Reposition live-dot since timeToCoordinate output
+                    // shifts when the data domain expands.
+                    if (typeof inst.updateLiveDot === 'function') {
+                        requestAnimationFrame(inst.updateLiveDot);
+                    }
+                }
+            }
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.warn('[CryptoChart] History load failed:', err);
+            }
+        } finally {
+            inst.loadingMore = false;
+        }
+    }
+
+    /**
      * Fetch current price data
      */
     async function fetchPriceData(coin, currency = 'usd') {
@@ -1091,6 +1167,24 @@ const CryptoChartModule = (function() {
             });
         } catch (e) { /* tolerate API differences */ }
 
+        // Lazy-load history when the user pans within ~30 logical bars
+        // of the loaded start. The chunk fetch returns one page of
+        // klines at the same interval the current range uses (1D→5m,
+        // 1W→1h, etc.) so each timeframe extends back into history at
+        // its own resolution. Crypto only — stocks use Yahoo and don't
+        // expose this endpoint yet.
+        try {
+            chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+                if (!range || range.from == null) return;
+                const inst = chartInstances.get(chartId);
+                if (!inst || inst.assetType !== 'crypto') return;
+                if (inst.loadingMore || inst.historyExhausted) return;
+                if (!inst.dataArray || inst.dataArray.length === 0) return;
+                if (range.from > 30) return; // not near the left edge yet
+                loadOlderHistory(chartId);
+            });
+        } catch (e) { /* tolerate API differences */ }
+
         // Store chart instance (resizeObserver + updateLiveDot for cleanup)
         chartInstances.set(chartId, {
             chart,
@@ -1242,6 +1336,16 @@ const CryptoChartModule = (function() {
                 } else if (instance.volumeSeries) {
                     instance.volumeSeries.setData([]);
                 }
+                // Lazy-load history bookkeeping: keep the loaded arrays
+                // around so we can prepend older chunks as the user pans
+                // left. Reset exhaustion + in-flight flags whenever a new
+                // range is selected (each range starts fresh from "now").
+                instance.dataArray = data.data.slice();
+                instance.volumeArray = Array.isArray(data.volume_data) ? data.volume_data.slice() : [];
+                instance.firstLoadedTime = data.data[0].time;
+                instance.historyExhausted = false;
+                instance.loadingMore = false;
+                instance.currentRange = range;
                 instance.chart.timeScale().fitContent();
                 // Force the right price-scale to recompute and render
                 // tick labels. Without this, the labels sometimes don't
