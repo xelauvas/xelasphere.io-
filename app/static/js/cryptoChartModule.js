@@ -72,9 +72,12 @@ const CryptoChartModule = (function() {
                 borderColor: 'rgba(255, 255, 255, 0.1)',
                 timeVisible: true,
                 secondsVisible: false,
-                // Push the last data point all the way to the plot's
-                // right edge so the line reaches the visible end.
-                rightOffset: 0,
+                // Leave a small empty band on the right of the last bar
+                // (8 bars). Without this the area-series line jams into
+                // the right edge on initial render and the chart reads
+                // as 'strange / cut off' until the user pans and creates
+                // some margin themselves. Matches TradingView's default.
+                rightOffset: 8,
                 // No fixRightEdge: allow users to pan/zoom history
                 // freely. Series marker tracks pan/zoom automatically
                 // so the live indicator stays correct regardless.
