@@ -2120,6 +2120,24 @@ const CryptoChartModule = (function() {
                     setLoadedContent(changeEl,
                         formatChange(data.change_percent, initialRange),
                         `sparkline-change ${isPos ? 'positive' : 'negative'}`);
+
+                    // Position the live-pulse dot at the actual last
+                    // data point on the line. priceToCoordinate runs
+                    // after layout in next animation frame so the
+                    // chart's pixel ↔ price mapping is finalized.
+                    requestAnimationFrame(() => {
+                        const lastPrice = data.current_price;
+                        if (lastPrice == null) return;
+                        const yCoord = series.priceToCoordinate(lastPrice);
+                        if (yCoord == null) return;
+                        let dot = canvasEl.querySelector('.sparkline-live-dot');
+                        if (!dot) {
+                            dot = document.createElement('div');
+                            dot.className = 'sparkline-live-dot';
+                            canvasEl.appendChild(dot);
+                        }
+                        dot.style.top = `${yCoord}px`;
+                    });
                 }
             } catch (err) {
                 console.warn('[Sparkline] load error:', err);
