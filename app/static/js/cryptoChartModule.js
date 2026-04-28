@@ -1178,12 +1178,19 @@ const CryptoChartModule = (function() {
                 // knows which range the percentage refers to.
                 setLoadedContent(changeElement, formatChange(data.change_percent, range), `price-change ${isPositive ? 'positive' : 'negative'}`);
 
-                // Live-pulse dot at the line's endpoint — same pattern
-                // as the sparkline preview, but for the full chart card.
+                // Live-pulse dot at the line's endpoint — uses BOTH
+                // priceToCoordinate (y) and timeScale.timeToCoordinate (x)
+                // so the dot lands ON the actual last data point, not the
+                // canvas's right edge (which would be inside the price-axis
+                // gutter, outside the visible plot area).
                 requestAnimationFrame(() => {
                     if (data.current_price == null) return;
                     const yCoord = instance.series.priceToCoordinate(data.current_price);
-                    if (yCoord == null) return;
+                    const lastPoint = data.data[data.data.length - 1];
+                    const xCoord = lastPoint
+                        ? instance.chart.timeScale().timeToCoordinate(lastPoint.time)
+                        : null;
+                    if (yCoord == null || xCoord == null) return;
                     const chartContainer = cardElement.querySelector('.crypto-chart-container');
                     const canvasFull = cardElement.querySelector('.crypto-chart-canvas');
                     if (!chartContainer || !canvasFull) return;
@@ -1193,10 +1200,8 @@ const CryptoChartModule = (function() {
                         dot.className = 'chart-live-dot';
                         chartContainer.appendChild(dot);
                     }
-                    const canvasTop = canvasFull.offsetTop;
-                    const canvasRight = canvasFull.offsetLeft + canvasFull.clientWidth;
-                    dot.style.top = `${canvasTop + yCoord}px`;
-                    dot.style.left = `${canvasRight}px`;
+                    dot.style.top = `${canvasFull.offsetTop + yCoord}px`;
+                    dot.style.left = `${canvasFull.offsetLeft + xCoord}px`;
                 });
 
                 // Update data source badge
@@ -2166,20 +2171,19 @@ const CryptoChartModule = (function() {
                         const lastPrice = data.current_price;
                         if (lastPrice == null) return;
                         const yCoord = series.priceToCoordinate(lastPrice);
-                        if (yCoord == null) return;
+                        const lastPoint = data.data[data.data.length - 1];
+                        const xCoord = lastPoint
+                            ? chart.timeScale().timeToCoordinate(lastPoint.time)
+                            : null;
+                        if (yCoord == null || xCoord == null) return;
                         let dot = sparkEl.querySelector('.sparkline-live-dot');
                         if (!dot) {
                             dot = document.createElement('div');
                             dot.className = 'sparkline-live-dot';
                             sparkEl.appendChild(dot);
                         }
-                        // Position relative to the sparkline parent.
-                        // Canvas top + yCoord (within canvas) gives us
-                        // the absolute top inside the sparkline container.
-                        const canvasTop = canvasEl.offsetTop;
-                        const canvasRight = canvasEl.offsetLeft + canvasEl.clientWidth;
-                        dot.style.top = `${canvasTop + yCoord}px`;
-                        dot.style.left = `${canvasRight}px`;
+                        dot.style.top = `${canvasEl.offsetTop + yCoord}px`;
+                        dot.style.left = `${canvasEl.offsetLeft + xCoord}px`;
                         dot.style.right = 'auto';
                     });
                 }
