@@ -1178,6 +1178,27 @@ const CryptoChartModule = (function() {
                 // knows which range the percentage refers to.
                 setLoadedContent(changeElement, formatChange(data.change_percent, range), `price-change ${isPositive ? 'positive' : 'negative'}`);
 
+                // Live-pulse dot at the line's endpoint — same pattern
+                // as the sparkline preview, but for the full chart card.
+                requestAnimationFrame(() => {
+                    if (data.current_price == null) return;
+                    const yCoord = instance.series.priceToCoordinate(data.current_price);
+                    if (yCoord == null) return;
+                    const chartContainer = cardElement.querySelector('.crypto-chart-container');
+                    const canvasFull = cardElement.querySelector('.crypto-chart-canvas');
+                    if (!chartContainer || !canvasFull) return;
+                    let dot = chartContainer.querySelector('.chart-live-dot');
+                    if (!dot) {
+                        dot = document.createElement('div');
+                        dot.className = 'chart-live-dot';
+                        chartContainer.appendChild(dot);
+                    }
+                    const canvasTop = canvasFull.offsetTop;
+                    const canvasRight = canvasFull.offsetLeft + canvasFull.clientWidth;
+                    dot.style.top = `${canvasTop + yCoord}px`;
+                    dot.style.left = `${canvasRight}px`;
+                });
+
                 // Update data source badge
                 updateDataSourceBadge(cardElement, data.data_source || 'live', data.cache_age_seconds || 0);
             }
