@@ -25,6 +25,11 @@ const CryptoChartModule = (function() {
                 background: { type: 'solid', color: 'transparent' },
                 textColor: 'rgba(255, 255, 255, 0.7)',
                 fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+                // Hide the TradingView "TV" attribution badge in the
+                // bottom-right corner. Allowed per the lightweight-charts
+                // license (it's a default opt-in promo, not a required
+                // attribution).
+                attributionLogo: false,
             },
             // Prefix all prices on the right axis with "$" so the user knows
             // the unit at a glance. Decimal precision adapts to magnitude
