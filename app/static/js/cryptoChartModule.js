@@ -1475,6 +1475,60 @@ const CryptoChartModule = (function() {
 
             console.log(`[NewsTicker] ${isStock ? 'Stock' : 'Crypto'} News:`, newsData?.articles?.length || 0, 'articles, Whales:', whaleData?.alerts?.length || 0, 'alerts');
 
+            // === NEWS-EVENT MARKERS ON CHART ===
+            // Drop a marker on the price line at each news article's
+            // publication timestamp. Color comes from the sentiment
+            // heuristic (bullish=green ↑, bearish=red ↓, neutral=gray).
+            // Hovering the marker shows the article headline. Lets the
+            // user see at a glance whether news clusters around price
+            // moves — qualitative cause/effect at the chart level.
+            try {
+                const instance = chartInstances.get(chartId);
+                if (instance && instance.series && newsData.success && newsData.articles?.length > 0) {
+                    const chartData = instance.series.data?.() || [];
+                    const firstTime = chartData[0]?.time;
+                    const lastTime  = chartData[chartData.length - 1]?.time;
+                    const markers = [];
+                    for (const article of newsData.articles) {
+                        if (!article.published_on) continue;
+                        const ts = typeof article.published_on === 'number'
+                            ? article.published_on
+                            : Math.floor(new Date(article.published_on).getTime() / 1000);
+                        // Skip markers outside the visible chart range.
+                        if (firstTime != null && ts < firstTime) continue;
+                        if (lastTime != null && ts > lastTime) continue;
+                        const sentiment = classifySentiment(article.title);
+                        const color = sentiment === 'bullish' ? '#22c55e'
+                                    : sentiment === 'bearish' ? '#ef4444'
+                                    : 'rgba(180, 180, 200, 0.7)';
+                        const shape = sentiment === 'bullish' ? 'arrowUp'
+                                    : sentiment === 'bearish' ? 'arrowDown'
+                                    : 'circle';
+                        const position = sentiment === 'bearish' ? 'aboveBar' : 'belowBar';
+                        markers.push({
+                            time: ts,
+                            position,
+                            color,
+                            shape,
+                            size: 1,
+                            text: article.title.length > 40
+                                ? article.title.slice(0, 40) + '…'
+                                : article.title,
+                        });
+                    }
+                    if (markers.length > 0) {
+                        // v5 markers API (setMarkers preserved for series).
+                        if (typeof instance.series.setMarkers === 'function') {
+                            instance.series.setMarkers(markers);
+                        } else if (typeof LightweightCharts.createSeriesMarkers === 'function') {
+                            LightweightCharts.createSeriesMarkers(instance.series, markers);
+                        }
+                    }
+                }
+            } catch (markerErr) {
+                console.warn('[Chart] news markers failed:', markerErr);
+            }
+
             // === NEWS SECTION (vertical list) ===
             if (newsData.success && newsData.articles && newsData.articles.length > 0) {
                 const newsItems = newsData.articles.map(article => {
