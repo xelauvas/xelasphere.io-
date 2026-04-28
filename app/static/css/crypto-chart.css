@@ -12,35 +12,22 @@
 }
 
 /* ==================== Chart Wrapper ==================== */
+/* Chart matches the input bar's full width (768px) edge-to-edge.
+   Investigation found .message-content was 580px max with 62px margins,
+   inside .ai-message at 728px, inside .chatbox with 20px padding —
+   total nesting forced the chart to 580px regardless of inner-rule
+   overrides. This rule uses auto-margin overflow: chart is 768px wide
+   centered relative to its narrower parent, which produces effective
+   negative margins that escape ALL parent width constraints in one
+   step. !important ensures it wins regardless of the parent-chain
+   specificity battle. */
 .crypto-chart-wrapper {
     margin-top: 0.75rem;
     margin-bottom: 1rem;
-    width: 100%;
-    /* Match the chat input bar's full outer width (--composer-shell-max-width),
-       so the chart's left/right edges align exactly with the visible input bar
-       below. Centered horizontally. */
-    max-width: var(--composer-shell-max-width, 768px);
-    margin-left: auto;
-    margin-right: auto;
-}
-
-/* When an AI message contains a chart, override the parent width AND
-   center it so the chart aligns horizontally with the chat input below.
-   Two overrides:
-     1. Width — base .message-content is constrained to --composer-max-width
-        (760px), but the input bar uses --composer-shell-max-width (768px).
-        Without this override, the chart maxes out at the parent's 760px,
-        rendering 8px narrower than the input.
-     2. Centering — base .ai-message .message-content uses `margin-right: auto`
-        (left-aligned), which would put the chart's left edge at the
-        chat-area's left edge instead of at the input's left edge.
-   :has() is well-supported in all modern browsers (Chrome 105+,
-   Firefox 121+, Safari 15.4+, 2022+). */
-.ai-message .message-content:has(.crypto-chart-wrapper) {
-    width: min(100%, var(--composer-shell-max-width, 768px));
-    max-width: min(100%, var(--composer-shell-max-width, 768px));
-    margin-left: auto;
-    margin-right: auto;
+    width: var(--composer-shell-max-width, 768px) !important;
+    max-width: var(--composer-shell-max-width, 768px) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
 }
 
 /* ==================== Chart Card ==================== */
