@@ -343,14 +343,15 @@ const CryptoChartModule = (function() {
     /**
      * Fetch chart data from backend
      */
-    async function fetchChartData(coin, days = '1', currency = 'usd') {
+    async function fetchChartData(coin, days = '1', currency = 'usd', signal) {
         try {
             const response = await fetch(
                 `/api/crypto/chart?coin=${encodeURIComponent(coin)}&days=${days}&currency=${currency}`,
                 {
                     headers: {
                         'X-CSRFToken': getCsrfToken()
-                    }
+                    },
+                    signal
                 }
             );
 
@@ -395,14 +396,15 @@ const CryptoChartModule = (function() {
     /**
      * Fetch stock chart data from backend
      */
-    async function fetchStockChartData(symbol, range = '1D') {
+    async function fetchStockChartData(symbol, range = '1D', signal) {
         try {
             const response = await fetch(
                 `/api/stock/chart?symbol=${encodeURIComponent(symbol)}&range=${range}`,
                 {
                     headers: {
                         'X-CSRFToken': getCsrfToken()
-                    }
+                    },
+                    signal
                 }
             );
 
@@ -729,38 +731,38 @@ const CryptoChartModule = (function() {
             : `<span class="symbol-icon-fallback">${safeInitials}</span>`;
 
         return `
-            <div class="crypto-chart-card" id="${safeChartId}">
+            <div class="crypto-chart-card" id="${safeChartId}" role="region" aria-label="${escapeHtml(symbol.toUpperCase())} price chart">
                 <div class="crypto-chart-header">
                     <div class="crypto-chart-info">
                         <div class="crypto-chart-symbol">
-                            <span class="symbol-icon">${iconHtml}</span>
+                            <span class="symbol-icon" aria-hidden="true">${iconHtml}</span>
                             <span class="symbol-name">${escapeHtml(symbol.toUpperCase())}</span>
                             <div class="fear-greed-badge" style="display: none;">
                                 <span class="fg-dot"></span>
                                 <span class="fg-label"></span>
                             </div>
                         </div>
-                        <div class="crypto-chart-price">
-                            <span class="price-value shimmer-loading">&nbsp;</span>
-                            <span class="price-change shimmer-loading">&nbsp;</span>
+                        <div class="crypto-chart-price" aria-live="polite" aria-atomic="true">
+                            <span class="price-value shimmer-loading" aria-label="Current price">&nbsp;</span>
+                            <span class="price-change shimmer-loading" aria-label="Price change">&nbsp;</span>
                             <span class="data-source-badge"></span>
                         </div>
                     </div>
                     <div class="crypto-chart-actions">
-                        <div class="crypto-chart-ranges">
-                            <button class="range-btn" data-range="1D">1D</button>
-                            <button class="range-btn" data-range="1W">1W</button>
-                            <button class="range-btn" data-range="1M">1M</button>
-                            <button class="range-btn" data-range="1Y">1Y</button>
-                            <button class="range-btn active" data-range="MAX">ALL</button>
+                        <div class="crypto-chart-ranges" role="group" aria-label="Chart time range">
+                            <button class="range-btn" data-range="1D" aria-label="Show 1 day chart" aria-pressed="false">1D</button>
+                            <button class="range-btn" data-range="1W" aria-label="Show 1 week chart" aria-pressed="false">1W</button>
+                            <button class="range-btn" data-range="1M" aria-label="Show 1 month chart" aria-pressed="false">1M</button>
+                            <button class="range-btn" data-range="1Y" aria-label="Show 1 year chart" aria-pressed="false">1Y</button>
+                            <button class="range-btn active" data-range="MAX" aria-label="Show all-time chart" aria-pressed="true">ALL</button>
                         </div>
-                        <button class="chart-action-btn chart-predict-btn" data-tooltip="Price Prediction" onclick="window.CryptoChart?.showPrediction('${chartId}')">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <button class="chart-action-btn chart-predict-btn" data-tooltip="Price Prediction" aria-label="Show price prediction" onclick="window.CryptoChart?.showPrediction('${chartId}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                 <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                             </svg>
                         </button>
-                        <button class="chart-action-btn chart-share-btn" data-tooltip="Share as Image" onclick="window.CryptoChart?.shareChart('${chartId}')">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <button class="chart-action-btn chart-share-btn" data-tooltip="Share as Image" aria-label="Share chart as image" onclick="window.CryptoChart?.shareChart('${chartId}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                 <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
                                 <polyline points="16 6 12 2 8 6"/>
                                 <line x1="12" y1="2" x2="12" y2="15"/>
@@ -768,9 +770,9 @@ const CryptoChartModule = (function() {
                         </button>
                     </div>
                 </div>
-                <div class="crypto-chart-container">
+                <div class="crypto-chart-container" role="img" aria-label="${escapeHtml(symbol.toUpperCase())} price chart, drag to inspect points">
                     <div class="crypto-chart-canvas"></div>
-                    <div class="crypto-chart-loading">
+                    <div class="crypto-chart-loading" aria-busy="true" aria-label="Loading chart data">
                         <div class="chart-spinner"></div>
                     </div>
                 </div>
@@ -882,8 +884,11 @@ const CryptoChartModule = (function() {
             height: 280,
         });
 
-        // Create area series with gradient
-        const areaSeries = chart.addAreaSeries({
+        // Create area series with gradient.
+        // Lightweight Charts v5 API: addSeries(SeriesType, options) replaces
+        // the v4 addAreaSeries(options) shorthand. Using v5 unlocks the
+        // plugins API and ~30% bundle reduction.
+        const areaSeries = chart.addSeries(LightweightCharts.AreaSeries, {
             lineColor: '#22c55e',
             topColor: 'rgba(34, 197, 94, 0.18)',
             bottomColor: 'rgba(34, 197, 94, 0.0)',
@@ -931,8 +936,12 @@ const CryptoChartModule = (function() {
                 lastRequestTime.set(chartId, now);
 
                 const range = btn.dataset.range;
-                rangeButtons.forEach(b => b.classList.remove('active'));
+                rangeButtons.forEach(b => {
+                    b.classList.remove('active');
+                    b.setAttribute('aria-pressed', 'false');
+                });
                 btn.classList.add('active');
+                btn.setAttribute('aria-pressed', 'true');
                 await updateChartData(chartId, range);
             });
         });
@@ -977,11 +986,22 @@ const CryptoChartModule = (function() {
 
         loadingElement.style.display = 'flex';
 
+        // Cancel any in-flight chart fetch for this chart instance.
+        // Without this, rapidly clicking range buttons (1D → 1W → 1M)
+        // lets all three fetches resolve out-of-order; the LAST to
+        // complete wins, not the LATEST clicked. AbortController makes
+        // every range change cancel the prior one.
+        if (instance.fetchAbortController) {
+            instance.fetchAbortController.abort();
+        }
+        instance.fetchAbortController = new AbortController();
+        const signal = instance.fetchAbortController.signal;
+
         try {
             let data;
             if (instance.assetType === 'stock') {
                 // Fetch stock chart data
-                data = await fetchStockChartData(instance.asset, range);
+                data = await fetchStockChartData(instance.asset, range, signal);
             } else {
                 // Fetch crypto chart data
                 let days = TIME_RANGES[range]?.days || '1';
@@ -991,7 +1011,7 @@ const CryptoChartModule = (function() {
                     const startOfYear = new Date(now.getFullYear(), 0, 1);
                     days = Math.ceil((now - startOfYear) / (1000 * 60 * 60 * 24));
                 }
-                data = await fetchChartData(instance.asset, days, instance.currency);
+                data = await fetchChartData(instance.asset, days, instance.currency, signal);
             }
 
             if (data.success && data.data.length > 0) {
@@ -1050,6 +1070,11 @@ const CryptoChartModule = (function() {
                 updateDataSourceBadge(cardElement, data.data_source || 'live', data.cache_age_seconds || 0);
             }
         } catch (error) {
+            // AbortError = a newer range click cancelled this fetch.
+            // Don't show an error; the newer fetch will paint the UI.
+            if (error.name === 'AbortError') {
+                return;
+            }
             console.error('[Chart] Load error:', error);
             const priceElement = cardElement.querySelector('.price-value');
             priceElement.classList.remove('shimmer-loading');
@@ -1411,6 +1436,11 @@ const CryptoChartModule = (function() {
     function destroyChart(chartId) {
         const instance = chartInstances.get(chartId);
         if (instance) {
+            // Cancel any in-flight fetches so they don't try to paint
+            // a destroyed chart's DOM.
+            if (instance.fetchAbortController) {
+                instance.fetchAbortController.abort();
+            }
             // Disconnect ResizeObserver before removing chart so the
             // observer doesn't keep a reference to a detached DOM node.
             if (instance.resizeObserver) {

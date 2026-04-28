@@ -178,8 +178,9 @@
     <!-- Stream Blocks -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-blocks.css') }}?v=6">
 
-    <!-- Lightweight Charts (TradingView) -->
-    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Lightweight Charts (TradingView) — v5 introduces breaking series-creation API
+         (addAreaSeries → addSeries(AreaSeries, ...)) handled in cryptoChartModule.js -->
+    <script src="https://unpkg.com/lightweight-charts@5.0.8/dist/lightweight-charts.standalone.production.js"></script>
 
     <!-- Premium Features JS (code headers, callouts, animations) -->
     <script defer src="{{ url_for('static', filename='js/premiumFeatures.js') }}"></script>
