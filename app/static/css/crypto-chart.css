@@ -12,20 +12,19 @@
 }
 
 /* ==================== Chart Wrapper ==================== */
-/* Chart matches the input bar's full width (768px) edge-to-edge.
-   Investigation found .message-content was 580px max with 62px margins,
-   inside .ai-message at 728px, inside .chatbox with 20px padding —
-   total nesting forced the chart to 580px regardless of inner-rule
-   overrides. This rule uses auto-margin overflow: chart is 768px wide
-   centered relative to its narrower parent, which produces effective
-   negative margins that escape ALL parent width constraints in one
-   step. !important ensures it wins regardless of the parent-chain
-   specificity battle. */
+/* Chart matches the visible rounded "input bar" width (.input-row, ~737.6px),
+   NOT the outer .input-container (768px). The container has 0.95rem
+   horizontal padding on each side, so the input-row is 768 - 2*0.95rem.
+   PR #41 made chart 768px (matching outer container); user feedback was
+   "graph card is wider than input bar" — the user sees the rounded
+   .input-row as "the input bar," and 768px chart spilled past it.
+   Auto-margin overflow centers the chart relative to its 580px parent,
+   producing effective negative margins that escape the nested clamps. */
 .crypto-chart-wrapper {
     margin-top: 0.75rem;
     margin-bottom: 1rem;
-    width: var(--composer-shell-max-width, 768px) !important;
-    max-width: var(--composer-shell-max-width, 768px) !important;
+    width: calc(var(--composer-shell-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+    max-width: calc(var(--composer-shell-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
     margin-left: auto !important;
     margin-right: auto !important;
 }
