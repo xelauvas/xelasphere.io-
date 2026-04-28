@@ -348,55 +348,65 @@ def test_wake_up_sync_called_with_expected_args(chat_routes_ast, func_name):
 
 
 # ------------------------------------------------------------
-# Test 4 — streaming user-half record_turn + assistant-half asymmetry
+# Test 4 — streaming has both user-half and assistant-half record_turn
 # ------------------------------------------------------------
 
 
-def test_chat_stream_has_user_half_record_turn_and_no_assistant_half(
+def test_chat_stream_has_both_user_and_assistant_record_turn_halves(
     chat_routes_ast,
 ):
-    """AST: chat_stream() has exactly one adapter.record_turn call with
-    role='user', and NO record_turn call with role='assistant'.
+    """AST: chat_stream() has exactly 2 adapter.record_turn calls
+    (user-half + assistant-half) and both reference the SAME variable
+    name for the ``pair_id`` kwarg.
 
-    The assistant-half asymmetry is intentional per M0.18 finish commit
-    af7549a: "The stream assembles assistant text across multiple SSE
-    exit branches (search path, cache hit, main path, done-event) and
-    a clean single assistant-finalization point doesn't exist without
-    a wrapper pattern. Deferred to a follow-up commit that introduces
-    a streaming-completion hook."
+    Mirrors test_record_turn_both_halves_share_pair_id_variable_name's
+    contract for the non-streaming path. The streaming assistant-half
+    was deferred at M0.18-finish commit af7549a; P1 dogfood (2026-04-28)
+    surfaced the impact — turns.sqlite contained 0 assistant rows for
+    every user, so semantic_search retrieved user statements and user
+    recall-questions only, never assistant-side answers. This commit
+    lands the streaming-completion hook at the SSE finalization point
+    (alongside Memory V2 post_turn).
 
-    This test pins the asymmetry so a future editor who adds an
-    assistant-half record_turn to chat_stream without landing the
-    wrapper first will fail here. When the wrapper lands, update this
-    test in the same commit.
-
-    Boundary: does NOT verify runtime that the user-half record_turn
-    fires during a live SSE flow, or that the stream's pair_id is
-    distinct from any concurrent non-streaming request. Value-level
-    coverage at issue #10.
+    Boundary: does NOT verify runtime that both halves fire per SSE
+    turn, or that the pair_id value is shared across calls at
+    runtime. Value-level coverage at issue #10.
     """
     chat_stream_fn = _find_function(chat_routes_ast, "chat_stream")
     calls = _record_turn_calls(chat_stream_fn)
 
-    user_halves = []
-    assistant_halves = []
+    assert len(calls) == 2, (
+        f"chat_stream: expected exactly 2 adapter.record_turn calls "
+        f"(user-half + assistant-half), found {len(calls)} at lines "
+        f"{[c.lineno for c in calls]}"
+    )
+
+    roles: dict[str, ast.Call] = {}
     for call in calls:
         role_node = _kwarg_value(call, "role")
-        if not isinstance(role_node, ast.Constant):
-            continue
-        if role_node.value == "user":
-            user_halves.append(call)
-        elif role_node.value == "assistant":
-            assistant_halves.append(call)
+        assert isinstance(role_node, ast.Constant), (
+            f"record_turn at line {call.lineno} has non-literal role= kwarg; "
+            f"test cannot classify user vs assistant half"
+        )
+        roles[role_node.value] = call
 
-    assert len(user_halves) == 1, (
-        f"chat_stream: expected exactly 1 user-half record_turn, found "
-        f"{len(user_halves)} at lines {[c.lineno for c in user_halves]}"
+    assert set(roles.keys()) == {"user", "assistant"}, (
+        f"chat_stream: expected one user-half + one assistant-half "
+        f"record_turn call, got roles={set(roles.keys())}"
     )
-    assert len(assistant_halves) == 0, (
-        f"chat_stream: found {len(assistant_halves)} assistant-half "
-        f"record_turn call(s) at lines {[c.lineno for c in assistant_halves]} — "
-        f"streaming assistant-half is deferred per M0.18 commit af7549a. "
-        f"If the streaming-completion wrapper has landed, update this test "
-        f"in the same commit to assert the new expected count."
+
+    user_pair_id = _kwarg_value(roles["user"], "pair_id")
+    assistant_pair_id = _kwarg_value(roles["assistant"], "pair_id")
+
+    assert isinstance(user_pair_id, ast.Name), (
+        f"chat_stream user-half pair_id= is not a Name node; "
+        f"test cannot verify shared-variable contract"
+    )
+    assert isinstance(assistant_pair_id, ast.Name), (
+        f"chat_stream assistant-half pair_id= is not a Name node"
+    )
+    assert user_pair_id.id == assistant_pair_id.id, (
+        f"chat_stream user-half pair_id uses {user_pair_id.id!r} but "
+        f"assistant-half uses {assistant_pair_id.id!r} — both halves must "
+        f"reference the same variable per spec §3 line 122"
     )

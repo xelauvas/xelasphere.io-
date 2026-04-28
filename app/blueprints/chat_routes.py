@@ -956,14 +956,12 @@ def chat_stream():
         logger.warning(f"[Stream] Mempalace wiring failed (legacy unaffected): {_mp_exc}")
 
     # M0.18: record_turn for the user half (mode-gated; off = no-op).
-    # Streaming-path note: assistant-half record_turn is NOT wired in this
-    # path. The stream assembles assistant text across multiple SSE exit
-    # branches (search path, cache hit, main path, done-event) and a clean
-    # single assistant-finalization point doesn't exist without a wrapper
-    # pattern. Deferred to a follow-up commit that introduces a streaming-
-    # completion hook. At mode=off default this is a no-op; at mode=shadow+
-    # the streaming path will record user-halves without assistant-halves
-    # until the wrapper lands (orphan pair_ids per spec §4.4 tolerated).
+    # Paired with the streaming assistant-half at the SSE finalization
+    # point (alongside Memory V2's post_turn hook), via the shared
+    # _mp_stream_pair_id. Lands the deferred wrapper from M0.18-finish
+    # commit af7549a; surfaced as a P1 dogfood finding (turns.sqlite had
+    # zero assistant rows, biasing semantic_search toward user statements
+    # and recall-questions only).
     _mp_stream_pair_id = str(uuid.uuid4())
     try:
         if user_id and session_id:
@@ -2156,6 +2154,31 @@ def chat_stream():
 
                             # Add memory_updated to done_payload
                             done_payload['memory_updated'] = stream_memory_updated
+                            # ============================================================
+
+                            # ============================================================
+                            # M0.18: record_turn for the assistant half (streaming).
+                            # Paired with the user-half record_turn at the route entry
+                            # (~line 965) via the shared _mp_stream_pair_id. Same
+                            # finalization point Memory V2 uses above; behaviorally
+                            # equivalent to the non-streaming assistant-half site.
+                            # Mode-gated; off = no-op. Exception-swallowing so any
+                            # mempalace-side failure cannot corrupt the SSE stream.
+                            # ============================================================
+                            try:
+                                if user_id and session_id and full_content:
+                                    _mempalace_get_adapter().record_turn(
+                                        user_id=user_id,
+                                        session_id=session_id,
+                                        turn_id=str(uuid.uuid4()),
+                                        pair_id=_mp_stream_pair_id,
+                                        role="assistant",
+                                        text=full_content,
+                                    )
+                            except Exception as _mp_exc:
+                                logger.warning(
+                                    f"[Stream] Mempalace record_turn (assistant) failed: {_mp_exc}"
+                                )
                             # ============================================================
 
                         except Exception as save_err:
