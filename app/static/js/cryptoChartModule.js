@@ -988,11 +988,55 @@ const CryptoChartModule = (function() {
             for (const entry of entries) {
                 const { width } = entry.contentRect;
                 chart.applyOptions({ width });
+                // Repositioning the live-dot after resize — width
+                // changed so timeToCoordinate output changed too.
+                if (instanceRef.updateLiveDot) instanceRef.updateLiveDot();
             }
         });
         resizeObserver.observe(chartContainer);
 
-        // Store chart instance (resizeObserver included for cleanup)
+        // Closure-captured reference so the resize observer can call
+        // the live-dot updater (defined below, after chart card looked up).
+        const instanceRef = {};
+
+        // Live-dot updater — recomputes position from current
+        // price/time using lightweight-charts coordinate APIs. Called
+        // on data load AND on every pan/zoom/resize so the dot stays
+        // glued to the line during interactions.
+        const updateLiveDot = () => {
+            const inst = chartInstances.get(chartId);
+            if (!inst || inst.currentPrice == null || inst.lastDataTime == null) return;
+            const card = document.getElementById(chartId);
+            if (!card) return;
+            const container = card.querySelector('.crypto-chart-container');
+            const canvas = card.querySelector('.crypto-chart-canvas');
+            if (!container || !canvas) return;
+            const yCoord = inst.series.priceToCoordinate(inst.currentPrice);
+            const xCoord = inst.chart.timeScale().timeToCoordinate(inst.lastDataTime);
+            let dot = container.querySelector('.chart-live-dot');
+            if (yCoord == null || xCoord == null) {
+                // Last point scrolled off-screen — hide dot.
+                if (dot) dot.style.display = 'none';
+                return;
+            }
+            if (!dot) {
+                dot = document.createElement('div');
+                dot.className = 'chart-live-dot';
+                container.appendChild(dot);
+            }
+            dot.style.display = '';
+            dot.style.top = `${canvas.offsetTop + yCoord}px`;
+            dot.style.left = `${canvas.offsetLeft + xCoord}px`;
+        };
+        instanceRef.updateLiveDot = updateLiveDot;
+
+        // Subscribe to pan/zoom — fires whenever the visible time
+        // range changes (mouse drag, wheel zoom, range button click).
+        try {
+            chart.timeScale().subscribeVisibleTimeRangeChange(updateLiveDot);
+        } catch (e) { /* tolerate older API name */ }
+
+        // Store chart instance (resizeObserver + updateLiveDot for cleanup)
         chartInstances.set(chartId, {
             chart,
             series: areaSeries,
@@ -1001,7 +1045,8 @@ const CryptoChartModule = (function() {
             assetType,
             currency,
             currentRange: initialRange,
-            resizeObserver
+            resizeObserver,
+            updateLiveDot
         });
 
         // Setup range button handlers with rate limiting
@@ -1202,30 +1247,17 @@ const CryptoChartModule = (function() {
                 // knows which range the percentage refers to.
                 setLoadedContent(changeElement, formatChange(data.change_percent, range), `price-change ${isPositive ? 'positive' : 'negative'}`);
 
-                // Live-pulse dot at the line's endpoint — uses BOTH
-                // priceToCoordinate (y) and timeScale.timeToCoordinate (x)
-                // so the dot lands ON the actual last data point, not the
-                // canvas's right edge (which would be inside the price-axis
-                // gutter, outside the visible plot area).
+                // Stash data for the live-dot updater so it can recompute
+                // on pan/zoom/resize. The updater (registered at chart
+                // creation) reads instance.currentPrice + lastDataTime.
+                const lastPt = data.data[data.data.length - 1];
+                instance.lastDataTime = lastPt ? lastPt.time : null;
+                // currentPrice is also assigned a few lines above; this
+                // keeps the two fields the dot needs in one place.
                 requestAnimationFrame(() => {
-                    if (data.current_price == null) return;
-                    const yCoord = instance.series.priceToCoordinate(data.current_price);
-                    const lastPoint = data.data[data.data.length - 1];
-                    const xCoord = lastPoint
-                        ? instance.chart.timeScale().timeToCoordinate(lastPoint.time)
-                        : null;
-                    if (yCoord == null || xCoord == null) return;
-                    const chartContainer = cardElement.querySelector('.crypto-chart-container');
-                    const canvasFull = cardElement.querySelector('.crypto-chart-canvas');
-                    if (!chartContainer || !canvasFull) return;
-                    let dot = chartContainer.querySelector('.chart-live-dot');
-                    if (!dot) {
-                        dot = document.createElement('div');
-                        dot.className = 'chart-live-dot';
-                        chartContainer.appendChild(dot);
+                    if (typeof instance.updateLiveDot === 'function') {
+                        instance.updateLiveDot();
                     }
-                    dot.style.top = `${canvasFull.offsetTop + yCoord}px`;
-                    dot.style.left = `${canvasFull.offsetLeft + xCoord}px`;
                 });
 
                 // Update data source badge
