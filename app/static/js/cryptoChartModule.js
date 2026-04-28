@@ -2134,21 +2134,32 @@ const CryptoChartModule = (function() {
                         `sparkline-change ${isPos ? 'positive' : 'negative'}`);
 
                     // Position the live-pulse dot at the actual last
-                    // data point on the line. priceToCoordinate runs
-                    // after layout in next animation frame so the
-                    // chart's pixel ↔ price mapping is finalized.
+                    // data point on the line. Mounted as a sibling of
+                    // the canvas inside the sparkline (NOT inside the
+                    // canvas) so the canvas's filter: drop-shadow
+                    // doesn't create a stacking context that hides
+                    // the dot. priceToCoordinate runs after layout in
+                    // next animation frame so the chart's pixel ↔
+                    // price mapping is finalized.
                     requestAnimationFrame(() => {
                         const lastPrice = data.current_price;
                         if (lastPrice == null) return;
                         const yCoord = series.priceToCoordinate(lastPrice);
                         if (yCoord == null) return;
-                        let dot = canvasEl.querySelector('.sparkline-live-dot');
+                        let dot = sparkEl.querySelector('.sparkline-live-dot');
                         if (!dot) {
                             dot = document.createElement('div');
                             dot.className = 'sparkline-live-dot';
-                            canvasEl.appendChild(dot);
+                            sparkEl.appendChild(dot);
                         }
-                        dot.style.top = `${yCoord}px`;
+                        // Position relative to the sparkline parent.
+                        // Canvas top + yCoord (within canvas) gives us
+                        // the absolute top inside the sparkline container.
+                        const canvasTop = canvasEl.offsetTop;
+                        const canvasRight = canvasEl.offsetLeft + canvasEl.clientWidth;
+                        dot.style.top = `${canvasTop + yCoord}px`;
+                        dot.style.left = `${canvasRight}px`;
+                        dot.style.right = 'auto';
                     });
                 }
             } catch (err) {
