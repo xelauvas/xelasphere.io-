@@ -233,9 +233,12 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
         print(f'[Binance] No chart mapping for coin_id: {coin_id}')
         return None
 
-    # Map days to Binance interval and limit
+    # Map days to Binance interval and limit. When user asks for 'max',
+    # use the maximum daily candles Binance allows in a single request
+    # (1000 ≈ 2.7 years). For true all-time history (BTC since 2009 etc.),
+    # pagination would be required — see TODO below.
     try:
-        days_int = int(days) if days != 'max' else 365
+        days_int = int(days) if days != 'max' else 1000
     except (ValueError, TypeError):
         days_int = 1
 
@@ -253,6 +256,11 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
         limit = days_int
     else:
         interval = '1d'
+        # Binance kline limit is hard-capped at 1000 per request. For
+        # 'max' or any range > 1000 days, this is what you get without
+        # pagination. TODO: implement paginated fetches if true all-time
+        # history is needed (e.g., 4 calls cover BTC's full Binance
+        # history from 2017 to today).
         limit = min(days_int, 1000)
 
     try:
