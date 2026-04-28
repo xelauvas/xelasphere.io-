@@ -162,6 +162,39 @@ const CryptoChartModule = (function() {
     }
 
     /**
+     * Escape HTML for safe interpolation into innerHTML.
+     * Pre-escapes &, <, >, ", ' so attacker-controlled API content
+     * (news titles, whale wallet IDs, symbol names) cannot inject
+     * <script> or break out of attribute values.
+     */
+    function escapeHtml(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    /**
+     * Validate a URL for safe href use. Rejects javascript:, data:,
+     * vbscript: and similar exfiltration vectors. Returns the URL if
+     * safe, '#' otherwise (so links degrade to no-op rather than break).
+     */
+    function safeUrl(url) {
+        if (!url) return '#';
+        const trimmed = String(url).trim().toLowerCase();
+        if (trimmed.startsWith('javascript:') ||
+            trimmed.startsWith('data:') ||
+            trimmed.startsWith('vbscript:') ||
+            trimmed.startsWith('file:')) {
+            return '#';
+        }
+        return url;
+    }
+
+    /**
      * Format large numbers (market cap, volume)
      */
     function formatLargeNumber(num) {
@@ -662,21 +695,25 @@ const CryptoChartModule = (function() {
     function createChartCardHTML(chartId, symbol, assetType = 'crypto') {
         const logoUrl = getAssetLogoUrl(symbol, assetType);
         const initials = getAssetInitials(symbol);
+        const safeSymbol = escapeHtml(symbol);
+        const safeInitials = escapeHtml(initials);
+        const safeLogoUrl = escapeHtml(safeUrl(logoUrl));
+        const safeChartId = escapeHtml(chartId);
 
         // Always show fallback first, hide it when image loads successfully
         const iconHtml = logoUrl
-            ? `<img class="symbol-logo" src="${logoUrl}" alt="${symbol}"
+            ? `<img class="symbol-logo" src="${safeLogoUrl}" alt="${safeSymbol}"
                    onload="handleLogoLoad(this)" onerror="handleLogoError(this)">
-               <span class="symbol-icon-fallback">${initials}</span>`
-            : `<span class="symbol-icon-fallback">${initials}</span>`;
+               <span class="symbol-icon-fallback">${safeInitials}</span>`
+            : `<span class="symbol-icon-fallback">${safeInitials}</span>`;
 
         return `
-            <div class="crypto-chart-card" id="${chartId}">
+            <div class="crypto-chart-card" id="${safeChartId}">
                 <div class="crypto-chart-header">
                     <div class="crypto-chart-info">
                         <div class="crypto-chart-symbol">
                             <span class="symbol-icon">${iconHtml}</span>
-                            <span class="symbol-name">${symbol.toUpperCase()}</span>
+                            <span class="symbol-name">${escapeHtml(symbol.toUpperCase())}</span>
                             <div class="fear-greed-badge" style="display: none;">
                                 <span class="fg-dot"></span>
                                 <span class="fg-label"></span>
@@ -1273,14 +1310,13 @@ const CryptoChartModule = (function() {
                     const timeAgo = article.published_on ? formatRelativeTime(article.published_on) : '';
                     const snippet = article.body ?
                         (article.body.length > 150 ? article.body.substring(0, 150) + '...' : article.body) : '';
-                    const escapedSnippet = snippet.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
                     return `
-                        <a href="${article.url}" target="_blank" rel="noopener noreferrer" class="news-ticker-item" data-preview="${escapedSnippet}">
-                            <span class="ticker-headline">${article.title}</span>
+                        <a href="${escapeHtml(safeUrl(article.url))}" target="_blank" rel="noopener noreferrer" class="news-ticker-item" data-preview="${escapeHtml(snippet)}">
+                            <span class="ticker-headline">${escapeHtml(article.title)}</span>
                             <div class="news-ticker-meta">
-                                ${timeAgo ? `<span class="ticker-time">${timeAgo}</span>` : ''}
-                                <span class="ticker-source">${article.source}</span>
+                                ${timeAgo ? `<span class="ticker-time">${escapeHtml(timeAgo)}</span>` : ''}
+                                <span class="ticker-source">${escapeHtml(article.source)}</span>
                             </div>
                         </a>
                     `;
@@ -1298,15 +1334,14 @@ const CryptoChartModule = (function() {
                     const whaleItems = whaleData.alerts.map(alert => {
                         const timeAgo = alert.timestamp ? formatRelativeTime(alert.timestamp) : '';
                         const previewText = `${alert.amount_formatted} ${alert.symbol} (${alert.amount_usd_formatted}) transferred from ${alert.from} to ${alert.to}`;
-                        const escapedPreview = previewText.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
                         return `
-                            <span class="whale-item" data-type="${alert.tx_type}" data-preview="${escapedPreview}">
-                                <span class="whale-emoji">${alert.emoji}</span>
-                                <span class="whale-amount">${alert.amount_formatted} ${alert.symbol}</span>
-                                <span class="whale-usd">${alert.amount_usd_formatted}</span>
-                                <span class="whale-flow">${alert.from} → ${alert.to}</span>
-                                ${timeAgo ? `<span class="whale-time">${timeAgo}</span>` : ''}
+                            <span class="whale-item" data-type="${escapeHtml(alert.tx_type)}" data-preview="${escapeHtml(previewText)}">
+                                <span class="whale-emoji">${escapeHtml(alert.emoji)}</span>
+                                <span class="whale-amount">${escapeHtml(alert.amount_formatted)} ${escapeHtml(alert.symbol)}</span>
+                                <span class="whale-usd">${escapeHtml(alert.amount_usd_formatted)}</span>
+                                <span class="whale-flow">${escapeHtml(alert.from)} → ${escapeHtml(alert.to)}</span>
+                                ${timeAgo ? `<span class="whale-time">${escapeHtml(timeAgo)}</span>` : ''}
                             </span>
                         `;
                     }).join('<span class="whale-separator">•</span>');
@@ -1567,7 +1602,10 @@ const CryptoChartModule = (function() {
         indicators.push({ name: 'MACD', value: macd.toFixed(2), signal: macdSignal, color: macdColor });
 
         // Price momentum (7-day change)
-        if (prices.length >= 7) {
+        // Guard against weekAgo == 0 (would yield Infinity / NaN). For
+        // legitimate crypto prices this is rare but possible for very
+        // new or de-listed coins.
+        if (prices.length >= 7 && prices[prices.length - 7] > 0) {
             const weekAgo = prices[prices.length - 7];
             const momentum = ((currentPrice - weekAgo) / weekAgo) * 100;
             const momSignal = momentum > 0 ? 'Positive' : 'Negative';
