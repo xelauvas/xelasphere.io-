@@ -1071,11 +1071,11 @@ const CryptoChartModule = (function() {
                         const symbol = detailsData.symbol || instance.asset.toUpperCase();
 
                         // 24h High/Low
-                        setLoadedContent(high24hEl, detailsData.high_24h ? '$' + formatPrice(detailsData.high_24h) : '--');
-                        setLoadedContent(low24hEl, detailsData.low_24h ? '$' + formatPrice(detailsData.low_24h) : '--');
+                        setLoadedContent(high24hEl, detailsData.high_24h ? formatPrice(detailsData.high_24h) : '--');
+                        setLoadedContent(low24hEl, detailsData.low_24h ? formatPrice(detailsData.low_24h) : '--');
 
                         // All-Time High
-                        setLoadedContent(athEl, detailsData.ath ? '$' + formatPrice(detailsData.ath) : '--');
+                        setLoadedContent(athEl, detailsData.ath ? formatPrice(detailsData.ath) : '--');
 
                         // ATH Change percentage
                         if (athChangeEl && detailsData.ath_change_percentage) {
@@ -1555,7 +1555,7 @@ const CryptoChartModule = (function() {
         else bearishSignals += 1;
         if (currentPrice > sma50) bullishSignals += 1;
         else bearishSignals += 1;
-        indicators.push({ name: 'MA (20)', value: '$' + formatPrice(sma20), signal: maSignal, color: maColor });
+        indicators.push({ name: 'MA (20)', value: formatPrice(sma20), signal: maSignal, color: maColor });
 
         // MACD
         const macd = calculateMACD(prices);
