@@ -25,6 +25,17 @@
     margin-right: auto;
 }
 
+/* When an AI message contains a chart, center the entire message content
+   so the chart aligns horizontally with the chat input below. By default,
+   .ai-message .message-content is `margin-right: auto` (left-aligned in
+   chat area), which made the chart's left edge sit at the chat-area left
+   edge instead of at the input's left edge. :has() is well-supported in
+   all modern browsers (Chrome 105+, Firefox 121+, Safari 15.4+, 2022+). */
+.ai-message .message-content:has(.crypto-chart-wrapper) {
+    margin-left: auto;
+    margin-right: auto;
+}
+
 /* ==================== Chart Card ==================== */
 .crypto-chart-card {
     background: var(--bg-hover, rgba(255, 255, 255, 0.05));
