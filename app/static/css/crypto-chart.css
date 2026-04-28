@@ -16,6 +16,13 @@
     margin-top: 0.75rem;
     margin-bottom: 1rem;
     width: 100%;
+    /* Constrain to the same effective width as the chat input
+       (--composer-shell-max-width minus 2x side padding), so the chart's
+       left/right edges align exactly with the visible composer edges
+       beneath it. Centered with auto margins. */
+    max-width: calc(var(--composer-shell-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem));
+    margin-left: auto;
+    margin-right: auto;
 }
 
 /* ==================== Chart Card ==================== */
