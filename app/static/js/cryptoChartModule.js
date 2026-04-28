@@ -792,11 +792,11 @@ const CryptoChartModule = (function() {
                 <div class="crypto-chart-footer">
                     <div class="crypto-chart-stats">
                         <div class="stat-item tier-primary">
-                            <span class="stat-label">Market Cap</span>
+                            <span class="stat-label">${assetType === 'stock' ? 'Exchange' : 'Market Cap'}</span>
                             <span class="stat-value market-cap shimmer-loading">&nbsp;</span>
                         </div>
                         <div class="stat-item tier-primary">
-                            <span class="stat-label">24h Volume</span>
+                            <span class="stat-label">${assetType === 'stock' ? 'Market Status' : '24h Volume'}</span>
                             <span class="stat-value volume shimmer-loading">&nbsp;</span>
                         </div>
                         <div class="stat-item tier-secondary">
