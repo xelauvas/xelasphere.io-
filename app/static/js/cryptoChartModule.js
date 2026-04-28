@@ -623,16 +623,23 @@ const CryptoChartModule = (function() {
         const symbolLower = symbol.toLowerCase();
 
         if (assetType === 'stock') {
-            // Use config from API if available
+            // Get the company domain. Prefer the curated mapping from
+            // STOCK_LOGOS (via API config). Falls back to symbol.com.
+            let domain;
             if (configCache && configCache.stock_logos) {
-                const domain = configCache.stock_logos[symbolUpper];
-                if (domain) {
-                    const baseUrl = configCache.clearbit_base || 'https://logo.clearbit.com/';
-                    return baseUrl + domain;
-                }
+                domain = configCache.stock_logos[symbolUpper];
             }
-            // Fallback to Clearbit with guessed domain
-            return `https://logo.clearbit.com/${symbolLower}.com`;
+            if (!domain) {
+                domain = `${symbolLower}.com`;
+            }
+            // Clearbit's free Logo API was sunset late 2024. Google's
+            // favicon service is free, fast, reliable, and returns up
+            // to 128x128 PNG — plenty for our ~32px chart icon at 4x
+            // retina. The configCache.clearbit_base override (if set)
+            // is honored for fully-self-hosted deployments.
+            const baseUrl = configCache?.clearbit_base
+                || 'https://www.google.com/s2/favicons?sz=128&domain=';
+            return baseUrl + domain;
         }
 
         // For crypto, check localStorage cache first
