@@ -912,7 +912,10 @@
 }
 
 .news-list {
-    padding: 6px 10px;
+    /* No top padding so the first article sits flush against the
+       news-feed-header divider when the section expands. Bottom
+       padding still gives breathing room before the whale ticker. */
+    padding: 0 10px 8px 10px;
 }
 
 .news-list-content {
