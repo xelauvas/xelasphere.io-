@@ -1036,6 +1036,13 @@
 }
 
 /* News item base styles */
+.crypto-chart-news:not(.collapsed) .news-ticker-item {
+    /* Explicit auto so child items are always clickable when the
+       news section is expanded — guards against inherited
+       pointer-events: none from any future container rules. */
+    pointer-events: auto;
+}
+
 .crypto-chart-news .news-ticker-item {
     display: flex;
     flex-direction: column;
@@ -1048,6 +1055,7 @@
     border-left: 2px solid transparent;
     position: relative;
     opacity: 1;
+    cursor: pointer;
 }
 
 /* Sentiment color tags — left-border accent + faint bg tint based on
