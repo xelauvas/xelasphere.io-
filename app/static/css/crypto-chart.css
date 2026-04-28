@@ -31,14 +31,20 @@
     max-width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
     margin-left: auto !important;
     margin-right: auto !important;
-    /* Compensate for asymmetric padding in the chart's parent chain vs the
-       input's parent chain. Chart's chain has: 20px padding-left on
-       .conversation-panel + 12px padding-left on .ai-message = 32px total
-       extra offset. Input's chain only adds --composer-side-pad (0.95rem ≈
-       15.2px). Net difference: 32 - 15.2 = 16.8px shift right; compensate
-       with a leftward translation. The calc keeps it portable if
-       --composer-side-pad changes. */
-    transform: translateX(calc(var(--composer-side-pad, 0.95rem) - 32px)) !important;
+    /* Compensate for two things:
+       1. Asymmetric padding in chart's parent chain vs input's chain:
+          chart's chain has 20px (.conversation-panel) + 12px (.ai-message)
+          = 32px padding-left extra; input's chain has --composer-side-pad
+          (~15.2px). Net: 32 - 15.2 = 16.8px shift right.
+       2. Width difference: when input is wider than chart (e.g.,
+          --composer-shell-max-width 800 vs --content-max-width 768),
+          chart needs to shift right by (input_w - chart_w)/2 to stay
+          centered within the wider input. The shift is
+          (--composer-shell-max-width - --content-max-width) / 2. */
+    transform: translateX(calc(
+        var(--composer-side-pad, 0.95rem) - 32px
+        + (var(--composer-shell-max-width, 768px) - var(--content-max-width, 768px)) / 2
+    )) !important;
 }
 
 /* ==================== Chart Card ==================== */
