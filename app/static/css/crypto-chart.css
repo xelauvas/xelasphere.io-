@@ -775,7 +775,9 @@
 /* ==================== Chart Container ==================== */
 .crypto-chart-container {
     position: relative;
-    height: 280px;
+    /* Bumped from 280→340 (matches chart height in JS) for more
+       breathing room when panning through history. */
+    height: 340px;
     padding-bottom: 28px;
     background: rgba(0, 0, 0, 0.12);
 }
