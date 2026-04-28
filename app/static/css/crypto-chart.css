@@ -82,6 +82,42 @@
     z-index: 2;
 }
 
+.sparkline-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.sparkline-logo {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+
+.sparkline-icon-fallback {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-secondary, #9ca3af);
+    line-height: 22px;
+}
+
+/* When the trend is known, glow the logo in trend color (matches
+   the full chart card's logo glow effect). */
+.crypto-chart-sparkline[data-trend="up"] .sparkline-logo {
+    box-shadow: 0 0 8px 1px rgba(34, 197, 94, 0.25);
+}
+.crypto-chart-sparkline[data-trend="down"] .sparkline-logo {
+    box-shadow: 0 0 8px 1px rgba(239, 68, 68, 0.25);
+}
+
 .sparkline-symbol {
     font-weight: 700;
     color: var(--text-primary, #ffffff);

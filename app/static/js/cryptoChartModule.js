@@ -2034,12 +2034,24 @@ const CryptoChartModule = (function() {
         const safeAsset = escapeHtml(asset.toUpperCase());
         const safeId = escapeHtml(sparklineId);
 
+        // Logo + initials, same pattern as the full chart card.
+        const logoUrl = getAssetLogoUrl(asset, assetType);
+        const initials = getAssetInitials(asset);
+        const safeLogoUrl = escapeHtml(safeUrl(logoUrl));
+        const safeInitials = escapeHtml(initials);
+        const iconHtml = logoUrl
+            ? `<img class="sparkline-logo" src="${safeLogoUrl}" alt="${safeAsset}"
+                   onload="handleLogoLoad(this)" onerror="handleLogoError(this)">
+               <span class="sparkline-icon-fallback">${safeInitials}</span>`
+            : `<span class="sparkline-icon-fallback">${safeInitials}</span>`;
+
         container.innerHTML = `
             <div class="crypto-chart-sparkline" id="${safeId}" role="button" tabindex="0"
                  aria-label="${safeAsset} sparkline preview — click to expand"
                  data-asset="${escapeHtml(asset)}" data-asset-type="${escapeHtml(assetType)}"
                  data-currency="${escapeHtml(currency)}" data-range="${escapeHtml(initialRange)}">
                 <div class="sparkline-header">
+                    <span class="sparkline-icon" aria-hidden="true">${iconHtml}</span>
                     <span class="sparkline-symbol">${safeAsset}</span>
                     <span class="sparkline-price shimmer-loading">&nbsp;</span>
                     <span class="sparkline-change shimmer-loading">&nbsp;</span>
