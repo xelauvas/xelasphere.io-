@@ -6,7 +6,11 @@ Most crypto lookups use CoinGecko's dynamic coin list.
 Used by views.py, crypto_api.py, and served to frontend via API.
 """
 
-# Top 10 crypto for fast-path detection (rest use dynamic CoinGecko lookup)
+# Top ~30 crypto for fast-path detection (rest use dynamic CoinGecko lookup).
+# Both symbol and full-name forms are listed so user inputs like "vechain"
+# AND "vet" both resolve. Expanded from top-10 → top-30 (2026-04-28) so
+# popular coins resolve instantly even when CoinGecko's coin-list cache
+# is cold (e.g., right after Flask restart, before /coins/list has warmed).
 CRYPTO_SYMBOLS = {
     'btc': 'bitcoin', 'bitcoin': 'bitcoin',
     'eth': 'ethereum', 'ethereum': 'ethereum',
@@ -18,6 +22,34 @@ CRYPTO_SYMBOLS = {
     'dot': 'polkadot', 'polkadot': 'polkadot',
     'link': 'chainlink', 'chainlink': 'chainlink',
     'ltc': 'litecoin', 'litecoin': 'litecoin',
+    'matic': 'matic-network', 'polygon': 'matic-network',
+    'avax': 'avalanche-2', 'avalanche': 'avalanche-2',
+    'shib': 'shiba-inu', 'shiba': 'shiba-inu', 'shiba inu': 'shiba-inu',
+    'trx': 'tron', 'tron': 'tron',
+    'uni': 'uniswap', 'uniswap': 'uniswap',
+    'atom': 'cosmos', 'cosmos': 'cosmos',
+    'near': 'near', 'near protocol': 'near',
+    'ftm': 'fantom', 'fantom': 'fantom',
+    'algo': 'algorand', 'algorand': 'algorand',
+    'vet': 'vechain', 'vechain': 'vechain',
+    'icp': 'internet-computer', 'internet computer': 'internet-computer',
+    'fil': 'filecoin', 'filecoin': 'filecoin',
+    'apt': 'aptos', 'aptos': 'aptos',
+    'arb': 'arbitrum', 'arbitrum': 'arbitrum',
+    'op': 'optimism', 'optimism': 'optimism',
+    'sui': 'sui', 'mantle': 'mantle',
+    'inj': 'injective-protocol', 'injective': 'injective-protocol',
+    'sei': 'sei-network',
+    'tia': 'celestia', 'celestia': 'celestia',
+    'pepe': 'pepe',
+    'bonk': 'bonk',
+    'wif': 'dogwifcoin', 'dogwifhat': 'dogwifcoin', 'dogwifcoin': 'dogwifcoin',
+    'hbar': 'hedera-hashgraph', 'hedera': 'hedera-hashgraph',
+    'xlm': 'stellar', 'stellar': 'stellar',
+    'usdt': 'tether', 'tether': 'tether',
+    'usdc': 'usd-coin',
+    'dai': 'dai',
+    'bch': 'bitcoin-cash', 'bitcoin cash': 'bitcoin-cash',
 }
 
 # CoinGecko ID -> Trading ticker symbol (top coins for display, rest use API symbol)
