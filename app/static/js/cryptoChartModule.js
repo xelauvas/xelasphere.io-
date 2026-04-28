@@ -75,6 +75,15 @@ const CryptoChartModule = (function() {
             },
             rightPriceScale: {
                 borderColor: 'rgba(255, 255, 255, 0.1)',
+                // Explicitly visible + autoScale so price-tick labels
+                // render from the first data load (some lightweight-charts
+                // versions skip rendering until first user interaction
+                // when these are left as defaults).
+                visible: true,
+                autoScale: true,
+                // Match the area series' top/bottom margins so the
+                // axis ticks don't try to label the volume strip area.
+                scaleMargins: { top: 0.05, bottom: 0.25 },
             },
             handleScroll: {
                 mouseWheel: true,
@@ -1129,6 +1138,16 @@ const CryptoChartModule = (function() {
                     instance.volumeSeries.setData([]);
                 }
                 instance.chart.timeScale().fitContent();
+                // Force the right price-scale to recompute and render
+                // tick labels. Without this, the labels sometimes don't
+                // appear on first data load until the user clicks a
+                // range button (which forces a re-render).
+                try {
+                    instance.chart.priceScale('right').applyOptions({
+                        autoScale: true,
+                        scaleMargins: { top: 0.05, bottom: 0.25 },
+                    });
+                } catch (e) { /* tolerate older API */ }
                 instance.currentPrice = data.current_price;
 
                 // Update symbol display from API response
