@@ -72,16 +72,23 @@ if [[ -f "${today_jsonl}" ]]; then
   today_lines=$(wc -l < "${today_jsonl}")
 fi
 
-# If no JSONL today AND there was chat traffic in last 24h, that's a red flag
+# If no JSONL today AND there was chat traffic TODAY, that's a red flag
 # (the writer is broken — same regression class as 2026-04-27 22:08 PermissionError).
+# Scope must be "since UTC midnight today" — comparing today's JSONL against
+# a rolling 24h window false-flags every morning, since yesterday's tail of
+# events lands in yesterday's file. (chat_events_24h kept as context only.)
 chat_events_24h=$(
   journalctl -u xelasphere.service --since '24 hours ago' --no-pager 2>/dev/null \
     | grep -c 'Memory V3: Shadow mode' || true
 )
-if [[ ! -f "${today_jsonl}" ]] && (( chat_events_24h > 0 )); then
-  red+=("no shadow JSONL for ${TODAY} despite ${chat_events_24h} chat events in last 24h")
-elif (( today_lines == 0 )) && (( chat_events_24h > 0 )); then
-  red+=("shadow JSONL for ${TODAY} is empty despite ${chat_events_24h} chat events in last 24h")
+chat_events_today=$(
+  journalctl -u xelasphere.service --since "${TODAY} 00:00:00 UTC" --no-pager 2>/dev/null \
+    | grep -c 'Memory V3: Shadow mode' || true
+)
+if [[ ! -f "${today_jsonl}" ]] && (( chat_events_today > 0 )); then
+  red+=("no shadow JSONL for ${TODAY} despite ${chat_events_today} chat events today")
+elif (( today_lines == 0 )) && (( chat_events_today > 0 )); then
+  red+=("shadow JSONL for ${TODAY} is empty despite ${chat_events_today} chat events today")
 fi
 
 # ---------------------------------------------------------------------------
@@ -196,7 +203,7 @@ fi
   echo "[${TS}] ${marker}"
   if (( exit_code != 0 )); then
     echo "  outbox: total=${outbox_total} pending=${outbox_pending} sent=${outbox_sent} oldest_pending_age=${oldest_pending_age}s"
-    echo "  JSONL:  ${today_jsonl} = ${today_lines} lines (chat events 24h: ${chat_events_24h})"
+    echo "  JSONL:  ${today_jsonl} = ${today_lines} lines (chat events today: ${chat_events_today}, 24h: ${chat_events_24h})"
     echo "  errors_24h: total=${err_total}${err_summary}"
     echo "  disk:   shadow=${shadow_bytes}B palace=${palace_bytes}B outbox=${outbox_bytes}B total=${disk_total_bytes}B"
     for r in ${red[@]+"${red[@]}"}; do echo "  RED:    ${r}"; done
