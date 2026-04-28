@@ -56,6 +56,38 @@
     transition: all 0.2s ease;
     margin: 0;
     width: 100%;
+    /* Container query context — child elements adapt to the card's
+       actual rendered width (not viewport) so the chart looks right
+       in narrow sidebars, modals, or split layouts as well as full chat. */
+    container-type: inline-size;
+    container-name: chart-card;
+}
+
+/* Container queries: 3-tier responsive layout based on the chart card's
+   own width, not the viewport. More accurate than media queries when
+   the chart is in a sidebar/modal smaller than the viewport. */
+@container chart-card (max-width: 480px) {
+    .crypto-chart-stats {
+        gap: 12px;
+        font-size: 0.92em;
+    }
+    .crypto-chart-ranges .range-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+    .stat-item.tier-tertiary {
+        display: none; /* hide tertiary stats on narrow cards */
+    }
+}
+
+@container chart-card (max-width: 360px) {
+    .crypto-chart-stats {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .crypto-chart-actions {
+        flex-wrap: wrap;
+    }
 }
 
 .crypto-chart-card:hover {

@@ -936,13 +936,26 @@ const CryptoChartModule = (function() {
                 lastRequestTime.set(chartId, now);
 
                 const range = btn.dataset.range;
-                rangeButtons.forEach(b => {
-                    b.classList.remove('active');
-                    b.setAttribute('aria-pressed', 'false');
-                });
-                btn.classList.add('active');
-                btn.setAttribute('aria-pressed', 'true');
-                await updateChartData(chartId, range);
+
+                // Wrap in View Transitions API for a smooth cross-fade
+                // when switching range. Only Chrome/Edge/Safari 18+ support
+                // it natively; falls back to instant switch on other
+                // browsers via the typeof guard. The animation makes
+                // 1D → 1W → 1M feel like a navigation, not a flash.
+                const updateLogic = async () => {
+                    rangeButtons.forEach(b => {
+                        b.classList.remove('active');
+                        b.setAttribute('aria-pressed', 'false');
+                    });
+                    btn.classList.add('active');
+                    btn.setAttribute('aria-pressed', 'true');
+                    await updateChartData(chartId, range);
+                };
+                if (typeof document.startViewTransition === 'function') {
+                    document.startViewTransition(updateLogic);
+                } else {
+                    await updateLogic();
+                }
             });
         });
 
@@ -963,12 +976,35 @@ const CryptoChartModule = (function() {
             priceElement.textContent = formatPrice(price, currency);
         });
 
-        // Load initial data
-        await loadChartData(chartId, initialRange);
-        await loadPriceStats(chartId);
+        // Lazy-load: defer chart-data + stats + news fetches until the
+        // chart actually scrolls into view. Saves API quota and shaves
+        // page-load time when the chat history has multiple charts the
+        // user hasn't scrolled to yet. Threshold 0.1 = trigger when 10%
+        // visible; rootMargin '100px' starts loading slightly before
+        // the chart appears so it feels instant.
+        let dataLoaded = false;
+        const loadDataIfNeeded = async () => {
+            if (dataLoaded) return;
+            dataLoaded = true;
+            await loadChartData(chartId, initialRange);
+            await loadPriceStats(chartId);
+            loadNews(chartId);
+        };
 
-        // Load news (async, don't wait)
-        loadNews(chartId);
+        if (typeof IntersectionObserver !== 'undefined') {
+            const lazyObserver = new IntersectionObserver((entries) => {
+                for (const entry of entries) {
+                    if (entry.isIntersecting) {
+                        loadDataIfNeeded();
+                        lazyObserver.disconnect();
+                    }
+                }
+            }, { rootMargin: '100px', threshold: 0.1 });
+            lazyObserver.observe(cardElement);
+        } else {
+            // Fallback for browsers without IntersectionObserver.
+            await loadDataIfNeeded();
+        }
 
         return chartId;
     }
