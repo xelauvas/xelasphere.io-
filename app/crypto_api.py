@@ -1997,6 +1997,20 @@ def get_crypto_chart():
             result['cache_age_seconds'] = round(cache_age)
             return jsonify(result)
 
+    # Prefer Binance for any coin with a Binance mapping. CoinGecko's
+    # total_volumes is rolling-24h cumulative, NOT per-bar volume —
+    # which makes the volume histogram on 1D / 1W / 1M look uniform
+    # ('ugly equal bars'). Binance klines return true per-bar volume
+    # with natural variance. CoinGecko remains the fallback for coins
+    # not listed on Binance.
+    if currency == 'usd' and coin_id in COINGECKO_TO_BINANCE:
+        binance_first = _fetch_chart_from_binance(coin_id, days)
+        if binance_first:
+            _chart_cache_set(cache_key, binance_first)
+            return jsonify(binance_first)
+        # Fall through to CoinGecko if Binance failed.
+        print(f'[CryptoAPI] Binance preferred path failed for {coin_id}, trying CoinGecko')
+
     try:
         # Determine interval - use 'daily' for ranges > 1 day (reduces data points)
         interval = None
