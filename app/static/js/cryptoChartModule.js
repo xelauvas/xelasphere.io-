@@ -1007,42 +1007,37 @@ const CryptoChartModule = (function() {
         // the live-dot updater (defined below, after chart card looked up).
         const instanceRef = {};
 
-        // Live-dot updater — recomputes position from current
-        // price/time using lightweight-charts coordinate APIs. Called
-        // on data load AND on every pan/zoom/resize so the dot stays
-        // glued to the line during interactions.
+        // Live-dot via lightweight-charts series markers — the library
+        // handles positioning internally (always correct on the line,
+        // tracks pan/zoom/resize without any manual coordinate math).
+        // Trade-off: marker is static (no CSS pulse) but pixel-perfect
+        // accuracy beats a misplaced pulse.
         const updateLiveDot = () => {
             const inst = chartInstances.get(chartId);
             if (!inst || inst.currentPrice == null || inst.lastDataTime == null) return;
             const card = document.getElementById(chartId);
             if (!card) return;
-            const container = card.querySelector('.crypto-chart-container');
-            const canvas = card.querySelector('.crypto-chart-canvas');
-            if (!container || !canvas) return;
-            const yCoord = inst.series.priceToCoordinate(inst.currentPrice);
-            const xCoord = inst.chart.timeScale().timeToCoordinate(inst.lastDataTime);
-            let dot = container.querySelector('.chart-live-dot');
-            if (yCoord == null || xCoord == null) {
-                // Last point scrolled off-screen — hide dot.
-                if (dot) dot.style.display = 'none';
-                return;
-            }
-            if (!dot) {
-                dot = document.createElement('div');
-                dot.className = 'chart-live-dot';
-                container.appendChild(dot);
-            }
-            dot.style.display = '';
-            dot.style.top = `${canvas.offsetTop + yCoord}px`;
-            dot.style.left = `${canvas.offsetLeft + xCoord}px`;
+            const isPos = card.getAttribute('data-trend') !== 'down';
+            const color = isPos ? '#22c55e' : '#ef4444';
+            try {
+                const markers = [{
+                    time: inst.lastDataTime,
+                    position: 'inBar',
+                    color,
+                    shape: 'circle',
+                    size: 1,
+                }];
+                if (typeof inst.series.setMarkers === 'function') {
+                    inst.series.setMarkers(markers);
+                } else if (typeof LightweightCharts.createSeriesMarkers === 'function') {
+                    LightweightCharts.createSeriesMarkers(inst.series, markers);
+                }
+            } catch (e) { /* tolerate API differences */ }
+            // Remove any old positioned-by-JS dot — markers replace it.
+            const oldDot = card.querySelector('.chart-live-dot');
+            if (oldDot) oldDot.remove();
         };
         instanceRef.updateLiveDot = updateLiveDot;
-
-        // Subscribe to pan/zoom — fires whenever the visible time
-        // range changes (mouse drag, wheel zoom, range button click).
-        try {
-            chart.timeScale().subscribeVisibleTimeRangeChange(updateLiveDot);
-        } catch (e) { /* tolerate older API name */ }
 
         // Store chart instance (resizeObserver + updateLiveDot for cleanup)
         chartInstances.set(chartId, {
