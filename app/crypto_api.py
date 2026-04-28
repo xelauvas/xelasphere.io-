@@ -2199,17 +2199,54 @@ def get_stock_price():
             volume = meta.get('regularMarketVolume')
             day_open = meta.get('regularMarketOpen')
 
-            # market_cap isn't in Yahoo's chart meta — fetch via yfinance
-            # which handles Yahoo's crumb auth automatically. Wrapped in
-            # try/except so a yfinance failure (rate limit, network, etc.)
-            # doesn't break the price endpoint — degrades to None.
+            # market_cap, P/E ratio, EPS, dividend yield aren't in Yahoo's
+            # chart meta — fetch via yfinance (handles Yahoo's crumb auth
+            # automatically). Wrapped in try/except so a yfinance failure
+            # doesn't break the price endpoint. Cached in Redis for 1h
+            # since these are slow-moving fundamentals (P/E, EPS only
+            # change quarterly; market_cap drifts with price but the
+            # 1h refresh window is fine for chart context).
             market_cap = meta.get('marketCap')
-            if not market_cap and _YF_AVAILABLE:
-                try:
-                    fast_info = _yf.Ticker(symbol).fast_info
-                    market_cap = getattr(fast_info, 'market_cap', None)
-                except Exception as yf_err:
-                    print(f'[StockAPI] yfinance market_cap fetch failed for {symbol}: {yf_err}')
+            pe_ratio = None
+            eps = None
+            dividend_yield = None
+            if _YF_AVAILABLE:
+                from app.redis_client import cache_get, cache_set
+                extras_key = f'stock:extras:{symbol}'
+                extras = cache_get(extras_key)
+                if not extras:
+                    try:
+                        ticker = _yf.Ticker(symbol)
+                        # fast_info is sub-second; .info is slower but has
+                        # the fundamentals. Pulling both — .info covers
+                        # all, fast_info as backup for market_cap if .info
+                        # times out.
+                        info = ticker.info
+                        extras = {
+                            'market_cap': info.get('marketCap'),
+                            'pe_ratio': info.get('trailingPE'),
+                            'eps': info.get('trailingEps'),
+                            'dividend_yield': info.get('dividendYield'),
+                        }
+                        cache_set(extras_key, extras, 3600)
+                    except Exception as yf_err:
+                        print(f'[StockAPI] yfinance .info fetch failed for {symbol}: {yf_err}')
+                        # Try fast_info as a quick fallback for market_cap only
+                        try:
+                            fast_info = _yf.Ticker(symbol).fast_info
+                            extras = {
+                                'market_cap': getattr(fast_info, 'market_cap', None),
+                                'pe_ratio': None,
+                                'eps': None,
+                                'dividend_yield': None,
+                            }
+                        except Exception:
+                            extras = {}
+                if extras:
+                    market_cap = extras.get('market_cap') or market_cap
+                    pe_ratio = extras.get('pe_ratio')
+                    eps = extras.get('eps')
+                    dividend_yield = extras.get('dividend_yield')
 
             return jsonify({
                 'success': True,
@@ -2230,6 +2267,9 @@ def get_stock_price():
                 'fifty_two_week_low': round(fifty_two_low, 2) if fifty_two_low else None,
                 'volume': volume,
                 'market_cap': market_cap,
+                'pe_ratio': round(pe_ratio, 2) if pe_ratio else None,
+                'eps': round(eps, 2) if eps else None,
+                'dividend_yield': round(dividend_yield * 100, 2) if dividend_yield else None,
             })
 
         return jsonify({'error': 'Failed to fetch stock price'}), 500

@@ -818,11 +818,11 @@ const CryptoChartModule = (function() {
                             <span class="stat-value ath-change shimmer-loading">&nbsp;</span>
                         </div>
                         <div class="stat-item tier-tertiary">
-                            <span class="stat-label">${assetType === 'stock' ? 'Exchange' : 'Circulating Supply'}</span>
+                            <span class="stat-label">${assetType === 'stock' ? 'P/E Ratio' : 'Circulating Supply'}</span>
                             <span class="stat-value circulating-supply shimmer-loading">&nbsp;</span>
                         </div>
                         <div class="stat-item tier-tertiary">
-                            <span class="stat-label">${assetType === 'stock' ? 'Market Status' : 'Max Supply'}</span>
+                            <span class="stat-label">${assetType === 'stock' ? 'EPS' : 'Max Supply'}</span>
                             <span class="stat-value max-supply shimmer-loading">&nbsp;</span>
                         </div>
                     </div>
@@ -1194,20 +1194,29 @@ const CryptoChartModule = (function() {
                     setLoadedContent(high24hEl, data.day_high ? formatPrice(data.day_high) : '--');
                     setLoadedContent(low24hEl, data.day_low ? formatPrice(data.day_low) : '--');
 
-                    // Tier 3 — repurpose the same DOM slots that crypto
-                    // uses for ATH/ATH Change/Supply. Element selectors
-                    // (.ath, .ath-change, .circulating-supply, .max-supply)
-                    // are shared because the slots are visually identical;
-                    // only the labels (set in the template) and the values
-                    // (set here) differ.
-                    const fiftyTwoHighEl = athEl;
-                    const fiftyTwoLowEl  = athChangeEl;
-                    const exchangeEl     = circulatingSupplyEl;
-                    const marketStateEl  = maxSupplyEl;
-                    setLoadedContent(fiftyTwoHighEl, data.fifty_two_week_high ? formatPrice(data.fifty_two_week_high) : '--');
-                    setLoadedContent(fiftyTwoLowEl, data.fifty_two_week_low ? formatPrice(data.fifty_two_week_low) : '--');
-                    setLoadedContent(exchangeEl, data.exchange || '--');
-                    setLoadedContent(marketStateEl, data.market_state || '--');
+                    // Tier 3 — repurpose crypto DOM slots for stock fundamentals.
+                    // Element selectors (.ath, .ath-change, .circulating-supply,
+                    // .max-supply) shared because slots are visually identical;
+                    // only labels (template) and values (here) differ.
+                    setLoadedContent(athEl, data.fifty_two_week_high ? formatPrice(data.fifty_two_week_high) : '--');
+                    setLoadedContent(athChangeEl, data.fifty_two_week_low ? formatPrice(data.fifty_two_week_low) : '--');
+                    setLoadedContent(circulatingSupplyEl, data.pe_ratio != null ? Number(data.pe_ratio).toFixed(2) : '--');
+                    setLoadedContent(maxSupplyEl, data.eps != null ? '$' + Number(data.eps).toFixed(2) : '--');
+
+                    // Dividend yield: shown next to the price-change as a
+                    // small badge when present. Not all stocks pay
+                    // dividends; skip the slot when null rather than
+                    // showing a permanent '--'.
+                    if (data.dividend_yield != null) {
+                        const priceChangeContainer = cardElement.querySelector('.crypto-chart-price');
+                        if (priceChangeContainer && !priceChangeContainer.querySelector('.dividend-badge')) {
+                            const badge = document.createElement('span');
+                            badge.className = 'dividend-badge';
+                            badge.textContent = `Yield ${Number(data.dividend_yield).toFixed(2)}%`;
+                            badge.title = 'Annual dividend yield';
+                            priceChangeContainer.appendChild(badge);
+                        }
+                    }
                 } else {
                     // Crypto: show market cap and volume
                     setLoadedContent(marketCapEl, data.market_cap ? '$' + formatLargeNumber(data.market_cap) : '--');
