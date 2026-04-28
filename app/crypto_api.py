@@ -2445,7 +2445,11 @@ def get_chart_config():
         'success': True,
         'stock_logos': STOCK_LOGOS,
         'time_ranges': TIME_RANGES,
-        'clearbit_base': 'https://logo.clearbit.com/',
+        # Field name kept as 'clearbit_base' for frontend compat, but
+        # Clearbit's free Logo API was sunset late 2024. Pointing at
+        # Google's favicon service which appends ?sz=128&domain=X.
+        # Frontend appends the domain to this base URL.
+        'clearbit_base': 'https://www.google.com/s2/favicons?sz=128&domain=',
         # Centralized asset mappings
         'asset_names': asset_cfg['asset_names'],
         'crypto_tickers': asset_cfg['crypto_tickers'],
