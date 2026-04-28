@@ -287,12 +287,18 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
                     'value': close_price
                 })
 
-            if len(chart_data) >= 2:
-                first_price = chart_data[0]['value']
-                last_price = chart_data[-1]['value']
-                change_pct = ((last_price - first_price) / first_price) * 100
-            else:
-                change_pct = 0
+            # Reject empty/single-point responses. Binance can return a
+            # valid 200 with [] klines for symbols that don't trade or
+            # for ranges that exceed available history. Without this
+            # guard, the empty result gets cached as a 'success' for 60s
+            # and the chart silently shows $0.00 / no line.
+            if len(chart_data) < 2:
+                print(f'[Binance] Insufficient chart data ({len(chart_data)} points) for {coin_id}')
+                return None
+
+            first_price = chart_data[0]['value']
+            last_price = chart_data[-1]['value']
+            change_pct = ((last_price - first_price) / first_price) * 100 if first_price > 0 else 0
 
             # Get ticker symbol
             base_symbol = symbol.replace('USDT', '')

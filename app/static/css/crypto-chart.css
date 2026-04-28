@@ -785,6 +785,13 @@
     animation-play-state: paused;
 }
 
+/* Empty-state guard: when whale data is unavailable, the JS adds
+   .no-scroll so the -50% animation doesn't leave the single message
+   blank for half each cycle. */
+.whale-ticker-content.no-scroll {
+    animation: none;
+}
+
 @keyframes whale-scroll {
     0% { transform: translateX(0); }
     100% { transform: translateX(-50%); }
