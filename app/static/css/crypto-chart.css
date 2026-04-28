@@ -53,7 +53,7 @@
     border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
     border-radius: 12px;
     overflow: visible;
-    transition: all 0.2s ease;
+    transition: all 0.2s ease, background 0.6s ease;
     margin: 0;
     width: 100%;
     /* Container query context — child elements adapt to the card's
@@ -61,6 +61,38 @@
        in narrow sidebars, modals, or split layouts as well as full chat. */
     container-type: inline-size;
     container-name: chart-card;
+    /* Tier-B polish: subtle gradient tinting based on trend. The
+       data-trend attribute is set by the chart module to up/down once
+       price data loads. Tints from a faint trend-colored corner into
+       the base background — keeps the card mostly neutral while
+       reinforcing the trend at a glance. */
+    position: relative;
+}
+
+.crypto-chart-card[data-trend="up"] {
+    background:
+        radial-gradient(circle at top right, rgba(34, 197, 94, 0.07), transparent 55%),
+        var(--bg-hover, rgba(255, 255, 255, 0.05));
+}
+
+.crypto-chart-card[data-trend="down"] {
+    background:
+        radial-gradient(circle at top right, rgba(239, 68, 68, 0.07), transparent 55%),
+        var(--bg-hover, rgba(255, 255, 255, 0.05));
+}
+
+/* Logo glow matching trend — subtle box-shadow on the symbol logo
+   that pulses the trend color. Connects the logo visually to the
+   chart's price direction. */
+.crypto-chart-card[data-trend="up"] .symbol-logo {
+    box-shadow: 0 0 12px 2px rgba(34, 197, 94, 0.18);
+}
+.crypto-chart-card[data-trend="down"] .symbol-logo {
+    box-shadow: 0 0 12px 2px rgba(239, 68, 68, 0.18);
+}
+.symbol-logo {
+    transition: box-shadow 0.3s ease;
+    border-radius: 50%;
 }
 
 /* Container queries: 3-tier responsive layout based on the chart card's
@@ -582,6 +614,17 @@
     gap: 4px;
     min-width: 80px;
     flex: 1;
+    /* Tier-B polish: subtle hover lift on stat tiles. Padding lets
+       hover bg breathe without shifting layout. */
+    padding: 4px 6px;
+    margin: -4px -6px;
+    border-radius: 6px;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.stat-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+    transform: translateY(-1px);
 }
 
 .stat-label {
