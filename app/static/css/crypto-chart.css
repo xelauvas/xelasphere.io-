@@ -139,22 +139,24 @@
     filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.25));
 }
 
-/* Live-pulse dot at the right edge — gives the sparkline a sense of
-   real-time motion. Pure CSS, no canvas math. */
-.crypto-chart-sparkline::after {
-    content: '';
+/* Live-pulse dot positioned at the LAST price point on the line.
+   Y coordinate is calculated by JS via lightweight-charts'
+   priceToCoordinate API after data loads — pure CSS pulse animation
+   handles the visual effect from there. */
+.sparkline-live-dot {
     position: absolute;
-    bottom: 18px;
-    right: 18px;
+    right: 0;
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: #4ade80;
+    transform: translate(50%, -50%);
     box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
     animation: sparkline-pulse 2s ease-out infinite;
+    pointer-events: none;
     z-index: 3;
 }
-.crypto-chart-sparkline[data-trend="down"]::after {
+.crypto-chart-sparkline[data-trend="down"] .sparkline-live-dot {
     background: #f87171;
     box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.7);
     animation-name: sparkline-pulse-red;
