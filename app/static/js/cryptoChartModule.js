@@ -163,9 +163,10 @@ const CryptoChartModule = (function() {
     /**
      * Format percentage change
      */
-    function formatChange(change) {
+    function formatChange(change, rangeLabel) {
         const sign = change >= 0 ? '+' : '';
-        return `${sign}${change.toFixed(2)}%`;
+        const pct = `${sign}${change.toFixed(2)}%`;
+        return rangeLabel ? `${pct} (${rangeLabel})` : pct;
     }
 
     /**
@@ -954,8 +955,9 @@ const CryptoChartModule = (function() {
                 const priceElement = cardElement.querySelector('.price-value');
                 animatePrice(priceElement, data.current_price, instance.currency);
 
-                // Update period change
-                setLoadedContent(changeElement, formatChange(data.change_percent), `price-change ${isPositive ? 'positive' : 'negative'}`);
+                // Update period change with timeframe label so the user
+                // knows which range the percentage refers to.
+                setLoadedContent(changeElement, formatChange(data.change_percent, range), `price-change ${isPositive ? 'positive' : 'negative'}`);
 
                 // Update data source badge
                 updateDataSourceBadge(cardElement, data.data_source || 'live', data.cache_age_seconds || 0);
@@ -1106,12 +1108,14 @@ const CryptoChartModule = (function() {
                     }
                 }
 
-                // 24h price change (from basic price data)
+                // 24h price change (from basic price data — labeled "1D" since
+                // this stats path always fetches the 24-hour change regardless
+                // of the chart's selected range).
                 const change24hEl = cardElement.querySelector('.price-change');
                 if (change24hEl) {
                     const changeValue = data.change_24h || data.change_percent || 0;
                     const isPositive = changeValue >= 0;
-                    setLoadedContent(change24hEl, formatChange(changeValue), `price-change ${isPositive ? 'positive' : 'negative'}`);
+                    setLoadedContent(change24hEl, formatChange(changeValue, '1D'), `price-change ${isPositive ? 'positive' : 'negative'}`);
                 }
 
                 // Fetch and display Fear & Greed Index (crypto only)
