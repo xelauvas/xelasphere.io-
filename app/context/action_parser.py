@@ -212,8 +212,12 @@ def _extract_chart(params: Optional[str]) -> Optional[Dict[str, Any]]:
     asset_name = parts[0]
     asset_hint = parts[1] if len(parts) > 1 else None
 
-    # Explicit stock hint
-    if asset_hint == 'stock' or asset_name.upper() in STOCK_SYMBOLS:
+    # Explicit stock hint. STOCK_SYMBOLS is lowercase, so compare against
+    # asset_name (already lowercased earlier) — was incorrectly comparing
+    # asset_name.upper() against the lowercase set, always returning False
+    # and letting TSLA/NVDA etc. fall through to dynamic CoinGecko (which
+    # matched scam tokens with those tickers).
+    if asset_hint == 'stock' or asset_name in STOCK_SYMBOLS:
         return {'symbol': asset_name.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
 
     # Company name

@@ -799,8 +799,12 @@ def _resolve_asset(query: str, allow_dynamic: bool = True) -> Optional[dict]:
             coin_id = CRYPTO_SYMBOLS[q]
             logger.info(f"💰 Crypto price query: {q} -> {coin_id}")
             return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
-        # 2. Curated stock symbol.
-        if q.upper() in STOCK_SYMBOLS:
+        # 2. Curated stock symbol. STOCK_SYMBOLS is a lowercase set so
+        # we match q.lower() against it; the case-mismatch bug
+        # (q.upper() in lowercase set → always False) used to let TSLA
+        # / NVDA / etc. fall through to dynamic CoinGecko and hit
+        # scam tokens with the same ticker.
+        if q.lower() in STOCK_SYMBOLS:
             logger.info(f"📈 Stock price query: {q}")
             return {'symbol': q.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
         # 3. Curated company name.
