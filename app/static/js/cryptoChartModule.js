@@ -184,6 +184,34 @@ const CryptoChartModule = (function() {
     }
 
     /**
+     * Heuristic sentiment classifier for a news headline. Returns
+     * 'bullish' | 'bearish' | 'neutral'. Pure keyword match — fast,
+     * no LLM call. Works on title only since that's what's most
+     * likely to capture sentiment without false positives.
+     */
+    const BULLISH_WORDS = ['rally', 'surge', 'soar', 'jump', 'rise', 'rises',
+        'gain', 'gains', 'up', 'climb', 'bullish', 'high', 'boost', 'rebound',
+        'breakout', 'breakthrough', 'record', 'all-time', 'ath', 'pumps',
+        'pump', 'moon', 'green', 'positive', 'partnership', 'adoption',
+        'approve', 'approved', 'launches', 'launch'];
+    const BEARISH_WORDS = ['drop', 'drops', 'fall', 'falls', 'plunge',
+        'plunges', 'crash', 'crashes', 'decline', 'declines', 'loss',
+        'losses', 'down', 'sell', 'bearish', 'low', 'tumble', 'tumbles',
+        'slide', 'slides', 'red', 'negative', 'hack', 'hacked', 'exploit',
+        'lawsuit', 'sec', 'regulator', 'ban', 'banned', 'suspension',
+        'liquidation', 'liquidations', 'fud'];
+
+    function classifySentiment(headline) {
+        if (!headline) return 'neutral';
+        const lower = headline.toLowerCase();
+        const bull = BULLISH_WORDS.some(w => lower.includes(w));
+        const bear = BEARISH_WORDS.some(w => lower.includes(w));
+        if (bull && !bear) return 'bullish';
+        if (bear && !bull) return 'bearish';
+        return 'neutral';
+    }
+
+    /**
      * Escape HTML for safe interpolation into innerHTML.
      * Pre-escapes &, <, >, ", ' so attacker-controlled API content
      * (news titles, whale wallet IDs, symbol names) cannot inject
@@ -1453,9 +1481,10 @@ const CryptoChartModule = (function() {
                     const timeAgo = article.published_on ? formatRelativeTime(article.published_on) : '';
                     const snippet = article.body ?
                         (article.body.length > 150 ? article.body.substring(0, 150) + '...' : article.body) : '';
+                    const sentiment = classifySentiment(article.title);
 
                     return `
-                        <a href="${escapeHtml(safeUrl(article.url))}" target="_blank" rel="noopener noreferrer" class="news-ticker-item" data-preview="${escapeHtml(snippet)}">
+                        <a href="${escapeHtml(safeUrl(article.url))}" target="_blank" rel="noopener noreferrer" class="news-ticker-item news-sentiment-${sentiment}" data-preview="${escapeHtml(snippet)}">
                             <span class="ticker-headline">${escapeHtml(article.title)}</span>
                             <div class="news-ticker-meta">
                                 ${timeAgo ? `<span class="ticker-time">${escapeHtml(timeAgo)}</span>` : ''}
