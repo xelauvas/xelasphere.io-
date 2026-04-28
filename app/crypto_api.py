@@ -11,6 +11,16 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 from flask import Blueprint, jsonify, request
 
+# yfinance is used as a thin extension over Yahoo's chart endpoint to
+# fetch fields the unauthenticated chart API doesn't expose (notably
+# market cap). Imported lazily/optionally so the module degrades
+# gracefully if yfinance isn't installed.
+try:
+    import yfinance as _yf
+    _YF_AVAILABLE = True
+except ImportError:
+    _YF_AVAILABLE = False
+
 from .asset_config import (
     CRYPTO_SYMBOLS, CRYPTO_TICKERS, ASSET_NAMES, STOCK_SYMBOLS,
     COMPANY_TO_SYMBOL, NEWS_SYMBOL_MAP, get_coin_ticker, get_coin_id,
@@ -2187,8 +2197,19 @@ def get_stock_price():
             fifty_two_high = meta.get('fiftyTwoWeekHigh')
             fifty_two_low = meta.get('fiftyTwoWeekLow')
             volume = meta.get('regularMarketVolume')
-            market_cap = meta.get('marketCap')  # not always populated
             day_open = meta.get('regularMarketOpen')
+
+            # market_cap isn't in Yahoo's chart meta — fetch via yfinance
+            # which handles Yahoo's crumb auth automatically. Wrapped in
+            # try/except so a yfinance failure (rate limit, network, etc.)
+            # doesn't break the price endpoint — degrades to None.
+            market_cap = meta.get('marketCap')
+            if not market_cap and _YF_AVAILABLE:
+                try:
+                    fast_info = _yf.Ticker(symbol).fast_info
+                    market_cap = getattr(fast_info, 'market_cap', None)
+                except Exception as yf_err:
+                    print(f'[StockAPI] yfinance market_cap fetch failed for {symbol}: {yf_err}')
 
             return jsonify({
                 'success': True,
