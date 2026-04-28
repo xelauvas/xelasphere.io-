@@ -89,16 +89,59 @@ COINGECKO_TO_BINANCE = {
 }
 
 # Cache for coin list (refreshed every hour)
+# In-memory mirror retained for sub-millisecond reads; authoritative
+# storage is Redis (see get_coin_list which now uses cache_get/cache_set).
 _coin_list_cache = {'data': None, 'timestamp': 0}
 _CACHE_DURATION = 3600  # 1 hour
 
-# Cache for chart data (reduces API calls to avoid rate limiting)
+# Cache for chart data (reduces API calls to avoid rate limiting).
+# Migrated to Redis 2026-04-28: see crypto:chart:* keys. The Python dicts
+# below are only retained as fallback when Redis is unreachable.
 _chart_cache = {}
-_CHART_CACHE_DURATION = 60  # 1 minute cache for chart data
+_CHART_CACHE_DURATION = 60   # 1 minute fresh
+_CHART_STALE_TTL = 3600      # Redis-stored entries valid up to 1 hour
+                             # for stale-cache fallback when CG is down
 
-# Cache for price data
+# Cache for price data — migrated to Redis 2026-04-28
 _price_cache = {}
-_PRICE_CACHE_DURATION = 30  # 30 seconds cache for price data
+_PRICE_CACHE_DURATION = 30
+_PRICE_STALE_TTL = 1800      # 30 minutes stale fallback
+
+
+def _chart_cache_get(cache_key: str):
+    """Get chart data from Redis. Returns the cached envelope
+    {'data': ..., 'timestamp': ...} or None. The caller decides if
+    timestamp is fresh enough vs. stale-fallback."""
+    from app.redis_client import cache_get
+    cached = cache_get(f'crypto:chart:{cache_key}')
+    if cached and 'data' in cached and 'timestamp' in cached:
+        return cached
+    return None
+
+
+def _chart_cache_set(cache_key: str, data) -> None:
+    """Store chart data envelope in Redis with the stale TTL window."""
+    from app.redis_client import cache_set
+    cache_set(f'crypto:chart:{cache_key}',
+              {'data': data, 'timestamp': time.time()},
+              _CHART_STALE_TTL)
+
+
+def _price_cache_get(cache_key: str):
+    """Get price data from Redis."""
+    from app.redis_client import cache_get
+    cached = cache_get(f'crypto:price:{cache_key}')
+    if cached and 'data' in cached and 'timestamp' in cached:
+        return cached
+    return None
+
+
+def _price_cache_set(cache_key: str, data) -> None:
+    """Store price data envelope in Redis."""
+    from app.redis_client import cache_set
+    cache_set(f'crypto:price:{cache_key}',
+              {'data': data, 'timestamp': time.time()},
+              _PRICE_STALE_TTL)
 
 # Fast lookup for top 10 coins (skip API call for common queries)
 # Everything else is looked up dynamically from CoinGecko's coin list
@@ -335,11 +378,11 @@ def _fetch_price_with_fallback(coin_id: str, currency: str = 'usd') -> dict | No
 
     Returns normalized data structure with 'data_source' field.
     """
-    # Check cache first (any source)
+    # Check cache first (Redis-backed; survives restarts, shared workers)
     cache_key = f"{coin_id}_{currency}"
     now = time.time()
-    if cache_key in _price_cache:
-        cached = _price_cache[cache_key]
+    cached = _price_cache_get(cache_key)
+    if cached:
         cache_age = now - cached['timestamp']
         if cache_age < _PRICE_CACHE_DURATION:
             result = cached['data'].copy()
@@ -382,7 +425,7 @@ def _fetch_price_with_fallback(coin_id: str, currency: str = 'usd') -> dict | No
                     'data_source': 'coingecko'
                 }
                 # Cache the result
-                _price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
+                _price_cache_set(cache_key, result)
                 print(f'[CoinGecko] Successfully fetched price for {coin_id}')
                 return result
 
@@ -398,13 +441,13 @@ def _fetch_price_with_fallback(coin_id: str, currency: str = 'usd') -> dict | No
     # Fallback #1: CoinPaprika
     result = _fetch_from_coinpaprika(coin_id, currency)
     if result:
-        _price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
+        _price_cache_set(cache_key, result)
         return result
 
     # Fallback #2: Binance
     result = _fetch_from_binance(coin_id, currency)
     if result:
-        _price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
+        _price_cache_set(cache_key, result)
         return result
 
     print(f'[PriceFallback] All APIs failed for {coin_id}')
@@ -464,12 +507,23 @@ def get_coin_id(query: str) -> str | None:
 
 
 def get_coin_list():
-    """Get cached list of all coins from CoinGecko."""
-    global _coin_list_cache
+    """Get cached list of all coins from CoinGecko.
 
-    now = time.time()
-    if _coin_list_cache['data'] and (now - _coin_list_cache['timestamp']) < _CACHE_DURATION:
-        return _coin_list_cache['data']
+    Uses Redis as the cache backend (was in-memory dict). Benefits:
+    - Survives Flask restarts (no cold-start race that returned 'Unknown
+      cryptocurrency: vechain' until cache warmed)
+    - Shared across gunicorn workers (one fetch warms all workers)
+    - 1-hour TTL same as before
+    """
+    from app.redis_client import cache_get, cache_set
+
+    cached = cache_get('crypto:coin_list')
+    if cached:
+        # Also keep the in-memory mirror for sub-millisecond hot reads
+        # within a single request cycle (avoids repeated Redis hits).
+        global _coin_list_cache
+        _coin_list_cache = {'data': cached, 'timestamp': time.time()}
+        return cached
 
     try:
         response = requests.get(
@@ -481,14 +535,15 @@ def get_coin_list():
             timeout=10
         )
         if response.status_code == 200:
-            _coin_list_cache = {
-                'data': response.json(),
-                'timestamp': now
-            }
-            return _coin_list_cache['data']
+            data = response.json()
+            cache_set('crypto:coin_list', data, _CACHE_DURATION)
+            _coin_list_cache = {'data': data, 'timestamp': time.time()}
+            return data
     except Exception as e:
         print(f'[CryptoAPI] Error fetching coin list: {e}')
 
+    # Fall back to whatever's in the in-memory mirror (might be stale
+    # from earlier in this process's lifetime).
     return _coin_list_cache.get('data', [])
 
 
@@ -1017,8 +1072,8 @@ def _build_ai_context(coin_id: str, original_query: str, currency: str = 'usd') 
     price_cache_key = f"{coin_id}_{currency}"
     price_data = None
 
-    if price_cache_key in _price_cache:
-        cached = _price_cache[price_cache_key]
+    cached = _price_cache_get(price_cache_key)
+    if cached:
         cache_age = now - cached['timestamp']
         if cache_age < _PRICE_CACHE_DURATION * 60:  # Allow up to 30 min stale
             oldest_cache_age = max(oldest_cache_age, cache_age)
@@ -1794,11 +1849,14 @@ def get_crypto_chart():
         except (ValueError, TypeError):
             days = '1'
 
-    # Check cache first
+    # Check cache first (Redis-backed; survives Flask restarts and is
+    # shared across gunicorn workers — eliminates the cold-start race
+    # that previously returned 'Unknown cryptocurrency: vechain' until
+    # /coins/list warmed in each worker independently).
     cache_key = f"{coin_id}_{days}_{currency}"
     now = time.time()
-    if cache_key in _chart_cache:
-        cached = _chart_cache[cache_key]
+    cached = _chart_cache_get(cache_key)
+    if cached:
         cache_age = now - cached['timestamp']
         if cache_age < _CHART_CACHE_DURATION:
             print(f'[CryptoAPI] Returning cached chart data for {cache_key}')
@@ -1869,11 +1927,8 @@ def get_crypto_chart():
                 'data_source': 'live'
             }
 
-            # Cache the result
-            _chart_cache[cache_key] = {
-                'data': result,
-                'timestamp': time.time()
-            }
+            # Cache the result (Redis)
+            _chart_cache_set(cache_key, result)
 
             return jsonify(result)
 
@@ -1881,11 +1936,11 @@ def get_crypto_chart():
         if response.status_code == 429 or response.status_code >= 400:
             print(f'[CryptoAPI] CoinGecko chart error {response.status_code}, checking stale cache...')
 
-            # Try stale cache first
-            if cache_key in _chart_cache:
-                cached = _chart_cache[cache_key]
-                cache_age = now - cached['timestamp']
-                result = cached['data'].copy()
+            # Try stale cache first (Redis returns it as long as TTL window holds)
+            stale = _chart_cache_get(cache_key)
+            if stale:
+                cache_age = now - stale['timestamp']
+                result = stale['data'].copy()
                 result['data_source'] = 'stale_cache'
                 result['cache_age_seconds'] = round(cache_age)
                 print(f'[CryptoAPI] Returning stale cache for {cache_key} (age: {round(cache_age)}s)')
@@ -1895,11 +1950,7 @@ def get_crypto_chart():
             print(f'[CryptoAPI] No cache, trying Binance fallback for {coin_id}...')
             binance_result = _fetch_chart_from_binance(coin_id, days)
             if binance_result:
-                # Cache the Binance result
-                _chart_cache[cache_key] = {
-                    'data': binance_result,
-                    'timestamp': time.time()
-                }
+                _chart_cache_set(cache_key, binance_result)
                 return jsonify(binance_result)
 
         # Log the actual error from CoinGecko
@@ -1908,11 +1959,11 @@ def get_crypto_chart():
 
     except Exception as e:
         print(f'[CryptoAPI] Chart error: {e}')
-        # On exception, try stale cache first
-        if cache_key in _chart_cache:
-            cached = _chart_cache[cache_key]
-            cache_age = now - cached['timestamp']
-            result = cached['data'].copy()
+        # On exception, try stale cache first (Redis-backed)
+        stale = _chart_cache_get(cache_key)
+        if stale:
+            cache_age = now - stale['timestamp']
+            result = stale['data'].copy()
             result['data_source'] = 'stale_cache'
             result['cache_age_seconds'] = round(cache_age)
             return jsonify(result)
@@ -1921,10 +1972,7 @@ def get_crypto_chart():
         print(f'[CryptoAPI] Exception occurred, trying Binance fallback for {coin_id}...')
         binance_result = _fetch_chart_from_binance(coin_id, days)
         if binance_result:
-            _chart_cache[cache_key] = {
-                'data': binance_result,
-                'timestamp': time.time()
-            }
+            _chart_cache_set(cache_key, binance_result)
             return jsonify(binance_result)
 
         return jsonify({'error': str(e)}), 500
