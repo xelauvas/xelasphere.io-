@@ -1184,17 +1184,12 @@ const CryptoChartModule = (function() {
             });
         } catch (e) { /* tolerate API differences */ }
 
-        // Lazy-load history when the user pans PAST the start of the
-        // loaded data. Two guards to keep this from firing during
-        // initial render / autoScale settle:
-        //   1) lazyLoadEnabledAt timestamp — set on load, blocks fetch
-        //      until 500ms after the chart has settled
-        //   2) range.from < 0 — only fires when the visible window
-        //      extends LEFT of the first loaded bar (user has actually
-        //      pushed past it; not just sitting at fitContent's start)
-        // Debounce 300ms so we wait for drag-release before fetching;
-        // otherwise every pan tick queues a fetch and the prepend
-        // re-renders make the chart jump under the cursor.
+        // Lazy-load history when the user pans near the start of the
+        // loaded data. Fires WHILE the user is dragging — short 80ms
+        // debounce so it feels live, but loadingMore serializes so we
+        // never have two concurrent fetches. The 250ms cooldown after
+        // load (set in loadChartData) prevents the initial fitContent
+        // / autoScale settle from triggering a phantom fetch.
         let lazyLoadTimer = null;
         try {
             chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
@@ -1204,12 +1199,17 @@ const CryptoChartModule = (function() {
                 if (inst.loadingMore || inst.historyExhausted) return;
                 if (!inst.dataArray || inst.dataArray.length === 0) return;
                 if (!inst.lazyLoadEnabledAt || Date.now() < inst.lazyLoadEnabledAt) return;
-                if (range.from >= 0) return; // user hasn't panned past the start
+                // Trigger when the user is within ~10 bars of the start
+                // OR has already panned past it (range.from < 0 = empty
+                // gray area to the left). This way the fetch fires as
+                // they approach the edge, so the prepended bars are
+                // ready by the time they get there.
+                if (range.from > 10) return;
                 if (lazyLoadTimer) clearTimeout(lazyLoadTimer);
                 lazyLoadTimer = setTimeout(() => {
                     lazyLoadTimer = null;
                     loadOlderHistory(chartId);
-                }, 300);
+                }, 80);
             });
         } catch (e) { /* tolerate API differences */ }
 
@@ -1374,11 +1374,11 @@ const CryptoChartModule = (function() {
                 instance.historyExhausted = false;
                 instance.loadingMore = false;
                 instance.currentRange = range;
-                // Block lazy-load for 500ms while fitContent + autoScale
+                // Block lazy-load for 250ms while fitContent + autoScale
                 // settle — without this, the visible-logical-range subscriber
                 // sees range.from near 0 right after fitContent and fires
                 // an unwanted history fetch on initial render.
-                instance.lazyLoadEnabledAt = Date.now() + 500;
+                instance.lazyLoadEnabledAt = Date.now() + 250;
                 instance.chart.timeScale().fitContent();
                 // Force the right price-scale to recompute and render
                 // tick labels. Without this, the labels sometimes don't
