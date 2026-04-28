@@ -38,7 +38,7 @@ def check(message: str, job: str) -> Optional[Tuple[str, str]]:
     if entry:
         resp, model_id, expires = entry
         if time.time() < expires:
-            logger.info(f"[Cache] HIT (hot): {message[:40]}...")
+            logger.info(f"[Cache] HIT (hot, msg_len={len(message)})")
             return resp, model_id
         else:
             del _hot[key]
@@ -122,7 +122,7 @@ def _check_firestore(key: str, message: str) -> Optional[Tuple[str, str]]:
         if response:
             # Warm hot cache
             _hot[key] = (response, model_id, time.time() + 86400)
-            logger.info(f"[Cache] HIT (firestore): {message[:40]}...")
+            logger.info(f"[Cache] HIT (firestore, msg_len={len(message)})")
             return response, model_id
     except Exception as e:
         logger.debug(f"[Cache] Firestore check failed: {e}")

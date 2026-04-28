@@ -549,5 +549,5 @@ class StorageExecutor:
         for candidate in candidates:
             success, message = self.process_candidate(candidate, user_id)
             results.append((candidate, success, message))
-            logger.debug(f"Processed {candidate.key}: {message}")
+            logger.debug(f"Processed {candidate.key}: success={success}")
         return results

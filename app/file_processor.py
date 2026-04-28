@@ -715,7 +715,7 @@ def _get_file_chunk_context(
         from app.hybrid_retrieval import FileChunkRetriever, format_file_chunk_context
         from app.config import db as _db
 
-        _fp_logger.info(f"RAG retrieval: query='{query[:50]}...', conversation_id={conversation_id}")
+        _fp_logger.info(f"RAG retrieval: query_len={len(query)}, conversation_id={conversation_id}")
 
         retriever = FileChunkRetriever(_db)
         results = retriever.search(

@@ -636,7 +636,7 @@ Only set has_crypto_mention=true if they're clearly asking about crypto PRICES o
                     result['confidence'] = 0.9
                     # Cache result
                     _intent_cache[cache_key] = (result, time.time())
-                    logger.info(f"🧠 Intent classified: {result.get('intent_type')} for '{prompt[:50]}...'")
+                    logger.info(f"🧠 Intent classified: {result.get('intent_type')} (prompt_len={len(prompt)})")
                     return result
     except Exception as e:
         logger.debug(f"Intent classification failed: {e}")
@@ -1011,7 +1011,7 @@ def build_prompt(
 
     # === PRIORITY 8: Recent conversation (critical for continuity) ===
     recent_added = 0
-    logger.info(f"🔍 HISTORY DEBUG: previous_messages count={len(previous_messages)}, last 4: {[m.get('prompt', '')[:30] for m in previous_messages[-4:]]}")
+    logger.info(f"🔍 HISTORY DEBUG: previous_messages count={len(previous_messages)}, last 4 prompt_lens={[len(m.get('prompt', '')) for m in previous_messages[-4:]]}")
     for message in reversed(previous_messages[-4:]):  # Last 4 messages max
         prompt_part = message.get('prompt', '')
         response_part = message.get('response', '')

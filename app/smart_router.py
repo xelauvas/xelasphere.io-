@@ -253,9 +253,7 @@ def _analyze_history_for_code(history: List[Dict[str, Any]], lookback: int = 4) 
         content = msg.get("content", "") or msg.get("text", "") or msg.get("response", "") or ""
         content_lower = content.lower()
 
-        # Debug: log what we're analyzing
-        content_preview = content[:100] if content else "(empty)"
-        logger.info(f"🔍 History msg[{i}]: content_len={len(content)}, preview='{content_preview}...'")
+        logger.info(f"🔍 History msg[{i}]: content_len={len(content)}")
 
         # Check for code blocks (strong indicator)
         if "```" in content:

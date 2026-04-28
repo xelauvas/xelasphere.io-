@@ -306,7 +306,7 @@ def edit_text():
         text = data.get('text', '').strip()
         instruction = data.get('instruction', '').strip()
 
-        logger.info(f"Edit text request - instruction: {instruction[:50]}...")
+        logger.info(f"Edit text request (instruction_len={len(instruction)}, text_len={len(text)})")
 
         if not text or not instruction:
             return jsonify({'error': 'Text and instruction are required'}), 400

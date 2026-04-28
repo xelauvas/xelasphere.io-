@@ -670,8 +670,7 @@ def extract_artifact_block(text: str) -> Optional[Dict[str, Any]]:
     start = max(0, error_pos - 50)
     end = min(len(raw_json), error_pos + 50)
     context = raw_json[start:end]
-    logger.warning(f"Artifact JSON parse error at position {error_pos}")
-    logger.warning(f"Context around error: ...{repr(context)}...")
+    logger.warning(f"Artifact JSON parse error at position {error_pos} (context_len={len(context)})")
     raise ArtifactParseError("Artifact block must contain valid JSON.")
 
 
@@ -687,7 +686,7 @@ def extract_fenced_artifact(text: str) -> Optional[dict]:
     try:
         meta = json.loads(meta_json)
     except json.JSONDecodeError:
-        logger.warning(f"Fenced artifact: meta JSON parse failed: {meta_json[:100]}")
+        logger.warning(f"Fenced artifact: meta JSON parse failed (meta_len={len(meta_json)})")
         return None
 
     files = []
@@ -746,7 +745,7 @@ def extract_artifact_patch_block(text: str) -> Optional[Dict[str, Any]]:
     try:
         payload = json.loads(raw_json)
     except json.JSONDecodeError as e:
-        logger.warning("artifact_patch block contains invalid JSON: %s (first 200 chars: %s)", e, raw_json[:200])
+        logger.warning("artifact_patch block contains invalid JSON: %s (raw_len=%d)", e, len(raw_json))
         return None
     if not isinstance(payload, dict):
         logger.warning("extract_artifact_patch_block: payload is not dict: %s", type(payload))
@@ -807,8 +806,7 @@ def apply_patches(
         file_entry = file_map[target_file]
         content = file_entry.get('content', '')
 
-        logger.debug(f"🩹 Patch target='{target_file}', old_string[:80]={repr(old_string[:80])}")
-        logger.debug(f"🩹 Content[:200]={repr(content[:200])}")
+        logger.debug(f"🩹 Patch target='{target_file}' (old_string_len={len(old_string)}, content_len={len(content)})")
 
         count = content.count(old_string)
         if count == 0:
@@ -1522,7 +1520,7 @@ class ArtifactRouter:
 
         try:
             search_text = structured.remainder or structured.chat or ""
-            logger.info(f"🔍 Searching for artifact block in text (length={len(search_text)}): {search_text[:500]}...")
+            logger.info(f"🔍 Searching for artifact block in text (length={len(search_text)})")
             artifact_block = extract_artifact_block(search_text)
             if artifact_block:
                 logger.info(f"✅ Found artifact block with {len(artifact_block.get('files', []))} files")
