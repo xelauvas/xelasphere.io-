@@ -1075,6 +1075,16 @@
     position: relative;
     opacity: 1;
     cursor: pointer;
+    /* Override class-name collision with options-btn.css's
+       .news-ticker-item rule (different component, same class).
+       That rule has position:absolute + transform:translateY(100%) +
+       opacity:0 — which pushed our chart's first news item DOWN by
+       exactly its own height (60.3px) and would have made all of
+       them invisible if the .active class wasn't intercepted. */
+    transform: none !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
 }
 
 /* Sentiment color tags — left-border accent + faint bg tint based on
