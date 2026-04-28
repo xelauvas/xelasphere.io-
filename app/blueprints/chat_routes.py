@@ -1413,6 +1413,24 @@ def chat_stream():
                 'forced_mode': 'search',
             }
             yield f"data: {json.dumps(_done_payload)}\n\n"
+
+            # M0.18: assistant-half record_turn for the forced-search exit branch.
+            # Same pair_id as the user-half (line 967); _final_content is the
+            # synthesized search response. Mode-gated; off = no-op.
+            try:
+                if user_id and session_id and _final_content:
+                    _mempalace_get_adapter().record_turn(
+                        user_id=user_id,
+                        session_id=session_id,
+                        turn_id=str(uuid.uuid4()),
+                        pair_id=_mp_stream_pair_id,
+                        role="assistant",
+                        text=_final_content,
+                    )
+            except Exception as _mp_exc:
+                logger.warning(
+                    f"[Stream] Mempalace record_turn (assistant, forced-search) failed: {_mp_exc}"
+                )
             return
 
         try:
@@ -1422,6 +1440,24 @@ def chat_stream():
                 logger.info(f"[Stream] CACHE HIT (prompt_len={len(user_prompt_raw)}, model={_cached_model})")
                 yield f"data: {json.dumps({'type': 'content', 'text': _cached_resp})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'content': _cached_resp, 'chat_summary': _cached_resp, 'render_mode': 'inline', 'reasoning': None, 'artifact': None, 'artifact_error': None, 'artifact_patches': None, 'response_id': f'cached_{hash(user_prompt_raw) % 99999}', 'is_email': False, 'email': None, 'crypto_chart': None, 'session_name': None, 'model_meta': {'model_id': _cached_model, 'model_label': 'Cached', 'model_provider': 'cache', 'auto_selected': True, 'task_type': _cache_job}, 'cached': True})}\n\n"
+
+                # M0.18: assistant-half record_turn for the cache-hit exit branch.
+                # Same pair_id as the user-half (line 967); _cached_resp is the
+                # cached assistant text being served. Mode-gated; off = no-op.
+                try:
+                    if user_id and session_id and _cached_resp:
+                        _mempalace_get_adapter().record_turn(
+                            user_id=user_id,
+                            session_id=session_id,
+                            turn_id=str(uuid.uuid4()),
+                            pair_id=_mp_stream_pair_id,
+                            role="assistant",
+                            text=_cached_resp,
+                        )
+                except Exception as _mp_exc:
+                    logger.warning(
+                        f"[Stream] Mempalace record_turn (assistant, cache-hit) failed: {_mp_exc}"
+                    )
                 return
         except Exception:
             pass

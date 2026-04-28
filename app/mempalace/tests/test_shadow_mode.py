@@ -355,58 +355,73 @@ def test_wake_up_sync_called_with_expected_args(chat_routes_ast, func_name):
 def test_chat_stream_has_both_user_and_assistant_record_turn_halves(
     chat_routes_ast,
 ):
-    """AST: chat_stream() has exactly 2 adapter.record_turn calls
-    (user-half + assistant-half) and both reference the SAME variable
-    name for the ``pair_id`` kwarg.
+    """AST: chat_stream() has exactly 1 user-half record_turn and at least
+    1 assistant-half record_turn, with ALL halves referencing the same
+    variable name for the ``pair_id`` kwarg.
 
     Mirrors test_record_turn_both_halves_share_pair_id_variable_name's
-    contract for the non-streaming path. The streaming assistant-half
-    was deferred at M0.18-finish commit af7549a; P1 dogfood (2026-04-28)
-    surfaced the impact — turns.sqlite contained 0 assistant rows for
-    every user, so semantic_search retrieved user statements and user
-    recall-questions only, never assistant-side answers. This commit
-    lands the streaming-completion hook at the SSE finalization point
-    (alongside Memory V2 post_turn).
+    pair_id-sharing contract for the non-streaming path. Diverges in
+    that the streaming path has multiple SSE exit branches that each
+    need their own assistant-half record_turn — they're mutually
+    exclusive at runtime, but all must propagate the same pair_id
+    variable as the (single) user-half. Documented exit branches:
 
-    Boundary: does NOT verify runtime that both halves fire per SSE
-    turn, or that the pair_id value is shared across calls at
-    runtime. Value-level coverage at issue #10.
+      - main path (after Memory V2 post_turn at the SSE done-event)
+      - forced-search mode (early return after search synthesis)
+      - cache-hit (early return after serving the cached response)
+
+    The streaming assistant-half was deferred at M0.18-finish commit
+    af7549a; P1 dogfood (2026-04-28) surfaced the impact —
+    turns.sqlite contained 0 assistant rows for every user, so
+    semantic_search retrieved user statements and user recall-questions
+    only, never assistant-side answers. This commit lands the
+    streaming-completion hook at every documented exit branch.
+
+    Boundary: does NOT verify runtime that all branches fire correctly
+    in their own paths, or that the pair_id value is shared across
+    calls at runtime. Value-level coverage at issue #10.
     """
     chat_stream_fn = _find_function(chat_routes_ast, "chat_stream")
     calls = _record_turn_calls(chat_stream_fn)
 
-    assert len(calls) == 2, (
-        f"chat_stream: expected exactly 2 adapter.record_turn calls "
-        f"(user-half + assistant-half), found {len(calls)} at lines "
-        f"{[c.lineno for c in calls]}"
-    )
-
-    roles: dict[str, ast.Call] = {}
+    user_halves = []
+    assistant_halves = []
     for call in calls:
         role_node = _kwarg_value(call, "role")
         assert isinstance(role_node, ast.Constant), (
             f"record_turn at line {call.lineno} has non-literal role= kwarg; "
             f"test cannot classify user vs assistant half"
         )
-        roles[role_node.value] = call
+        if role_node.value == "user":
+            user_halves.append(call)
+        elif role_node.value == "assistant":
+            assistant_halves.append(call)
 
-    assert set(roles.keys()) == {"user", "assistant"}, (
-        f"chat_stream: expected one user-half + one assistant-half "
-        f"record_turn call, got roles={set(roles.keys())}"
+    assert len(user_halves) == 1, (
+        f"chat_stream: expected exactly 1 user-half record_turn (one input "
+        f"per turn), found {len(user_halves)} at lines "
+        f"{[c.lineno for c in user_halves]}"
+    )
+    assert len(assistant_halves) >= 1, (
+        f"chat_stream: expected at least 1 assistant-half record_turn "
+        f"(one per SSE exit branch), found 0. Streaming assistant-half "
+        f"is the M0.18-finish (af7549a) deferred wrapper — see PR #102 "
+        f"for the lift."
     )
 
-    user_pair_id = _kwarg_value(roles["user"], "pair_id")
-    assistant_pair_id = _kwarg_value(roles["assistant"], "pair_id")
+    pair_id_names = set()
+    for call in (*user_halves, *assistant_halves):
+        pair_id_node = _kwarg_value(call, "pair_id")
+        assert isinstance(pair_id_node, ast.Name), (
+            f"record_turn at line {call.lineno} pair_id= is not a Name "
+            f"node — test cannot verify shared-variable contract"
+        )
+        pair_id_names.add(pair_id_node.id)
 
-    assert isinstance(user_pair_id, ast.Name), (
-        f"chat_stream user-half pair_id= is not a Name node; "
-        f"test cannot verify shared-variable contract"
-    )
-    assert isinstance(assistant_pair_id, ast.Name), (
-        f"chat_stream assistant-half pair_id= is not a Name node"
-    )
-    assert user_pair_id.id == assistant_pair_id.id, (
-        f"chat_stream user-half pair_id uses {user_pair_id.id!r} but "
-        f"assistant-half uses {assistant_pair_id.id!r} — both halves must "
-        f"reference the same variable per spec §3 line 122"
+    assert len(pair_id_names) == 1, (
+        f"chat_stream: all record_turn halves must reference the same "
+        f"pair_id variable per spec §3 line 122; found "
+        f"{sorted(pair_id_names)} across "
+        f"{len(user_halves) + len(assistant_halves)} call(s) at lines "
+        f"{[c.lineno for c in (*user_halves, *assistant_halves)]}"
     )
