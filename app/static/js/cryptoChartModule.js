@@ -163,10 +163,23 @@ const CryptoChartModule = (function() {
     /**
      * Format percentage change
      */
+    // Map range button labels to time-period strings shown next to the
+    // percentage. "1D" reads as "24h" because the user thinks in hours
+    // for short windows, days for medium, etc.
+    const RANGE_LABEL_MAP = {
+        '1D': '24h',
+        '1W': '7d',
+        '1M': '30d',
+        '1Y': '1y',
+        'ALL': 'ALL'
+    };
+
     function formatChange(change, rangeLabel) {
         const sign = change >= 0 ? '+' : '';
         const pct = `${sign}${change.toFixed(2)}%`;
-        return rangeLabel ? `${pct} (${rangeLabel})` : pct;
+        if (!rangeLabel) return pct;
+        const display = RANGE_LABEL_MAP[rangeLabel] || rangeLabel;
+        return `${pct} (${display})`;
     }
 
     /**
