@@ -922,6 +922,22 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    /* Belt-and-suspenders flex alignment so children always hug the
+       top of the container. Diagnosed a 60px first-item offset that
+       didn't show in any padding/margin/transform. Forcing
+       justify-content: flex-start eliminates ambiguity from
+       browser-default 'normal' values. */
+    justify-content: flex-start !important;
+    align-items: stretch;
+    align-content: flex-start;
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}
+
+/* Force first item flush with top of container regardless of any
+   inherited margin from parent or sibling rules. */
+.news-list-content > .news-ticker-item:first-child {
+    margin-top: 0 !important;
 }
 
 .news-empty {
