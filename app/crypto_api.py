@@ -309,26 +309,60 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
         limit = days_int
     else:
         interval = '1d'
-        # Binance kline limit is hard-capped at 1000 per request. For
-        # 'max' or any range > 1000 days, this is what you get without
-        # pagination. TODO: implement paginated fetches if true all-time
-        # history is needed (e.g., 4 calls cover BTC's full Binance
-        # history from 2017 to today).
-        limit = min(days_int, 1000)
+        limit = min(days_int, 1000)  # Binance per-page kline cap is 1000;
+                                     # 'max' takes the paginated path below
 
     try:
-        response = requests.get(
-            f'{BINANCE_BASE}/klines',
-            params={
-                'symbol': symbol,
-                'interval': interval,
-                'limit': limit
-            },
-            timeout=15
-        )
-
-        if response.status_code == 200:
+        # For 'max' with daily interval, paginate. Binance kline limit
+        # is 1000 per request. We chain requests with descending endTime
+        # to walk back through history until Binance returns fewer than
+        # the limit (= reached the start of trading) or we hit a safety
+        # cap. Single-page case takes the regular path.
+        klines = None
+        if days == 'max' and interval == '1d':
+            klines = []
+            end_time_ms = int(time.time() * 1000)
+            PAGE_LIMIT = 1000
+            MAX_PAGES = 18  # 18 × 1000 = 18000 daily bars ≈ 49 years
+            for _ in range(MAX_PAGES):
+                page_resp = requests.get(
+                    f'{BINANCE_BASE}/klines',
+                    params={
+                        'symbol': symbol,
+                        'interval': '1d',
+                        'limit': PAGE_LIMIT,
+                        'endTime': end_time_ms,
+                    },
+                    timeout=15
+                )
+                if page_resp.status_code != 200:
+                    break
+                page = page_resp.json()
+                if not page:
+                    break
+                # Page is ascending; prepend to growing list.
+                klines = page + klines
+                # Step endTime to 1ms before this page's first kline.
+                end_time_ms = page[0][0] - 1
+                if len(page) < PAGE_LIMIT:
+                    break
+            print(f'[Binance] Paginated max for {coin_id}: {len(klines)} bars across pages')
+        else:
+            response = requests.get(
+                f'{BINANCE_BASE}/klines',
+                params={
+                    'symbol': symbol,
+                    'interval': interval,
+                    'limit': limit
+                },
+                timeout=15
+            )
+            if response.status_code != 200:
+                print(f'[Binance] Chart API error: {response.status_code}')
+                return None
             klines = response.json()
+
+        if klines is not None:
 
             # Binance kline format: [open_time, open, high, low, close, volume, ...]
             chart_data = []
@@ -380,7 +414,6 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
             print(f'[Binance] Successfully fetched chart for {coin_id}: {len(chart_data)} points')
             return result
 
-        print(f'[Binance] Chart API error: {response.status_code}')
         return None
 
     except Exception as e:
