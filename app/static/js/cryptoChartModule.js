@@ -72,6 +72,14 @@ const CryptoChartModule = (function() {
                 borderColor: 'rgba(255, 255, 255, 0.1)',
                 timeVisible: true,
                 secondsVisible: false,
+                // Push the last data point all the way to the plot's
+                // right edge — default rightOffset reserves bar slots
+                // beyond the data which made the live-dot land 50-100px
+                // inside the chart instead of at its visible end.
+                rightOffset: 0,
+                // Prevent pan-past-end so users can't scroll into empty
+                // future space (which would also detach the live-dot).
+                fixRightEdge: true,
             },
             rightPriceScale: {
                 borderColor: 'rgba(255, 255, 255, 0.1)',
