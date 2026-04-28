@@ -2010,7 +2010,7 @@ def chat_stream():
                         if parsed_action and parsed_action.search_payload:
                             done_payload['render_hint'] = parsed_action.search_payload.get('render_hint', 'text_only')
                     _pvd = getattr(routing, '_patch_visual_data', None) if routing else None
-                    logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, has_patches={_pvd is not None}, patch_count={len(_pvd.get('patches',[])) if _pvd else 0}, session_name={repr(stream_session_name)}")
+                    logger.info(f"Stream done payload: render_mode={render_mode}, has_artifact={artifact_data is not None}, has_patches={_pvd is not None}, patch_count={len(_pvd.get('patches',[])) if _pvd else 0}, session_name_set={stream_session_name is not None}")
 
                     # Save to history and persist artifact
                     if session_id and user_id and not guest_mode:
