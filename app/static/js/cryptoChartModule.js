@@ -1025,37 +1025,71 @@ const CryptoChartModule = (function() {
         // the live-dot updater (defined below, after chart card looked up).
         const instanceRef = {};
 
-        // Live-dot via lightweight-charts series markers — the library
-        // handles positioning internally (always correct on the line,
-        // tracks pan/zoom/resize without any manual coordinate math).
-        // Trade-off: marker is static (no CSS pulse) but pixel-perfect
-        // accuracy beats a misplaced pulse.
+        // Live-dot as a CSS-overlay sibling of the canvas. Position
+        // is computed each tick from the chart's official coordinate
+        // mappers (priceToCoordinate + timeToCoordinate) using the
+        // ACTUAL last-data-point time — so the dot lands exactly
+        // where the line ends, not at the canvas right edge. Color
+        // is driven by the card's [data-trend] attribute (set in
+        // loadChartData before this runs), and the CSS keyframes do
+        // the pulse animation.
         const updateLiveDot = () => {
             const inst = chartInstances.get(chartId);
             if (!inst || inst.currentPrice == null || inst.lastDataTime == null) return;
             const card = document.getElementById(chartId);
             if (!card) return;
-            const isPos = card.getAttribute('data-trend') !== 'down';
-            const color = isPos ? '#22c55e' : '#ef4444';
+            const container = card.querySelector('.crypto-chart-container');
+            const canvas = card.querySelector('.crypto-chart-canvas');
+            if (!container || !canvas) return;
+
+            // Clear any leftover library marker from prior versions
+            // — we own positioning now via CSS overlay.
             try {
-                const markers = [{
-                    time: inst.lastDataTime,
-                    position: 'inBar',
-                    color,
-                    shape: 'circle',
-                    size: 1,
-                }];
                 if (typeof inst.series.setMarkers === 'function') {
-                    inst.series.setMarkers(markers);
-                } else if (typeof LightweightCharts.createSeriesMarkers === 'function') {
-                    LightweightCharts.createSeriesMarkers(inst.series, markers);
+                    inst.series.setMarkers([]);
                 }
+            } catch (e) { /* ignore */ }
+
+            let dot = container.querySelector('.chart-live-dot');
+            if (!dot) {
+                dot = document.createElement('div');
+                dot.className = 'chart-live-dot';
+                container.appendChild(dot);
+            }
+
+            try {
+                const yCoord = inst.series.priceToCoordinate(inst.currentPrice);
+                const xCoord = inst.chart.timeScale().timeToCoordinate(inst.lastDataTime);
+                if (yCoord == null || xCoord == null) {
+                    dot.style.display = 'none';
+                    return;
+                }
+                // Hide when the user has panned/zoomed the last bar
+                // off-screen — half a dot bleeding off the edge looks
+                // broken. 4px slack so a marker right at the edge
+                // still shows.
+                const w = canvas.clientWidth;
+                const h = canvas.clientHeight;
+                if (xCoord < -4 || xCoord > w + 4 || yCoord < -4 || yCoord > h + 4) {
+                    dot.style.display = 'none';
+                    return;
+                }
+                dot.style.display = '';
+                dot.style.top = `${canvas.offsetTop + yCoord}px`;
+                dot.style.left = `${canvas.offsetLeft + xCoord}px`;
+                dot.style.right = 'auto';
             } catch (e) { /* tolerate API differences */ }
-            // Remove any old positioned-by-JS dot — markers replace it.
-            const oldDot = card.querySelector('.chart-live-dot');
-            if (oldDot) oldDot.remove();
         };
         instanceRef.updateLiveDot = updateLiveDot;
+
+        // Track the dot through pan/zoom — visible time range changes
+        // shift timeToCoordinate output, so we must recompute on every
+        // viewport change to keep the dot pinned to the line endpoint.
+        try {
+            chart.timeScale().subscribeVisibleTimeRangeChange(() => {
+                if (instanceRef.updateLiveDot) instanceRef.updateLiveDot();
+            });
+        } catch (e) { /* tolerate API differences */ }
 
         // Store chart instance (resizeObserver + updateLiveDot for cleanup)
         chartInstances.set(chartId, {
