@@ -717,37 +717,37 @@ const CryptoChartModule = (function() {
                 </div>
                 <div class="crypto-chart-footer">
                     <div class="crypto-chart-stats">
-                        <div class="stat-item">
+                        <div class="stat-item tier-primary">
                             <span class="stat-label">Market Cap</span>
                             <span class="stat-value market-cap shimmer-loading">&nbsp;</span>
                         </div>
-                        <div class="stat-item">
+                        <div class="stat-item tier-primary">
                             <span class="stat-label">24h Volume</span>
                             <span class="stat-value volume shimmer-loading">&nbsp;</span>
                         </div>
-                        <div class="stat-item">
+                        <div class="stat-item tier-secondary">
                             <span class="stat-label">24h High</span>
                             <span class="stat-value high-24h shimmer-loading">&nbsp;</span>
                         </div>
-                        <div class="stat-item">
+                        <div class="stat-item tier-secondary">
                             <span class="stat-label">24h Low</span>
                             <span class="stat-value low-24h shimmer-loading">&nbsp;</span>
                         </div>
                     </div>
                     <div class="crypto-chart-stats stats-row-2">
-                        <div class="stat-item">
+                        <div class="stat-item tier-tertiary">
                             <span class="stat-label">All-Time High</span>
                             <span class="stat-value ath shimmer-loading">&nbsp;</span>
                         </div>
-                        <div class="stat-item">
+                        <div class="stat-item tier-tertiary">
                             <span class="stat-label">ATH Change</span>
                             <span class="stat-value ath-change shimmer-loading">&nbsp;</span>
                         </div>
-                        <div class="stat-item">
+                        <div class="stat-item tier-tertiary">
                             <span class="stat-label">Circulating Supply</span>
                             <span class="stat-value circulating-supply shimmer-loading">&nbsp;</span>
                         </div>
-                        <div class="stat-item">
+                        <div class="stat-item tier-tertiary">
                             <span class="stat-label">Max Supply</span>
                             <span class="stat-value max-supply shimmer-loading">&nbsp;</span>
                         </div>
