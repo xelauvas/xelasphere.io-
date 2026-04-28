@@ -201,8 +201,6 @@ class MemoryExtractor:
         Returns:
             List of MemoryCandidate
         """
-        logger.info(f"🔍 MemoryExtractor.extract() called with message: '{user_message}'")
-
         # UPGRADE: Check for opt-out phrases first
         if contains_opt_out(user_message):
             logger.info("User requested no memory storage for this message")
@@ -246,13 +244,12 @@ class MemoryExtractor:
     def _extract_patterns(self, text: str) -> List[MemoryCandidate]:
         """Extract candidates using regex patterns with normalization."""
         candidates = []
-        logger.info(f"🔍 Pattern extraction on text: '{text}'")
 
         for memory_type, patterns in self.EXTRACTION_PATTERNS.items():
             for pattern, key_template, confidence in patterns:
                 matches = list(re.finditer(pattern, text, re.IGNORECASE))
                 if matches:
-                    logger.info(f"🔍 Pattern '{key_template}' matched: {[m.group(0) for m in matches]}")
+                    logger.info(f"🔍 Pattern '{key_template}' matched ({len(matches)} hits)")
                 for match in matches:
                     value = match.group(1).strip()
                     if len(value) < 2 or len(value) > 200:

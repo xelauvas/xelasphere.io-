@@ -454,7 +454,7 @@ def generate_image_result(user_id: str, prompt: str, aspect_override: Optional[s
     seed = abs(hash(f"{user_id}:{prompt}")) % (2**31)
     aspect, width, height = resolve_aspect(prompt, override=aspect_override)
     size_str = f"{width}x{height}"
-    logger.info(f"Image aspect resolved to {aspect} ({size_str}) for prompt: {prompt[:60]!r}")
+    logger.info(f"Image aspect resolved to {aspect} ({size_str}) for prompt (len={len(prompt)})")
     # Chain: OpenRouter → Pollinations (free) → OpenAI gpt-image-1 (paid, last resort)
     result = generate_image_with_openrouter(prompt, user_id, seed, size=size_str)
     if result:

@@ -740,7 +740,7 @@ def chat_stream():
     if pending and pending.get('type') == 'generate_image':
         if time.time() - pending.get('timestamp', 0) < 300:  # 5-minute TTL
             bucket = classify_confirmation_response(user_prompt_raw, pending['description'])
-            logger.info(f"[Stream] Image confirmation: bucket={bucket}, desc={pending['description'][:60]}")
+            logger.info(f"[Stream] Image confirmation: bucket={bucket}, desc_len={len(pending['description'])}")
             if bucket == 'confirm':
                 # Generate with the original description
                 try:
@@ -1345,7 +1345,7 @@ def chat_stream():
         # The UI toggle is authoritative: user asked for this pipeline.
         if request_mode == 'search':
             _forced_search_type = _classify_search_type(user_prompt_raw)
-            logger.info(f"[Stream] MODE=search forced by UI. type={_forced_search_type} query={user_prompt_raw[:80]!r}")
+            logger.info(f"[Stream] MODE=search forced by UI. type={_forced_search_type} query_len={len(user_prompt_raw)}")
             # Extract system prompt up-front — the synthesis generator
             # closes over `_sys_prompt`, so it must be bound before we
             # call it. In the auto path this happens inside the try-block
@@ -1421,7 +1421,7 @@ def chat_stream():
             _cached = None if _skip_cache else orchestrator_check_cache(user_prompt_raw, _cache_job)
             if _cached:
                 _cached_resp, _cached_model = _cached
-                logger.info(f"[Stream] CACHE HIT: {user_prompt_raw[:40]}... (model={_cached_model})")
+                logger.info(f"[Stream] CACHE HIT (prompt_len={len(user_prompt_raw)}, model={_cached_model})")
                 yield f"data: {json.dumps({'type': 'content', 'text': _cached_resp})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'content': _cached_resp, 'chat_summary': _cached_resp, 'render_mode': 'inline', 'reasoning': None, 'artifact': None, 'artifact_error': None, 'artifact_patches': None, 'response_id': f'cached_{hash(user_prompt_raw) % 99999}', 'is_email': False, 'email': None, 'crypto_chart': None, 'session_name': None, 'model_meta': {'model_id': _cached_model, 'model_label': 'Cached', 'model_provider': 'cache', 'auto_selected': True, 'task_type': _cache_job}, 'cached': True})}\n\n"
                 return
@@ -1783,7 +1783,7 @@ def chat_stream():
                         if routing.render_mode and routing.render_mode != 'inline':
                             render_mode = routing.render_mode
                             chat_summary = routing.chat_payload or ''
-                            logger.info(f"Stream chat_summary set to: {repr(chat_summary[:200])}")
+                            logger.info(f"Stream chat_summary set (len={len(chat_summary)})")
 
                             # Handle artifact_patch — apply patches and send both patches + result to frontend
                             if routing.render_mode == 'artifact_patch' and routing.artifact_payload:
@@ -1791,7 +1791,7 @@ def chat_stream():
                                 current_files, full_artifact = _load_current_artifact_files(user_id, session_id)
                                 if current_files:
                                     for i, p in enumerate(patch_data.get('patches', [])):
-                                        logger.info(f"🩹 Patch[{i}] file='{p.get('file')}' old_string='{repr(p.get('old_string','')[:120])}' new_string='{repr(p.get('new_string','')[:120])}'")
+                                        logger.info(f"🩹 Patch[{i}] file='{p.get('file')}' old_len={len(p.get('old_string',''))} new_len={len(p.get('new_string',''))}")
                                     for cf in current_files:
                                         logger.info(f"🩹 Current file='{cf.get('path')}' content_len={len(cf.get('content',''))}")
                                     patched_files, patch_results = apply_patches(current_files, patch_data.get('patches', []))
@@ -1922,7 +1922,7 @@ def chat_stream():
                     email_data = None
                     if is_email:
                         email_data = parse_email_from_response(full_content)
-                        logger.info(f"Stream: Email detected, parsed: subject='{email_data.get('subject', '')[:30]}...'")
+                        logger.info(f"Stream: Email detected, parsed (subject_len={len(email_data.get('subject', ''))})")
 
                     # Check if AI model decided to show a chart (best: AI understands context)
                     crypto_chart = None
@@ -2531,7 +2531,7 @@ def chat():
                 user_id, session_id, user_prompt
             )
             if was_rewritten:
-                logger.info(f"Pointer resolved: '{original_prompt[:50]}' → '{user_prompt[:80]}'")
+                logger.info(f"Pointer resolved (orig_len={len(original_prompt)}, resolved_len={len(user_prompt)})")
             elif pointer_info and pointer_info.get("needs_clarification"):
                 # Pointer detected but no list to resolve - will need clarification
                 logger.debug(f"Pointer detected but needs clarification: {pointer_info}")
@@ -2596,7 +2596,7 @@ def chat():
         # Determine stateless vs stateful mode
         is_stateless = should_skip_memory(user_prompt)
         message_mode = get_message_mode(user_prompt)
-        logger.debug(f"Message mode: {message_mode} for prompt: {user_prompt[:50]}...")
+        logger.debug(f"Message mode: {message_mode} (prompt_len={len(user_prompt)})")
 
         # ============================================================
         # Memory V2: Get memory context via orchestrator
@@ -2833,7 +2833,7 @@ def chat():
                     "Do NOT skip ingredients. Do NOT put ingredients inside instruction steps only.\n\n"
                 )
                 user_prompt = recipe_format_reminder + "User request: " + user_prompt
-                logger.info(f"🍳 Injected recipe format reminder for: {user_prompt[:80]}...")
+                logger.info(f"🍳 Injected recipe format reminder (prompt_len={len(user_prompt)})")
 
             # --- Smart Context Window: build prompt via ContextBuilder ---
             artifact_tracker = None
@@ -3292,7 +3292,7 @@ def chat():
                 # Log the ingredients section for debugging
                 ing_match = re.search(r'(### Ingredients.*?)(?=###|$)', response_text, re.DOTALL)
                 if ing_match:
-                    logger.warning(f"🍳 Ingredients section content: {ing_match.group(1)[:200]}...")
+                    logger.warning(f"🍳 Ingredients section length: {len(ing_match.group(1))} chars (no bullets found)")
             elif not has_ingredients_section:
                 logger.warning(f"🍳 Recipe response missing ### Ingredients section entirely!")
             else:
@@ -3303,7 +3303,7 @@ def chat():
         logger.info(f"🔍 ARTIFACT DEBUG: AI contains_code={routing_decision.contains_code}, effective={effective_contains_code}")
         logger.info(f"🔍 ARTIFACT DEBUG: has_code_anywhere={has_code_anywhere}")
         logger.info(f"🔍 ARTIFACT DEBUG: meta={structured_response.meta if structured_response else 'N/A (ActionParser path)'}")
-        logger.info(f"🔍 ARTIFACT DEBUG: response_text_preview={response_text[:200] if response_text else 'EMPTY'}...")
+        logger.info(f"🔍 ARTIFACT DEBUG: response_text_len={len(response_text) if response_text else 0}")
 
         artifact_payload = None
         artifact_reference = None
@@ -3748,7 +3748,7 @@ def chat():
         is_email = looks_like_email(response_text, user_asked_for_email=is_email_request(user_prompt))
         if is_email:
             email_data = parse_email_from_response(response_text)
-            logger.info(f"Email detected, parsed: subject='{email_data.get('subject', '')[:30]}...'")
+            logger.info(f"Email detected, parsed (subject_len={len(email_data.get('subject', ''))})")
 
         # Check for pending dream notification
         dream_notification = None

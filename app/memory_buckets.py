@@ -310,7 +310,7 @@ class MemoryBucketManager:
                         if bucket[i].text in texts_to_remove:
                             removed_entry = bucket.pop(i)
                             removed_entries.append(removed_entry)
-                            logger.info(f"Anchoring removed conflicting memory: '{removed_entry.text}'")
+                            logger.info(f"Anchoring removed conflicting memory (len={len(removed_entry.text)})")
 
                     # Use the highest version from removed entries + 1
                     max_version = max((e.version for e in removed_entries), default=0)
@@ -325,7 +325,7 @@ class MemoryBucketManager:
                         updated_at=now
                     ))
                     self._save()
-                    logger.info(f"Anchoring resolved conflict: '{resolution.final_text}' (v{new_version})")
+                    logger.info(f"Anchoring resolved conflict (len={len(resolution.final_text)}, v{new_version})")
                     return True
 
             except Exception as e:
@@ -344,7 +344,7 @@ class MemoryBucketManager:
                     updated_at=now
                 )
                 self._save()
-                logger.debug(f"Updated existing memory: '{entry.text}' -> '{text}'")
+                logger.debug(f"Updated existing memory (old_len={len(entry.text)}, new_len={len(text)})")
                 return True
 
         # 3. No conflict/similar found, add new

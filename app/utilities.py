@@ -887,7 +887,7 @@ def strip_html_from_response(text: str) -> str:
     has_html = bool(re.search(r'<(?:p|div|span|br|h[1-6]|strong|b|em|i|ul|ol|li|a)\b[^>]*>', text, re.IGNORECASE))
 
     if has_html:
-        logging.info(f"Stripping HTML tags from AI response (first 100 chars): {text[:100]}")
+        logging.info(f"Stripping HTML tags from AI response (len={len(text)})")
 
     # Strip paragraph tags
     text = re.sub(r'<p\s*[^>]*>(.*?)</p>', r'\1', text, flags=re.DOTALL | re.IGNORECASE)
@@ -915,6 +915,6 @@ def strip_html_from_response(text: str) -> str:
     text = re.sub(r'</?(?:p|div|span)(?:\s[^>]*)?\s*/?>', '', text, flags=re.IGNORECASE)
 
     if has_html and text != original:
-        logging.info(f"HTML stripped successfully. Result (first 100 chars): {text[:100]}")
+        logging.info(f"HTML stripped successfully (result_len={len(text)})")
 
     return text.strip()

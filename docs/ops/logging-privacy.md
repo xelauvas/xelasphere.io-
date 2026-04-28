@@ -1,6 +1,42 @@
 # Logging privacy — pseudonymous, not anonymous
 
-Per spec §8.4. Operator-facing statement of what is and isn't protected in mempalace logs.
+Per spec §8.4. Operator-facing statement of what is and isn't protected in
+mempalace AND xelasphere Flask logs.
+
+**Scope note:** The discipline below originated for mempalace (sidecar +
+Flask-mempalace). It was extended to cover the broader Flask codebase
+(memory_v2/v3, chat_engine, chat_routes, smart_router, file_processor,
+artifacts, image_generator, orchestrator/cache, utilities, blueprints) on
+2026-04-28 after issue #11 surfaced that user message content was being
+logged at INFO across many call sites. The principle ("logs never contain
+always-personal-data payloads") applies uniformly across the codebase —
+not just mempalace.
+
+## Always-personal-data payloads (never log content; counts/lengths only)
+
+The following fields are always-personal-data when they originate from a
+user request or a model response derived from one. Logs may record their
+**presence, count, or length** but never their **content** (no `[:N]`
+slicing, no `repr()`, no embedded interpolation):
+
+- User chat messages, prompts, queries (`user_message`, `user_prompt`,
+  `user_prompt_raw`, `prompt`, `query`, `instruction`, `description`)
+- AI model responses and excerpts (`response_text`, `chat_summary`,
+  `chat_payload`, any `response.text` from the chat path)
+- Memory-extraction candidate values (`candidate.value`, `entry.text`,
+  `resolution.final_text`, `removed_entry.text`)
+- Artifact content and patches (`old_string`, `new_string`, `content`,
+  `meta_json`, `raw_json`, `search_text`)
+- Email subject/body parsed from AI output
+- Pattern match groups extracted from user text (`m.group(0)`)
+- Image generation prompts
+- File RAG queries
+
+Acceptable variants for diagnostic value:
+- `len(field)` — record the length without the content
+- `field is not None` / boolean presence flags
+- The field's category or schema key (e.g., `candidate.key` is the schema
+  name like "favorite_color"; the value is the personal data)
 
 ## Pseudonymous vs. anonymous
 

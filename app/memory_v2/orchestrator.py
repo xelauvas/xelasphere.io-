@@ -474,9 +474,9 @@ class MemoryOrchestrator:
         # Step 2: Extract candidates (from user_message ONLY - never assistant)
         # ====================================================================
         try:
-            logger.info(f"🔍 Extracting memories from: '{user_message[:100]}...' (len={len(user_message)})")
+            logger.info(f"🔍 Extracting memories (msg len={len(user_message)})")
             candidates = self._extractor.extract(user_message)
-            logger.info(f"🔍 Found {len(candidates)} candidates: {[(c.key, c.value) for c in candidates]}")
+            logger.info(f"🔍 Found {len(candidates)} candidates")
         except Exception as e:
             logger.error(f"Extraction failed: {e}", exc_info=True)
             candidates = []
@@ -641,7 +641,7 @@ class MemoryOrchestrator:
 
         # Judge decision
         judgment = self._judge.judge(candidate)
-        logger.info(f"🧠 Judge decision for {candidate.key}={candidate.value}: {judgment.decision.value} - {judgment.reason}")
+        logger.info(f"🧠 Judge decision (key={candidate.key}): {judgment.decision.value}")
 
         # Shadow mode: log but don't write
         if ShadowMode.is_enabled():
