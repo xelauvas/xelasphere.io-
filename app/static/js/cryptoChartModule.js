@@ -1402,16 +1402,37 @@ const CryptoChartModule = (function() {
                 tooltip.textContent = preview;
                 tooltip.classList.add('visible');
 
-                // Position tooltip above the item
+                // Force layout to get accurate dimensions BEFORE
+                // positioning. Without forcing reflow here, the
+                // first hover yields stale rect dimensions (the
+                // empty initial size) and the tooltip lands off
+                // screen.
+                tooltip.style.left = '0px';
+                tooltip.style.top = '0px';
+                // Trigger reflow.
+                void tooltip.offsetHeight;
+
                 const rect = item.getBoundingClientRect();
                 const tooltipRect = tooltip.getBoundingClientRect();
 
+                // Horizontal: center on item, clamp to viewport
                 let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
-                // Keep tooltip within viewport
                 left = Math.max(10, Math.min(left, window.innerWidth - tooltipRect.width - 10));
 
+                // Vertical: prefer above. If above-position would be
+                // off-screen (rect.top - tooltip.height - 10 < 10),
+                // flip to below the item instead.
+                let top = rect.top - tooltipRect.height - 10;
+                if (top < 10) {
+                    top = rect.bottom + 10;
+                    // If still off-screen below, clamp to bottom.
+                    if (top + tooltipRect.height > window.innerHeight - 10) {
+                        top = window.innerHeight - tooltipRect.height - 10;
+                    }
+                }
+
                 tooltip.style.left = `${left}px`;
-                tooltip.style.top = `${rect.top - tooltipRect.height - 10}px`;
+                tooltip.style.top = `${top}px`;
             });
 
             item.addEventListener('mouseleave', () => {
@@ -1588,6 +1609,12 @@ const CryptoChartModule = (function() {
         if (newsSection && newsSection.classList.contains('crypto-chart-news')) {
             const isCollapsed = newsSection.classList.toggle('collapsed');
             linkElement.textContent = isCollapsed ? 'Show News' : 'Hide News';
+            // Reset scroll position to the top when expanding so the
+            // user always sees the most recent article first, not
+            // wherever they left off scrolled last time.
+            if (!isCollapsed) {
+                newsSection.scrollTop = 0;
+            }
         }
     }
 
