@@ -479,6 +479,16 @@ const CryptoChartModule = (function() {
                 const olderData = data.data.filter(p => p.time < cutoff);
                 const olderVol = (data.volume_data || []).filter(v => v.time < cutoff);
                 if (olderData.length > 0) {
+                    // Capture the user's current viewport BEFORE setData
+                    // so we can restore it after the re-render. Without
+                    // this, lightweight-charts may shift the visible
+                    // window when the data domain grows backwards, and
+                    // the chart visibly jumps under the user's cursor.
+                    let savedRange = null;
+                    try {
+                        savedRange = inst.chart.timeScale().getVisibleRange();
+                    } catch (e) { /* ignore */ }
+
                     inst.dataArray = olderData.concat(inst.dataArray);
                     inst.volumeArray = olderVol.concat(inst.volumeArray);
                     inst.firstLoadedTime = inst.dataArray[0].time;
@@ -486,6 +496,13 @@ const CryptoChartModule = (function() {
                     if (inst.volumeSeries) {
                         inst.volumeSeries.setData(inst.volumeArray);
                     }
+
+                    if (savedRange) {
+                        try {
+                            inst.chart.timeScale().setVisibleRange(savedRange);
+                        } catch (e) { /* ignore */ }
+                    }
+
                     // Reposition live-dot since timeToCoordinate output
                     // shifts when the data domain expands.
                     if (typeof inst.updateLiveDot === 'function') {
@@ -1167,12 +1184,18 @@ const CryptoChartModule = (function() {
             });
         } catch (e) { /* tolerate API differences */ }
 
-        // Lazy-load history when the user pans within ~30 logical bars
-        // of the loaded start. The chunk fetch returns one page of
-        // klines at the same interval the current range uses (1D→5m,
-        // 1W→1h, etc.) so each timeframe extends back into history at
-        // its own resolution. Crypto only — stocks use Yahoo and don't
-        // expose this endpoint yet.
+        // Lazy-load history when the user pans PAST the start of the
+        // loaded data. Two guards to keep this from firing during
+        // initial render / autoScale settle:
+        //   1) lazyLoadEnabledAt timestamp — set on load, blocks fetch
+        //      until 500ms after the chart has settled
+        //   2) range.from < 0 — only fires when the visible window
+        //      extends LEFT of the first loaded bar (user has actually
+        //      pushed past it; not just sitting at fitContent's start)
+        // Debounce 300ms so we wait for drag-release before fetching;
+        // otherwise every pan tick queues a fetch and the prepend
+        // re-renders make the chart jump under the cursor.
+        let lazyLoadTimer = null;
         try {
             chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
                 if (!range || range.from == null) return;
@@ -1180,8 +1203,13 @@ const CryptoChartModule = (function() {
                 if (!inst || inst.assetType !== 'crypto') return;
                 if (inst.loadingMore || inst.historyExhausted) return;
                 if (!inst.dataArray || inst.dataArray.length === 0) return;
-                if (range.from > 30) return; // not near the left edge yet
-                loadOlderHistory(chartId);
+                if (!inst.lazyLoadEnabledAt || Date.now() < inst.lazyLoadEnabledAt) return;
+                if (range.from >= 0) return; // user hasn't panned past the start
+                if (lazyLoadTimer) clearTimeout(lazyLoadTimer);
+                lazyLoadTimer = setTimeout(() => {
+                    lazyLoadTimer = null;
+                    loadOlderHistory(chartId);
+                }, 300);
             });
         } catch (e) { /* tolerate API differences */ }
 
@@ -1346,6 +1374,11 @@ const CryptoChartModule = (function() {
                 instance.historyExhausted = false;
                 instance.loadingMore = false;
                 instance.currentRange = range;
+                // Block lazy-load for 500ms while fitContent + autoScale
+                // settle — without this, the visible-logical-range subscriber
+                // sees range.from near 0 right after fitContent and fires
+                // an unwanted history fetch on initial render.
+                instance.lazyLoadEnabledAt = Date.now() + 500;
                 instance.chart.timeScale().fitContent();
                 // Force the right price-scale to recompute and render
                 // tick labels. Without this, the labels sometimes don't
