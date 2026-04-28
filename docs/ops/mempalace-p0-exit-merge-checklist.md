@@ -117,11 +117,20 @@ git pull origin main
 ```
 Working tree should be clean of **tracked-file modifications**. Untracked state (`claude-code (untracked content)` submodule-like + any transient `mempalace/` etc.) does not block the pull — git won't touch untracked files. If `git status` shows any *modified* or *staged* tracked files, stop and investigate — those may be in-progress work that would be overwritten by the pull.
 
-3.2 [ ] **Sidecar: no action required.** The sidecar wheel currently installed at `/opt/mempalace-sidecar/venv/` was built from `mempalace-sidecar/` source at its last-touching commit. That commit is **830ca85** (M0.27 — config-drift audit + check-script hardening). Nothing since then has touched `mempalace-sidecar/` on the feature branch; verify with:
+3.2 [ ] **Sidecar: no action required.** The sidecar wheel currently installed at `/opt/mempalace-sidecar/venv/` was built from `mempalace-sidecar/` source at its last-touching commit. That commit is **830ca85** (M0.27 — config-drift audit + check-script hardening). Verify nothing since then has touched the source by comparing tree state directly (snapshot comparison — sidesteps the parent-walking ambiguity that bit issue #17):
 ```bash
-git log 830ca85..HEAD -- mempalace-sidecar/    # must be empty
+git diff 830ca85 HEAD -- mempalace-sidecar/mempalace_sidecar/    # must be empty
 ```
-(Chose 830ca85 as the anchor, not M0.27c/5eeec9a, because 830ca85 IS the actual last-sidecar-touching commit — robust to future reorderings. M0.27c happens to also work as an anchor only because nothing between 830ca85 and 5eeec9a touched sidecar either.) Sidecar stays running, `/readyz` stays green, no restart needed.
+(Chose 830ca85 as the anchor, not M0.27c/5eeec9a, because 830ca85 IS the actual last-sidecar-touching commit — robust to future reorderings. M0.27c happens to also work as an anchor only because nothing between 830ca85 and 5eeec9a touched sidecar either.)
+
+**Why `git diff` not `git log`:** the original `git log 830ca85..HEAD -- mempalace-sidecar/` walked both parents of any merge commit on main, which surfaced (a) the merge commit itself (which adds the whole subtree at the merge boundary) and (b) auto-backup commits with .venv/ pollution (issue #13). `git diff` is a snapshot comparison and answers the question the check actually wants — "did source change?" — without walking history.
+
+If the diff is non-empty, look at WHICH files changed:
+- Changes to `mempalace-sidecar/mempalace_sidecar/*.py` → wheel rebuild required.
+- Changes to `mempalace-sidecar/pyproject.toml` (deps or version) → wheel rebuild required.
+- Changes only to `mempalace-sidecar/README.md` or `mempalace-sidecar/tests/` → no rebuild needed.
+
+When sidecar SOURCE has changed, follow `docs/ops/mempalace-runbook.md` "wheel rebuild" section. Sidecar stays running while the new wheel is being built, `/readyz` stays green, no restart needed until the rebuild step.
 
 3.3 [ ] **Flask restart** — chat_routes.py changed (today's #9 fix at commit `f6c6906`). Restart to pick up the new code:
 ```bash
