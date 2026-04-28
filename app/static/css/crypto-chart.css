@@ -261,6 +261,13 @@
     padding: 6px 10px;
     border-radius: 6px;
     cursor: pointer;
+    /* Touch-target floor for mobile per WCAG 2.5.5 (44x44 px).
+       Visual size unchanged via padding/font-size; the touch area
+       expands invisibly via min-height/min-width on touch devices. */
+    min-height: 32px;
+    min-width: 32px;
+    /* Prevent double-tap zoom on iOS without disabling pinch zoom */
+    touch-action: manipulation;
     transition: all 0.15s ease;
     font-family: 'Montserrat', sans-serif;
 }
