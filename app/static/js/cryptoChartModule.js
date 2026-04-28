@@ -2085,7 +2085,7 @@ const CryptoChartModule = (function() {
                 handleScroll: false,
                 handleScale: false,
                 width: canvasEl.clientWidth,
-                height: 60,
+                height: 70,
             });
             const series = chart.addSeries(LightweightCharts.AreaSeries, {
                 lineColor: '#22c55e',

@@ -12,28 +12,60 @@
 }
 
 /* ==================== Sparkline (chat-history compact mode) ==================== */
-/* Used in chat history instead of the full chart card. ~60px tall
+/* Used in chat history instead of the full chart card. ~70px tall
    line preview with a tiny symbol/price/change header. Whole sparkline
    is clickable — expands to the full chart card on click. */
 .crypto-chart-sparkline {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 10px 12px;
+    gap: 6px;
+    padding: 12px 14px;
     margin: 0.5rem 0;
     background: var(--bg-hover, rgba(255, 255, 255, 0.04));
     border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.06));
-    border-radius: 10px;
+    border-radius: 12px;
     cursor: pointer;
-    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+    overflow: hidden;
+    transition: background 0.2s ease, border-color 0.2s ease,
+                transform 0.2s ease, box-shadow 0.2s ease;
     width: 100%;
     box-sizing: border-box;
+    /* Smooth entrance on first render */
+    animation: sparkline-fadein 0.4s ease both;
+}
+
+@keyframes sparkline-fadein {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Trend-tinted radial gradient backdrop — subtle wash from the side
+   matching the trend color. Layered behind the line so it reads as
+   ambient context, not a UI element. */
+.crypto-chart-sparkline[data-trend="up"] {
+    border-left: 2px solid rgba(34, 197, 94, 0.7);
+    background:
+        radial-gradient(ellipse at right, rgba(34, 197, 94, 0.08), transparent 60%),
+        var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+.crypto-chart-sparkline[data-trend="down"] {
+    border-left: 2px solid rgba(239, 68, 68, 0.7);
+    background:
+        radial-gradient(ellipse at right, rgba(239, 68, 68, 0.08), transparent 60%),
+        var(--bg-hover, rgba(255, 255, 255, 0.04));
 }
 
 .crypto-chart-sparkline:hover {
-    background: var(--bg-hover, rgba(255, 255, 255, 0.07));
-    border-color: rgba(255, 255, 255, 0.15);
-    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+}
+.crypto-chart-sparkline[data-trend="up"]:hover {
+    box-shadow: 0 8px 28px rgba(34, 197, 94, 0.18);
+}
+.crypto-chart-sparkline[data-trend="down"]:hover {
+    box-shadow: 0 8px 28px rgba(239, 68, 68, 0.18);
 }
 
 .crypto-chart-sparkline:focus-visible {
@@ -41,55 +73,102 @@
     outline-offset: 2px;
 }
 
-.crypto-chart-sparkline[data-trend="up"] {
-    border-left: 2px solid rgba(34, 197, 94, 0.6);
-}
-.crypto-chart-sparkline[data-trend="down"] {
-    border-left: 2px solid rgba(239, 68, 68, 0.6);
-}
-
 .sparkline-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 12px;
+    gap: 10px;
+    font-size: 13px;
+    position: relative;
+    z-index: 2;
 }
 
 .sparkline-symbol {
     font-weight: 700;
     color: var(--text-primary, #ffffff);
     letter-spacing: 0.04em;
-    font-size: 13px;
+    font-size: 14px;
 }
 
 .sparkline-price {
     color: var(--text-primary, #e8e8f0);
     font-variant-numeric: tabular-nums;
-    font-weight: 600;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.01em;
 }
 
 .sparkline-change {
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
 }
-.sparkline-change.positive { color: #4ade80; }
-.sparkline-change.negative { color: #f87171; }
+.sparkline-change.positive {
+    color: #4ade80;
+    background: rgba(34, 197, 94, 0.1);
+}
+.sparkline-change.negative {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.1);
+}
 
 .sparkline-expand {
     margin-left: auto;
     font-size: 14px;
-    opacity: 0.4;
+    opacity: 0.35;
     color: var(--text-tertiary, #5a5a70);
-    transition: opacity 0.18s ease;
+    transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .crypto-chart-sparkline:hover .sparkline-expand {
-    opacity: 0.85;
+    opacity: 1;
+    transform: scale(1.15);
 }
 
 .sparkline-canvas {
+    position: relative;
     width: 100%;
-    height: 60px;
+    height: 70px;
     pointer-events: none; /* whole card is the click target */
+    /* Glow filter on the line — uses drop-shadow which respects
+       canvas alpha (so it only glows around the line, not the
+       rectangle). */
+    filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.25));
+    transition: filter 0.3s ease;
+}
+.crypto-chart-sparkline[data-trend="down"] .sparkline-canvas {
+    filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.25));
+}
+
+/* Live-pulse dot at the right edge — gives the sparkline a sense of
+   real-time motion. Pure CSS, no canvas math. */
+.crypto-chart-sparkline::after {
+    content: '';
+    position: absolute;
+    bottom: 18px;
+    right: 18px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+    animation: sparkline-pulse 2s ease-out infinite;
+    z-index: 3;
+}
+.crypto-chart-sparkline[data-trend="down"]::after {
+    background: #f87171;
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.7);
+    animation-name: sparkline-pulse-red;
+}
+
+@keyframes sparkline-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.6); }
+    70%  { box-shadow: 0 0 0 12px rgba(74, 222, 128, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+}
+@keyframes sparkline-pulse-red {
+    0%   { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.6); }
+    70%  { box-shadow: 0 0 0 12px rgba(248, 113, 113, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0); }
 }
 
 /* ==================== Chart Wrapper ==================== */
