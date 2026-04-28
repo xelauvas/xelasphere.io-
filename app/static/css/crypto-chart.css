@@ -23,8 +23,12 @@
 .crypto-chart-wrapper {
     margin-top: 0.75rem;
     margin-bottom: 1rem;
-    width: calc(var(--composer-shell-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
-    max-width: calc(var(--composer-shell-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+    /* Chart uses --content-max-width (768px) instead of
+       --composer-shell-max-width — they used to be the same value, but
+       PR #44 widened the composer to 800px while chart should stay at
+       768. --content-max-width remains 768. */
+    width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+    max-width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
     margin-left: auto !important;
     margin-right: auto !important;
     /* Compensate for asymmetric padding in the chart's parent chain vs the
