@@ -435,7 +435,13 @@ def get_coin_id(query: str) -> str | None:
     if query_lower in EXCLUDED_WORDS:
         return None
 
-    # 1. Fast path: check top 10 coins (no API call needed)
+    # 1. Fast path: check the local curated list. TOP_COINS_FAST has top
+    # 10 by some forms; CRYPTO_SYMBOLS (asset_config) has top ~30 by
+    # both symbol AND name forms ("vechain" + "vet" both resolve).
+    # Curated list catches popular coins instantly even when CoinGecko's
+    # /coins/list cache is cold (race after Flask restart).
+    if query_lower in CRYPTO_SYMBOLS:
+        return CRYPTO_SYMBOLS[query_lower]
     if query_lower in TOP_COINS_FAST:
         return TOP_COINS_FAST[query_lower]
 
