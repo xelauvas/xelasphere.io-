@@ -1977,9 +1977,147 @@ const CryptoChartModule = (function() {
         }
     }
 
+    /**
+     * Render a compact sparkline preview — used for chat-history charts
+     * to avoid rendering the full heavy card per scrollback entry.
+     * Click anywhere on the sparkline expands it to the full chart by
+     * calling the regular renderChart() with the same options.
+     *
+     * Visual: ~80px tall area chart, no axes, no buttons, no stats,
+     * with a tiny header showing symbol + price + change. Lazy-loads
+     * data only when the sparkline scrolls into view.
+     */
+    async function renderSparkline(container, asset, options = {}) {
+        if (!container || !asset) return null;
+        if (typeof LightweightCharts === 'undefined') {
+            container.innerHTML = '<div class="crypto-chart-error">Chart library not available</div>';
+            return null;
+        }
+
+        await fetchConfig();
+        const sparklineId = `chart-spark-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const currency = options.currency || 'usd';
+        const initialRange = options.range || 'MAX';
+        const assetType = options.assetType || 'crypto';
+        const safeAsset = escapeHtml(asset.toUpperCase());
+        const safeId = escapeHtml(sparklineId);
+
+        container.innerHTML = `
+            <div class="crypto-chart-sparkline" id="${safeId}" role="button" tabindex="0"
+                 aria-label="${safeAsset} sparkline preview — click to expand"
+                 data-asset="${escapeHtml(asset)}" data-asset-type="${escapeHtml(assetType)}"
+                 data-currency="${escapeHtml(currency)}" data-range="${escapeHtml(initialRange)}">
+                <div class="sparkline-header">
+                    <span class="sparkline-symbol">${safeAsset}</span>
+                    <span class="sparkline-price shimmer-loading">&nbsp;</span>
+                    <span class="sparkline-change shimmer-loading">&nbsp;</span>
+                    <span class="sparkline-expand" aria-hidden="true">⤢</span>
+                </div>
+                <div class="sparkline-canvas"></div>
+            </div>
+        `;
+
+        const sparkEl = container.querySelector(`#${sparklineId}`);
+        const canvasEl = sparkEl.querySelector('.sparkline-canvas');
+        const priceEl = sparkEl.querySelector('.sparkline-price');
+        const changeEl = sparkEl.querySelector('.sparkline-change');
+
+        // Click expands the sparkline to the full chart card.
+        const expand = () => {
+            // Replace the sparkline with the full chart, preserving options.
+            container.innerHTML = '';
+            renderChart(container, asset, { currency, range: initialRange, assetType });
+        };
+        sparkEl.addEventListener('click', expand);
+        sparkEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                expand();
+            }
+        });
+
+        // Lazy-load data when scrolled into view (same pattern as full chart).
+        const loadOnce = (async () => {
+            const chart = LightweightCharts.createChart(canvasEl, {
+                layout: {
+                    background: { type: 'solid', color: 'transparent' },
+                    textColor: 'rgba(255, 255, 255, 0.5)',
+                    fontFamily: "'Inter', -apple-system, sans-serif",
+                },
+                grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+                rightPriceScale: { visible: false },
+                leftPriceScale: { visible: false },
+                timeScale: { visible: false, borderColor: 'transparent' },
+                crosshair: { vertLine: { visible: false }, horzLine: { visible: false } },
+                handleScroll: false,
+                handleScale: false,
+                width: canvasEl.clientWidth,
+                height: 60,
+            });
+            const series = chart.addSeries(LightweightCharts.AreaSeries, {
+                lineColor: '#22c55e',
+                topColor: 'rgba(34, 197, 94, 0.18)',
+                bottomColor: 'rgba(34, 197, 94, 0.0)',
+                lineWidth: 2,
+                priceLineVisible: false,
+                lastValueVisible: false,
+            });
+            try {
+                let data;
+                if (assetType === 'stock') {
+                    data = await fetchStockChartData(asset, initialRange);
+                } else {
+                    let days = TIME_RANGES[initialRange]?.days || '1';
+                    if (days === 'ytd') {
+                        const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+                        days = Math.ceil((Date.now() - startOfYear) / 86400000);
+                    }
+                    data = await fetchChartData(asset, days, currency);
+                }
+                if (data?.success && data.data?.length > 0) {
+                    series.setData(data.data);
+                    chart.timeScale().fitContent();
+                    const isPos = data.is_positive;
+                    series.applyOptions({
+                        lineColor: isPos ? '#22c55e' : '#ef4444',
+                        topColor: isPos ? 'rgba(34, 197, 94, 0.18)' : 'rgba(239, 68, 68, 0.18)',
+                    });
+                    sparkEl.setAttribute('data-trend', isPos ? 'up' : 'down');
+                    setLoadedContent(priceEl, formatPrice(data.current_price, currency), 'sparkline-price');
+                    setLoadedContent(changeEl,
+                        formatChange(data.change_percent, initialRange),
+                        `sparkline-change ${isPos ? 'positive' : 'negative'}`);
+                }
+            } catch (err) {
+                console.warn('[Sparkline] load error:', err);
+                priceEl.classList.remove('shimmer-loading');
+                priceEl.textContent = '--';
+                changeEl.classList.remove('shimmer-loading');
+                changeEl.textContent = '';
+            }
+        });
+
+        if (typeof IntersectionObserver !== 'undefined') {
+            const obs = new IntersectionObserver((entries) => {
+                for (const e of entries) {
+                    if (e.isIntersecting) {
+                        loadOnce();
+                        obs.disconnect();
+                    }
+                }
+            }, { rootMargin: '100px', threshold: 0.1 });
+            obs.observe(sparkEl);
+        } else {
+            await loadOnce();
+        }
+
+        return sparklineId;
+    }
+
     // Public API
     return {
         render: renderChart,
+        renderSparkline,
         destroy: destroyChart,
         fetchPrice: fetchPriceData,
         fetchChart: fetchChartData,
