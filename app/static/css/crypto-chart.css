@@ -11,6 +11,87 @@
     line-height: 1.5;
 }
 
+/* ==================== Sparkline (chat-history compact mode) ==================== */
+/* Used in chat history instead of the full chart card. ~60px tall
+   line preview with a tiny symbol/price/change header. Whole sparkline
+   is clickable — expands to the full chart card on click. */
+.crypto-chart-sparkline {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    margin: 0.5rem 0;
+    background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.06));
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.crypto-chart-sparkline:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.07));
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
+}
+
+.crypto-chart-sparkline:focus-visible {
+    outline: 2px solid #4ade80;
+    outline-offset: 2px;
+}
+
+.crypto-chart-sparkline[data-trend="up"] {
+    border-left: 2px solid rgba(34, 197, 94, 0.6);
+}
+.crypto-chart-sparkline[data-trend="down"] {
+    border-left: 2px solid rgba(239, 68, 68, 0.6);
+}
+
+.sparkline-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.sparkline-symbol {
+    font-weight: 700;
+    color: var(--text-primary, #ffffff);
+    letter-spacing: 0.04em;
+    font-size: 13px;
+}
+
+.sparkline-price {
+    color: var(--text-primary, #e8e8f0);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.sparkline-change {
+    font-size: 11px;
+    font-weight: 500;
+}
+.sparkline-change.positive { color: #4ade80; }
+.sparkline-change.negative { color: #f87171; }
+
+.sparkline-expand {
+    margin-left: auto;
+    font-size: 14px;
+    opacity: 0.4;
+    color: var(--text-tertiary, #5a5a70);
+    transition: opacity 0.18s ease;
+}
+.crypto-chart-sparkline:hover .sparkline-expand {
+    opacity: 0.85;
+}
+
+.sparkline-canvas {
+    width: 100%;
+    height: 60px;
+    pointer-events: none; /* whole card is the click target */
+}
+
 /* ==================== Chart Wrapper ==================== */
 /* Chart matches the visible rounded "input bar" width (.input-row, ~737.6px),
    NOT the outer .input-container (768px). The container has 0.95rem

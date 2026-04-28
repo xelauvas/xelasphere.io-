@@ -4407,13 +4407,19 @@ async loadChatHistory(pageToken = null, limit = 10) {
                     messageContent.insertBefore(introText, chartWrapper);
                 }
 
-                window.CryptoChartModule.render(chartWrapper, asset, {
+                // Chat-history charts render as compact sparklines (just
+                // a 60px line + symbol/price/change) instead of the full
+                // heavy card. Click expands to the full chart on demand.
+                // Saves bandwidth and prevents N parallel chart loads
+                // when scrolling back through old sessions.
+                const renderFn = (window.CryptoChartModule.renderSparkline || window.CryptoChartModule.render);
+                Promise.resolve(renderFn(chartWrapper, asset, {
                     currency: chartData.currency || 'usd',
                     range: chartData.range || '1D',
                     assetType: assetType
-                }).catch(err => console.error('[Chart History] Render error:', err));
+                })).catch(err => console.error('[Chart History] Render error:', err));
 
-                console.log('[Chart History] Chart render initiated for:', asset);
+                console.log('[Chart History] Sparkline render initiated for:', asset);
             } else {
                 console.warn('[Chart History] No asset found in chart data');
             }
