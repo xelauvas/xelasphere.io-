@@ -1083,21 +1083,22 @@ const CryptoChartModule = (function() {
             scaleMargins: { top: 0.05, bottom: 0.25 },
         });
 
-        // Volume bars (HistogramSeries) overlaid in the bottom 25%.
-        // priceScaleId='' makes it an overlay (no separate axis label
-        // on the right) — keeps the right axis showing only price.
-        // lastValueVisible:false + priceLineVisible:false hide the
-        // ugly volume value label that would otherwise stick to the
-        // right axis with the raw volume number.
+        // Volume bars (HistogramSeries) overlaid in the bottom 15%.
+        // Slim, low-alpha spikes that read as ambient context, not a
+        // second chart. priceScaleId='' makes it an overlay (no axis
+        // label on the right) and base:0 anchors the bars at the
+        // bottom of the pane so each bar reads as a spike rising from
+        // the floor, not a centered diamond.
         const volumeSeries = chart.addSeries(LightweightCharts.HistogramSeries, {
             priceFormat: { type: 'volume' },
             priceScaleId: '',
-            color: 'rgba(38, 166, 154, 0.4)',
+            color: 'rgba(148, 163, 184, 0.28)',
+            base: 0,
             lastValueVisible: false,
             priceLineVisible: false,
         });
         volumeSeries.priceScale().applyOptions({
-            scaleMargins: { top: 0.78, bottom: 0 },
+            scaleMargins: { top: 0.85, bottom: 0 },
         });
 
         // Handle window resize. Stored on chartInstances so destroyChart

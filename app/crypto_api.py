@@ -403,7 +403,7 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1', before_ms: int | No
                 # multiply by close price to get USD-equivalent).
                 vol_usd = volume * close_price
                 prev_close = float(klines[i - 1][4]) if i > 0 else close_price
-                color = 'rgba(34, 197, 94, 0.4)' if close_price >= prev_close else 'rgba(239, 68, 68, 0.4)'
+                color = 'rgba(74, 222, 128, 0.32)' if close_price >= prev_close else 'rgba(248, 113, 113, 0.32)'
                 volume_data.append({'time': ts, 'value': vol_usd, 'color': color})
 
             # Empty historical chunk = reached start of asset's trading
@@ -2047,7 +2047,7 @@ def get_crypto_chart():
                     # Color volume bar by per-bar price direction (vs the
                     # previous bar). Green on up-move, red on down.
                     prev_price = prices[i - 1][1] if i > 0 else price
-                    color = 'rgba(34, 197, 94, 0.4)' if price >= prev_price else 'rgba(239, 68, 68, 0.4)'
+                    color = 'rgba(74, 222, 128, 0.32)' if price >= prev_price else 'rgba(248, 113, 113, 0.32)'
                     volume_data.append({'time': ts, 'value': vol, 'color': color})
 
             # Calculate price change
