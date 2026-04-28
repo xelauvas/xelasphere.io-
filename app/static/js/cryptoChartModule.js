@@ -82,6 +82,12 @@ const CryptoChartModule = (function() {
                 mouseWheel: true,
                 pinch: true,
             },
+            // Mobile-friendly: kinetic scroll on touch (momentum after
+            // the finger lifts) makes panning feel native, not janky.
+            kineticScroll: {
+                mouse: false,
+                touch: true,
+            },
         };
     }
 
