@@ -789,26 +789,34 @@ def _resolve_asset(query: str, allow_dynamic: bool = True) -> Optional[dict]:
         candidates.append(query[:-1])
 
     for q in candidates:
-        # Crypto fast path (top coins) — curated, safe.
+        # All curated lists run BEFORE dynamic CoinGecko — CoinGecko's
+        # catalog contains thousands of scam/lookalike tokens that would
+        # hijack queries for legitimate stocks ("apple" → scam token
+        # instead of AAPL). Curated → safe; dynamic → only as last resort.
+
+        # 1. Curated crypto fast path (top coins).
         if q in CRYPTO_SYMBOLS:
             coin_id = CRYPTO_SYMBOLS[q]
             logger.info(f"💰 Crypto price query: {q} -> {coin_id}")
             return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
-        # Dynamic crypto lookup — gated by explicit financial intent.
+        # 2. Curated stock symbol.
+        if q.upper() in STOCK_SYMBOLS:
+            logger.info(f"📈 Stock price query: {q}")
+            return {'symbol': q.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
+        # 3. Curated company name.
+        if q in COMPANY_TO_SYMBOL:
+            symbol = COMPANY_TO_SYMBOL[q]
+            logger.info(f"📈 Stock price query (company): {q} -> {symbol}")
+            return {'symbol': symbol.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
+        # 4. Dynamic CoinGecko lookup — gated by explicit financial intent.
+        #    Last resort: only fires for queries that didn't match any
+        #    curated list above. Catches legitimate alt-coins ("vechain",
+        #    "polkadot") without hijacking company names.
         if allow_dynamic:
             coin_id = get_coin_id_dynamic(q)
             if coin_id:
                 logger.info(f"💰 Crypto price query (dynamic): {q} -> {coin_id}")
                 return {'coin': coin_id, 'asset_type': 'crypto', 'currency': 'usd', 'range': '1D'}
-        # Stock symbol — curated, safe.
-        if q.upper() in STOCK_SYMBOLS:
-            logger.info(f"📈 Stock price query: {q}")
-            return {'symbol': q.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
-        # Company name — curated, safe.
-        if q in COMPANY_TO_SYMBOL:
-            symbol = COMPANY_TO_SYMBOL[q]
-            logger.info(f"📈 Stock price query (company): {q} -> {symbol}")
-            return {'symbol': symbol.upper(), 'asset_type': 'stock', 'currency': 'usd', 'range': '1D'}
 
     return None
 
