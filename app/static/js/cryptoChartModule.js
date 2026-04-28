@@ -942,6 +942,19 @@ const CryptoChartModule = (function() {
         const chartContainer = cardElement.querySelector('.crypto-chart-canvas');
         const loadingElement = cardElement.querySelector('.crypto-chart-loading');
 
+        // Sync the visually-active range button to initialRange. The
+        // HTML template hardcodes MAX as active; this rewrites that
+        // so the highlighted button always matches the data being
+        // loaded. Was a real bug: if initialRange='1D' the chart would
+        // load 1D data while MAX button was visually active —
+        // confused users into clicking ALL to "fix" it (which forced
+        // a re-render that revealed the actual mismatch).
+        cardElement.querySelectorAll('.range-btn').forEach(btn => {
+            const isActive = btn.dataset.range === initialRange;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+
         // Initialize Lightweight Chart. Bumped height 280→340 so more
         // of the price action is visible per chart card. Users wanted
         // more vertical breathing room when scrolling back through
