@@ -26,9 +26,21 @@ const CryptoChartModule = (function() {
                 textColor: 'rgba(255, 255, 255, 0.7)',
                 fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
             },
+            // Prefix all prices on the right axis with "$" so the user knows
+            // the unit at a glance. Uses toLocaleString for thousands
+            // separators (e.g., $76,359.50 instead of $76359.5).
+            localization: {
+                priceFormatter: (price) => '$' + Number(price).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                }),
+            },
             grid: {
                 vertLines: { visible: false },
-                horzLines: { color: 'rgba(255, 255, 255, 0.06)', style: 1 },
+                // Stronger horizontal gridlines so price levels are
+                // visually anchored. Was 0.06 (almost invisible);
+                // 0.14 reads as clear-but-not-distracting.
+                horzLines: { color: 'rgba(255, 255, 255, 0.14)', style: 1 },
             },
             crosshair: {
                 mode: LightweightCharts.CrosshairMode.Normal,
@@ -814,7 +826,7 @@ const CryptoChartModule = (function() {
         // Create area series with gradient
         const areaSeries = chart.addAreaSeries({
             lineColor: '#22c55e',
-            topColor: 'rgba(34, 197, 94, 0.4)',
+            topColor: 'rgba(34, 197, 94, 0.18)',
             bottomColor: 'rgba(34, 197, 94, 0.0)',
             lineWidth: 2,
             priceFormat: {
@@ -952,7 +964,7 @@ const CryptoChartModule = (function() {
                 // Update colors based on price direction
                 const isPositive = data.is_positive;
                 const lineColor = isPositive ? '#22c55e' : '#ef4444';
-                const topColor = isPositive ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+                const topColor = isPositive ? 'rgba(34, 197, 94, 0.18)' : 'rgba(239, 68, 68, 0.18)';
                 const bottomColor = isPositive ? 'rgba(34, 197, 94, 0.0)' : 'rgba(239, 68, 68, 0.0)';
 
                 instance.series.applyOptions({
