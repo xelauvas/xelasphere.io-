@@ -73,13 +73,15 @@ const CryptoChartModule = (function() {
                 timeVisible: true,
                 secondsVisible: false,
                 // Push the last data point all the way to the plot's
-                // right edge — default rightOffset reserves bar slots
-                // beyond the data which made the live-dot land 50-100px
-                // inside the chart instead of at its visible end.
+                // right edge so the line reaches the visible end.
                 rightOffset: 0,
-                // Prevent pan-past-end so users can't scroll into empty
-                // future space (which would also detach the live-dot).
-                fixRightEdge: true,
+                // No fixRightEdge: allow users to pan/zoom history
+                // freely. Series marker tracks pan/zoom automatically
+                // so the live indicator stays correct regardless.
+                rightBarStaysOnScroll: true,
+                // Default barSpacing kept; allow the user to zoom in
+                // tight by lowering minBarSpacing.
+                minBarSpacing: 0.5,
             },
             rightPriceScale: {
                 borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -940,11 +942,14 @@ const CryptoChartModule = (function() {
         const chartContainer = cardElement.querySelector('.crypto-chart-canvas');
         const loadingElement = cardElement.querySelector('.crypto-chart-loading');
 
-        // Initialize Lightweight Chart
+        // Initialize Lightweight Chart. Bumped height 280→340 so more
+        // of the price action is visible per chart card. Users wanted
+        // more vertical breathing room when scrolling back through
+        // history.
         const chart = LightweightCharts.createChart(chartContainer, {
             ...getDefaultChartOptions(),
             width: chartContainer.clientWidth,
-            height: 280,
+            height: 340,
         });
 
         // Create area series with gradient.
