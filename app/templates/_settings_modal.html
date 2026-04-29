@@ -42,7 +42,49 @@
             <main class="settings-modal-content">
                 <section class="settings-pane is-active" data-pane="general">
                     <h3>General</h3>
-                    <p class="settings-pane-empty">Coming Soon — placeholder until PR 4 wires Theme, Archived chats, and Delete all chats.</p>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <strong>Theme</strong>
+                            <span>Change how XelaSphere looks.</span>
+                        </div>
+                        <div class="settings-radio-group">
+                            <button type="button" class="settings-radio" data-theme-option="light">Light</button>
+                            <button type="button" class="settings-radio" data-theme-option="dark">Dark</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <strong>Archived chats</strong>
+                            <span>Restore, label, or delete archived threads.</span>
+                        </div>
+                        <button type="button" class="btn btn-secondary" disabled title="Coming Soon">Manage</button>
+                    </div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <strong>Archive all chats</strong>
+                            <span>Move current conversations into the archive.</span>
+                        </div>
+                        <button type="button" class="btn btn-secondary" disabled title="Coming Soon">Archive all</button>
+                    </div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <strong>Delete all chats</strong>
+                            <span>Irreversibly delete every chat from this workspace.</span>
+                        </div>
+                        <button type="button" class="btn btn-danger" data-action="delete-all-chats">Delete all</button>
+                    </div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <strong>Log out</strong>
+                            <span>Sign out from this device.</span>
+                        </div>
+                        <button type="button" class="btn btn-secondary" data-action="logout">Log out</button>
+                    </div>
                 </section>
                 <section class="settings-pane" data-pane="notifications">
                     <h3>Notifications</h3>

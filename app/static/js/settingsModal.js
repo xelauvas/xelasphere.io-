@@ -214,10 +214,90 @@
         }
     });
 
-    // Wrap open() so memory toggle state loads each time the modal opens.
+    /**
+     * Theme radio group wiring. Calls window.ThemeManager.setTheme(theme)
+     * which is the existing global theme controller.
+     */
+    function refreshThemeRadios() {
+        const current = (document.documentElement.getAttribute('data-theme') === 'light')
+            ? 'light' : 'dark';
+        document.querySelectorAll('[data-theme-option]').forEach(btn => {
+            btn.classList.toggle('is-active', btn.dataset.themeOption === current);
+        });
+    }
+
+    /**
+     * Delete all chats — exposed as window.deleteAllChats so the legacy
+     * /account/manage page button (still present until PR 5) and the new
+     * modal button both reach the same flow. Native confirm() instead of
+     * a styled modal — keeps PR 4 small. Can be replaced with a styled
+     * confirmation later.
+     */
+    window.deleteAllChats = async function deleteAllChats() {
+        const ok = window.confirm(
+            'Delete all chats? This cannot be undone.'
+        );
+        if (!ok) return;
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+                  || document.querySelector('input[name="csrf_token"]')?.value
+                  || '';
+        try {
+            const resp = await fetch('/chat/delete-all', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf
+                }
+            });
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(payload.error || `status ${resp.status}`);
+            if (window.Toast) {
+                window.Toast.success(payload.message || 'All chats deleted');
+            }
+            window.setTimeout(() => window.location.reload(), 800);
+        } catch (e) {
+            console.error('[SettingsModal] deleteAllChats failed:', e);
+            if (window.Toast) {
+                window.Toast.error('Failed to delete chats: ' + e.message);
+            }
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Theme radio buttons
+        document.querySelectorAll('[data-theme-option]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const theme = btn.dataset.themeOption;
+                if (window.ThemeManager && typeof window.ThemeManager.setTheme === 'function') {
+                    window.ThemeManager.setTheme(theme, true);
+                } else {
+                    document.documentElement.setAttribute('data-theme', theme);
+                }
+                refreshThemeRadios();
+            });
+        });
+
+        // Delete all chats — modal button
+        document.querySelectorAll('[data-action="delete-all-chats"]').forEach(btn => {
+            btn.addEventListener('click', () => window.deleteAllChats());
+        });
+
+        // Log out — submit the existing logout form
+        document.querySelectorAll('[data-action="logout"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const form = document.getElementById('logout-form');
+                if (form) form.submit();
+                else if (window.Toast) window.Toast.error('Log-out form not found');
+            });
+        });
+    });
+
+    // Wrap open() so toggle state + theme radios refresh each time the modal opens.
     const _origOpen = window.SettingsModal.open.bind(window.SettingsModal);
     window.SettingsModal.open = function(tabId) {
         _origOpen(tabId);
         loadMemoryToggleState();
+        refreshThemeRadios();
     };
 })();
