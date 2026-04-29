@@ -253,6 +253,36 @@
     z-index: 2300;
 }
 
+/* ---------- radio group ---------- */
+.settings-radio-group {
+    display: flex;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+    padding: 2px;
+}
+
+.settings-radio {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+}
+
+.settings-radio:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.settings-radio.is-active {
+    background: rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.98);
+}
+
 /* ---------- mobile ---------- */
 @media (max-width: 768px) {
     .settings-modal-backdrop {
