@@ -387,17 +387,49 @@
        (Kokoro local sidecar → Gemini → Groq fallback chain on the server)
        ==================================================================== */
 
-    const VOICE_PREVIEW_TEXT = 'Hi, I\'m your XelaSphere voice assistant.';
     const PLAY_BTN_DEFAULT_HTML = '<i class="fas fa-play"></i> Play';
     const PLAY_BTN_LOADING_HTML = '<i class="fas fa-spinner fa-spin"></i> Loading';
     const PLAY_BTN_STOP_HTML = '<i class="fas fa-stop"></i> Stop';
     let _activePreviewAudio = null;
 
+    // Per-voice introduction script — each voice tells its name + character.
+    // Key = backend voice name (data-dropdown-option value).
+    const VOICE_SAMPLES = {
+        'Sulafat':      "Hi, I'm Ember. My voice is warm and welcoming, perfect for cozy conversations.",
+        'Vindemiatrix': "Hi, I'm Maple. I'll keep things gentle and patient as we talk.",
+        'Aoede':        "Hey, I'm Sol. I bring brightness and a touch of energy to every chat.",
+        'Enceladus':    "Hi, I'm Cove. My voice is soft and intimate, made for thoughtful moments.",
+        'Zephyr':       "Hey there, I'm Spruce. Energetic and fresh, ready to go.",
+        'Callirrhoe':   "Hi, I'm Juniper. Patient, calm, and happy to take things slow.",
+        'Orus':         "Hi, I'm Vale. I speak with measured precision and steady clarity.",
+        'Charon':       "Hello, I'm Forge. Crisp and precise, focused on getting the details right.",
+        'Alnilam':      "I'm Onyx. Firm, grounded, here to bring weight to important things.",
+        'Fenrir':       "Hi, I'm Spark. Upbeat and energetic, let's make this fun.",
+        'Algieba':      "Hello, I'm Sage. Smooth and assured, with a touch of British warmth.",
+        'Gacrux':       "Hello, I'm Arbor. Mature and considered, with a British accent.",
+        'Rasalgethi':   "Good day, I'm Reed. Professional and polished, in the best British tradition."
+    };
+
+    const FALLBACK_PREVIEW_TEXT = "Hi, I'm your XelaSphere voice assistant.";
+
+    /**
+     * Public: read the user's preferred voice. Used by speechSynthesisModule,
+     * voiceModeModule, and any other future TTS caller so that the choice in
+     * Settings → General → Voice is the default everywhere.
+     */
+    window.getPreferredVoice = function getPreferredVoice() {
+        try {
+            const raw = localStorage.getItem('xelasphere-settings-prefs');
+            if (!raw) return 'Sulafat';
+            const prefs = JSON.parse(raw);
+            return prefs.voice || 'Sulafat';
+        } catch (e) {
+            return 'Sulafat';
+        }
+    };
+
     function getSelectedVoice() {
-        // Stored as the backend voice name (Sulafat, Charon, etc.) under
-        // pref key 'voice' by the dropdown change router.
-        const prefs = loadPrefs();
-        return prefs.voice || 'Sulafat';
+        return window.getPreferredVoice();
     }
 
     function resetPlayButton(btn) {
@@ -426,6 +458,8 @@
         }
 
         try {
+            const voice = getSelectedVoice();
+            const sample = VOICE_SAMPLES[voice] || FALLBACK_PREVIEW_TEXT;
             const resp = await fetch('/tts/groq', {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -434,8 +468,8 @@
                     'X-CSRFToken': csrf
                 },
                 body: JSON.stringify({
-                    text: VOICE_PREVIEW_TEXT,
-                    voice: getSelectedVoice(),
+                    text: sample,
+                    voice: voice,
                     lang: 'en'
                 })
             });
