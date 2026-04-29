@@ -13,8 +13,8 @@
 
     const MODELS = [
         { id: 'auto',              label: 'Chat',  icon: '', note: '', host: '', mono: false },
-        { id: 'deepseek-reasoner', label: 'Think', icon: '', note: '', host: '', mono: false },
-        { id: 'deepseek-chat',     label: 'Code',  icon: '', note: '', host: '', mono: true },
+        { id: 'deepseek-v4-pro',   label: 'Code',  icon: '', note: '', host: '', mono: true },
+        { id: 'deepseek-v4-flash', label: 'Think', icon: '', note: '', host: '', mono: false },
     ];
 
     const TASK_ICON_MAP = {
@@ -28,8 +28,8 @@
     };
 
     const TASK_MODEL_MAP = {
-        coding: 'deepseek-chat',
-        reasoning: 'deepseek-reasoner',
+        coding: 'deepseek-v4-pro',
+        reasoning: 'deepseek-v4-pro',
     };
 
     // ============================================
@@ -112,7 +112,7 @@
             this.debounceTimer = null;
 
             // Restore locked model from localStorage
-            const saved = localStorage.getItem('ghostLockedModel');
+            const saved = localStorage.getItem('ghostLockedModel_v2');
             if (saved && MODELS.some(m => m.id === saved)) {
                 this.lockedModel = saved;
             }
@@ -345,7 +345,7 @@
             if (modelId === 'auto') {
                 this.overrideModel = null;
                 this.lockedModel = null;
-                localStorage.removeItem('ghostLockedModel');
+                localStorage.removeItem('ghostLockedModel_v2');
             } else {
                 this.overrideModel = modelId;
             }
@@ -358,11 +358,11 @@
             if (modelId === 'auto') {
                 this.lockedModel = null;
                 this.overrideModel = null;
-                localStorage.removeItem('ghostLockedModel');
+                localStorage.removeItem('ghostLockedModel_v2');
             } else {
                 this.lockedModel = modelId;
                 this.overrideModel = null;
-                localStorage.setItem('ghostLockedModel', modelId);
+                localStorage.setItem('ghostLockedModel_v2', modelId);
             }
             this.closePills();
             this.closeSheet();
@@ -373,7 +373,7 @@
         clearLock() {
             this.lockedModel = null;
             this.overrideModel = null;
-            localStorage.removeItem('ghostLockedModel');
+            localStorage.removeItem('ghostLockedModel_v2');
             this.detectAndUpdate();
             this.buildPills();
             this.crossfadeGhost();

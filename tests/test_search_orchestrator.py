@@ -470,7 +470,7 @@ class TestModelFamily:
         self.orch = SearchOrchestrator()
 
     def test_deepseek_family(self):
-        assert self.orch._model_family('deepseek-chat') == 'deepseek'
+        assert self.orch._model_family('deepseek-v4-pro') == 'deepseek'
 
     def test_llama_family(self):
         assert self.orch._model_family('llama-3.1-70b') == 'llama'

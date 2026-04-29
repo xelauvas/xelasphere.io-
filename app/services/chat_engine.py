@@ -152,7 +152,8 @@ PROVIDER_SPECIFIC_MESSAGES = {
 # Ordered list of models to try for artifact generation.
 # When one fails to produce valid artifact JSON, try the next.
 ARTIFACT_MODEL_CASCADE = [
-    "deepseek-chat",
+    "deepseek-v4-pro",
+    "deepseek-v4-flash",
     "gpt-4.1",
     "qwen/qwen3-32b",
     "kimi-k2.5",
@@ -163,7 +164,7 @@ ARTIFACT_MODEL_CASCADE = [
 # Small/fast models should only get chat instructions — they can't reliably
 # follow the ACTION protocol with artifact fences.
 ARTIFACT_CAPABLE_MODELS = {
-    "deepseek-chat", "deepseek-reasoner",
+    "deepseek-v4-flash", "deepseek-v4-pro",
     "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
     "qwen/qwen3-32b", "qwen/qwq-32b",
     "kimi-k2.5", "kimi-latest",

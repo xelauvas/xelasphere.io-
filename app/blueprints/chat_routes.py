@@ -628,7 +628,7 @@ def chat_stream():
     request_mode = (request.form.get('mode') or 'auto').strip().lower()
     if request_mode not in _VALID_MODES:
         request_mode = 'auto'
-    model = request.form.get('model', 'deepseek-reasoner')
+    model = request.form.get('model', 'deepseek-v4-pro')
     logger.info(f"[Stream] Received model={model!r}")
     page_id = request.form.get('page_id', '').strip() or None
 
@@ -1147,8 +1147,8 @@ def chat_stream():
         resolved = resolve_model_id(stream_model)
         provider = MODEL_PROVIDERS.get(resolved, "")
         if provider not in ("deepseek", "moonshot", "openai", "groq", "cerebras", "gemini"):
-            stream_model = "deepseek-chat"
-            logger.info(f"🔀 [Stream] Overriding non-streaming model to deepseek-chat")
+            stream_model = "deepseek-v4-flash"
+            logger.info(f"🔀 [Stream] Overriding non-streaming model to deepseek-v4-flash")
         # Orchestrator validates provider health + quota, returns best available
         _orch_job = {"chat": "general_chat", "image_gen": "general_chat"}.get(task_type, task_type)
         _orch_model, _orch_provider, _orch_indicator = orchestrator_get_model(_orch_job, {})
