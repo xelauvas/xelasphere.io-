@@ -237,16 +237,32 @@ def _is_assistant_hedge_result(item: dict) -> bool:
 #   4. text length < ``_NEAR_DUPLICATE_QUESTION_MAX_LEN`` (200) so a
 #      long substantive user message that ends with a clarifying
 #      question stays.
+#   5. word count <= ``_NEAR_DUPLICATE_QUESTION_MAX_WORDS`` (12) — the
+#      finer-grained discriminator added 2026-04-29 after Tom bench
+#      surfaced answer-bearing user-questions like "Deploy target is a
+#      Hetzner box, ~4GB RAM. Does that change the DB recommendation?"
+#      (13 words) being misclassified as near-dups. Pure questions at
+#      observed natural-language lengths sit at 5-11 words (Marcus,
+#      Maya); answer-bearing questions with a declarative clause begin
+#      at 13+ words.
 _NEAR_DUPLICATE_QUESTION_RATIO = 0.7
 _NEAR_DUPLICATE_QUESTION_MAX_LEN = 200
+_NEAR_DUPLICATE_QUESTION_MAX_WORDS = 12
 
 
 def _looks_like_user_question(item: dict) -> bool:
-    """True iff item looks like a short user-turn question (no
-    ``ACTION: chat`` prefix, ends with ``?``, length < max). Used both
-    for near-dup filtering AND for computing the relative floor anchor:
-    we want the anchor to come from non-question items so the floor
-    isn't dominated by the questions we're trying to filter.
+    """True iff item looks like a short pure-question user turn — no
+    ``ACTION: chat`` prefix, ends with ``?``, length < max chars, AND
+    word count <= max words. Used both for near-dup filtering AND for
+    computing the relative floor anchor: we want the anchor to come
+    from non-pure-question items so the floor isn't dominated by the
+    questions we're trying to filter.
+
+    The word-count cap separates pure questions (5-11 words observed)
+    from answer-bearing questions with declarative clauses (13+ words):
+    a long user message that ends with a clarifying question carries
+    establishment-grade signal in its body and must not be misclassified
+    as near-dup noise.
     """
     text = item.get("text") if isinstance(item, dict) else None
     if not isinstance(text, str):
@@ -255,7 +271,11 @@ def _looks_like_user_question(item: dict) -> bool:
         return False
     if not text.rstrip().endswith("?"):
         return False
-    return len(text) < _NEAR_DUPLICATE_QUESTION_MAX_LEN
+    if len(text) >= _NEAR_DUPLICATE_QUESTION_MAX_LEN:
+        return False
+    if len(text.split()) > _NEAR_DUPLICATE_QUESTION_MAX_WORDS:
+        return False
+    return True
 
 
 def _is_near_duplicate_user_question(item: dict, *, sim_floor: float) -> bool:
