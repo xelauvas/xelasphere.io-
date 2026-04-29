@@ -168,7 +168,12 @@
                 option.addEventListener('click', e => {
                     e.stopPropagation();
                     const value = option.dataset.dropdownOption;
-                    const label = option.textContent.trim();
+                    // Use only the option's primary text node as the trigger
+                    // label, dropping any inline hint spans (e.g. "· af_heart").
+                    const labelNode = option.firstChild;
+                    const label = labelNode && labelNode.nodeType === Node.TEXT_NODE
+                        ? labelNode.textContent.trim()
+                        : option.textContent.trim();
                     setDropdownValue(dropdown, value, label);
                     onDropdownChange(dropdown.dataset.dropdown, value, label);
                     dropdown.classList.remove('is-open');
@@ -392,25 +397,40 @@
     const PLAY_BTN_STOP_HTML = '<i class="fas fa-stop"></i> Stop';
     let _activePreviewAudio = null;
 
-    // Per-voice introduction script — each voice tells its name + character.
-    // Key = backend voice name (data-dropdown-option value).
+    // Per-voice introduction scripts for the curated "Recommended" voices.
+    // Key = backend voice id (data-dropdown-option value, raw Kokoro id).
     const VOICE_SAMPLES = {
-        'Sulafat':      "Hi, I'm Ember. My voice is warm and welcoming, perfect for cozy conversations.",
-        'Vindemiatrix': "Hi, I'm Maple. I'll keep things gentle and patient as we talk.",
-        'Aoede':        "Hey, I'm Sol. I bring brightness and a touch of energy to every chat.",
-        'Enceladus':    "Hi, I'm Cove. My voice is soft and intimate, made for thoughtful moments.",
-        'Zephyr':       "Hey there, I'm Spruce. Energetic and fresh, ready to go.",
-        'Callirrhoe':   "Hi, I'm Juniper. Patient, calm, and happy to take things slow.",
-        'Orus':         "Hi, I'm Vale. I speak with measured precision and steady clarity.",
-        'Charon':       "Hello, I'm Forge. Crisp and precise, focused on getting the details right.",
-        'Alnilam':      "I'm Onyx. Firm, grounded, here to bring weight to important things.",
-        'Fenrir':       "Hi, I'm Spark. Upbeat and energetic, let's make this fun.",
-        'Algieba':      "Hello, I'm Sage. Smooth and assured, with a touch of British warmth.",
-        'Gacrux':       "Hello, I'm Arbor. Mature and considered, with a British accent.",
-        'Rasalgethi':   "Good day, I'm Reed. Professional and polished, in the best British tradition."
+        'af_heart':  "Hi, I'm Ember. My voice is warm and welcoming, perfect for cozy conversations.",
+        'af_sarah':  "Hi, I'm Maple. I'll keep things gentle and patient as we talk.",
+        'af_sky':    "Hey, I'm Sol. I bring brightness and a touch of energy to every chat.",
+        'am_adam':   "Hi, I'm Vale. I speak with measured precision and steady clarity.",
+        'bm_george': "Hello, I'm Arbor. Mature and considered, with a British accent."
     };
 
+    // Lookup tables for generating intro lines for the rest of the 54 voices.
+    const KOKORO_LANG_NAMES = {
+        a: 'American English', b: 'British English',
+        e: 'Spanish', f: 'French',
+        h: 'Hindi', i: 'Italian',
+        j: 'Japanese', p: 'Portuguese', z: 'Mandarin Chinese'
+    };
+    const KOKORO_GENDER_NAMES = { f: 'female', m: 'male' };
+
     const FALLBACK_PREVIEW_TEXT = "Hi, I'm your XelaSphere voice assistant.";
+
+    /**
+     * Generate a friendly intro line for any Kokoro voice id (e.g. "bm_lewis"
+     * or "zf_xiaoxiao") when no curated sample exists.
+     *   "Hi, I'm Lewis. I'm a British English male voice."
+     */
+    function buildVoiceIntro(voiceId, displayName) {
+        const m = /^([abefhijpz])([fm])_(.+)$/.exec(voiceId || '');
+        if (!m) return FALLBACK_PREVIEW_TEXT;
+        const lang = KOKORO_LANG_NAMES[m[1]] || 'this language';
+        const gender = KOKORO_GENDER_NAMES[m[2]] || '';
+        const name = (displayName || m[3]).replace(/^./, c => c.toUpperCase());
+        return `Hi, I'm ${name}. I'm a ${lang} ${gender} voice.`;
+    }
 
     /**
      * Public: read the user's preferred voice. Used by speechSynthesisModule,
@@ -420,11 +440,11 @@
     window.getPreferredVoice = function getPreferredVoice() {
         try {
             const raw = localStorage.getItem('xelasphere-settings-prefs');
-            if (!raw) return 'Sulafat';
+            if (!raw) return 'af_heart';
             const prefs = JSON.parse(raw);
-            return prefs.voice || 'Sulafat';
+            return prefs.voice || 'af_heart';
         } catch (e) {
-            return 'Sulafat';
+            return 'af_heart';
         }
     };
 
@@ -459,7 +479,14 @@
 
         try {
             const voice = getSelectedVoice();
-            const sample = VOICE_SAMPLES[voice] || FALLBACK_PREVIEW_TEXT;
+            // Find the option to extract its display name for the intro fallback
+            const opt = document.querySelector(
+                `.settings-dropdown[data-dropdown="voice"] [data-dropdown-option="${voice}"]`
+            );
+            const displayName = opt
+                ? (opt.firstChild ? opt.firstChild.textContent.trim() : opt.textContent.trim())
+                : null;
+            const sample = VOICE_SAMPLES[voice] || buildVoiceIntro(voice, displayName);
             const resp = await fetch('/tts/groq', {
                 method: 'POST',
                 credentials: 'same-origin',
