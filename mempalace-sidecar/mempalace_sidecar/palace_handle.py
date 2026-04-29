@@ -742,26 +742,33 @@ class PalaceHandle:
         )
         items = result.get("results", []) or []
         threshold = _semantic_score_threshold()
-        # Relative sim floor for near-dup question filter — anchored on
-        # the best NON-USER-QUESTION result so the floor doesn't pivot
-        # off the questions we're trying to drop. Falls back to +inf
-        # (no near-dup filtering) when retrieval returns only user
-        # questions, since dropping them would leave the caller with
-        # nothing.
+        # Two-pass filter so the relative near-dup floor anchors on
+        # items that actually survive — hedges drop in pass 1, so they
+        # don't pollute the floor anchor in pass 2. Marcus bench
+        # 2026-04-29: a 0.725 hedge was anchoring floor at 0.51, which
+        # then dropped legitimate items below 0.51 even though the hedge
+        # itself wouldn't survive. Computing floor AFTER hedge filter
+        # gives a 0.287 floor anchored on the 0.410 Sat-answer, surfacing
+        # the real establishment turn at 0.278.
+        score_and_hedge_filtered = [
+            r for r in items
+            if (r.get("similarity") or 0.0) >= threshold
+            and not _is_assistant_hedge_result(r)
+        ]
         non_question_sims = [
             r.get("similarity") or 0.0
-            for r in items
+            for r in score_and_hedge_filtered
             if not _looks_like_user_question(r)
         ]
         if non_question_sims:
             near_dup_floor = max(non_question_sims) * _NEAR_DUPLICATE_QUESTION_RATIO
         else:
+            # No non-question anchor → fall back to no near-dup filtering
+            # rather than empty the result.
             near_dup_floor = float("inf")
         filtered = [
-            r for r in items
-            if (r.get("similarity") or 0.0) >= threshold
-            and not _is_assistant_hedge_result(r)
-            and not _is_near_duplicate_user_question(r, sim_floor=near_dup_floor)
+            r for r in score_and_hedge_filtered
+            if not _is_near_duplicate_user_question(r, sim_floor=near_dup_floor)
         ]
         return filtered[:k]
 

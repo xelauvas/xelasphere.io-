@@ -828,6 +828,49 @@ def test_semantic_search_no_near_dup_filter_when_only_questions_returned(
     assert len(out) == 2
 
 
+def test_semantic_search_relative_floor_excludes_hedges_from_anchor(
+    handle, monkeypatch,
+):
+    """Regression test: the relative near-dup floor must be computed
+    AFTER hedge filtering, otherwise a high-sim hedge that gets dropped
+    pollutes the anchor and the floor ends up too high. Surfaced by
+    Marcus bench 2026-04-29: a 0.725 hedge anchored the floor at 0.51,
+    which dropped legitimate items below 0.51 even though the hedge
+    itself wouldn't survive.
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [
+            # High-sim hedge — drops in pass 1, must NOT anchor pass 2 floor.
+            {"text": "ACTION: chat\nI don't have any info about that.",
+             "similarity": 0.725},
+            # Real non-question answer at lower similarity:
+            {"text": "ACTION: chat\nThe deploy box is the Hetzner one. " * 20,
+             "similarity": 0.41},
+            # Low-sim user-statement establishment turn:
+            {"text": '"I am Marcus, sub-3:00 goal."', "similarity": 0.28},
+            # Tangential past question — should NOT drop because the
+            # correct floor is 0.41 * 0.7 = 0.287, and 0.42 > 0.287
+            # but a buggy v1 floor (0.725 * 0.7 = 0.51) would let it
+            # stay AND would drop the 0.28 establishment turn.
+            {"text": "What was that question I asked about deploys?",
+             "similarity": 0.42},
+        ]},
+    )
+    out = handle.semantic_search("any-q", k=5)
+    texts = [r["text"] for r in out]
+    # The 0.28 establishment turn must survive (proves floor isn't 0.51).
+    assert any("sub-3:00" in t for t in texts), (
+        f"Establishment turn dropped — relative floor likely anchored on hedge. "
+        f"Got: {texts}"
+    )
+    # The 0.42 tangential question must drop (proves floor IS being applied,
+    # at the correct anchored value of 0.287).
+    assert not any("question I asked" in t for t in texts), (
+        f"Tangential question survived — floor not applied. Got: {texts}"
+    )
+
+
 def test_semantic_search_relative_floor_anchored_on_non_questions_only(
     handle, monkeypatch,
 ):
