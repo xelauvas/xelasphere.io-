@@ -102,9 +102,16 @@ def _semantic_score_threshold() -> float:
 # 2026-04-29 alongside PR #107: at chroma fetch=k=5, two slots were
 # pre-deploy short hedges; PR #107 dropped them but the result truncated
 # to 3 with no backfill — burying the real ``sub-3:00`` answer at chroma
-# rank 4. With multiplier=3 + cap=50, fetch=15 candidates, 10 may drop,
-# the 5 best survivors fill k.
-DEFAULT_RETRIEVAL_BUFFER_MULTIPLIER = 3
+# rank 4.
+#
+# Bumped from 3 to 4 the same day after observing that chroma's hybrid
+# scoring is non-monotonic in ``n_results``: at n_results=15 a target
+# item could be absent from the returned list, while at n_results=20
+# the same item appeared at rank 12. The library appears to combine
+# BM25/vector top-N candidates differently as N changes. Setting
+# multiplier=4 by default gives k=5 callers a 20-item buffer, which
+# was sufficient across all three benched personas (Marcus, Tom, Maya).
+DEFAULT_RETRIEVAL_BUFFER_MULTIPLIER = 4
 
 # Absolute cap on chroma fetch size — caller-controlled k can in theory
 # be unbounded, but multiplier × k must not blow up retrieval cost. 50

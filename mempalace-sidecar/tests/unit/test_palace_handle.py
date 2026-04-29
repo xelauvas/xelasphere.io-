@@ -215,7 +215,7 @@ def test_semantic_search_returns_search_memories_shape(handle, monkeypatch):
     # Buffer-fetch contract: ask the library for k * multiplier candidates
     # so post-filter trim back to k doesn't truncate. Default multiplier
     # is 3 (see DEFAULT_RETRIEVAL_BUFFER_MULTIPLIER).
-    assert calls[0]["n_results"] == 15
+    assert calls[0]["n_results"] == 20
     # palace_path passed as a string, per library signature.
     assert isinstance(calls[0]["palace_path"], str)
 
@@ -419,9 +419,10 @@ def test_semantic_search_buffer_fetch_trims_to_k_after_filter(handle, monkeypatc
     dropped them but the result truncated to 3 with no backfill, burying
     the real ``sub-3:00`` answer at chroma rank 4.
 
-    This test simulates: caller asks k=3, library returns 9 candidates,
-    6 are filtered (4 hedges + 2 below floor), the 3 best survivors fill
-    the result. Without buffer-fetch the result would be 1 item.
+    This test simulates: caller asks k=3, library returns 12 candidates
+    (k * default multiplier 4), 9 are filtered (4 hedges + 5 below floor),
+    the 3 best survivors fill the result. Without buffer-fetch the result
+    would be < k.
     """
     captured: dict = {}
 
@@ -439,9 +440,12 @@ def test_semantic_search_buffer_fetch_trims_to_k_after_filter(handle, monkeypatc
                 {"text": "real answer one", "similarity": 0.60},
                 {"text": "real answer two", "similarity": 0.55},
                 {"text": "real answer three", "similarity": 0.50},
-                # 2 below-floor (filtered):
+                # 5 below-floor (filtered):
                 {"text": "noise one", "similarity": 0.10},
                 {"text": "noise two", "similarity": 0.05},
+                {"text": "noise three", "similarity": 0.04},
+                {"text": "noise four", "similarity": 0.03},
+                {"text": "noise five", "similarity": 0.02},
             ],
         }
 
@@ -450,8 +454,8 @@ def test_semantic_search_buffer_fetch_trims_to_k_after_filter(handle, monkeypatc
         capture_n_results,
     )
     out = handle.semantic_search("query", k=3)
-    # Library must have been asked for k * multiplier = 9 candidates.
-    assert captured["n_results"] == 9
+    # Library must have been asked for k * multiplier = 12 candidates.
+    assert captured["n_results"] == 12
     # Caller gets up to k=3 substantive items.
     assert len(out) == 3
     assert [r["text"] for r in out] == [
@@ -462,7 +466,7 @@ def test_semantic_search_buffer_fetch_trims_to_k_after_filter(handle, monkeypatc
 def test_semantic_search_buffer_fetch_caps_at_absolute_ceiling(handle, monkeypatch):
     """The buffer multiplier is bounded by ``DEFAULT_RETRIEVAL_BUFFER_CAP``
     (50) so a caller passing absurdly large k doesn't blow up the chroma
-    fetch. With multiplier=3, k=20 would be 60; cap clamps to 50.
+    fetch. With multiplier=4, k=20 would be 80; cap clamps to 50.
     """
     captured: dict = {}
 
@@ -512,7 +516,7 @@ def test_semantic_search_invalid_buffer_multiplier_falls_back(handle, monkeypatc
         "mempalace_sidecar.palace_handle._library_search_memories", capture,
     )
     handle.semantic_search("query", k=5)
-    assert captured["n_results"] == 15  # default multiplier=3
+    assert captured["n_results"] == 20  # default multiplier=4
 
 
 def test_semantic_search_zero_or_negative_buffer_multiplier_falls_back(
@@ -533,7 +537,7 @@ def test_semantic_search_zero_or_negative_buffer_multiplier_falls_back(
         "mempalace_sidecar.palace_handle._library_search_memories", capture,
     )
     handle.semantic_search("query", k=5)
-    assert captured["n_results"] == 15  # default multiplier=3
+    assert captured["n_results"] == 20  # default multiplier=4
 
 
 def test_semantic_search_drops_isnt_specified_hedge(handle, monkeypatch):
