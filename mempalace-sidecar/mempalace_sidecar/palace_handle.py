@@ -34,6 +34,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -93,6 +94,53 @@ def _semantic_score_threshold() -> float:
             raw, DEFAULT_SEMANTIC_SCORE_THRESHOLD,
         )
         return DEFAULT_SEMANTIC_SCORE_THRESHOLD
+
+
+# Read-time hedge filter (companion to PR #103 write-time filter in
+# ``app/mempalace/adapter.py``). PR #103 prevents new "I don't know"
+# assistant turns from being indexed; this filter drops pre-deploy hedges
+# that are still in older palaces and would otherwise outrank real
+# establishment turns at retrieval time. Surfaced by Marcus persona bench
+# 2026-04-29: "What's my A-race target time again?" returned a hedge at
+# similarity 0.705 ahead of the real "sub-3:00" turn at 0.436.
+#
+# Patterns and length threshold mirror PR #103 exactly. Filter applies
+# only to assistant turns — text whose body starts with the
+# ``ACTION: chat`` marker (the legacy adapter's prefix). User turns,
+# even short ones with hedge phrasing, carry establishment-grade signal
+# and are kept.
+_HEDGE_LEN_THRESHOLD = 250
+_HEDGE_ASSISTANT_PREFIX = "ACTION: chat"
+
+_HEDGE_PATTERNS = [
+    re.compile(r"\bi don'?t have (any|the)?\s*info", re.IGNORECASE),
+    re.compile(r"(you|i) haven'?t (been |yet )?(told|mentioned|said|provided)", re.IGNORECASE),
+    re.compile(r"\bcould you (please )?(provide|clarify|share|tell)", re.IGNORECASE),
+    re.compile(r"\bwithout (more )?(context|information|details)", re.IGNORECASE),
+    re.compile(r"\bi don'?t know\b", re.IGNORECASE),
+    re.compile(r"\bi'?m (sorry|not sure)\b", re.IGNORECASE),
+]
+
+
+def _is_assistant_hedge_result(item: dict) -> bool:
+    """True iff a search result looks like a short assistant hedge.
+
+    Three conditions, all required:
+      1. ``item['text']`` begins with the ``ACTION: chat`` marker (the
+         legacy assistant-turn prefix). User turns lack this prefix.
+      2. The full text length is below ``_HEDGE_LEN_THRESHOLD``.
+      3. The text matches at least one hedge pattern.
+
+    Returns False on any malformed item — defensive against schema drift.
+    """
+    text = item.get("text") if isinstance(item, dict) else None
+    if not isinstance(text, str):
+        return False
+    if not text.startswith(_HEDGE_ASSISTANT_PREFIX):
+        return False
+    if len(text) >= _HEDGE_LEN_THRESHOLD:
+        return False
+    return any(p.search(text) for p in _HEDGE_PATTERNS)
 
 
 # turns.sqlite DDL — literal schema from spec §5.3. Don't add columns.
@@ -534,20 +582,27 @@ class PalaceHandle:
 
         Bridged to ``searcher.search_memories`` which returns a dict
         envelope ``{"query", "filters", "total_before_filter", "results"}``.
-        We unwrap to the ``results`` list and apply the relevance-score
-        floor (``_semantic_score_threshold``, default 0.25) so off-topic
-        queries don't pollute the LLM's context with low-similarity
-        project memory.
+        We unwrap to the ``results`` list and apply two predicates:
 
-        Items missing the ``similarity`` field are treated as 0.0 and
-        dropped — defensive against library schema drift.
+        - relevance-score floor (``_semantic_score_threshold``, default 0.25)
+          so off-topic queries don't pollute the LLM's context with
+          low-similarity project memory.
+        - read-time hedge filter (companion to PR #103) drops short
+          assistant ``I don't know`` / ``could you clarify`` responses
+          that pre-date the write-time filter and still outrank real
+          turns. Items missing the ``similarity`` field are treated as
+          0.0 and dropped.
         """
         result = _library_search_memories(
             query, str(self.palace_path), n_results=k,
         )
         items = result.get("results", []) or []
         threshold = _semantic_score_threshold()
-        return [r for r in items if (r.get("similarity") or 0.0) >= threshold]
+        return [
+            r for r in items
+            if (r.get("similarity") or 0.0) >= threshold
+            and not _is_assistant_hedge_result(r)
+        ]
 
     # Our L2: v1 behaves identically to semantic_search. Topic-filter
     # logic is deferred — see spec §10 Open Question.

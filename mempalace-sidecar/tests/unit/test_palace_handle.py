@@ -303,6 +303,140 @@ def test_semantic_search_returns_empty_when_all_below_threshold(handle, monkeypa
     assert out == []
 
 
+def test_semantic_search_drops_assistant_hedge_at_read(handle, monkeypatch):
+    """Read-time hedge filter complements PR #103's write-time filter:
+    pre-deploy hedges already in the palace would otherwise outrank real
+    establishment turns at retrieval time. Surfaced by Marcus persona
+    bench (2026-04-29): "What's my A-race target time again?" returned
+    two hedge responses at similarities 0.705 and 0.509 ahead of the
+    real "sub-3:00" establishment turn at 0.436.
+
+    Filter mirrors PR #103: same patterns, same length threshold,
+    applied only to assistant turns (text starts with "ACTION: chat").
+    The two hedge texts below are the literal strings observed in the
+    bench-2026-04-29 probe.
+    """
+    hedge_a = (
+        "ACTION: chat\nYour A-race target time isn't specified in our "
+        "current conversation, and I don't have any prior information about "
+        "your target times. Could you please provide more context or specify "
+        "which race you're referring to?"
+    )
+    hedge_b = (
+        "ACTION: chat\nI don't have any information about your A-race, "
+        "including the date. If you could provide more context or details "
+        "about the race, I'd be happy to help you find the information "
+        "you're looking for."
+    )
+    real_answer = (
+        "ACTION: chat\nYour A-race goal is sub-3:00 in Boston 2027 "
+        "according to our earlier conversation. Coach Jenny Hadfield "
+        "has you doing 90-mile peak weeks with hill repeats."
+    )
+    # Both hedges must be under the length threshold or the filter is moot.
+    assert len(hedge_a) < 250
+    assert len(hedge_b) < 250
+
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {
+            "results": [
+                {"text": hedge_a, "similarity": 0.705},
+                {"text": real_answer, "similarity": 0.436},
+                {"text": hedge_b, "similarity": 0.509},
+            ],
+        },
+    )
+    out = handle.semantic_search("a-race target", k=5)
+    # Both hedges dropped, real establishment turn kept.
+    assert len(out) == 1
+    assert "sub-3:00" in out[0]["text"]
+
+
+def test_semantic_search_keeps_user_text_with_hedge_phrasing(handle, monkeypatch):
+    """Read-time hedge filter applies ONLY to assistant turns (text
+    prefixed "ACTION: chat"). User turns that happen to use hedge
+    phrasing must stay — they're real user statements that may carry
+    establishment-grade signal ("I don't know what to do about my
+    plantar fasciitis" is the user telling us about an injury).
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {
+            "results": [
+                # User turn — no ACTION: chat prefix. Kept regardless of phrasing.
+                {"text": "I don't know what to do about my plantar fasciitis.",
+                 "similarity": 0.55},
+                # Assistant hedge — dropped.
+                {"text": "ACTION: chat\nI don't know what you mean.",
+                 "similarity": 0.55},
+            ],
+        },
+    )
+    out = handle.semantic_search("plantar", k=5)
+    assert len(out) == 1
+    assert out[0]["text"].startswith("I don't know what to do")
+
+
+def test_semantic_search_keeps_long_assistant_response_with_hedge_phrase(
+    handle, monkeypatch,
+):
+    """Long substantive assistant responses must stay even when they
+    open with hedge phrasing. Threshold mirrors PR #103: items < 250
+    chars + matching pattern are filtered; longer responses carry real
+    semantic content. Without the length gate, every "I don't know
+    exactly, but here's what I can tell you..." answer gets dropped.
+    """
+    long_assistant = (
+        "ACTION: chat\nI don't know exactly what your peak mileage tolerance is, "
+        "but here's what I can tell you: at 90 mile weeks with chronic plantar "
+        "fasciitis, the typical marker for trouble is morning stiffness lasting "
+        "more than 10 minutes after waking. If you're crossing that threshold "
+        "consistently, drop volume by 15-20% for two weeks and add a daily 5-min "
+        "calf and arch mobility routine before reassessing."
+    )
+    assert len(long_assistant) >= 250  # invariant for the test premise
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {
+            "results": [
+                {"text": long_assistant, "similarity": 0.55},
+            ],
+        },
+    )
+    out = handle.semantic_search("mileage", k=5)
+    assert len(out) == 1
+    assert out[0]["text"] == long_assistant
+
+
+def test_semantic_search_hedge_filter_complements_score_floor(handle, monkeypatch):
+    """Both filters apply — a high-similarity hedge that passes the
+    score floor still gets dropped by the hedge filter, and a low-
+    similarity non-hedge still gets dropped by the score floor. Order
+    is irrelevant because the predicates compose by AND.
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {
+            "results": [
+                # High-similarity assistant hedge — score floor passes,
+                # hedge filter drops.
+                {"text": "ACTION: chat\nI don't have any info about that.",
+                 "similarity": 0.80},
+                # Low-similarity non-hedge — score floor drops.
+                {"text": "ACTION: chat\nA substantive answer that scores low.",
+                 "similarity": 0.10},
+                # High-similarity non-hedge — both pass.
+                {"text": "ACTION: chat\nA substantive answer that scores high.",
+                 "similarity": 0.60},
+            ],
+        },
+    )
+    out = handle.semantic_search("anything", k=5)
+    assert len(out) == 1
+    assert "scores high" in out[0]["text"]
+
+
 def test_list_drawers_offset_pagination(handle):
     # Insert 25 drawers.
     for i in range(25):
