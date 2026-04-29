@@ -360,6 +360,40 @@
                 </div>
             </div>
 
+            <!-- Memory toggles (master + per-system) — Tier-1 trust contract -->
+            <div class="memory-toggle-rows">
+                <div class="dream-toggle-row">
+                    <div class="dream-toggle-info">
+                        <span class="dream-toggle-label">Memory</span>
+                        <span class="dream-toggle-desc">Master switch — turn off all memory recall and writes for your account</span>
+                    </div>
+                    <label class="dream-switch">
+                        <input type="checkbox" id="memory-toggle-master" checked>
+                        <span class="dream-switch-slider"></span>
+                    </label>
+                </div>
+                <div class="dream-toggle-row">
+                    <div class="dream-toggle-info">
+                        <span class="dream-toggle-label">Reference saved memories</span>
+                        <span class="dream-toggle-desc">Use facts the AI has learned (Profile, Preferences, Projects, etc.)</span>
+                    </div>
+                    <label class="dream-switch">
+                        <input type="checkbox" id="memory-toggle-ref-v2" checked>
+                        <span class="dream-switch-slider"></span>
+                    </label>
+                </div>
+                <div class="dream-toggle-row">
+                    <div class="dream-toggle-info">
+                        <span class="dream-toggle-label">Reference chat history</span>
+                        <span class="dream-toggle-desc">Use past conversation turns for personalized recall</span>
+                    </div>
+                    <label class="dream-switch">
+                        <input type="checkbox" id="memory-toggle-ref-mempalace" checked>
+                        <span class="dream-switch-slider"></span>
+                    </label>
+                </div>
+            </div>
+
             <!-- Dream Toggle -->
             <div class="dream-toggle-row" id="dream-toggle-row">
                 <div class="dream-toggle-info">
@@ -665,6 +699,7 @@
             memoryModal.setAttribute('aria-hidden', 'false');
             loadMemories();
             if (typeof loadDreamToggle === 'function') loadDreamToggle();
+            if (typeof loadMemoryToggles === 'function') loadMemoryToggles();
         }
 
         function closeMemoryModal() {
@@ -1052,6 +1087,55 @@
             e.preventDefault();
             const activeFilter = document.querySelector('.conv-filter-chip.active')?.getAttribute('data-conv-filter') || 'all';
             fetchConversationMemory(activeFilter);
+        });
+
+        // ─── Memory toggles (master + per-system) ───
+        async function loadMemoryToggles() {
+            try {
+                const resp = await fetch('/user/memory-toggles', { credentials: 'same-origin' });
+                if (!resp.ok) return;
+                const t = await resp.json();
+                const master = document.getElementById('memory-toggle-master');
+                const refV2 = document.getElementById('memory-toggle-ref-v2');
+                const refMp = document.getElementById('memory-toggle-ref-mempalace');
+                if (master) master.checked = t.master !== false;
+                if (refV2) refV2.checked = t.ref_v2 !== false;
+                if (refMp) refMp.checked = t.ref_mempalace !== false;
+            } catch (e) {
+                console.warn('[memory-toggles] load failed:', e);
+            }
+        }
+
+        async function persistMemoryToggle(field, value, fieldId) {
+            try {
+                const resp = await fetch('/user/memory-toggles', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({ [field]: value }),
+                });
+                if (!resp.ok) {
+                    // Revert UI optimistic state
+                    const el = document.getElementById(fieldId);
+                    if (el) el.checked = !value;
+                    alert('Could not save preference; please retry.');
+                }
+            } catch (e) {
+                console.warn('[memory-toggles] persist failed:', e);
+            }
+        }
+
+        document.getElementById('memory-toggle-master')?.addEventListener('change', (e) => {
+            persistMemoryToggle('master', e.target.checked, 'memory-toggle-master');
+        });
+        document.getElementById('memory-toggle-ref-v2')?.addEventListener('change', (e) => {
+            persistMemoryToggle('ref_v2', e.target.checked, 'memory-toggle-ref-v2');
+        });
+        document.getElementById('memory-toggle-ref-mempalace')?.addEventListener('change', (e) => {
+            persistMemoryToggle('ref_mempalace', e.target.checked, 'memory-toggle-ref-mempalace');
         });
 
         // Conversation memory: per-row delete (delegated)
