@@ -72,6 +72,18 @@ const DEFAULT_TTS_VOICE = 'autumn';
 const DEFAULT_TTS_FORMAT = 'wav';
 const MAX_TTS_CHARACTERS = 10000;
 
+/**
+ * Read the user's preferred voice from settings. Falls back to the legacy
+ * DEFAULT_TTS_VOICE if unset or settings module isn't loaded yet. This lets
+ * the Voice choice in Settings → General → Voice apply to Read Aloud.
+ */
+function getPreferredVoiceOrDefault() {
+    if (typeof window.getPreferredVoice === 'function') {
+        try { return window.getPreferredVoice() || DEFAULT_TTS_VOICE; } catch (e) {}
+    }
+    return DEFAULT_TTS_VOICE;
+}
+
 function parseMessageSources(messageElement) {
     if (!messageElement) return [];
     const raw = messageElement.dataset?.sourceResults;
@@ -314,7 +326,7 @@ async function speakText(text, button) {
             if (_ttsAborted) break;
 
             // Send full text as voice_context so backend picks voice from full message, not chunk
-            const audioBuffer = await requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, DEFAULT_TTS_VOICE, '', sanitized);
+            const audioBuffer = await requestGroqTts(chunks[i], DEFAULT_TTS_FORMAT, getPreferredVoiceOrDefault(), '', sanitized);
             if (_ttsAborted) break;
 
             isFetchingAudio = false;

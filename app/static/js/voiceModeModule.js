@@ -71,7 +71,12 @@ const VoiceModeModule = (function() {
     const VAD_INTERVAL = 50;
 
     // ── Voice shortcuts ──
-    let _preferredVoice = 'auto';
+    // Initial preferred voice from Settings → General → Voice; falls back to
+    // 'auto' (lets the backend pick based on content). This default is what
+    // applies on a fresh voice-mode session before the LLM locks a voice mid-stream.
+    let _preferredVoice = (typeof window.getPreferredVoice === 'function')
+        ? (window.getPreferredVoice() || 'auto')
+        : 'auto';
     let _detectedLang = 'en';
 
     // ── Streaming TTS Pipeline ──
