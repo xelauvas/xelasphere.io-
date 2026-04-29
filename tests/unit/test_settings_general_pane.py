@@ -10,10 +10,11 @@ def _render(client):
         return client.get('/')
 
 
-def test_general_pane_has_theme_radio_buttons(authenticated_client, mock_firestore):
+def test_general_pane_has_three_theme_radio_buttons(authenticated_client, mock_firestore):
     resp = _render(authenticated_client)
-    assert b'data-theme-option="light"' in resp.data
+    assert b'data-theme-option="system"' in resp.data
     assert b'data-theme-option="dark"' in resp.data
+    assert b'data-theme-option="light"' in resp.data
 
 
 def test_general_pane_has_delete_all_chats_button(authenticated_client, mock_firestore):
