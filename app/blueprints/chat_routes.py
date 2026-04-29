@@ -139,6 +139,33 @@ logger = logging.getLogger(__name__)
 chat_bp = Blueprint('chat', __name__)
 
 
+def _read_memory_toggles(user_id: str) -> dict:
+    """Read user's memory toggle prefs once per request.
+
+    Defaults all-true if doc missing. Errors fail-OPEN (return defaults)
+    so a Firestore blip never accidentally turns memory off mid-request.
+
+    Stored at users/{uid}/preferences/memory per the trust-contract Week 1
+    design (see docs/superpowers/specs/2026-04-29-mempalace-trust-contract-design.md).
+    """
+    if not user_id:
+        return {"master": True, "ref_v2": True, "ref_mempalace": True}
+    try:
+        snap = db.collection("users").document(user_id) \
+                 .collection("preferences").document("memory").get()
+        if not snap.exists:
+            return {"master": True, "ref_v2": True, "ref_mempalace": True}
+        data = snap.to_dict() or {}
+        return {
+            "master": bool(data.get("master", True)),
+            "ref_v2": bool(data.get("ref_v2", True)),
+            "ref_mempalace": bool(data.get("ref_mempalace", True)),
+        }
+    except Exception:
+        logger.warning("memory toggle read failed; defaulting all-on", exc_info=True)
+        return {"master": True, "ref_v2": True, "ref_mempalace": True}
+
+
 @chat_bp.route('/chat/new', methods=['POST'])
 @limiter.limit("20 per minute")
 @csrf_required
@@ -859,7 +886,15 @@ def chat_stream():
     memory_eval_metadata_stream = None
     long_term_memory_stream = ""
 
-    if not guest_mode and user_id:
+    # Read user memory toggles once per request — gates retrieval + writes.
+    # Fail-OPEN on Firestore blips: never accidentally turn memory off.
+    _mem_toggles = _read_memory_toggles(user_id) if user_id else {
+        "master": True, "ref_v2": True, "ref_mempalace": True,
+    }
+    _mp_allowed = _mem_toggles["master"] and _mem_toggles["ref_mempalace"]
+    _v2_allowed = _mem_toggles["master"] and _mem_toggles["ref_v2"]
+
+    if not guest_mode and user_id and _v2_allowed:
         try:
             memory_session_ctx = SessionContext(
                 user_id=user_id,
@@ -947,7 +982,7 @@ def chat_stream():
     _mp_active_injected = False  # set True iff ACTIVE mode injects recall
     try:
         _mp_mode = _mempalace_mode()
-        if _mp_mode != _MempalaceMode.OFF and user_id:
+        if _mp_mode != _MempalaceMode.OFF and user_id and _mp_allowed:
             _mp_adapter = _mempalace_get_adapter()
             _mp_wake = _mp_adapter.wake_up_sync(user_id, display_prompt, session_id=session_id)
             if _mp_mode == _MempalaceMode.SHADOW:
@@ -985,7 +1020,7 @@ def chat_stream():
     # and recall-questions only).
     _mp_stream_pair_id = str(uuid.uuid4())
     try:
-        if user_id and session_id:
+        if user_id and session_id and _mp_allowed:
             _mempalace_get_adapter().record_turn(
                 user_id=user_id,
                 session_id=session_id,
@@ -1452,7 +1487,7 @@ def chat_stream():
             # Same pair_id as the user-half (line 967); _final_content is the
             # synthesized search response. Mode-gated; off = no-op.
             try:
-                if user_id and session_id and _final_content:
+                if user_id and session_id and _final_content and _mp_allowed:
                     _mempalace_get_adapter().record_turn(
                         user_id=user_id,
                         session_id=session_id,
@@ -1479,7 +1514,7 @@ def chat_stream():
                 # Same pair_id as the user-half (line 967); _cached_resp is the
                 # cached assistant text being served. Mode-gated; off = no-op.
                 try:
-                    if user_id and session_id and _cached_resp:
+                    if user_id and session_id and _cached_resp and _mp_allowed:
                         _mempalace_get_adapter().record_turn(
                             user_id=user_id,
                             session_id=session_id,
@@ -2236,7 +2271,7 @@ def chat_stream():
                             # mempalace-side failure cannot corrupt the SSE stream.
                             # ============================================================
                             try:
-                                if user_id and session_id and full_content:
+                                if user_id and session_id and full_content and _mp_allowed:
                                     _mempalace_get_adapter().record_turn(
                                         user_id=user_id,
                                         session_id=session_id,
@@ -2697,43 +2732,55 @@ def chat():
         message_mode = get_message_mode(user_prompt)
         logger.debug(f"Message mode: {message_mode} (prompt_len={len(user_prompt)})")
 
+        # Read user memory toggles once per request — gates retrieval + writes
+        # in the same way the streaming path does. Fail-OPEN on Firestore blips.
+        _mem_toggles = _read_memory_toggles(user_id) if user_id else {
+            "master": True, "ref_v2": True, "ref_mempalace": True,
+        }
+        _mp_allowed = _mem_toggles["master"] and _mem_toggles["ref_mempalace"]
+        _v2_allowed = _mem_toggles["master"] and _mem_toggles["ref_v2"]
+
         # ============================================================
         # Memory V2: Get memory context via orchestrator
         # ============================================================
-        logger.info(f"🧠 Memory V2: Starting retrieval for user {user_id}")
         memory_eval_metadata = None
         memory_orchestrator = None  # Kept for post_turn() call later
+        long_term_memory = ""
+        if not _v2_allowed:
+            logger.debug("Memory V2 retrieval skipped (user toggle off)")
         try:
-            # Build session context for Memory V2
-            memory_session_ctx = SessionContext(
-                user_id=user_id,
-                device_id=session.get('_device_id'),
-                is_new_device=session.get('_is_new_device', False)
-            )
+            if _v2_allowed:
+                logger.info(f"🧠 Memory V2: Starting retrieval for user {user_id}")
+                # Build session context for Memory V2
+                memory_session_ctx = SessionContext(
+                    user_id=user_id,
+                    device_id=session.get('_device_id'),
+                    is_new_device=session.get('_is_new_device', False)
+                )
 
-            # Get conversation state from session (for pending confirmations)
-            conv_state = ConversationState(
-                pending_confirmation_ids=session.get('_memory_pending_ids', []),
-                last_retrieved_ids=session.get('_memory_last_ids', []),
-                messages_in_session=len(previous_messages)
-            )
+                # Get conversation state from session (for pending confirmations)
+                conv_state = ConversationState(
+                    pending_confirmation_ids=session.get('_memory_pending_ids', []),
+                    last_retrieved_ids=session.get('_memory_last_ids', []),
+                    messages_in_session=len(previous_messages)
+                )
 
-            # Create orchestrator and get context
-            memory_orchestrator = MemoryOrchestrator(user_id, memory_session_ctx)
-            memory_context = memory_orchestrator.get_context(display_prompt, conv_state)
+                # Create orchestrator and get context
+                memory_orchestrator = MemoryOrchestrator(user_id, memory_session_ctx)
+                memory_context = memory_orchestrator.get_context(display_prompt, conv_state)
 
-            # Use context_block as long_term_memory
-            if memory_context.memory_disabled:
-                long_term_memory = ""
-                logger.debug(f"Memory disabled: {memory_context.disable_reason}")
-            else:
-                long_term_memory = memory_context.context_block
-                memory_eval_metadata = memory_context.eval_metadata
-                logger.info(f"🧠 Memory V2: Retrieved {len(memory_context.eval_metadata.retrieved_ids)} memories")
+                # Use context_block as long_term_memory
+                if memory_context.memory_disabled:
+                    long_term_memory = ""
+                    logger.debug(f"Memory disabled: {memory_context.disable_reason}")
+                else:
+                    long_term_memory = memory_context.context_block
+                    memory_eval_metadata = memory_context.eval_metadata
+                    logger.info(f"🧠 Memory V2: Retrieved {len(memory_context.eval_metadata.retrieved_ids)} memories")
 
-                # Check for action required (low-confidence confirmation)
-                if memory_context.action_required:
-                    logger.debug(f"Memory action required: {memory_context.action_required.action_type}")
+                    # Check for action required (low-confidence confirmation)
+                    if memory_context.action_required:
+                        logger.debug(f"Memory action required: {memory_context.action_required.action_type}")
 
         except Exception as e:
             logger.error(f"🧠 Memory V2 retrieval FAILED: {e}", exc_info=True)
@@ -2804,7 +2851,7 @@ def chat():
         # See wrapping-template comment at the streaming site for semantics.
         try:
             _mp_mode = _mempalace_mode()
-            if _mp_mode != _MempalaceMode.OFF and user_id:
+            if _mp_mode != _MempalaceMode.OFF and user_id and _mp_allowed:
                 _mp_adapter = _mempalace_get_adapter()
                 _mp_wake = _mp_adapter.wake_up_sync(user_id, display_prompt, session_id=session_id)
                 if _mp_mode == _MempalaceMode.SHADOW:
@@ -2835,7 +2882,7 @@ def chat():
         # M0.18: record_turn for the user half (mode-gated; off = no-op).
         # pair_id/turn_id generated above at response_message_id block.
         try:
-            if user_id and session_id:
+            if user_id and session_id and _mp_allowed:
                 _mempalace_get_adapter().record_turn(
                     user_id=user_id,
                     session_id=session_id,
@@ -3383,7 +3430,7 @@ def chat():
         # M0.18: record_turn for the assistant half (mode-gated; off = no-op).
         # Paired with the user-turn record_turn above via shared pair_id.
         try:
-            if user_id and session_id and response_text:
+            if user_id and session_id and response_text and _mp_allowed:
                 _mempalace_get_adapter().record_turn(
                     user_id=user_id,
                     session_id=session_id,
