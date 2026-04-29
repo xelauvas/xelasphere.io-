@@ -225,6 +225,7 @@
         document.querySelectorAll('.settings-dropdown[data-dropdown]').forEach(dropdown => {
             const key = dropdown.dataset.dropdown;
             if (key === 'appearance') return;  // handled separately by theme
+            if (PERSONALIZATION_DROPDOWN_KEYS.has(key)) return;  // in-memory only
             const stored = prefs[key];
             if (!stored) return;
             const option = dropdown.querySelector(`[data-dropdown-option="${stored}"]`);
@@ -243,9 +244,12 @@
     }
 
     function bindToggleClicks() {
-        // Memory toggles + pref toggles share click semantics: flip
-        // aria-checked on click, then dispatch the appropriate save handler.
-        document.querySelectorAll('[data-memory-toggle], [data-pref-toggle]').forEach(btn => {
+        // Three flavors of toggle, all sharing the same click → aria-checked flip.
+        // Routing on which dataset attr is present determines persistence:
+        //   data-memory-toggle        → POST /user/memory-toggles (server)
+        //   data-pref-toggle          → localStorage (PREF_STORAGE_KEY)
+        //   data-personalization-toggle → in-memory only (personalizationState)
+        document.querySelectorAll('[data-memory-toggle], [data-pref-toggle], [data-personalization-toggle]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const newValue = !getToggleState(btn);
                 setToggleState(btn, newValue);
@@ -253,10 +257,68 @@
                     saveMemoryToggle(btn.dataset.memoryToggle, newValue);
                 } else if (btn.dataset.prefToggle) {
                     setPref(btn.dataset.prefToggle, newValue);
+                } else if (btn.dataset.personalizationToggle) {
+                    personalizationState[btn.dataset.personalizationToggle] = newValue;
                 }
             });
         });
     }
+
+    /* ====================================================================
+       Personalization pane — in-memory state (no persistence per spec v1)
+       ==================================================================== */
+
+    // Dropdown keys that belong to the Personalization pane. Routing in
+    // onDropdownChange treats them as in-memory rather than localStorage.
+    const PERSONALIZATION_DROPDOWN_KEYS = new Set([
+        'p-base-style', 'p-warm', 'p-enthusiastic', 'p-headers-lists', 'p-emoji'
+    ]);
+
+    const personalizationState = {
+        'p-base-style': 'default',
+        'p-warm': 'default',
+        'p-enthusiastic': 'default',
+        'p-headers-lists': 'default',
+        'p-emoji': 'default',
+        'p-fast-answers': true,
+        'p-record-history': false,
+        'p-web-search': true,
+        'p-canvas': true,
+        'p-voice': true,
+        'p-advanced-voice': true,
+        'p-connector-search': true,
+        'p-custom-instructions': '',
+        'p-nickname': '',
+        'p-occupation': '',
+        'p-more-about-you': '',
+        'p-advanced-open': false
+    };
+
+    function bindPersonalizationInputs() {
+        document.querySelectorAll('[data-personalization-input]').forEach(input => {
+            input.addEventListener('input', () => {
+                personalizationState[input.dataset.personalizationInput] = input.value;
+            });
+        });
+    }
+
+    function bindCollapsibles() {
+        document.querySelectorAll('[data-collapsible-trigger]').forEach(trigger => {
+            trigger.addEventListener('click', () => {
+                const expanded = trigger.getAttribute('aria-expanded') === 'true';
+                trigger.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+                const section = trigger.closest('[data-collapsible]');
+                if (section && section.id === 'personalization-advanced') {
+                    personalizationState['p-advanced-open'] = !expanded;
+                }
+            });
+        });
+    }
+
+    // Expose for tests / debug — read-only snapshot.
+    window.__getPersonalizationState = function () {
+        return Object.assign({}, personalizationState);
+    };
 
     /* ====================================================================
        Theme dropdown — System / Dark / Light
@@ -313,6 +375,11 @@
     function onDropdownChange(key, value, label) {
         if (key === 'appearance') {
             applyTheme(value);
+            return;
+        }
+        if (PERSONALIZATION_DROPDOWN_KEYS.has(key)) {
+            // Personalization pane v1 — in-memory only, no persistence.
+            personalizationState[key] = value;
             return;
         }
         // Other dropdowns persist locally; no backend in V1
@@ -569,6 +636,8 @@
     document.addEventListener('DOMContentLoaded', () => {
         bindDropdowns();
         bindToggleClicks();
+        bindPersonalizationInputs();
+        bindCollapsibles();
 
         // Manage memory button
         document.querySelectorAll('[data-action="open-memory-modal"]').forEach(btn => {
