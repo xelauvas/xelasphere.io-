@@ -578,16 +578,25 @@
     cursor: not-allowed;
 }
 
-/* ---------- memory child modal (legacy markup, globally included) ---------- */
+/* ================================================================
+   Memory child modal — themed to match settings modal
+   (legacy markup from settings_api_keys.html, included globally;
+   styles here apply on the chat page where api-keys.css doesn't load
+   AND override api-keys.css on /account/manage via #id specificity)
+   ================================================================ */
+
 #memory-modal,
 #clear-memory-confirm-modal {
     position: fixed;
     inset: 0;
-    background: rgba(6, 8, 15, 0.8);
+    background: rgba(0, 0, 0, 0.45);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
     display: none;
     align-items: center;
     justify-content: center;
-    padding: 1rem;
+    padding: 24px;
+    box-sizing: border-box;
 }
 
 #memory-modal[aria-hidden="false"],
@@ -595,14 +604,665 @@
 #memory-modal.open,
 #clear-memory-confirm-modal.open {
     display: flex;
+    animation: settings-fade-in 180ms ease-out;
 }
 
-#memory-modal {
-    z-index: 2200;
+#memory-modal { z-index: 2200; }
+#clear-memory-confirm-modal { z-index: 2300; }
+
+#memory-modal .modal-card,
+#clear-memory-confirm-modal .modal-card {
+    position: relative;
+    background: #ffffff;
+    color: #0d0d0d;
+    border-radius: 16px;
+    padding: 24px;
+    width: 100%;
+    max-width: 480px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.04),
+        0 16px 48px rgba(0, 0, 0, 0.18);
+    border: none;
+    animation: settings-slide-up 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-#clear-memory-confirm-modal {
-    z-index: 2300;
+#memory-modal .modal-card-lg {
+    max-width: 640px;
+}
+
+#memory-modal .modal-close-btn,
+#clear-memory-confirm-modal .modal-close-btn {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    transition: background 120ms ease, color 120ms ease;
+}
+
+#memory-modal .modal-close-btn:hover,
+#clear-memory-confirm-modal .modal-close-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: rgba(0, 0, 0, 0.92);
+}
+
+/* ---------- Memory modal header ---------- */
+#memory-modal .memory-modal-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding-right: 32px; /* leave room for close btn */
+    margin: 0;
+    border: none;
+}
+
+#memory-modal .memory-modal-header .modal-icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(0, 0, 0, 0.78);
+    font-size: 1rem;
+    margin: 0;
+}
+
+#memory-modal .memory-modal-header h3 {
+    margin: 0 0 2px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.95);
+    letter-spacing: -0.01em;
+}
+
+#memory-modal .memory-modal-header p {
+    margin: 0;
+    font-size: 0.825rem;
+    color: rgba(0, 0, 0, 0.55);
+    line-height: 1.4;
+}
+
+/* ---------- Memory modal toggle rows (re-skin .dream-toggle-row + .dream-switch) ---------- */
+#memory-modal .memory-toggle-rows,
+#memory-modal .dream-toggle-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+}
+
+#memory-modal .memory-toggle-rows .dream-toggle-row,
+#memory-modal > .modal-card > .dream-toggle-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    background: transparent;
+    border-radius: 0;
+}
+
+#memory-modal .memory-toggle-rows .dream-toggle-row:first-child {
+    border-top: none;
+}
+
+#memory-modal .dream-toggle-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+#memory-modal .dream-toggle-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.92);
+    line-height: 1.3;
+}
+
+#memory-modal .dream-toggle-desc {
+    font-size: 0.78rem;
+    color: rgba(0, 0, 0, 0.55);
+    line-height: 1.4;
+}
+
+/* Re-skin .dream-switch to match settings-toggle (44×24 pill) */
+#memory-modal .dream-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    min-width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+#memory-modal .dream-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+    margin: 0;
+    padding: 0;
+}
+
+#memory-modal .dream-switch-slider {
+    position: absolute;
+    inset: 0;
+    background: #d1d5db;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#memory-modal .dream-switch-slider::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: #ffffff;
+    border-radius: 50%;
+    transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+#memory-modal .dream-switch input:checked + .dream-switch-slider {
+    background: #3b82f6;
+}
+
+#memory-modal .dream-switch input:checked + .dream-switch-slider::before {
+    transform: translateX(20px);
+}
+
+/* ---------- Memory modal tab strip ---------- */
+#memory-modal .memory-tab-toggle {
+    display: flex;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 8px;
+    padding: 3px;
+    margin: 0;
+}
+
+#memory-modal .memory-tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: rgba(0, 0, 0, 0.6);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+}
+
+#memory-modal .memory-tab-btn:hover:not(.active) {
+    color: rgba(0, 0, 0, 0.85);
+}
+
+#memory-modal .memory-tab-btn.active {
+    background: #ffffff;
+    color: rgba(0, 0, 0, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* ---------- Memory tab panels ---------- */
+#memory-modal .memory-tab-panel {
+    display: none;
+}
+
+#memory-modal .memory-tab-panel.active {
+    display: block;
+}
+
+#memory-modal .memory-list-container,
+#memory-modal .conversation-memory-container,
+#memory-modal .dream-activity-container {
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 10px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+#memory-modal .memory-loading,
+#memory-modal .memory-empty,
+#memory-modal .conversation-loading,
+#memory-modal .conversation-empty,
+#memory-modal .dream-activity-loading,
+#memory-modal .dream-activity-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 28px 16px;
+    color: rgba(0, 0, 0, 0.45);
+    font-size: 0.82rem;
+    text-align: center;
+}
+
+#memory-modal .memory-empty i,
+#memory-modal .conversation-empty i,
+#memory-modal .dream-activity-empty i {
+    font-size: 1.4rem;
+    opacity: 0.6;
+    margin-bottom: 4px;
+}
+
+/* Conversation memory rows */
+#memory-modal .conversation-memory-filter {
+    display: flex;
+    gap: 6px;
+    padding: 6px 8px 10px;
+}
+
+#memory-modal .conv-filter-chip {
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    color: rgba(0, 0, 0, 0.6);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 120ms ease;
+}
+
+#memory-modal .conv-filter-chip:hover:not(.active) {
+    background: rgba(0, 0, 0, 0.04);
+    color: rgba(0, 0, 0, 0.85);
+}
+
+#memory-modal .conv-filter-chip.active {
+    background: rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.95);
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
+#memory-modal .conv-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+}
+
+#memory-modal .conv-row:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+#memory-modal .conv-role-badge {
+    flex-shrink: 0;
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1.3;
+    margin-top: 1px;
+}
+
+#memory-modal .conv-role-user {
+    background: rgba(34, 197, 94, 0.12);
+    color: #15803d;
+}
+
+#memory-modal .conv-role-assistant {
+    background: rgba(59, 130, 246, 0.12);
+    color: #1e40af;
+}
+
+#memory-modal .conv-text {
+    flex: 1;
+    font-size: 0.82rem;
+    color: rgba(0, 0, 0, 0.78);
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+#memory-modal .conv-delete-btn {
+    background: transparent;
+    border: none;
+    color: rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: color 120ms ease, background 120ms ease;
+}
+
+#memory-modal .conv-delete-btn:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+}
+
+/* ---------- Memory modal footer ---------- */
+#memory-modal .memory-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    margin: 0;
+    background: transparent;
+}
+
+#memory-modal .memory-count {
+    font-size: 0.78rem;
+    color: rgba(0, 0, 0, 0.55);
+}
+
+#memory-modal .memory-actions {
+    display: flex;
+    gap: 8px;
+}
+
+#memory-modal .btn,
+#clear-memory-confirm-modal .btn {
+    font-size: 0.8125rem;
+    padding: 6px 14px;
+    border-radius: 8px;
+    line-height: 1.3;
+    font-weight: 500;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 120ms ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#memory-modal .btn-ghost {
+    background: transparent;
+    color: rgba(0, 0, 0, 0.7);
+    border-color: rgba(0, 0, 0, 0.12);
+}
+
+#memory-modal .btn-ghost:hover {
+    background: rgba(0, 0, 0, 0.04);
+    color: rgba(0, 0, 0, 0.92);
+}
+
+#memory-modal .btn-danger,
+#clear-memory-confirm-modal .btn-danger {
+    background: transparent;
+    color: #dc2626;
+    border-color: rgba(220, 38, 38, 0.4);
+}
+
+#memory-modal .btn-danger:hover,
+#clear-memory-confirm-modal .btn-danger:hover {
+    background: rgba(220, 38, 38, 0.06);
+    border-color: rgba(220, 38, 38, 0.6);
+}
+
+#clear-memory-confirm-modal .btn-secondary {
+    background: #ffffff;
+    color: rgba(0, 0, 0, 0.92);
+    border-color: rgba(0, 0, 0, 0.18);
+}
+
+#clear-memory-confirm-modal .btn-secondary:hover {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.25);
+}
+
+/* ---------- Clear memory confirmation modal ---------- */
+#clear-memory-confirm-modal .modal-card {
+    max-width: 420px;
+    text-align: left;
+}
+
+#clear-memory-confirm-modal .modal-icon.caution {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    margin: 0;
+}
+
+#clear-memory-confirm-modal h3 {
+    margin: 0 0 6px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.95);
+}
+
+#clear-memory-confirm-modal p,
+#clear-memory-confirm-modal ul {
+    color: rgba(0, 0, 0, 0.65);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+#clear-memory-confirm-modal ul {
+    padding-left: 1.2rem;
+    margin: 6px 0;
+}
+
+#clear-memory-confirm-modal strong {
+    color: rgba(0, 0, 0, 0.85);
+    font-weight: 600;
+}
+
+#clear-memory-confirm-modal .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+/* ---------- Dark theme overrides for memory modal ---------- */
+[data-theme="dark"] #memory-modal .modal-card,
+[data-theme="dark"] #clear-memory-confirm-modal .modal-card {
+    background: #2f2f2f;
+    color: rgba(255, 255, 255, 0.92);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.04),
+        0 16px 48px rgba(0, 0, 0, 0.55);
+}
+
+[data-theme="dark"] #memory-modal .modal-close-btn,
+[data-theme="dark"] #clear-memory-confirm-modal .modal-close-btn {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+[data-theme="dark"] #memory-modal .modal-close-btn:hover,
+[data-theme="dark"] #clear-memory-confirm-modal .modal-close-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.92);
+}
+
+[data-theme="dark"] #memory-modal .memory-modal-header .modal-icon {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+[data-theme="dark"] #memory-modal .memory-modal-header h3 {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="dark"] #memory-modal .memory-modal-header p {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+[data-theme="dark"] #memory-modal .memory-toggle-rows .dream-toggle-row,
+[data-theme="dark"] #memory-modal > .modal-card > .dream-toggle-row {
+    border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] #memory-modal .dream-toggle-label {
+    color: rgba(255, 255, 255, 0.92);
+}
+
+[data-theme="dark"] #memory-modal .dream-toggle-desc {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+[data-theme="dark"] #memory-modal .dream-switch-slider {
+    background: #4a4a4f;
+}
+
+[data-theme="dark"] #memory-modal .memory-tab-toggle {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] #memory-modal .memory-tab-btn {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+[data-theme="dark"] #memory-modal .memory-tab-btn:hover:not(.active) {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+[data-theme="dark"] #memory-modal .memory-tab-btn.active {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.98);
+    box-shadow: none;
+}
+
+[data-theme="dark"] #memory-modal .memory-list-container,
+[data-theme="dark"] #memory-modal .conversation-memory-container,
+[data-theme="dark"] #memory-modal .dream-activity-container {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] #memory-modal .memory-loading,
+[data-theme="dark"] #memory-modal .memory-empty,
+[data-theme="dark"] #memory-modal .conversation-loading,
+[data-theme="dark"] #memory-modal .conversation-empty {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+[data-theme="dark"] #memory-modal .conv-filter-chip {
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.6);
+}
+
+[data-theme="dark"] #memory-modal .conv-filter-chip:hover:not(.active) {
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+[data-theme="dark"] #memory-modal .conv-filter-chip.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.95);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="dark"] #memory-modal .conv-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] #memory-modal .conv-text {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+[data-theme="dark"] #memory-modal .conv-role-user {
+    background: rgba(74, 222, 128, 0.15);
+    color: #4ade80;
+}
+
+[data-theme="dark"] #memory-modal .conv-role-assistant {
+    background: rgba(96, 165, 250, 0.15);
+    color: #93c5fd;
+}
+
+[data-theme="dark"] #memory-modal .memory-modal-footer {
+    border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] #memory-modal .memory-count {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+[data-theme="dark"] #memory-modal .btn-ghost {
+    color: rgba(255, 255, 255, 0.78);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] #memory-modal .btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="dark"] #memory-modal .btn-danger,
+[data-theme="dark"] #clear-memory-confirm-modal .btn-danger {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.4);
+}
+
+[data-theme="dark"] #memory-modal .btn-danger:hover,
+[data-theme="dark"] #clear-memory-confirm-modal .btn-danger:hover {
+    background: rgba(248, 113, 113, 0.1);
+    border-color: rgba(248, 113, 113, 0.6);
+}
+
+[data-theme="dark"] #clear-memory-confirm-modal .btn-secondary {
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.92);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+[data-theme="dark"] #clear-memory-confirm-modal .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="dark"] #clear-memory-confirm-modal h3 {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="dark"] #clear-memory-confirm-modal p,
+[data-theme="dark"] #clear-memory-confirm-modal ul {
+    color: rgba(255, 255, 255, 0.65);
+}
+
+[data-theme="dark"] #clear-memory-confirm-modal strong {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+[data-theme="dark"] #clear-memory-confirm-modal .modal-icon.caution {
+    background: rgba(248, 113, 113, 0.15);
+    color: #f87171;
 }
 
 /* ---------- mobile (≤640px) ---------- */
