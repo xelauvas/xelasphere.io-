@@ -1,16 +1,24 @@
 /**
  * SettingsModal — singleton controller for the global settings modal.
- * Mirrors ChatGPT's Settings modal: left-rail navigation, content panes
- * swap on tab click. ESC / backdrop / X all close.
+ * ChatGPT-parity v2: top-left close, 240px grey rail with 9 sections,
+ * General pane with MFA promo card + dropdowns + toggles.
  */
 (function() {
     'use strict';
 
     const VALID_TABS = new Set([
-        'general', 'notifications', 'personalization', 'speech',
-        'data', 'connected', 'security', 'api-keys'
+        'general', 'notifications', 'personalization', 'apps',
+        'schedules', 'data', 'security', 'parental', 'account', 'api-keys'
     ]);
     const DEFAULT_TAB = 'general';
+
+    const PREF_STORAGE_KEY = 'xelasphere-settings-prefs';
+    const MFA_DISMISSED_KEY = 'xelasphere-settings-mfa-dismissed';
+    const THEME_STORAGE_KEY = 'xelasphere-theme';
+
+    /* ====================================================================
+       Modal controller
+       ==================================================================== */
 
     class SettingsModalController {
         constructor() {
@@ -33,20 +41,14 @@
             this._railItems = this._modal.querySelectorAll('.settings-rail-item');
             this._panes = this._modal.querySelectorAll('.settings-pane');
 
-            // Tab clicks
             this._railItems.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    this.setTab(btn.dataset.tab);
-                });
+                btn.addEventListener('click', () => this.setTab(btn.dataset.tab));
             });
 
-            // Close button(s)
             this._modal.querySelectorAll('[data-settings-close]').forEach(btn => {
                 btn.addEventListener('click', () => this.close());
             });
 
-            // Backdrop click closes (only when target IS the modal element itself,
-            // not a descendant — so clicks inside the dialog don't close it)
             this._modal.addEventListener('click', e => {
                 if (e.target === this._modal) this.close();
             });
@@ -69,7 +71,6 @@
             this._modal.setAttribute('aria-hidden', 'false');
             document.body.classList.add('settings-modal-open');
 
-            // ESC handler — added on open, removed on close
             this._boundEsc = e => {
                 if (e.key === 'Escape') {
                     e.stopPropagation();
@@ -78,15 +79,22 @@
             };
             document.addEventListener('keydown', this._boundEsc);
 
-            // Focus the active rail item for keyboard navigation
             const activeRailItem = this._modal.querySelector('.settings-rail-item.is-active');
             if (activeRailItem) activeRailItem.focus();
+
+            // Refresh local state for all pane controls
+            loadMemoryToggleState();
+            refreshThemeDropdown();
+            refreshPrefDropdowns();
+            refreshPrefToggles();
+            refreshMfaCard();
         }
 
         close() {
             if (!this._modal) return;
             this._modal.setAttribute('aria-hidden', 'true');
             document.body.classList.remove('settings-modal-open');
+            closeAllDropdowns();
 
             if (this._boundEsc) {
                 document.removeEventListener('keydown', this._boundEsc);
@@ -120,23 +128,208 @@
 
     window.SettingsModal = new SettingsModalController();
 
-    // Hijack any element with data-settings-trigger to open the modal.
-    // The optional value of the attribute is the tab id to land on.
+    /* ====================================================================
+       Sidebar trigger hijack
+       ==================================================================== */
+
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('[data-settings-trigger]').forEach(el => {
             el.addEventListener('click', e => {
                 e.preventDefault();
-                const tabId = el.dataset.settingsTrigger || undefined;
-                window.SettingsModal.open(tabId);
+                window.SettingsModal.open(el.dataset.settingsTrigger || undefined);
             });
         });
     });
 
-    /**
-     * Memory toggle wiring. Mirrors the legacy settings_api_keys.html flow
-     * but lives in this controller so it survives PR 5's deletion of that
-     * template.
-     */
+    /* ====================================================================
+       Dropdown popover behavior
+       ==================================================================== */
+
+    function closeAllDropdowns() {
+        document.querySelectorAll('.settings-dropdown.is-open').forEach(d => {
+            d.classList.remove('is-open');
+        });
+    }
+
+    function bindDropdowns() {
+        document.querySelectorAll('.settings-dropdown').forEach(dropdown => {
+            const trigger = dropdown.querySelector('[data-dropdown-trigger]');
+            const menu = dropdown.querySelector('[data-dropdown-menu]');
+            if (!trigger || !menu) return;
+
+            trigger.addEventListener('click', e => {
+                e.stopPropagation();
+                const wasOpen = dropdown.classList.contains('is-open');
+                closeAllDropdowns();
+                if (!wasOpen) dropdown.classList.add('is-open');
+            });
+
+            menu.querySelectorAll('[data-dropdown-option]').forEach(option => {
+                option.addEventListener('click', e => {
+                    e.stopPropagation();
+                    const value = option.dataset.dropdownOption;
+                    const label = option.textContent.trim();
+                    setDropdownValue(dropdown, value, label);
+                    onDropdownChange(dropdown.dataset.dropdown, value, label);
+                    dropdown.classList.remove('is-open');
+                });
+            });
+        });
+
+        // Click anywhere outside an open dropdown closes it
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.settings-dropdown')) closeAllDropdowns();
+        });
+    }
+
+    function setDropdownValue(dropdown, value, label) {
+        const labelEl = dropdown.querySelector('[data-dropdown-label]');
+        if (labelEl) labelEl.textContent = label;
+        dropdown.querySelectorAll('[data-dropdown-option]').forEach(opt => {
+            opt.classList.toggle('is-selected', opt.dataset.dropdownOption === value);
+        });
+    }
+
+    /* ====================================================================
+       Preferences (localStorage-backed, no backend)
+       ==================================================================== */
+
+    function loadPrefs() {
+        try {
+            const raw = localStorage.getItem(PREF_STORAGE_KEY);
+            return raw ? JSON.parse(raw) : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function savePrefs(prefs) {
+        try {
+            localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify(prefs));
+        } catch (e) {}
+    }
+
+    function setPref(key, value) {
+        const prefs = loadPrefs();
+        prefs[key] = value;
+        savePrefs(prefs);
+    }
+
+    function refreshPrefDropdowns() {
+        const prefs = loadPrefs();
+        document.querySelectorAll('.settings-dropdown[data-dropdown]').forEach(dropdown => {
+            const key = dropdown.dataset.dropdown;
+            if (key === 'appearance') return;  // handled separately by theme
+            const stored = prefs[key];
+            if (!stored) return;
+            const option = dropdown.querySelector(`[data-dropdown-option="${stored}"]`);
+            if (option) {
+                setDropdownValue(dropdown, stored, option.textContent.trim());
+            }
+        });
+    }
+
+    function refreshPrefToggles() {
+        const prefs = loadPrefs();
+        document.querySelectorAll('[data-pref-toggle]').forEach(input => {
+            const key = input.dataset.prefToggle;
+            if (key in prefs) input.checked = !!prefs[key];
+        });
+    }
+
+    function bindPrefToggles() {
+        document.querySelectorAll('[data-pref-toggle]').forEach(input => {
+            input.addEventListener('change', () => {
+                setPref(input.dataset.prefToggle, input.checked);
+            });
+        });
+    }
+
+    /* ====================================================================
+       Theme dropdown — System / Dark / Light
+       ==================================================================== */
+
+    function getStoredTheme() {
+        try {
+            return localStorage.getItem(THEME_STORAGE_KEY);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function getSystemTheme() {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+            return 'light';
+        }
+        return 'dark';
+    }
+
+    function applyTheme(option) {
+        if (option === 'system') {
+            const osTheme = getSystemTheme();
+            if (window.ThemeManager && typeof window.ThemeManager.setTheme === 'function') {
+                window.ThemeManager.setTheme(osTheme, true);
+            } else {
+                document.documentElement.setAttribute('data-theme', osTheme);
+            }
+            try { localStorage.removeItem(THEME_STORAGE_KEY); } catch (e) {}
+        } else if (option === 'light' || option === 'dark') {
+            if (window.ThemeManager && typeof window.ThemeManager.setTheme === 'function') {
+                window.ThemeManager.setTheme(option, true);
+            } else {
+                document.documentElement.setAttribute('data-theme', option);
+            }
+        }
+    }
+
+    function refreshThemeDropdown() {
+        const stored = getStoredTheme();
+        const active = (stored === 'light' || stored === 'dark') ? stored : 'system';
+        const dropdown = document.querySelector('.settings-dropdown[data-dropdown="appearance"]');
+        if (!dropdown) return;
+        const option = dropdown.querySelector(`[data-dropdown-option="${active}"]`);
+        if (option) {
+            setDropdownValue(dropdown, active, option.textContent.trim());
+        }
+    }
+
+    /* ====================================================================
+       Dropdown change router
+       ==================================================================== */
+
+    function onDropdownChange(key, value, label) {
+        if (key === 'appearance') {
+            applyTheme(value);
+            return;
+        }
+        // Other dropdowns persist locally; no backend in V1
+        setPref(key, value);
+    }
+
+    /* ====================================================================
+       MFA promo card
+       ==================================================================== */
+
+    function refreshMfaCard() {
+        const card = document.getElementById('settings-mfa-card');
+        if (!card) return;
+        let dismissed = false;
+        try {
+            dismissed = localStorage.getItem(MFA_DISMISSED_KEY) === 'true';
+        } catch (e) {}
+        card.setAttribute('aria-hidden', dismissed ? 'true' : 'false');
+    }
+
+    function dismissMfaCard() {
+        const card = document.getElementById('settings-mfa-card');
+        if (card) card.setAttribute('aria-hidden', 'true');
+        try { localStorage.setItem(MFA_DISMISSED_KEY, 'true'); } catch (e) {}
+    }
+
+    /* ====================================================================
+       Memory toggles + Manage memory child modal
+       ==================================================================== */
+
     async function loadMemoryToggleState() {
         try {
             const resp = await fetch('/user/memory-toggles', { credentials: 'same-origin' });
@@ -173,117 +366,12 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        // Toggle change handlers
-        document.querySelectorAll('[data-memory-toggle]').forEach(input => {
-            input.addEventListener('change', () => {
-                saveMemoryToggle(input.dataset.memoryToggle, input.checked);
-            });
-        });
+    /* ====================================================================
+       Delete all chats — exposed as window-global
+       ==================================================================== */
 
-        // Manage memory button → open the memory child modal. Markup is
-        // rendered globally from _settings_memory_modal.html.
-        document.querySelectorAll('[data-action="open-memory-modal"]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const memoryModal = document.getElementById('memory-modal');
-                if (memoryModal) {
-                    memoryModal.setAttribute('aria-hidden', 'false');
-                } else {
-                    console.warn('[SettingsModal] #memory-modal not in DOM');
-                }
-            });
-        });
-
-        // Backdrop + close button close the memory child modal. The legacy
-        // settings_api_keys.html inline JS wires the same handlers, but it
-        // doesn't run on /chat pages, so we wire them here for the global
-        // path. Setting aria-hidden twice is a no-op.
-        const memoryModal = document.getElementById('memory-modal');
-        if (memoryModal) {
-            memoryModal.addEventListener('click', e => {
-                if (e.target === memoryModal) {
-                    memoryModal.setAttribute('aria-hidden', 'true');
-                }
-            });
-            const closeBtn = document.getElementById('close-memory-modal');
-            if (closeBtn) {
-                closeBtn.addEventListener('click', () => {
-                    memoryModal.setAttribute('aria-hidden', 'true');
-                });
-            }
-        }
-    });
-
-    /**
-     * Theme radio group wiring (System / Dark / Light).
-     *
-     * - 'dark' / 'light': call window.ThemeManager.setTheme() — persists to
-     *   localStorage and applies the theme.
-     * - 'system': read the current OS preference via matchMedia, apply that
-     *   theme (so the page updates immediately), then remove the stored key
-     *   so the next page load re-reads the OS preference.
-     *
-     * The "active" indicator reads localStorage directly:
-     *   no key → System
-     *   'light' / 'dark' → that explicit choice
-     */
-    const THEME_STORAGE_KEY = 'xelasphere-theme';
-
-    function getStoredTheme() {
-        try {
-            return localStorage.getItem(THEME_STORAGE_KEY);
-        } catch (e) {
-            return null;
-        }
-    }
-
-    function getSystemTheme() {
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-            return 'light';
-        }
-        return 'dark';
-    }
-
-    function refreshThemeRadios() {
-        const stored = getStoredTheme();
-        const active = (stored === 'light' || stored === 'dark') ? stored : 'system';
-        document.querySelectorAll('[data-theme-option]').forEach(btn => {
-            btn.classList.toggle('is-active', btn.dataset.themeOption === active);
-        });
-    }
-
-    function selectTheme(option) {
-        if (option === 'system') {
-            // Apply OS preference immediately, then clear the stored key so
-            // future loads continue to follow the OS.
-            const osTheme = getSystemTheme();
-            if (window.ThemeManager && typeof window.ThemeManager.setTheme === 'function') {
-                window.ThemeManager.setTheme(osTheme, true);
-            } else {
-                document.documentElement.setAttribute('data-theme', osTheme);
-            }
-            try { localStorage.removeItem(THEME_STORAGE_KEY); } catch (e) {}
-        } else if (option === 'light' || option === 'dark') {
-            if (window.ThemeManager && typeof window.ThemeManager.setTheme === 'function') {
-                window.ThemeManager.setTheme(option, true);
-            } else {
-                document.documentElement.setAttribute('data-theme', option);
-            }
-        }
-        refreshThemeRadios();
-    }
-
-    /**
-     * Delete all chats — exposed as window.deleteAllChats so the legacy
-     * /account/manage page button (still present until PR 5) and the new
-     * modal button both reach the same flow. Native confirm() instead of
-     * a styled modal — keeps PR 4 small. Can be replaced with a styled
-     * confirmation later.
-     */
     window.deleteAllChats = async function deleteAllChats() {
-        const ok = window.confirm(
-            'Delete all chats? This cannot be undone.'
-        );
+        const ok = window.confirm('Delete all chats? This cannot be undone.');
         if (!ok) return;
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content
                   || document.querySelector('input[name="csrf_token"]')?.value
@@ -311,34 +399,78 @@
         }
     };
 
+    /* ====================================================================
+       Wire all pane interactions on DOMContentLoaded
+       ==================================================================== */
+
     document.addEventListener('DOMContentLoaded', () => {
-        // Theme radio buttons (System / Dark / Light)
-        document.querySelectorAll('[data-theme-option]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                selectTheme(btn.dataset.themeOption);
+        bindDropdowns();
+        bindPrefToggles();
+
+        // Memory toggles
+        document.querySelectorAll('[data-memory-toggle]').forEach(input => {
+            input.addEventListener('change', () => {
+                saveMemoryToggle(input.dataset.memoryToggle, input.checked);
             });
         });
 
-        // Delete all chats — modal button
+        // Manage memory button
+        document.querySelectorAll('[data-action="open-memory-modal"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const memoryModal = document.getElementById('memory-modal');
+                if (memoryModal) {
+                    memoryModal.setAttribute('aria-hidden', 'false');
+                }
+            });
+        });
+
+        // Memory child modal close (backdrop + X)
+        const memoryModal = document.getElementById('memory-modal');
+        if (memoryModal) {
+            memoryModal.addEventListener('click', e => {
+                if (e.target === memoryModal) {
+                    memoryModal.setAttribute('aria-hidden', 'true');
+                }
+            });
+            const closeBtn = document.getElementById('close-memory-modal');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    memoryModal.setAttribute('aria-hidden', 'true');
+                });
+            }
+        }
+
+        // MFA card dismiss
+        document.querySelectorAll('[data-action="dismiss-mfa"]').forEach(btn => {
+            btn.addEventListener('click', dismissMfaCard);
+        });
+
+        // MFA setup CTA (no-op for now)
+        document.querySelectorAll('[data-action="setup-mfa"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                console.log('[SettingsModal] MFA setup not wired yet');
+                if (window.Toast) window.Toast.info('MFA setup coming soon');
+            });
+        });
+
+        // Voice preview play (no-op for now)
+        document.querySelectorAll('[data-action="play-voice-preview"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                console.log('[SettingsModal] play voice preview');
+            });
+        });
+
+        // Delete all chats
         document.querySelectorAll('[data-action="delete-all-chats"]').forEach(btn => {
             btn.addEventListener('click', () => window.deleteAllChats());
         });
 
-        // Log out — submit the existing logout form
+        // Logout
         document.querySelectorAll('[data-action="logout"]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const form = document.getElementById('logout-form');
                 if (form) form.submit();
-                else if (window.Toast) window.Toast.error('Log-out form not found');
             });
         });
     });
-
-    // Wrap open() so toggle state + theme radios refresh each time the modal opens.
-    const _origOpen = window.SettingsModal.open.bind(window.SettingsModal);
-    window.SettingsModal.open = function(tabId) {
-        _origOpen(tabId);
-        loadMemoryToggleState();
-        refreshThemeRadios();
-    };
 })();

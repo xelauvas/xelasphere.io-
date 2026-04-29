@@ -1,12 +1,9 @@
 {# Settings modal — ChatGPT-parity. Included once in index.html. #}
 <div class="settings-modal-backdrop" id="settings-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
     <div class="settings-modal-dialog" role="document">
-        <header class="settings-modal-header">
-            <h2 id="settings-modal-title">Settings</h2>
-            <button type="button" class="settings-modal-close" data-settings-close aria-label="Close settings">
-                <i class="fas fa-xmark"></i>
-            </button>
-        </header>
+        <button type="button" class="settings-modal-close" data-settings-close aria-label="Close settings">
+            <i class="fas fa-xmark"></i>
+        </button>
 
         <div class="settings-modal-body">
             <nav class="settings-modal-rail" aria-label="Settings sections">
@@ -17,19 +14,25 @@
                     <i class="fas fa-bell"></i><span>Notifications</span>
                 </button>
                 <button type="button" class="settings-rail-item" data-tab="personalization">
-                    <i class="fas fa-user"></i><span>Personalization</span>
+                    <i class="fas fa-wand-magic-sparkles"></i><span>Personalization</span>
                 </button>
-                <button type="button" class="settings-rail-item" data-tab="speech">
-                    <i class="fas fa-microphone"></i><span>Speech</span>
+                <button type="button" class="settings-rail-item" data-tab="apps">
+                    <i class="fas fa-table-cells-large"></i><span>Apps</span>
+                </button>
+                <button type="button" class="settings-rail-item" data-tab="schedules">
+                    <i class="fas fa-clock"></i><span>Schedules</span>
                 </button>
                 <button type="button" class="settings-rail-item" data-tab="data">
-                    <i class="fas fa-shield-halved"></i><span>Data Controls</span>
-                </button>
-                <button type="button" class="settings-rail-item" data-tab="connected">
-                    <i class="fas fa-plug"></i><span>Connected apps</span>
+                    <i class="fas fa-database"></i><span>Data controls</span>
                 </button>
                 <button type="button" class="settings-rail-item" data-tab="security">
-                    <i class="fas fa-lock"></i><span>Security</span>
+                    <i class="fas fa-shield-halved"></i><span>Security</span>
+                </button>
+                <button type="button" class="settings-rail-item" data-tab="parental">
+                    <i class="fas fa-users"></i><span>Parental controls</span>
+                </button>
+                <button type="button" class="settings-rail-item" data-tab="account">
+                    <i class="fas fa-circle-user"></i><span>Account</span>
                 </button>
                 {% if is_admin %}
                 <div class="settings-rail-divider"></div>
@@ -41,24 +44,118 @@
 
             <main class="settings-modal-content">
                 <section class="settings-pane is-active" data-pane="general">
-                    <h3>General</h3>
+                    <h2 class="settings-pane-title">General</h2>
+
+                    <div class="settings-mfa-card" id="settings-mfa-card" aria-hidden="false">
+                        <div class="settings-mfa-icon">
+                            <i class="fas fa-shield-halved"></i>
+                        </div>
+                        <div class="settings-mfa-text">
+                            <strong>Secure your account</strong>
+                            <p>Add multi-factor authentication (MFA), like a text message or authenticator app, to help protect your account when logging in.</p>
+                            <button type="button" class="btn-pill" data-action="setup-mfa">Set up MFA</button>
+                        </div>
+                        <button type="button" class="settings-mfa-dismiss" data-action="dismiss-mfa" aria-label="Dismiss">
+                            <i class="fas fa-xmark"></i>
+                        </button>
+                    </div>
 
                     <div class="settings-row">
                         <div class="settings-row-text">
-                            <strong>Theme</strong>
-                            <span>Change how XelaSphere looks.</span>
+                            <strong>Appearance</strong>
                         </div>
-                        <div class="settings-radio-group">
-                            <button type="button" class="settings-radio" data-theme-option="system">System</button>
-                            <button type="button" class="settings-radio" data-theme-option="dark">Dark</button>
-                            <button type="button" class="settings-radio" data-theme-option="light">Light</button>
+                        <div class="settings-dropdown" data-dropdown="appearance">
+                            <button type="button" class="settings-dropdown-trigger" data-dropdown-trigger>
+                                <span data-dropdown-label>System</span>
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                            <ul class="settings-dropdown-menu" data-dropdown-menu role="listbox">
+                                <li data-dropdown-option="system">System</li>
+                                <li data-dropdown-option="dark">Dark</li>
+                                <li data-dropdown-option="light">Light</li>
+                            </ul>
                         </div>
                     </div>
 
                     <div class="settings-row">
                         <div class="settings-row-text">
+                            <strong>Language</strong>
+                        </div>
+                        <div class="settings-dropdown" data-dropdown="language">
+                            <button type="button" class="settings-dropdown-trigger" data-dropdown-trigger>
+                                <span data-dropdown-label>Auto-detect</span>
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                            <ul class="settings-dropdown-menu" data-dropdown-menu role="listbox">
+                                <li data-dropdown-option="auto">Auto-detect</li>
+                                <li data-dropdown-option="en">English</li>
+                                <li data-dropdown-option="es">Spanish</li>
+                                <li data-dropdown-option="fr">French</li>
+                                <li data-dropdown-option="de">German</li>
+                                <li data-dropdown-option="ro">Romanian</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="settings-row settings-row--with-helper">
+                        <div class="settings-row-text">
+                            <strong>Spoken language</strong>
+                            <p class="settings-row-helper">For best results, select the language you mainly speak. If it's not listed, it may still be supported via auto-detection.</p>
+                        </div>
+                        <div class="settings-dropdown" data-dropdown="spoken-language">
+                            <button type="button" class="settings-dropdown-trigger" data-dropdown-trigger>
+                                <span data-dropdown-label>Auto-detect</span>
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                            <ul class="settings-dropdown-menu" data-dropdown-menu role="listbox">
+                                <li data-dropdown-option="auto">Auto-detect</li>
+                                <li data-dropdown-option="en">English</li>
+                                <li data-dropdown-option="es">Spanish</li>
+                                <li data-dropdown-option="fr">French</li>
+                                <li data-dropdown-option="de">German</li>
+                                <li data-dropdown-option="ro">Romanian</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <strong>Voice</strong>
+                        </div>
+                        <div class="settings-row-control-group">
+                            <button type="button" class="settings-play-btn" data-action="play-voice-preview">
+                                <i class="fas fa-play"></i> Play
+                            </button>
+                            <div class="settings-dropdown" data-dropdown="voice">
+                                <button type="button" class="settings-dropdown-trigger" data-dropdown-trigger>
+                                    <span data-dropdown-label>Ember</span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                                <ul class="settings-dropdown-menu" data-dropdown-menu role="listbox">
+                                    <li data-dropdown-option="ember">Ember</li>
+                                    <li data-dropdown-option="maple">Maple</li>
+                                    <li data-dropdown-option="sol">Sol</li>
+                                    <li data-dropdown-option="vale">Vale</li>
+                                    <li data-dropdown-option="arbor">Arbor</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-row settings-row--with-helper">
+                        <div class="settings-row-text">
+                            <strong>Separate Voice</strong>
+                            <p class="settings-row-helper">Keep XelaSphere Voice in a separate full screen, without real-time transcripts and visuals.</p>
+                        </div>
+                        <label class="settings-toggle">
+                            <input type="checkbox" data-pref-toggle="separate_voice" checked>
+                            <span class="settings-toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
                             <strong>Archived chats</strong>
-                            <span>Restore, label, or delete archived threads.</span>
                         </div>
                         <button type="button" class="btn btn-secondary" disabled title="Coming Soon">Manage</button>
                     </div>
@@ -66,7 +163,6 @@
                     <div class="settings-row">
                         <div class="settings-row-text">
                             <strong>Archive all chats</strong>
-                            <span>Move current conversations into the archive.</span>
                         </div>
                         <button type="button" class="btn btn-secondary" disabled title="Coming Soon">Archive all</button>
                     </div>
@@ -74,25 +170,25 @@
                     <div class="settings-row">
                         <div class="settings-row-text">
                             <strong>Delete all chats</strong>
-                            <span>Irreversibly delete every chat from this workspace.</span>
                         </div>
                         <button type="button" class="btn btn-danger" data-action="delete-all-chats">Delete all</button>
                     </div>
 
                     <div class="settings-row">
                         <div class="settings-row-text">
-                            <strong>Log out</strong>
-                            <span>Sign out from this device.</span>
+                            <strong>Log out on this device</strong>
                         </div>
                         <button type="button" class="btn btn-secondary" data-action="logout">Log out</button>
                     </div>
                 </section>
+
                 <section class="settings-pane" data-pane="notifications">
-                    <h3>Notifications</h3>
+                    <h2 class="settings-pane-title">Notifications</h2>
                     <p class="settings-pane-empty">Coming Soon.</p>
                 </section>
+
                 <section class="settings-pane" data-pane="personalization">
-                    <h3>Memory</h3>
+                    <h2 class="settings-pane-title">Personalization</h2>
                     <p class="settings-pane-hint">Control what XelaSphere remembers about you.</p>
 
                     <div class="settings-row">
@@ -136,27 +232,43 @@
                         <button type="button" class="btn btn-secondary" data-action="open-memory-modal">Manage</button>
                     </div>
 
-                    <h3 style="margin-top: 24px;">Custom instructions</h3>
+                    <h3 class="settings-pane-subhead">Custom instructions</h3>
                     <p class="settings-pane-empty">Coming Soon.</p>
                 </section>
-                <section class="settings-pane" data-pane="speech">
-                    <h3>Speech</h3>
+
+                <section class="settings-pane" data-pane="apps">
+                    <h2 class="settings-pane-title">Apps</h2>
                     <p class="settings-pane-empty">Coming Soon.</p>
                 </section>
+
+                <section class="settings-pane" data-pane="schedules">
+                    <h2 class="settings-pane-title">Schedules</h2>
+                    <p class="settings-pane-empty">Coming Soon.</p>
+                </section>
+
                 <section class="settings-pane" data-pane="data">
-                    <h3>Data Controls</h3>
-                    <p class="settings-pane-empty">Coming Soon — placeholder until PR 4 wires Shared links and Export.</p>
-                </section>
-                <section class="settings-pane" data-pane="connected">
-                    <h3>Connected apps</h3>
+                    <h2 class="settings-pane-title">Data controls</h2>
                     <p class="settings-pane-empty">Coming Soon.</p>
                 </section>
+
                 <section class="settings-pane" data-pane="security">
-                    <h3>Security</h3>
+                    <h2 class="settings-pane-title">Security</h2>
                     <p class="settings-pane-empty">Coming Soon.</p>
                 </section>
+
+                <section class="settings-pane" data-pane="parental">
+                    <h2 class="settings-pane-title">Parental controls</h2>
+                    <p class="settings-pane-empty">Coming Soon.</p>
+                </section>
+
+                <section class="settings-pane" data-pane="account">
+                    <h2 class="settings-pane-title">Account</h2>
+                    <p class="settings-pane-empty">Coming Soon.</p>
+                </section>
+
                 {% if is_admin %}
                 <section class="settings-pane" data-pane="api-keys">
+                    <h2 class="settings-pane-title">API Keys</h2>
                     {% include "_settings_api_keys_form.html" %}
                 </section>
                 {% endif %}
