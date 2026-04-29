@@ -105,6 +105,17 @@ Verify each of these before starting Task 1. Each check is fast (< 2 minutes). I
 
   Expected: only the 5 pre-existing flaky tests (deselected) fail. Everything else passes. If new failures appear, investigate before starting Task 1.
 
+- [ ] **PF9: Forge feature-flag-off smoke test (post-deploy, manual).**
+
+  Performed once after the M1 PR deploys to staging — verifies R10's mitigation. With `FORGE_VALIDATION_ENABLED = False` (forced via temporary code edit on a throwaway branch, OR by stubbing `MODEL_CATALOG` to drop the V4 IDs so the startup guard demotes the flag):
+
+  1. Restart workers and confirm the chat service comes up. The startup guard should log `🔥 Forge startup guard: cascade models [...] not in MODEL_CATALOG/MODEL_ALIASES. Disabling Forge validation feature flag.` at ERROR level — and no `RuntimeError` at boot.
+  2. Send a non-artifact chat request (e.g., "what's the weather in Paris"). Expected: response streams normally, `forge_metrics=None` persisted.
+  3. Send an artifact chat request (e.g., "build me a netflix clone"). Expected: artifact streams as it does today, `forge_metrics=None` persisted, no `forge_retry` / `forge_done` / `forge_exhausted` SSE events emitted.
+  4. Re-enable the flag (revert the test edit) and confirm cascade fires on the next artifact request.
+
+  Expected outcome: chat works end-to-end with Forge disabled. This is the proof that the Forge feature flag cannot take down the whole product.
+
 ---
 
 ## 3. Task decomposition
@@ -1377,21 +1388,43 @@ FORGE_VALIDATION_CASCADE = [
 # overshoot — pre-flight estimate gates each call (Amendment 3).
 FORGE_RETRY_TOKEN_BUDGET = 80_000
 
-# Startup guard (spec §13.1). Fail at gunicorn worker spawn if the V4
-# swap hasn't merged — fast feedback during deploy.
+# Module-level feature flag — defaults to True, demoted to False by the
+# startup guard if cascade models aren't resolvable. The cascade body
+# (Step 5.4) checks this flag before entering. Per R10 review feedback:
+# Forge MUST NOT take down the whole chat service if the catalog drifts.
+FORGE_VALIDATION_ENABLED = True
+
+# Startup guard (spec §13.1, plan R10 mitigation). Logs at ERROR and
+# disables Forge if V4 catalog entries are missing — does NOT raise.
+# Worst case: chat works as today (no validation), Forge silently no-ops.
 def _forge_validate_cascade_models_resolvable() -> None:
+    global FORGE_VALIDATION_ENABLED
     from app.model_catalog import MODEL_CATALOG, MODEL_ALIASES
-    for _m in FORGE_VALIDATION_CASCADE:
-        if _m not in MODEL_CATALOG and _m not in MODEL_ALIASES:
-            raise RuntimeError(
-                f"FORGE_VALIDATION_CASCADE references unknown model {_m!r}. "
-                f"Did feat/deepseek-v4-swap merge? See "
-                f"docs/superpowers/specs/2026-04-29-forge-m1-validation-loop.md "
-                f"§3 / §13."
-            )
+    missing = [
+        _m for _m in FORGE_VALIDATION_CASCADE
+        if _m not in MODEL_CATALOG and _m not in MODEL_ALIASES
+    ]
+    if missing:
+        logger.error(
+            f"🔥 Forge startup guard: cascade models {missing} not in "
+            f"MODEL_CATALOG/MODEL_ALIASES. Disabling Forge validation "
+            f"feature flag. Chat service remains functional. See "
+            f"docs/superpowers/specs/2026-04-29-forge-m1-validation-loop.md "
+            f"§3 / §13. To re-enable: ensure feat/deepseek-v4-swap is merged "
+            f"and restart workers."
+        )
+        FORGE_VALIDATION_ENABLED = False
 
 _forge_validate_cascade_models_resolvable()
 ```
+
+**Spec-vs-impl divergence note:** Spec §13.1 shows the original
+`raise RuntimeError` pattern. This plan implements the demoted
+feature-flag pattern per the R10 review feedback (the "Forge feature
+flag taking down the whole product" risk). Spec Amendment 10 already
+documents this divergence as acknowledged. The implementation is
+authoritative; the spec text remains the aspirational original per
+the same convention as Amendment 1.
 
 - [ ] **Step 5.2: Write failing test for cascade-skip-stream-model behavior.**
 
@@ -1471,24 +1504,31 @@ from app.services.chat_engine import (
                     # ============================================================
                     # === Forge M1 — validation loop (spec §7.1) ===
                     # ============================================================
-                    forge_metrics = {
-                        'forge_validation_attempted': False,
-                        'forge_validation_passed_first_try': True,
-                        'forge_attempts': 0,
-                        'forge_healed_at_iter': None,
-                        'forge_total_retry_tokens': 0,
-                        'forge_time_to_heal_ms': None,
-                        'forge_budget_exhausted': False,
-                        'forge_loop_detected_skip': False,
-                        'forge_validation_failed': False,
-                        'forge_errors': [],
-                        'forge_output_estimate_actual_ratio': None,
-                        '_ratio_log': [],
-                    }
+                    # forge_metrics stays None for non-artifact responses, when
+                    # FORGE_VALIDATION_ENABLED is False, or when the artifact has
+                    # no validatable files. It becomes a dict only when the
+                    # cascade actually runs against a validatable artifact.
+                    # save_interaction(forge_metrics=None) writes all five
+                    # envelope fields as null (legacy-compatible per R4 +
+                    # Task 4 `test_forge_metrics_none_writes_nulls`).
+                    forge_metrics = None
 
-                    if routing and routing.artifact_payload:
+                    if FORGE_VALIDATION_ENABLED and routing and routing.artifact_payload:
                         if _has_validatable_files(routing.artifact_payload):
-                            forge_metrics['forge_validation_attempted'] = True
+                            forge_metrics = {
+                                'forge_validation_attempted': True,
+                                'forge_validation_passed_first_try': True,
+                                'forge_attempts': 0,
+                                'forge_healed_at_iter': None,
+                                'forge_total_retry_tokens': 0,
+                                'forge_time_to_heal_ms': None,
+                                'forge_budget_exhausted': False,
+                                'forge_loop_detected_skip': False,
+                                'forge_validation_failed': False,
+                                'forge_errors': [],
+                                'forge_output_estimate_actual_ratio': None,
+                                '_ratio_log': [],
+                            }
                             import time as _time
                             t_start = _time.monotonic()
                             result = validate_artifact_payload(routing.artifact_payload)
@@ -1594,10 +1634,13 @@ def _estimate_tokens_pair(prompt: str, response: str) -> tuple:
 
 ```python
     # Around chat_routes.py:2257 — find the existing save_interaction(...) call.
-    # Add forge_metrics= kwarg at the end:
+    # Add forge_metrics= kwarg at the end. Because forge_metrics is initialized
+    # to None at the top of the chunk_type=='done' branch (BEFORE the routing
+    # check), no `in dir()` introspection guard is needed — the variable is
+    # always bound by the time we reach this call site.
     save_interaction(
         # ... existing args unchanged ...
-        forge_metrics=forge_metrics if 'forge_metrics' in dir() else None,
+        forge_metrics=forge_metrics,
     )
 ```
 
@@ -1841,11 +1884,84 @@ Refs: AC #6 (identical-error tier skip), AC #16 (no false flip)."
 
 **ACs satisfied:** #8 (budget triggers early stop), #15 (calibration logs).
 
-**Estimated LOC delta:** ~30 cascade body + ~70 tests.
+**Estimated LOC delta:** ~30 cascade body + ~70 tests + ~25 token-utility refactor.
 
 **Dependencies:** Task 6.
 
-- [ ] **Step 7.1: Write failing tests.**
+- [ ] **Step 7.1: Refactor token utility into `accountant.py`.**
+
+  Spec §7.2 says to "delegate to existing `orchestrator/accountant.py` token estimation utilities" — but the canonical implementation today is `app.utilities.count_tokens`, not on the accountant module. Plan review surfaced this as ambiguous; the resolution is to make the spec text literally true rather than wrap a different module silently.
+
+  **Sub-step 7.1a — move + re-export:**
+
+  Open `app/utilities.py:166`. Cut `count_tokens` (the tiktoken cl100k_base entry point). Open `app/orchestrator/accountant.py` and paste it as `estimate_tokens` (or `count_tokens` if signatures match — preserve the public name that callers already use; rename only if the accountant module's existing convention demands it). Add a re-export shim back in `app/utilities.py`:
+
+```python
+# app/utilities.py — preserve existing public surface for callers.
+# Token-estimation belongs to the accountant module per spec §7.2.
+from app.orchestrator.accountant import count_tokens  # noqa: F401  (re-export)
+```
+
+  Update direct callers — at minimum, `_estimate_tokens_pair` in `chat_routes.py` (added in Task 5 Step 5.4) — to import from `app.orchestrator.accountant` directly rather than going through the shim:
+
+```python
+def _estimate_tokens_pair(prompt: str, response: str) -> tuple:
+    """Estimate (input_tokens, output_tokens) for a prompt/response pair.
+
+    Per spec §7.2 — delegates to the accountant module's token utility,
+    which is the same tiktoken cl100k_base wrapper that previously lived
+    in app/utilities.py (now re-exported from there for legacy callers).
+    """
+    from app.orchestrator.accountant import count_tokens
+    return (count_tokens(prompt or ""), count_tokens(response or ""))
+```
+
+  **Sub-step 7.1b — verify nothing broke:**
+
+  ```bash
+  # Both import paths must return the same value.
+  python3 -c "
+  from app.utilities import count_tokens as u_ct
+  from app.orchestrator.accountant import count_tokens as a_ct
+  for s in ['', 'hello', 'a' * 1000, 'unicode: αβγ']:
+      assert u_ct(s) == a_ct(s), f'roundtrip mismatch on {s!r}'
+  print('OK — token utility roundtrip via both paths matches')
+  "
+
+  # Existing tests still pass (any test that imported count_tokens from utilities).
+  python3 -m pytest tests/ -q -k "count_tokens or token" 2>&1 | tail -5
+  ```
+
+  Expected: roundtrip OK, no test regressions from the shim.
+
+  **Sub-step 7.1c — update spec §7.2:**
+
+  After the refactor lands in `feat/forge-m1-impl`, the spec text at §7.2 ("delegate to existing `orchestrator/accountant.py` token estimation utilities") becomes factually true. Add a brief Amendment 11 to the spec on the same PR (`docs/superpowers/specs/2026-04-29-forge-m1-validation-loop.md`):
+
+  > **Amendment 11 — \<merge-date\> — §7.2 token utility location now factually accurate**
+  >
+  > The spec was authored saying token estimation lives in `app.orchestrator.accountant`. At spec-write time, the canonical entry point was actually `app.utilities.count_tokens`. Plan PR #154's review surfaced the discrepancy. Resolution: implement option (c) — *fix the code to match the spec*, not the other way around. M1 implementation moves `count_tokens` into `app.orchestrator.accountant` (preserving a re-export shim from `app.utilities` for legacy callers). The spec text is now literally true rather than aspirational. Future calibration work (issue #149) benefits: all token-related utilities live on the accountant module, where `record_usage` already lives.
+
+  Commit this together with the refactor.
+
+  **Sub-step 7.1d — commit (token-utility refactor only):**
+
+```bash
+git add app/utilities.py app/orchestrator/accountant.py app/blueprints/chat_routes.py docs/superpowers/specs/2026-04-29-forge-m1-validation-loop.md
+git commit -m "refactor(accountant): move count_tokens from utilities to accountant
+
+Per spec §7.2 — token estimation belongs on the accountant module
+alongside record_usage. Implementation moved; re-export shim left in
+app/utilities.py for legacy callers. Adds spec Amendment 11
+documenting the spec-now-matches-code resolution.
+
+This is plan PR #154's first review-fix — option (c): fix the code to
+match the spec, not the spec to match the code."
+```
+
+  This is intentionally a separate commit from the rest of Task 7 — the refactor is a pure-rename change; the cascade-pre-flight work that follows is the actual feature.
+
+- [ ] **Step 7.2: Write failing tests.**
 
 ```python
 # tests/test_forge_cascade.py — append
@@ -1898,12 +2014,12 @@ class TestMedianRatioAggregation:
         assert median is None
 ```
 
-- [ ] **Step 7.2: Run failing tests.**
+- [ ] **Step 7.3: Run failing tests.**
 
   Run: `python3 -m pytest tests/test_forge_cascade.py::TestPreflightBudget tests/test_forge_cascade.py::TestMedianRatioAggregation -v`
   Expected: all pass (pure-logic tests).
 
-- [ ] **Step 7.3: Replace `# TODO Task 7` markers with pre-flight + calibration aggregation.**
+- [ ] **Step 7.4: Replace `# TODO Task 7` markers with pre-flight + calibration aggregation.**
 
   Find the `# TODO Task 7: pre-flight token budget check.` marker. Replace with:
 
@@ -1960,12 +2076,12 @@ class TestMedianRatioAggregation:
                             forge_metrics.pop('_ratio_log', None)
 ```
 
-- [ ] **Step 7.4: Run tests.**
+- [ ] **Step 7.5: Run tests.**
 
   Run: `python3 -m pytest tests/test_forge_cascade.py tests/test_artifact_validator.py -v`
   Expected: all pass.
 
-- [ ] **Step 7.5: Commit.**
+- [ ] **Step 7.6: Commit (pre-flight + calibration feature work).**
 
 ```bash
 git add app/blueprints/chat_routes.py tests/test_forge_cascade.py
@@ -2677,7 +2793,7 @@ Refs: AC #13 (per-turn telemetry), AC #15 (calibration logs)."
 
 ### Task 13: End-to-end integration tests
 
-**Goal:** Add fixtures + integration tests that exercise the cascade end-to-end against the real validator + a mocked `get_ai_response`. Cover all 16 acceptance criteria.
+**Goal:** Add fixtures + integration tests that exercise the cascade end-to-end against the real validator + a mocked `get_ai_response`. **This task does NOT cover all 16 ACs** — see §5.1 for the full coverage matrix. T13 covers the 11 ACs that require end-to-end integration testing; the other 5 (#10, #11, #12, #13, #15) are unit-tested in T8 (accountant), T3 (`_short_reason`), T10 (replay breadcrumb), T12 (per-turn telemetry), and T13 itself for #15 (calibration). Do not mark M1 shipped based on T13 alone — the §5.1 verification command runs all relevant test files.
 
 **Files:**
 - Create: `tests/fixtures/artifacts/loop_detect_identical_errors.json`
@@ -2685,7 +2801,7 @@ Refs: AC #13 (per-turn telemetry), AC #15 (calibration logs)."
 - Create: `tests/fixtures/artifacts/context_window_overflow.json`
 - Modify: `tests/test_forge_cascade.py` (or split into `tests/test_forge_e2e.py`)
 
-**ACs satisfied:** #1, #2, #3, #4, #5, #6, #7, #8, #9, #14, #16 (the entire AC list verified end-to-end).
+**ACs satisfied (this task only):** #1, #2, #3, #4, #5, #6, #7, #8, #9, #14, #15, #16 — 12 of 16. The remaining 4 are owned by earlier tasks per the §5.1 matrix.
 
 **Estimated LOC delta:** ~240 fixtures + ~280 tests.
 
@@ -3054,15 +3170,63 @@ git push
 | R7 | `_estimate_tokens_pair` token count drift across providers (tiktoken cl100k_base biased toward GPT) | Low | All four cascade models are queried via OpenAI-compatible endpoints; token counts are approximate but within ±15% of true. Token budget is also conservative (1.2x output multiplier). For accountant accuracy, the orchestrator's `record_usage` is the source of truth — `_estimate_tokens_pair` is only used for budget pre-flight. Calibration via #149 will surface drift. |
 | R8 | The cascade body is large and inline in `chat_routes.py`; future maintenance painful | Medium | Task 14 polish step: extract the cascade body into a module-level function `_run_forge_cascade(routing, prompt, stream_model)` in `chat_engine.py` if time permits. Not in M1 scope; tracked as a Task 14 stretch goal. |
 | R9 | `package.json` at repo root may collide with future Node ecosystem additions | Very Low | Package is named `xelasphere-runtime`, marked `private: true`. If a real frontend bundler later wants its own `package.json`, scope it to a subdirectory (`frontend/package.json`) and migrate `@babel/parser` accordingly. |
-| R10 | Startup guard's `RuntimeError` crashes the server if V4 swap merge slips | Intentional | This is the design — fail-fast at gunicorn worker spawn rather than at first artifact request. PF1 catches this before Task 1 starts. If the spec author chooses the fallback path (cherry-pick V4 catalog entries into M1 PR), update `chat_engine.py` to add minimal entries instead of raising. |
+| R10 | Startup guard fails if V4 swap merge slips or catalog drifts | Low (PF1 catches pre-impl) | **Feature flag** — Forge silently disables; rest of chat remains functional. The guard logs an ERROR-level warning and sets `FORGE_VALIDATION_ENABLED = False` rather than raising `RuntimeError`. Worst case: chat works as today (no validation), Forge cascade is a silent no-op until the catalog is fixed. Verified by PF9 (smoke test post-deploy with flag off). The Forge feature should never take down the whole chat service. |
 
 ---
 
 ## 5. Acceptance gate definition
 
-**M1 is shipped when:**
+### 5.0 Merge order enforcement (must be done in sequence)
 
-- [ ] All 16 acceptance criteria from spec pass (verified by Task 13's E2E test class).
+The Forge M1 work spans four PRs (investigation #135, spec #136, plan #154, V4 swap #139). They merge in a specific order — getting it wrong leaves stale "hard prereq" language on main or branches the impl off a base that's missing the V4 catalog entries.
+
+1. **V4 swap PR #139 merges to main.** This puts `deepseek-v4-flash` and `deepseek-v4-pro` (plus the V4 aliases) into `MODEL_CATALOG`.
+2. **Verify V4 model IDs are on main:** `git checkout main && git pull && python3 -c "from app.model_catalog import MODEL_CATALOG, MODEL_ALIASES; assert all(m in MODEL_CATALOG or m in MODEL_ALIASES for m in ['deepseek-v4-flash', 'deepseek-v4-pro', 'kimi-k2.5', 'gpt-4.1']); print('OK')"` — same check as PF1.
+3. **Verify Phase C commit landed on PR #136 spec branch:** `git log --oneline feat/forge-m1-spec | grep "Phase C"` — the §3 V4-sequencing-language cleanup must be present, otherwise spec on main will still claim "M1 PR depends on V4 swap merging first" after V4 has already merged.
+4. **Investigation PR #135 merges** — independent of the others, can go any time after V4.
+5. **Spec PR #136 rebases on new main, merges.** Phase C must be on this branch (step 3) before merge.
+6. **Plan PR #154's base auto-shifts to main** (since it's based on the spec branch). Re-verify the diff is sane after the rebase, then merge.
+7. **Only then does `feat/forge-m1-impl` branch off the new main.** PF1 / PF2 / PF3 in §2 verify all four PRs have landed before Task 1 starts.
+
+**If any of the seven steps is skipped or out-of-order, STOP and fix the sequencing before continuing — do not paper over with a hotfix commit.**
+
+### 5.1 Acceptance criteria coverage
+
+**The 16 acceptance criteria from spec §AC are NOT all covered by Task 13.** Coverage is split across multiple tasks. The acceptance gate verifies the union — Task 13 alone is insufficient.
+
+Verification command (run from repo root after Task 14):
+
+```bash
+python3 -m pytest tests/test_forge_cascade.py tests/test_artifact_validator.py tests/test_save_interaction_forge_fields.py tests/test_forge_telemetry.py tests/test_forge_replay.py -v 2>&1 | tail -30
+```
+
+Expected: all test classes pass. The matrix below shows which test class verifies each AC and in which task it lands.
+
+| AC # | Test class | Task | Notes |
+|---|---|---|---|
+| #1 (Netflix heals) | `TestNetflixHeals` (E2E) | T13 | End-to-end cascade healing on a JSX project. |
+| #2 (clean first try) | `TestCleanFirstTry` | T13 | Validator passes immediately, no retries. |
+| #3 (SVG bypass) | `TestSvgBypass` | T13 | `_has_validatable_files` returns False, cascade skipped. |
+| #4 (cascade exhaustion) | `TestExhaustion` | T13 | All 4 tiers fail → `forge_exhausted` SSE + `forge_validation_failed=True`. |
+| #5 (stream-model skip) | `TestStreamModelSkip` | T13 | `start_idx` advances past `stream_model`. |
+| #6 (identical-error tier skip) | `TestIdenticalErrorsTierSkip` | T13 | Two consecutive identical signatures → skip next tier. |
+| #7 (E16: stream=GPT-4.1 → no retries) | `TestStreamModelSkip` (E16 case) | T13 | `start_idx >= len(cascade)` → loop never enters. |
+| #8 (budget pre-flight) | `TestBudgetPreflight` | T13 | Projected total > 80k → `forge_budget_exhausted=True`, break. |
+| #9 (validator timeout doesn't block) | `TestValidatorTimeoutDoesntBlock` | T13 | Per-file 3s timeout returns `ok=True`; cascade continues. |
+| #10 (accountant wraps existing cascades) | `TestAccountantWraps` | T8  | All four cascades (Forge + #1/#2/#3) call `record_usage`. |
+| #11 (`_short_reason` correctness) | `TestShortReason` | T3  | First error → exactly one short status string. |
+| #12 (replay breadcrumb) | `TestReplayBreadcrumb` | T10 | Persisted `forge_attempts > 0` → renders "Healed after N attempts". |
+| #13 (per-turn telemetry shape) | `TestPerTurnTelemetry` | T12 | `🔥 forge_metrics:` log line emits 8 fields per spec §12. |
+| #14 (no regression) | `TestNoRegressionInExistingFlow` | T13 | Existing artifact flow unchanged when validation skipped. |
+| #15 (calibration logs) | `TestForgeCalibrationLogged` | T13 | Per-iter `🔥 forge_calibration:` log lines + per-turn median ratio. |
+| #16 (final-tier identical errors) | `TestIdenticalErrorsTierSkip` (final-tier case) | T13 | Same-signature on last tier still emits `forge_exhausted`. |
+
+**If any AC line lacks a passing test, the gate fails.** Do not mark M1 shipped on partial coverage.
+
+### 5.2 Other gate requirements
+
+**M1 is shipped when (in addition to §5.0 merge order + §5.1 AC matrix):**
+
 - [ ] Spec §14 file-by-file manifest fully realized — 8 NEW files, 5 TOUCHED files, 1 dep added.
 - [ ] Self-review subagent report written to `docs/superpowers/reviews/<date>-forge-m1-impl-review.md` with verdict `APPROVED` or `APPROVED WITH NOTES` (no `CHANGES REQUESTED`).
 - [ ] PR opened with link to spec, review report, and AC checklist; awaiting human review.
@@ -3071,6 +3235,7 @@ git push
 - [ ] Spec doc merged (PR #136) — verified by PF2.
 - [ ] No regression in existing artifact flow — verified by Task 13 step 13.6 (broader test suite minus 5 pre-existing flaky tests).
 - [ ] Manual smoke (send a "build me a netflix clone" request, observe cascade live) — once after deploy to staging.
+- [ ] PF9 feature-flag-off smoke completed — proves Forge cannot take down chat (R10).
 
 If any gate fails, fix before merging. The plan's `Task 14` step is the deliberate stop-and-review point; do not auto-merge.
 
