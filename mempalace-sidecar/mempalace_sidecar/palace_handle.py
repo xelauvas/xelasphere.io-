@@ -212,34 +212,58 @@ def _is_assistant_hedge_result(item: dict) -> bool:
 # ``sub-3:00`` establishment turn at internal rank 9 past top-5 even
 # after PR #108's hedge expansion.
 #
+# Cross-persona generalization (Tom + Maya benches, same day): the
+# absolute v1 threshold of 0.85 was calibrated for Marcus where
+# near-dups scored 0.97/0.96. Tom's near-dups scored 0.42-0.58 — well
+# below 0.85, so v1 didn't drop them, and the answer turn ("Hetzner",
+# sim 0.288) stayed past top-5. Switched to a RELATIVE threshold:
+# drop a user-question if its similarity is at least
+# ``_NEAR_DUPLICATE_QUESTION_RATIO`` (0.7) of the highest similarity
+# in the result batch. Adapts to per-query / per-corpus score
+# distributions instead of assuming Marcus-grade similarities.
+#
 # A "near-duplicate question" is:
-#   1. similarity >= ``_NEAR_DUPLICATE_QUESTION_SIM_THRESHOLD`` (0.85)
+#   1. similarity >= top_sim * ``_NEAR_DUPLICATE_QUESTION_RATIO`` (0.7)
 #   2. text does NOT start with ``ACTION: chat`` (so it's a user turn,
 #      not an assistant answer that happens to be very similar)
 #   3. text rstrip ends with ``?`` (it's a question)
 #   4. text length < ``_NEAR_DUPLICATE_QUESTION_MAX_LEN`` (200) so a
 #      long substantive user message that ends with a clarifying
 #      question stays.
-_NEAR_DUPLICATE_QUESTION_SIM_THRESHOLD = 0.85
+_NEAR_DUPLICATE_QUESTION_RATIO = 0.7
 _NEAR_DUPLICATE_QUESTION_MAX_LEN = 200
 
 
-def _is_near_duplicate_user_question(item: dict) -> bool:
-    """True iff a search result is a short user question near-identical
-    to the present query (similarity >= 0.85). Drops past phrasings of
-    the same question without dropping legitimate user-turn signal.
+def _looks_like_user_question(item: dict) -> bool:
+    """True iff item looks like a short user-turn question (no
+    ``ACTION: chat`` prefix, ends with ``?``, length < max). Used both
+    for near-dup filtering AND for computing the relative floor anchor:
+    we want the anchor to come from non-question items so the floor
+    isn't dominated by the questions we're trying to filter.
     """
     text = item.get("text") if isinstance(item, dict) else None
     if not isinstance(text, str):
         return False
     if text.startswith(_HEDGE_ASSISTANT_PREFIX):
-        return False  # assistant turn — different concern
+        return False
     if not text.rstrip().endswith("?"):
         return False
-    if len(text) >= _NEAR_DUPLICATE_QUESTION_MAX_LEN:
+    return len(text) < _NEAR_DUPLICATE_QUESTION_MAX_LEN
+
+
+def _is_near_duplicate_user_question(item: dict, *, sim_floor: float) -> bool:
+    """True iff a search result is a short user question whose
+    similarity to the query reaches ``sim_floor`` (computed by the
+    caller as ``top_non_question_sim * _NEAR_DUPLICATE_QUESTION_RATIO``).
+
+    Adapting to per-query top similarity catches near-dups in dense
+    corpora (Marcus) AND sparse corpora (Tom) without needing a
+    persona-specific tuning constant.
+    """
+    if not _looks_like_user_question(item):
         return False
     sim = item.get("similarity") or 0.0
-    return sim >= _NEAR_DUPLICATE_QUESTION_SIM_THRESHOLD
+    return sim >= sim_floor
 
 
 # turns.sqlite DDL — literal schema from spec §5.3. Don't add columns.
@@ -711,11 +735,26 @@ class PalaceHandle:
         )
         items = result.get("results", []) or []
         threshold = _semantic_score_threshold()
+        # Relative sim floor for near-dup question filter — anchored on
+        # the best NON-USER-QUESTION result so the floor doesn't pivot
+        # off the questions we're trying to drop. Falls back to +inf
+        # (no near-dup filtering) when retrieval returns only user
+        # questions, since dropping them would leave the caller with
+        # nothing.
+        non_question_sims = [
+            r.get("similarity") or 0.0
+            for r in items
+            if not _looks_like_user_question(r)
+        ]
+        if non_question_sims:
+            near_dup_floor = max(non_question_sims) * _NEAR_DUPLICATE_QUESTION_RATIO
+        else:
+            near_dup_floor = float("inf")
         filtered = [
             r for r in items
             if (r.get("similarity") or 0.0) >= threshold
             and not _is_assistant_hedge_result(r)
-            and not _is_near_duplicate_user_question(r)
+            and not _is_near_duplicate_user_question(r, sim_floor=near_dup_floor)
         ]
         return filtered[:k]
 

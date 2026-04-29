@@ -662,6 +662,8 @@ def test_semantic_search_drops_near_duplicate_user_question(handle, monkeypatch)
             {"text": "Hey, picking up. What's my A-race target time again?",
              "similarity": 0.958},
             # Real establishment turn — user statement, no question mark:
+            # Anchors the relative floor (0.32 * 0.7 = 0.224); near-dup Q's
+            # at 0.97/0.96 are well above and drop.
             {"text": '"I\'m Marcus, marathoner in Asheville. Training for '
                      'Boston 2027 — my first Boston, sub-3:00 goal. "',
              "similarity": 0.32},
@@ -672,23 +674,27 @@ def test_semantic_search_drops_near_duplicate_user_question(handle, monkeypatch)
     assert "sub-3:00" in out[0]["text"]
 
 
-def test_semantic_search_keeps_user_question_below_similarity_threshold(
+def test_semantic_search_keeps_user_question_below_relative_floor(
     handle, monkeypatch,
 ):
-    """A user question that scored lower (e.g., 0.42) is NOT a near-
-    duplicate of the current query — it's a tangentially related past
-    question that may still carry context. Keep it.
+    """A user question that scored well below the relative floor (top
+    non-question sim × 0.7) is kept — it's tangentially related, not a
+    near-duplicate. With anchor at 0.65 (a high-sim non-question item),
+    floor is 0.455; a 0.42 question stays.
     """
     monkeypatch.setattr(
         "mempalace_sidecar.palace_handle._library_search_memories",
         lambda *a, **kw: {"results": [
-            # Tangentially related question at moderate similarity:
+            # High-sim non-question anchor (sets relative floor at 0.455):
+            {"text": "Marcus's intro statement about marathon goals.",
+             "similarity": 0.65},
+            # Tangentially related question well below 0.455:
             {"text": "What did I decide about the Saturday long-run time change?",
              "similarity": 0.42},
         ]},
     )
     out = handle.semantic_search("a-race", k=5)
-    assert len(out) == 1
+    assert len(out) == 2  # both kept; question is tangential, not near-dup
 
 
 def test_semantic_search_keeps_long_user_message_ending_in_question(
@@ -752,6 +758,97 @@ def test_semantic_search_keeps_user_statement_at_high_similarity(
     )
     out = handle.semantic_search("about-me", k=5)
     assert len(out) == 1
+
+
+def test_semantic_search_relative_near_dup_threshold_adapts_to_corpus(
+    handle, monkeypatch,
+):
+    """Cross-persona generalization: Marcus's near-dup questions scored
+    0.97 (dense corpus); Tom's scored 0.58 (sparser corpus). v1 absolute
+    threshold of 0.85 caught Marcus but not Tom. v2 uses a relative
+    threshold (top non-question sim × 0.7) so the same logic catches
+    near-dups in either density.
+
+    Simulates Tom's deploy-box probe: top non-question item at 0.394
+    (a 'Full recap' user statement); near-dup questions at 0.581 and
+    0.477. Floor = 0.394 * 0.7 = 0.276. Both questions exceed 0.276,
+    so both drop. Real Hetzner item at 0.288 (a question with
+    establishment-grade content but length > question-filter cap)
+    survives via the length gate.
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [
+            # Near-dup user questions (drop):
+            {"text": "What box am I deploying to?", "similarity": 0.581},
+            {"text": "What's my deploy box again?", "similarity": 0.477},
+            # User statement anchor for relative floor:
+            {"text": "Full recap — features, stack, deadline, beta user, "
+                     "deploy target. Just want to see I've got it all straight.",
+             "similarity": 0.394},
+            # The answer-bearing question (length > 200 chars: keeps via length gate)
+            {"text": "Deploy target is a Hetzner box, ~4GB RAM. Does that "
+                     "change the DB recommendation? I want to make sure I'm "
+                     "not over-provisioning given the workload pattern, so "
+                     "let me know what specs justify the choice and what "
+                     "I should keep an eye on as users come online.",
+             "similarity": 0.288},
+        ]},
+    )
+    out = handle.semantic_search("deploy-box", k=5)
+    texts = [r["text"] for r in out]
+    # Both near-dup questions dropped; statement and Hetzner kept.
+    assert len(out) == 2
+    assert any("Full recap" in t for t in texts)
+    assert any("Hetzner" in t for t in texts)
+
+
+def test_semantic_search_no_near_dup_filter_when_only_questions_returned(
+    handle, monkeypatch,
+):
+    """Edge case: retrieval returns only user-turn questions with no
+    non-question anchor. Under v2 relative threshold, the floor would
+    be undefined; we fall back to no near-dup filtering rather than
+    drop everything and leave the caller empty-handed.
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [
+            {"text": "What did I decide about the long-run change?",
+             "similarity": 0.42},
+            {"text": "Who was that runner I mentioned?", "similarity": 0.38},
+        ]},
+    )
+    out = handle.semantic_search("recap", k=5)
+    # Both questions kept (no anchor → no near-dup filter applied).
+    assert len(out) == 2
+
+
+def test_semantic_search_relative_floor_anchored_on_non_questions_only(
+    handle, monkeypatch,
+):
+    """The relative floor anchor is the highest sim among NON-USER-
+    QUESTION items. If a question scores at 0.95 (highest of all) but
+    a statement is at 0.60, the floor is 0.60 * 0.7 = 0.42, not
+    0.95 * 0.7 = 0.665. Otherwise the floor would pivot on the very
+    items we're trying to drop, anchoring itself out.
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [
+            # Highest sim is a question (would be near-dup if we anchored on it).
+            {"text": "What's my favorite color?", "similarity": 0.95},
+            # Non-question anchor (correct anchor):
+            {"text": "I told you blue is my favorite color.", "similarity": 0.60},
+            # Lower-sim question (would be kept under correct anchor: 0.45 < 0.42).
+            {"text": "Wait, what color did I say?", "similarity": 0.45},
+        ]},
+    )
+    out = handle.semantic_search("color", k=5)
+    # 0.95 question dropped (above 0.60 * 0.7 = 0.42). 0.45 question
+    # also dropped (still above 0.42). 0.60 statement kept.
+    assert len(out) == 1
+    assert "blue is my favorite" in out[0]["text"]
 
 
 def test_semantic_search_hedge_filter_complements_score_floor(handle, monkeypatch):
