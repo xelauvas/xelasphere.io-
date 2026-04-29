@@ -374,6 +374,66 @@ def test_record_turn_generic_exception_labels_outbox_db_down(adapter_factory):
     assert outbox.inserts == []  # Quality M2: no partial insert on DB-down path.
 
 
+def test_record_turn_skips_assistant_hedge_response_with_metric(adapter_factory):
+    """Assistant hedge responses (e.g., 'I don't have any information...')
+    are skipped at record_turn to prevent self-referential pollution at
+    retrieval time — surfaced by Marcus persona dogfood (2026-04-28):
+    assistant responses to recall queries that the user hadn't yet
+    established got indexed and re-surfaced on later synthesis queries,
+    displacing the actual establishment turns.
+
+    Filter applies to assistant turns only (user turns that happen to
+    use hedge phrasing keep recording — they're real establishment
+    content). Threshold: pattern match AND length < 300 chars.
+    """
+    adapter, _, outbox, _, metrics = adapter_factory(mode="active")
+    hedge = "I don't have any information about your A-race, including the date."
+    adapter.record_turn(**_record_turn_args(role="assistant", text=hedge))
+    assert metrics.inserts_dropped_calls == ["hedge_assistant"]
+    assert outbox.inserts == []
+
+
+def test_record_turn_records_user_role_with_hedge_phrasing(adapter_factory):
+    """The hedge filter applies ONLY to assistant turns. User turns
+    that happen to use hedge phrasing ('I don't know what to do...')
+    must still be indexed — they're real user statements.
+    """
+    adapter, _, outbox, _, _ = adapter_factory(mode="active")
+    user_text = "I don't know what to do about my plantar fasciitis."
+    adapter.record_turn(**_record_turn_args(role="user", text=user_text))
+    assert len(outbox.inserts) == 1
+
+
+def test_record_turn_records_long_assistant_response_with_hedge_phrase(adapter_factory):
+    """Substantive assistant responses that happen to mention hedge
+    phrasing must NOT be filtered. The filter targets pure-hedge
+    (short + matches pattern) responses; longer answers carry real
+    semantic content even when they begin with 'I don't know exactly'.
+    """
+    adapter, _, outbox, _, _ = adapter_factory(mode="active")
+    long_text = (
+        "I don't know exactly what your peak mileage tolerance is, but here's "
+        "what I can tell you: at 90 mile weeks with chronic PF, the typical "
+        "marker for trouble is morning stiffness lasting more than 10 minutes. "
+        "If you're crossing that threshold consistently, drop volume by 15-20%."
+    )
+    adapter.record_turn(**_record_turn_args(role="assistant", text=long_text))
+    assert len(outbox.inserts) == 1
+
+
+def test_record_turn_off_mode_takes_precedence_over_hedge_filter(adapter_factory):
+    """OFF-mode short-circuit fires before the hedge filter — the
+    'mode_off' metric label wins, not 'hedge_assistant'. Pins the
+    decision-order contract so a future refactor that swaps these
+    would surface immediately.
+    """
+    adapter, _, outbox, _, metrics = adapter_factory(mode="off")
+    hedge = "I don't have any information about your race."
+    adapter.record_turn(**_record_turn_args(role="assistant", text=hedge))
+    assert metrics.inserts_dropped_calls == ["mode_off"]
+    assert outbox.inserts == []
+
+
 def test_record_turn_scrubs_text_via_rules(adapter_factory):
     """Redaction runs before outbox insert per spec §4.1 line 189.
     Rules wire through to scrub with metrics for hit counting.

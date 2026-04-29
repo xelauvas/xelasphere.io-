@@ -42,6 +42,7 @@ is an implementation detail.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -50,6 +51,36 @@ from urllib.parse import urlencode
 
 from app.mempalace.feature_flag import MempalaceMode, mode
 from app.mempalace.redaction.rules import scrub
+
+
+# Hedge filter: drop assistant turns that are short "I don't know" / "could
+# you provide more context" responses. Surfaced by Marcus persona dogfood
+# 2026-04-28 — these get retrieved on later synthesis queries and displace
+# real establishment turns. Pattern + length both required (a long
+# substantive answer that happens to begin with "I don't know exactly..."
+# carries real signal and stays).
+_HEDGE_LEN_THRESHOLD = 250
+
+_HEDGE_PATTERNS = [
+    re.compile(r"\bi don'?t have (any|the)?\s*info", re.IGNORECASE),
+    re.compile(r"(you|i) haven'?t (been |yet )?(told|mentioned|said|provided)", re.IGNORECASE),
+    re.compile(r"\bcould you (please )?(provide|clarify|share|tell)", re.IGNORECASE),
+    re.compile(r"\bwithout (more )?(context|information|details)", re.IGNORECASE),
+    re.compile(r"\bi don'?t know\b", re.IGNORECASE),
+    re.compile(r"\bi'?m (sorry|not sure)\b", re.IGNORECASE),
+]
+
+
+def _is_hedge_response(text: str) -> bool:
+    """True iff text looks like an empty 'I don't know' response.
+
+    Both conditions required: matches at least one hedge pattern AND
+    text length below threshold. Long responses that happen to use
+    hedge phrasing carry real content and stay indexed.
+    """
+    if not text or len(text) >= _HEDGE_LEN_THRESHOLD:
+        return False
+    return any(p.search(text) for p in _HEDGE_PATTERNS)
 
 
 @dataclass
@@ -283,6 +314,15 @@ class MempalaceAdapter:
             # be expected to remember this counter.
             if self._metrics is not None:
                 self._metrics.inserts_dropped("mode_off")
+            return
+        if role == "assistant" and _is_hedge_response(text):
+            # Hedge filter: drop short "I don't know" / "could you
+            # clarify" responses so they don't pollute later synthesis
+            # via self-referential retrieval. Off-mode wins above; this
+            # check runs AFTER, so the metric labels stay disambiguated
+            # for ops alerting.
+            if self._metrics is not None:
+                self._metrics.inserts_dropped("hedge_assistant")
             return
         if ts is None:
             ts = time.time()
