@@ -680,8 +680,15 @@ def chat_stream():
     # session id diverged from the cookie (cookie wipe, multi-tab drift), the
     # client's session_id is the source of truth — verify it belongs to this
     # user, then sync the cookie before loading history.
+    #
+    # EXCEPTION: temp_* sessions (incognito) must never be reconciled away.
+    # The cookie-temp_* is authoritative; client sending a stale non-temp
+    # session_id from form data is exactly the failure mode that broke
+    # incognito on first message before this guard was added.
     client_session_id = (request.form.get('session_id') or '').strip()
-    if client_session_id and not guest_mode and user_id:
+    _cookie_session_id = session.get('current_session_id', '')
+    _cookie_is_temp = isinstance(_cookie_session_id, str) and _cookie_session_id.startswith('temp_')
+    if client_session_id and not guest_mode and user_id and not _cookie_is_temp:
         try:
             client_doc = db.collection('users').document(user_id).collection('chat_sessions').document(client_session_id).get()
             if client_doc.exists:
