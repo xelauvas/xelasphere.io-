@@ -1644,6 +1644,14 @@ async loadChatHistory(pageToken = null, limit = 10) {
                     status: isTemporary ? 'temporary' : 'active',
                     is_temporary: isTemporary
                 };
+                // activeSessionId is the source of truth for the form-sent
+                // session_id on chat POSTs (codeWindow.js reads it). MUST be
+                // updated for both temp and non-temp paths — otherwise the
+                // backend session-reconciliation logic sees a stale
+                // session_id from the previous active chat and overwrites
+                // the just-created cookie session, defeating the entire
+                // temp-chat ephemeral promise.
+                this.activeSessionId = sessionId;
                 if (isTemporary) {
                     this.temporarySessionId = sessionId;
                     this.isTemporaryUiActive = true;
