@@ -654,6 +654,56 @@
         ]
       }
     },
+    "/palace/{user_id}/drawers/{drawer_id}": {
+      "delete": {
+        "description": "Surgical per-drawer delete. Idempotent on missing drawer_id.\n\nPer-drawer delete is the trust-contract Week 1 feature: users need\nto clean up individual indexed turns (e.g., hallucinated assistant\nresponses indexed in prior shadow-mode usage).\n\nAcquires the per-user writer_lock \u2014 same discipline as ``/ingest``.",
+        "operationId": "delete_drawer_palace__user_id__drawers__drawer_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "drawer_id",
+            "required": true,
+            "schema": {
+              "title": "Drawer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Drawer",
+        "tags": [
+          "palace"
+        ]
+      }
+    },
     "/palace/{user_id}/ingest": {
       "post": {
         "description": "Accept a single conversation turn and file it as a drawer.\n\nFlow (spec \u00a74.1 amended write-path ordering):\n\n  1. Optional ``Idempotency-Key`` header parsing. If present AND\n     differs from ``body.turn_id``, return 400 \u2014 the header is a\n     contract-assertion channel for catching outbox bugs, not a\n     dedup mechanism. Either way, we stash it in the structured\n     log for correlation with Flask's outbox.\n\n  2. ``registry.open(user_id)`` \u2014 opens (or fetches cached) the\n     per-user palace. May trigger eviction of a different user;\n     that's fine, it runs under its own lock.\n\n  3. ``async with lock.writer_lock:`` \u2014 serialises this write\n     against any other writer for the same user_id (spec \u00a75.3\n     invariant: \"caller holds the per-user write lock for mutating\n     methods\"). Parallel readers on the same user still proceed\n     under the reader_lock.\n\n  4. ``handle.add_drawer(...)`` \u2014 wrapped in ``asyncio.to_thread``\n     to keep the event loop responsive while the synchronous\n     SELECT + library call + INSERT executes. The call is usually\n     fast (local sqlite + Chroma upsert), but \"usually fast\" isn't\n     a concurrency story \u2014 blocking the loop on every ingest would\n     stall every other route.\n\n  5. Return ``IngestResponse(status=result.status)`` \u2014 ``accepted``\n     means a fresh row landed in turns.sqlite; ``duplicate`` means\n     the turn_id was already present. No 3rd status exists.",

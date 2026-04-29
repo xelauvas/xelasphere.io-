@@ -490,3 +490,35 @@ def get_conversation_memory():
     next_offset = envelope.get("next_offset")
     next_cursor = str(next_offset) if next_offset is not None else None
     return jsonify({"turns": turns, "next_cursor": next_cursor})
+
+
+def _sidecar_delete_drawer(user_id: str, drawer_id: str) -> bool:
+    """Call sidecar DELETE /palace/{user_id}/drawers/{drawer_id}.
+
+    Separated as a single seam for testing.
+    """
+    url = f"{_sidecar_base_url()}/palace/{user_id}/drawers/{drawer_id}"
+    resp = _requests.delete(
+        url,
+        headers={"X-Sidecar-Token": _sidecar_token()},
+        timeout=5,
+    )
+    resp.raise_for_status()
+    return True
+
+
+@memory_bp.route('/user/conversation-memory/<drawer_id>', methods=['DELETE'])
+@error_handler
+@login_required
+@csrf_required
+def delete_conversation_memory_item(drawer_id: str):
+    """Delete a single mempalace turn for the current user."""
+    user_id = session['user']['uid']
+    if not drawer_id:
+        return jsonify({"error": "missing drawer_id"}), 400
+    try:
+        _sidecar_delete_drawer(user_id, drawer_id)
+    except Exception as exc:
+        logger.warning("Sidecar delete-drawer failed: %s", exc)
+        return jsonify({"error": "sidecar_unavailable"}), 503
+    return jsonify({"status": "ok", "drawer_id": drawer_id})

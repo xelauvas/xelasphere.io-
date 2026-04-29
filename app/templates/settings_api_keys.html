@@ -1026,7 +1026,7 @@
                     <div class="conv-row" data-drawer-id="${escapeHtmlConv(t.drawer_id)}">
                         <span class="conv-role-badge conv-role-${t.role === 'assistant' ? 'assistant' : 'user'}">[${escapeHtmlConv(t.role)}]</span>
                         <span class="conv-text">${escapeHtmlConv(t.text)}</span>
-                        <button type="button" class="conv-delete-btn" data-drawer-id="${escapeHtmlConv(t.drawer_id)}" title="Delete this turn" disabled>
+                        <button type="button" class="conv-delete-btn" data-drawer-id="${escapeHtmlConv(t.drawer_id)}" title="Delete this turn">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -1052,6 +1052,34 @@
             e.preventDefault();
             const activeFilter = document.querySelector('.conv-filter-chip.active')?.getAttribute('data-conv-filter') || 'all';
             fetchConversationMemory(activeFilter);
+        });
+
+        // Conversation memory: per-row delete (delegated)
+        document.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.conv-delete-btn');
+            if (!btn) return;
+            const drawerId = btn.getAttribute('data-drawer-id');
+            if (!drawerId) return;
+            if (!confirm('Delete this conversation turn? The AI will no longer remember it.')) return;
+
+            btn.disabled = true;
+            try {
+                const resp = await fetch(`/user/conversation-memory/${encodeURIComponent(drawerId)}`, {
+                    method: 'DELETE',
+                    credentials: 'same-origin',
+                    headers: { 'X-CSRFToken': csrfToken },
+                });
+                if (resp.ok) {
+                    btn.closest('.conv-row')?.remove();
+                } else {
+                    alert("Couldn't delete that turn — try again in a moment.");
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                console.warn('[conversation-memory] delete failed:', err);
+                alert("Couldn't delete that turn — network error.");
+                btn.disabled = false;
+            }
         });
 
         async function loadDreamToggle() {
