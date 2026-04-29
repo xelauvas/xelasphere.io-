@@ -4011,7 +4011,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
             <div class="modal-content">
                 <h2>Delete chat?</h2>
                 <p>This will delete <strong>${safeName}.</strong></p>
-                <p>Visit <a href="/settings" target="_blank" rel="noopener">settings</a> to delete any memories saved during this chat.</p>
+                <p>This removes the conversation from your chat history. The AI's memory of you stays intact — to clear that, use <strong>Forget Me</strong> in Memory settings.</p>
                 <div class="modal-actions">
                     <button class="btn-cancel">Cancel</button>
                     <button class="btn-delete">Delete</button>
