@@ -225,6 +225,14 @@ def save_chat_session(session_id: str):
     if not isinstance(data, dict):
         return jsonify({'error': 'Invalid payload.'}), 400
 
+    # Temporary chat ("incognito") sessions never have a Firestore doc by
+    # design. Without this short-circuit, the fallback path below would
+    # CREATE the temp_ doc with status='active', defeating the incognito
+    # promise. Defense-in-depth — frontend also skips /chat/save for temp_,
+    # but a future regression there shouldn't leak temp data into Firestore.
+    if isinstance(session_id, str) and session_id.startswith('temp_'):
+        return jsonify({'message': 'Temporary session — not persisted'}), 200
+
     user_id = session['user']['uid']
     messages = data.get('messages')
     pages = data.get('pages')

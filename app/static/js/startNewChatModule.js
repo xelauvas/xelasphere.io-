@@ -3785,8 +3785,11 @@ async loadChatHistory(pageToken = null, limit = 10) {
      */
     async saveSession(sessionId, { silent = false } = {}) {
         if (!sessionId || !this.chatHistory[sessionId]) return;
-        // Skip saving for guest sessions (ephemeral)
-        if (sessionId.startsWith('guest_')) return;
+        // Skip saving for ephemeral sessions: guest mode AND temporary
+        // (incognito) chats. Without the temp_ skip, /chat/save's fallback
+        // path silently CREATED a Firestore doc with status='active',
+        // defeating the incognito promise on every message.
+        if (sessionId.startsWith('guest_') || sessionId.startsWith('temp_')) return;
         const session = this.ensureSessionPages(sessionId) || this.chatHistory[sessionId];
         const payload = {};
 
