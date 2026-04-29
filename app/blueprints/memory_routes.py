@@ -522,3 +522,43 @@ def delete_conversation_memory_item(drawer_id: str):
         logger.warning("Sidecar delete-drawer failed: %s", exc)
         return jsonify({"error": "sidecar_unavailable"}), 503
     return jsonify({"status": "ok", "drawer_id": drawer_id})
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Memory toggles — master + per-system (Tier-1 trust contract)
+# ─────────────────────────────────────────────────────────────────────
+
+_TOGGLE_FIELDS = {"master", "ref_v2", "ref_mempalace"}
+
+
+def _toggle_doc_ref(user_id: str):
+    """Return the Firestore doc ref for the user's memory toggle prefs."""
+    from app.config import db
+    return db.collection("users").document(user_id) \
+             .collection("preferences").document("memory")
+
+
+@memory_bp.route('/user/memory-toggles', methods=['GET'])
+@error_handler
+@login_required
+def get_memory_toggles():
+    """Return the three boolean memory toggles. Defaults all-true."""
+    user_id = session['user']['uid']
+    snap = _toggle_doc_ref(user_id).get()
+    data = snap.to_dict() if snap.exists else {}
+    return jsonify({f: bool(data.get(f, True)) for f in _TOGGLE_FIELDS})
+
+
+@memory_bp.route('/user/memory-toggles', methods=['POST'])
+@error_handler
+@login_required
+@csrf_required
+def post_memory_toggles():
+    """Update one or more memory toggles. Unknown fields ignored."""
+    user_id = session['user']['uid']
+    payload = request.get_json(silent=True) or {}
+    update = {f: bool(payload[f]) for f in _TOGGLE_FIELDS if f in payload}
+    if not update:
+        return jsonify({"error": "no valid fields"}), 400
+    _toggle_doc_ref(user_id).set(update, merge=True)
+    return jsonify({"status": "ok", "updated": update})
