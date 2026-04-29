@@ -51,3 +51,18 @@ def test_general_tab_marked_active_by_default(authenticated_client, mock_firesto
 def test_close_button_present(authenticated_client, mock_firestore):
     resp = _render(authenticated_client)
     assert b'data-settings-close' in resp.data
+
+
+def test_api_keys_form_rendered_inside_modal_for_admin(authenticated_client, mock_firestore):
+    resp = _render(authenticated_client, email='a.savu.stefan@gmail.com')
+    assert b'data-pane="api-keys"' in resp.data
+    assert b'id="api-key-form"' in resp.data
+    assert b'id="groq_api_key"' in resp.data
+    assert b'id="openrouter_api_key"' in resp.data
+    assert b'id="deepseek_api_key"' in resp.data
+
+
+def test_api_keys_form_omitted_for_non_admin(authenticated_client, mock_firestore):
+    resp = _render(authenticated_client, email='regular@example.com')
+    assert b'data-pane="api-keys"' not in resp.data
+    assert b'id="api-key-form"' not in resp.data
