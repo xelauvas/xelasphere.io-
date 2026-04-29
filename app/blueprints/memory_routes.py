@@ -405,3 +405,88 @@ def undo_memory_activity(log_id):
     except Exception as e:
         logger.error(f"Failed to undo dream log {log_id} for {user_id}: {e}")
         return jsonify({'error': 'Undo failed'}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Conversation memory (mempalace turns) — Tier-1 trust contract Week 1
+# ─────────────────────────────────────────────────────────────────────
+
+import os
+import requests as _requests
+
+
+def _sidecar_base_url() -> str:
+    """Return the base URL for the mempalace sidecar.
+
+    Mirrors how ``app.mempalace.adapter`` resolves the sidecar URL —
+    that module is the source of truth for runtime sidecar config.
+    """
+    return os.getenv("MEMPALACE_SIDECAR_URL", "http://sidecar")
+
+
+def _sidecar_token() -> str:
+    return os.getenv("MEMPALACE_TOKEN", "")
+
+
+def _sidecar_list_drawers(user_id: str, limit: int = 100, offset: int = 0) -> dict:
+    """Call sidecar GET /palace/{user_id}/drawers and return the raw envelope.
+
+    Separated as a single seam so tests can monkey-patch this module-level
+    helper without needing to mock the requests library globally.
+    """
+    url = f"{_sidecar_base_url()}/palace/{user_id}/drawers"
+    resp = _requests.get(
+        url,
+        params={"limit": limit, "offset": offset},
+        headers={"X-Sidecar-Token": _sidecar_token()},
+        timeout=5,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+@memory_bp.route('/user/conversation-memory', methods=['GET'])
+@error_handler
+@login_required
+def get_conversation_memory():
+    """Get the user's mempalace conversation turns, formatted for the panel.
+
+    Response shape:
+        {turns: [{drawer_id, role, text, ts}], next_cursor: str|null}
+
+    role is 'assistant' if text starts with "ACTION: chat"; else 'user'.
+    The "ACTION: chat\\n" prefix is stripped for display.
+    """
+    user_id = session['user']['uid']
+    cursor = request.args.get('cursor')
+    limit = min(int(request.args.get('limit', 100)), 200)
+    offset = int(cursor) if cursor and cursor.isdigit() else 0
+
+    try:
+        envelope = _sidecar_list_drawers(user_id, limit=limit, offset=offset)
+    except Exception as exc:
+        logger.warning("Sidecar drawers list failed: %s", exc)
+        return jsonify({"error": "sidecar_unavailable"}), 503
+
+    drawers = envelope.get("drawers", []) or []
+    turns = []
+    for d in drawers:
+        text = (d.get("text") or "").strip()
+        if not text:
+            continue
+        if text.startswith("ACTION: chat"):
+            role = "assistant"
+            display = text[len("ACTION: chat"):].lstrip("\n").strip()
+        else:
+            role = "user"
+            display = text
+        turns.append({
+            "drawer_id": d.get("drawer_id"),
+            "role": role,
+            "text": display,
+            "ts": d.get("ts"),
+        })
+
+    next_offset = envelope.get("next_offset")
+    next_cursor = str(next_offset) if next_offset is not None else None
+    return jsonify({"turns": turns, "next_cursor": next_cursor})
