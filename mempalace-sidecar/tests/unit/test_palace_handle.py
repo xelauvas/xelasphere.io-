@@ -217,6 +217,92 @@ def test_semantic_search_returns_search_memories_shape(handle, monkeypatch):
     assert isinstance(calls[0]["palace_path"], str)
 
 
+def test_semantic_search_filters_below_relevance_threshold(handle, monkeypatch):
+    """Items with similarity below the threshold (default 0.25) are
+    filtered out. Surfaced by Marcus persona dogfood (2026-04-29) where
+    cross-topic queries (book recommendations, NYC coffee shops) returned
+    project-context items at similarities 0.17-0.21 that polluted the
+    LLM's context. Real recall hits scored 0.33-0.46 — the 0.25 floor
+    sits between noise and signal.
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {
+            "results": [
+                {"text": "high-relevance hit", "wing": "conversations",
+                 "room": "session", "similarity": 0.45},
+                {"text": "borderline hit", "wing": "conversations",
+                 "room": "session", "similarity": 0.30},
+                {"text": "low-similarity noise", "wing": "conversations",
+                 "room": "session", "similarity": 0.18},
+                {"text": "very low noise", "wing": "conversations",
+                 "room": "session", "similarity": 0.05},
+            ],
+        },
+    )
+    out = handle.semantic_search("query", k=5)
+    assert [r["text"] for r in out] == ["high-relevance hit", "borderline hit"]
+
+
+def test_semantic_search_threshold_configurable_via_env(handle, monkeypatch):
+    """``MEMPALACE_SEMANTIC_SCORE_THRESHOLD`` env var overrides the default
+    so prod ops can re-tune the floor without a code deploy.
+    """
+    monkeypatch.setenv("MEMPALACE_SEMANTIC_SCORE_THRESHOLD", "0.5")
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {
+            "results": [
+                {"text": "above 0.5", "wing": "conversations",
+                 "room": "session", "similarity": 0.6},
+                {"text": "below 0.5 but above default 0.25",
+                 "wing": "conversations", "room": "session",
+                 "similarity": 0.4},
+            ],
+        },
+    )
+    out = handle.semantic_search("query", k=5)
+    assert [r["text"] for r in out] == ["above 0.5"]
+
+
+def test_semantic_search_treats_missing_similarity_as_zero(handle, monkeypatch):
+    """Items without a ``similarity`` field are treated as similarity=0
+    and filtered out — defensive against library schema drift, and
+    consistent with the floor's intent (no signal, no value).
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {
+            "results": [
+                {"text": "with similarity", "wing": "conversations",
+                 "room": "session", "similarity": 0.4},
+                {"text": "no similarity field", "wing": "conversations",
+                 "room": "session"},
+            ],
+        },
+    )
+    out = handle.semantic_search("query", k=5)
+    assert [r["text"] for r in out] == ["with similarity"]
+
+
+def test_semantic_search_returns_empty_when_all_below_threshold(handle, monkeypatch):
+    """If every result is below threshold, return an empty list rather
+    than pad with noise. Cross-topic queries should fall through cleanly
+    to whatever the LLM does without retrieved memory.
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {
+            "results": [
+                {"text": "all noise 1", "similarity": 0.10},
+                {"text": "all noise 2", "similarity": 0.08},
+            ],
+        },
+    )
+    out = handle.semantic_search("query", k=5)
+    assert out == []
+
+
 def test_list_drawers_offset_pagination(handle):
     # Insert 25 drawers.
     for i in range(25):

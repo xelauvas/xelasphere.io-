@@ -33,6 +33,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import sqlite3
 import time
 from pathlib import Path
@@ -68,6 +69,30 @@ CURRENT_SCHEMA_VERSION = 1
 DEFAULT_WING = "conversations"
 DEFAULT_ROOM = "session"
 DEFAULT_AGENT = "xelasphere"
+
+
+# Cross-topic noise floor for semantic_search / topic_search (L2/L3).
+# Items with similarity below this threshold are filtered out so
+# off-topic queries don't pollute the LLM's context with low-relevance
+# project memory. Calibrated from Marcus persona dogfood (2026-04-29):
+# legitimate recall hits scored 0.33-0.46, cross-topic noise scored
+# 0.17-0.21. The 0.25 floor sits between noise and signal.
+# Tunable in prod via MEMPALACE_SEMANTIC_SCORE_THRESHOLD.
+DEFAULT_SEMANTIC_SCORE_THRESHOLD = 0.25
+
+
+def _semantic_score_threshold() -> float:
+    raw = os.environ.get("MEMPALACE_SEMANTIC_SCORE_THRESHOLD")
+    if raw is None:
+        return DEFAULT_SEMANTIC_SCORE_THRESHOLD
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        log.warning(
+            "Invalid MEMPALACE_SEMANTIC_SCORE_THRESHOLD=%r; using default %.2f",
+            raw, DEFAULT_SEMANTIC_SCORE_THRESHOLD,
+        )
+        return DEFAULT_SEMANTIC_SCORE_THRESHOLD
 
 
 # turns.sqlite DDL — literal schema from spec §5.3. Don't add columns.
@@ -509,13 +534,20 @@ class PalaceHandle:
 
         Bridged to ``searcher.search_memories`` which returns a dict
         envelope ``{"query", "filters", "total_before_filter", "results"}``.
-        We unwrap to the ``results`` list so callers deal with a
-        homogeneous ``list[dict]`` across all four layers.
+        We unwrap to the ``results`` list and apply the relevance-score
+        floor (``_semantic_score_threshold``, default 0.25) so off-topic
+        queries don't pollute the LLM's context with low-similarity
+        project memory.
+
+        Items missing the ``similarity`` field are treated as 0.0 and
+        dropped — defensive against library schema drift.
         """
         result = _library_search_memories(
             query, str(self.palace_path), n_results=k,
         )
-        return result.get("results", [])
+        items = result.get("results", []) or []
+        threshold = _semantic_score_threshold()
+        return [r for r in items if (r.get("similarity") or 0.0) >= threshold]
 
     # Our L2: v1 behaves identically to semantic_search. Topic-filter
     # logic is deferred — see spec §10 Open Question.
