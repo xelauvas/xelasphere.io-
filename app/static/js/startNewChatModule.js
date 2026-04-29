@@ -1186,6 +1186,14 @@ async loadChatHistory(pageToken = null, limit = 10) {
     async ensureSessionLoaded(sessionId) {
         if (!sessionId) return false;
         if (this.chatHistory[sessionId]) return true;
+        // Temp ("incognito") sessions are unreachable post-reload by design —
+        // they have no Firestore document. Match ChatGPT's behavior: a
+        // temp chat can't be reopened. Don't fetch (would 404), don't
+        // toast — just signal "not loaded" and let the caller fall
+        // through to its no-session path.
+        if (sessionId.startsWith('temp_') || sessionId.startsWith('guest_')) {
+            return false;
+        }
         try {
             const response = await this.fetchApi(`/chat/session/${sessionId}`, 'GET');
             const data = response?.session;
