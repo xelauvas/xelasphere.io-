@@ -108,20 +108,18 @@ implementation, escalate to spec-author rather than re-opening the decision.
     would add subprocess overhead with low yield. Future-us should not
     think this was a forgotten case.
 
-### Implementation prerequisite (not a decision, a fact)
+### V4 model catalog state
 
-Decision 3 references `deepseek-v4-flash` and `deepseek-v4-pro`. These IDs
-are **not** in `MODEL_CATALOG` on `main` — they live on
-`feat/deepseek-v4-swap` (PR open). On `main`, `resolve_model_id` would
-fall back to `DEFAULT_MODEL` for these IDs.
+`FORGE_VALIDATION_CASCADE` references V4 model IDs (`deepseek-v4-flash`,
+`deepseek-v4-pro`) which are present in `MODEL_CATALOG` on `main` as of
+the `feat/deepseek-v4-swap` merge (PR #139). No cross-PR sequencing
+constraint remains — Decision 3's "independent" framing is genuinely
+true, not technically-true-via-fallback-mechanics.
 
-**M1 PR therefore depends on `feat/deepseek-v4-swap` merging first.** The
-V4 swap branch is already deployed to `/opt/xelasphere/` via file-copy and
-verified working. Merging the V4 PR is a precondition listed in §13.
-
-If the V4 swap merge slips, the fallback is to add minimal `MODEL_CATALOG`
-entries for v4-flash/v4-pro as part of M1 PR (cherry-pick from the swap
-branch). This is documented but not the recommended path.
+The implementation startup-guard check in §13.1 remains in place as a
+defensive verification (logs warning + disables Forge feature flag if
+the catalog ever drifts from spec) but is not a hard prerequisite for
+the M1 PR opening.
 
 ---
 
@@ -131,6 +129,50 @@ This section is the standing audit trail of decisions amended after the
 spec was first authored. Future-you (or future-agent) reading this spec in
 six months needs to see amendments at a glance, not buried in section
 bodies. Add new amendments at the top of this section, dated.
+
+### Amendment 10 — 2026-04-29 — §3 V4 sequencing language removed pre-emptively
+
+After V4 swap (PR #139) merges, the V4 model IDs (`deepseek-v4-flash`,
+`deepseek-v4-pro`, plus aliases `deepseek-chat`, `deepseek-reasoner`)
+are present in `MODEL_CATALOG` on `main`, making the original "hard
+prereq" framing factually obsolete. Edits made on the spec branch in
+advance of V4 merge to keep merge ordering flexible — Decision 3's
+"independent" framing is now genuinely true rather than
+technically-true-via-fallback-mechanics.
+
+**Original (pre-Phase-C):** §3 ended with an "Implementation
+prerequisite" subsection that:
+- Stated M1 PR "depends on `feat/deepseek-v4-swap` merging first."
+- Documented a fallback path (cherry-pick V4 catalog entries into M1 PR
+  if V4 merge slips).
+- Required the M1 PR base to be post-V4-merge `main`.
+
+**Amended to:** the prerequisite section is gone. Replaced with a
+short "V4 model catalog state" subsection that simply notes the V4
+IDs are in `MODEL_CATALOG` on main as of the V4 merge, with no
+cross-PR sequencing constraint remaining. The §13.1 startup guard
+remains in place as a defensive verification, demoted from
+"hard-fail-on-startup" to "log + feature-flag-disable" per the plan
+PR's review feedback (R10 mitigation).
+
+**Rationale:** the original framing put a hard sequencing constraint
+on the M1 PR's base branch that disappeared the moment V4 merged.
+Pre-staging this edit on the spec branch keeps the merge order
+flexible — investigation #135, spec #136, and plan #154 can merge in
+any order relative to V4 #139, as long as V4 merges before
+implementation begins on `feat/forge-m1-impl`.
+
+**Impact on other decisions:** Decision 3 unchanged in intent; the
+"independent" framing is now factually true. §13.1's startup-guard
+*code sample* remains the original `raise RuntimeError` version
+in this spec; the plan PR (Task 5 Step 5.1, R10 review fix)
+documents the actual implementation pattern as a feature-flag
+(log warning + set `FORGE_VALIDATION_ENABLED = False`). This is an
+acknowledged plan-implements-modified-version-of-spec divergence,
+mirroring Amendment 1's pattern (spec text remains the aspirational
+version; implementation follows the amended pattern).
+
+---
 
 ### Amendment 9 — 2026-04-29 — telemetry-correctness fixes (§7.1, §7.2, §10.1, §12, AC#16)
 
