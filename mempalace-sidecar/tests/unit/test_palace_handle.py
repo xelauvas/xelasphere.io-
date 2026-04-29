@@ -398,7 +398,7 @@ def test_semantic_search_keeps_long_assistant_response_with_hedge_phrase(
         "consistently, drop volume by 15-20% for two weeks and add a daily 5-min "
         "calf and arch mobility routine before reassessing."
     )
-    assert len(long_assistant) >= 250  # invariant for the test premise
+    assert len(long_assistant) >= 350  # invariant for the test premise (v2 threshold)
     monkeypatch.setattr(
         "mempalace_sidecar.palace_handle._library_search_memories",
         lambda *a, **kw: {
@@ -534,6 +534,116 @@ def test_semantic_search_zero_or_negative_buffer_multiplier_falls_back(
     )
     handle.semantic_search("query", k=5)
     assert captured["n_results"] == 15  # default multiplier=3
+
+
+def test_semantic_search_drops_isnt_specified_hedge(handle, monkeypatch):
+    """v2 hedge pattern: 'X isn't specified' / 'X is not specified'.
+    Surfaced by Marcus bench (2026-04-29) — the live sidecar returned
+    'Your A-race target time isn't specified...' (212 chars) at sim 0.688
+    on the recall probe, ranking ahead of the real answer. v1 patterns
+    didn't match the phrasing.
+    """
+    text = (
+        "ACTION: chat\nYour A-race target time isn't specified in our "
+        "current conversation, but I can help you determine a realistic "
+        "goal based on your previous performances or current training "
+        "if you provide more details."
+    )
+    assert len(text) < 350  # in length-gate range
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [{"text": text, "similarity": 0.688}]},
+    )
+    out = handle.semantic_search("query", k=5)
+    assert out == []
+
+
+def test_semantic_search_drops_didnt_decide_hedge(handle, monkeypatch):
+    """v2 hedge pattern: 'didn't decide'. Surfaced by Marcus bench —
+    'You didn't decide anything... beginning of our conversation'
+    (257 chars) was just over the v1 length cap of 250 and survived;
+    the v2 cap of 350 + new pattern catches it cleanly.
+    """
+    text = (
+        "ACTION: chat\nYou didn't decide anything about the Saturday "
+        "long-run time change in this conversation, as this is the "
+        "beginning of our conversation and no such discussion has taken "
+        "place. If you'd like to discuss or decide on a time change, "
+        "I'm here to help."
+    )
+    assert 250 < len(text) < 350  # would have survived v1 length=250
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [{"text": text, "similarity": 0.356}]},
+    )
+    out = handle.semantic_search("query", k=5)
+    assert out == []
+
+
+def test_semantic_search_drops_beginning_of_conversation_hedge(handle, monkeypatch):
+    """v2 hedge pattern: 'beginning of our/this conversation' — common
+    opener for assistant turns that have no recall to offer.
+    """
+    text = (
+        "ACTION: chat\nThis is the beginning of our conversation, so I "
+        "don't have prior context. Let me know what you're working on."
+    )
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [{"text": text, "similarity": 0.5}]},
+    )
+    out = handle.semantic_search("query", k=5)
+    assert out == []
+
+
+def test_semantic_search_drops_if_you_provide_more_details_hedge(handle, monkeypatch):
+    """v2 hedge pattern: 'if you provide more details' / variants — the
+    offer-to-help-if-more-info pattern that masks a non-answer. Patterns
+    cover 'if you (provide|share|give|can provide|can share)' + (more|
+    additional) + (details|context|information). Other syntactic shapes
+    ('Once you give me X', 'When you tell me Y') aren't covered — they
+    weren't observed in the bench data and would risk false positives
+    in substantive answers.
+    """
+    cases = [
+        "ACTION: chat\nI can answer if you provide more details.",
+        "ACTION: chat\nLet me know if you can share more context.",
+        "ACTION: chat\nIf you give me additional information I can help.",
+    ]
+    for text in cases:
+        monkeypatch.setattr(
+            "mempalace_sidecar.palace_handle._library_search_memories",
+            lambda *a, _t=text, **kw: {"results": [{"text": _t, "similarity": 0.5}]},
+        )
+        out = handle.semantic_search("query", k=5)
+        assert out == [], f"hedge survived: {text!r}"
+
+
+def test_semantic_search_keeps_long_substantive_hedge_phrased_answer(
+    handle, monkeypatch,
+):
+    """The bumped 350-char length threshold preserves the original v1
+    intent: substantive answers that happen to use hedge phrasing carry
+    real signal and stay indexed. This 360-char answer mentions
+    'isn't specified' but goes on to provide concrete guidance.
+    """
+    text = (
+        "ACTION: chat\nYour exact mileage cap isn't specified in your "
+        "training plan, but here's the general rule for chronic plantar "
+        "fasciitis at sub-3:00 marathon training: peak weeks should not "
+        "exceed 90 miles, and any week where morning stiffness lasts "
+        "more than 10 minutes signals you should drop volume by 15-20% "
+        "for 2 weeks. Add daily 5-min calf and arch mobility before "
+        "reassessing."
+    )
+    assert len(text) >= 350  # invariant for the test premise
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [{"text": text, "similarity": 0.5}]},
+    )
+    out = handle.semantic_search("mileage", k=5)
+    assert len(out) == 1
+    assert out[0]["text"] == text
 
 
 def test_semantic_search_hedge_filter_complements_score_floor(handle, monkeypatch):
