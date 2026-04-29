@@ -1,0 +1,179 @@
+{# Memory child modal — used by both /account/manage page and the global settings modal. #}
+{# Markup only. Behavior wired by settingsModal.js (modal flow) and the legacy inline #}
+{# script in settings_api_keys.html (which dies in PR 5). #}
+<!-- Memory Management Modal -->
+<div class="modal-backdrop" id="memory-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="memory-modal-title">
+    <div class="modal-card modal-card-lg">
+        <button type="button" class="modal-close-btn" id="close-memory-modal" aria-label="Close memory manager">
+            <i class="fas fa-xmark"></i>
+        </button>
+        <div class="memory-modal-header">
+            <div class="modal-icon">
+                <i class="fas fa-brain"></i>
+            </div>
+            <div>
+                <h3 id="memory-modal-title">Memory</h3>
+                <p>Things the AI remembers about you to personalize responses.</p>
+            </div>
+        </div>
+
+        <!-- Memory toggles (master + per-system) — Tier-1 trust contract -->
+        <div class="memory-toggle-rows">
+            <div class="dream-toggle-row">
+                <div class="dream-toggle-info">
+                    <span class="dream-toggle-label">Memory</span>
+                    <span class="dream-toggle-desc">Master switch — turn off all memory recall and writes for your account</span>
+                </div>
+                <label class="dream-switch">
+                    <input type="checkbox" id="memory-toggle-master" checked>
+                    <span class="dream-switch-slider"></span>
+                </label>
+            </div>
+            <div class="dream-toggle-row">
+                <div class="dream-toggle-info">
+                    <span class="dream-toggle-label">Reference saved memories</span>
+                    <span class="dream-toggle-desc">Use facts the AI has learned (Profile, Preferences, Projects, etc.)</span>
+                </div>
+                <label class="dream-switch">
+                    <input type="checkbox" id="memory-toggle-ref-v2" checked>
+                    <span class="dream-switch-slider"></span>
+                </label>
+            </div>
+            <div class="dream-toggle-row">
+                <div class="dream-toggle-info">
+                    <span class="dream-toggle-label">Reference chat history</span>
+                    <span class="dream-toggle-desc">Use past conversation turns for personalized recall</span>
+                </div>
+                <label class="dream-switch">
+                    <input type="checkbox" id="memory-toggle-ref-mempalace" checked>
+                    <span class="dream-switch-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Dream Toggle -->
+        <div class="dream-toggle-row" id="dream-toggle-row">
+            <div class="dream-toggle-info">
+                <span class="dream-toggle-label">Memory Consolidation</span>
+                <span class="dream-toggle-desc">Automatically organize, merge duplicates, and remove stale memories</span>
+            </div>
+            <label class="dream-switch">
+                <input type="checkbox" id="dream-enabled-toggle" checked>
+                <span class="dream-switch-slider"></span>
+            </label>
+        </div>
+
+        <!-- Tab Toggle -->
+        <div class="memory-tab-toggle">
+            <button type="button" class="memory-tab-btn active" data-memory-tab="memories">Memories</button>
+            <button type="button" class="memory-tab-btn" data-memory-tab="conversation">Conversation memory</button>
+            <button type="button" class="memory-tab-btn" data-memory-tab="activity">Activity</button>
+        </div>
+
+        <!-- Memories Tab -->
+        <div class="memory-tab-panel active" data-memory-panel="memories">
+            <div class="memory-list-container">
+                <div class="memory-loading" id="memory-loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Loading memories...</span>
+                </div>
+                <div class="memory-empty" id="memory-empty" style="display: none;">
+                    <i class="fas fa-sparkles"></i>
+                    <p>No memories yet. As you chat, the AI will learn your preferences and remember important details.</p>
+                </div>
+                <div class="memory-buckets" id="memory-buckets"></div>
+            </div>
+        </div>
+
+        <!-- Conversation memory tab (mempalace turns, NEW) -->
+        <div class="memory-tab-panel" data-memory-panel="conversation">
+            <div class="conversation-memory-filter">
+                <button type="button" class="conv-filter-chip active" data-conv-filter="all">All turns</button>
+                <button type="button" class="conv-filter-chip" data-conv-filter="user">User only</button>
+            </div>
+            <div class="conversation-memory-container">
+                <div class="conversation-loading" id="conversation-loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Loading conversation memory...</span>
+                </div>
+                <div class="conversation-empty" id="conversation-empty" style="display: none;">
+                    <i class="fas fa-comment-dots"></i>
+                    <p>No conversation memory yet. As you chat, the AI saves what you tell it for future recall.</p>
+                </div>
+                <div class="conversation-error" id="conversation-error" style="display: none;">
+                    <p>Couldn't load conversation memory. <a href="#" id="conversation-retry">Retry</a></p>
+                </div>
+                <div class="conversation-list" id="conversation-list"></div>
+            </div>
+        </div>
+
+        <!-- Activity Tab -->
+        <div class="memory-tab-panel" data-memory-panel="activity">
+            <div class="dream-activity-container">
+                <div class="dream-activity-loading" id="dream-activity-loading" style="display: none;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Loading activity...</span>
+                </div>
+                <div class="dream-activity-empty" id="dream-activity-empty" style="display: none;">
+                    <i class="fas fa-moon"></i>
+                    <p>No consolidation activity yet</p>
+                </div>
+                <div class="dream-activity-error" id="dream-activity-error" style="display: none;">
+                    <p>Failed to load activity. <a href="#" id="dream-activity-retry">Retry</a></p>
+                </div>
+                <div class="dream-activity-list" id="dream-activity-list"></div>
+                <div style="padding: 0.75rem 1rem; border-top: 1px solid rgba(255,255,255,0.05); text-align: center;">
+                    <button type="button" class="btn btn-ghost" id="dream-test-btn" style="font-size: 0.75rem;">
+                        <i class="fas fa-flask"></i> Run consolidation now (test)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="memory-modal-footer">
+            <span class="memory-count" id="memory-count">0 memories</span>
+            <div class="memory-actions">
+                <button type="button" class="btn btn-ghost" id="refresh-memories">
+                    <i class="fas fa-arrows-rotate"></i> Refresh
+                </button>
+                <button type="button" class="btn btn-danger" id="clear-all-memories">
+                    <i class="fas fa-eraser"></i> Forget Me
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Clear Memory Confirmation Modal -->
+<div class="modal-backdrop" id="clear-memory-confirm-modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-card">
+        <button type="button" class="modal-close-btn" id="close-clear-memory-modal" aria-label="Close">
+            <i class="fas fa-xmark"></i>
+        </button>
+        <div class="modal-icon caution">
+            <i class="fas fa-triangle-exclamation"></i>
+        </div>
+        <div>
+            <h3>Forget Me?</h3>
+            <p>This will permanently delete everything the AI has learned about you across all conversations.</p>
+            <div style="margin-top: 0.75rem; font-size: 0.85rem; color: #aaa; text-align: left;">
+                <strong style="color: #ccc;">Will be deleted:</strong>
+                <ul style="margin: 0.3rem 0 0.6rem 1.2rem;">
+                    <li>All saved facts (Profile, Preferences, Projects, etc.)</li>
+                    <li>All conversation memory turns</li>
+                    <li>Smart suggestions cache</li>
+                </ul>
+                <strong style="color: #ccc;">Will be kept:</strong>
+                <ul style="margin: 0.3rem 0 0 1.2rem;">
+                    <li>Your chat history (delete separately if needed)</li>
+                    <li>Your account + memory toggle preferences</li>
+                </ul>
+            </div>
+            <p style="margin-top: 0.5rem; font-style: italic; color: #888;">This action cannot be undone.</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="cancel-clear-memory">Cancel</button>
+            <button type="button" class="btn btn-danger" id="confirm-clear-memory">Forget Me</button>
+        </div>
+    </div>
+</div>
