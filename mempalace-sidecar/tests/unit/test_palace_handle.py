@@ -828,6 +828,45 @@ def test_semantic_search_no_near_dup_filter_when_only_questions_returned(
     assert len(out) == 2
 
 
+def test_semantic_search_keeps_answer_bearing_user_question(
+    handle, monkeypatch,
+):
+    """Surfaced by Tom bench (2026-04-29): answer-bearing user questions
+    like 'Deploy target is a Hetzner box, ~4GB RAM. Does that change
+    the DB recommendation?' (13 words) carry establishment-grade signal
+    in their declarative clause. The word-count cap (12) protects them
+    from the near-dup filter.
+    """
+    long_q = (
+        "Deploy target is a Hetzner box, ~4GB RAM. Does that change "
+        "the DB recommendation?"
+    )
+    assert long_q.rstrip().endswith("?")
+    assert len(long_q) < 200
+    assert len(long_q.split()) > 12  # invariant for the test premise
+
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [
+            # Pure user question — drops as near-dup:
+            {"text": "What box am I deploying to?", "similarity": 0.581},
+            # Non-question anchor:
+            {"text": "Project recap.", "similarity": 0.394},
+            # Answer-bearing user question (long, has 'Hetzner') — KEEP:
+            {"text": long_q, "similarity": 0.288},
+        ]},
+    )
+    out = handle.semantic_search("deploy", k=5)
+    texts = [r["text"] for r in out]
+    assert any("Hetzner" in t for t in texts), (
+        f"Answer-bearing user question dropped — word-count cap not protecting "
+        f"declarative clauses. Got: {texts}"
+    )
+    assert not any("What box am I deploying to" in t for t in texts), (
+        f"Pure question survived — near-dup filter not applying. Got: {texts}"
+    )
+
+
 def test_semantic_search_relative_floor_excludes_hedges_from_anchor(
     handle, monkeypatch,
 ):
