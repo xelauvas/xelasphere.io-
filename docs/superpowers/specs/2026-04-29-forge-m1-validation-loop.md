@@ -130,6 +130,121 @@ spec was first authored. Future-you (or future-agent) reading this spec in
 six months needs to see amendments at a glance, not buried in section
 bodies. Add new amendments at the top of this section, dated.
 
+### Amendment 5 — 2026-04-29 — broken-with-warning signaling refactor (§7.1, §10.1, §14)
+
+**Original (review-of-spec, pre-feedback):** on cascade exhaustion, the
+spec mutated `routing.artifact_payload` with two underscore-prefixed
+keys (`_forge_validation_failed`, `_forge_errors`) and let the panel
+renderer / persist path read them off the payload directly.
+
+**Amended to:** validation status travels in the **message envelope**
+alongside the artifact, not inside it. Four new envelope fields persist
+in the message record (`forge_attempts`, `forge_healed_at`,
+`forge_validation_failed`, `forge_errors`), emitted as part of the SSE
+done payload. The panel renderer reads them from the envelope; the
+artifact_payload is never mutated.
+
+**Rationale:** other consumers of `artifact_payload` (Firestore persist,
+ContextBuilder on next turn, replay convergence) shouldn't have to know
+about Forge meta-keys. Underscore-prefix is a Python convention for
+"private" — it doesn't carry that meaning over the wire to JSON
+consumers. Mutating the payload would have round-tripped the meta-keys
+to Firestore on the artifact document forever, even after a healing
+regen on the next turn. Envelope-not-payload separation keeps the
+artifact data shape clean and the validation status owned by the
+message, where it logically belongs.
+
+**Impact on other decisions:** Decision 2 (persistence schema)
+unchanged in intent but expanded — was 2 fields, now 4. Schema table in
+§10.1 updated. Decision 4 (broken-with-warning) unchanged in intent,
+implementation moved to envelope.
+
+---
+
+### Amendment 4 — 2026-04-29 — stream_model cascade start position (§7.1, §11.E13, §11.E16)
+
+**Original (review-of-spec, pre-feedback):** cascade always iterated from
+index 0 — meaning if `stream_model` was `deepseek-v4-flash` and the
+stream attempt failed, iter 1 of the cascade would call `deepseek-v4-flash`
+*again*. Spec relied on loop-detect (Decision 9) to handle the
+"identical errors twice" case, but loop-detect requires byte-identical
+errors — slightly-different errors on the second Flash attempt would
+slip through and burn iter 1 for no value.
+
+**Amended to:** `start_idx = FORGE_VALIDATION_CASCADE.index(stream_model) + 1`
+when `stream_model` is in the cascade. The stream attempt counts as
+iter 0; cascade starts at the next tier up. New edge case **E16**: if
+`stream_model` is the LAST cascade entry (e.g. user explicitly picked
+`gpt-4.1`), `start_idx = len(cascade)` → no retries fire → artifact
+surfaces broken-with-warning per Decision 4.
+
+**Rationale:** user's review caught that Decision 9's loop-detect was
+being asked to do work that belongs at cascade-startup. Skipping past
+`stream_model` is a structural fix; loop-detect remains in place for
+mid-cascade identical-error-twice patterns.
+
+**Impact on other decisions:** Decision 9 unchanged. Decision 4
+unchanged. New acceptance criterion: when `stream_model` is V4-Flash
+and validation fails, iter 1 uses V4-Pro, not V4-Flash again.
+
+---
+
+### Amendment 3 — 2026-04-29 — token budget pre-flight check (§7.1, §7.2)
+
+**Original (review-of-spec, pre-feedback):** budget check was post-call
+accumulate then check-before-next-call. Effective semantics: "soft cap
+with up to one retry of overshoot acceptable" (a single retry could
+push the total well above 80k as long as the prior cumulative was below
+80k).
+
+**Amended to:** pre-flight estimate of the retry prompt + projected
+output tokens, summed against the running total, gates each retry
+**before** calling the model. If projected total exceeds budget, break
+the loop without making the call. Hard cap, no overshoot.
+
+**Rationale:** Decision 8 framed the budget as a "hard cap." The
+implementation didn't match the framing. Future-debugging discipline
+prefers "the spec says 80k and we mean 80k." Pre-flight estimation
+re-uses existing `orchestrator/accountant.py` token utilities; the
+output estimate is conservative (~1.2x the broken artifact's content
+size, since the model regenerates roughly the same shape).
+
+**Impact on other decisions:** Decision 8 unchanged in intent,
+implementation tightened. Decision 7 (accountant wrap) unchanged —
+post-call recording still happens, plus the new pre-flight estimate.
+
+---
+
+### Amendment 2 — 2026-04-29 — cascade increment discipline (§7.1, §7.2)
+
+**Original (review-of-spec, pre-feedback):** `previous_skip_count`
+parallel counter advanced by 2 on loop-detect match, while
+`cascade_iter` advanced by 1 unconditionally at the end of the loop.
+Two increment sites that combined incorrectly: on Flash + Pro = identical
+errors, the math went `cascade_iter=2, skip=2 → effective=4 → break`,
+missing GPT-4.1 entirely (the strongest model in the cascade and the
+one most likely to break a same-family failure pattern).
+
+**Amended to:** drop `previous_skip_count` entirely. Single increment
+site discipline — on loop-detect match: `cascade_iter += 2; continue`.
+Otherwise: `cascade_iter += 1` at the bottom of the loop. The `continue`
+is load-bearing — it bypasses the unconditional `+= 1` that would
+otherwise double-step. A worked-example walkthrough is now embedded as
+a comment in the §7.1 pseudo-code so the iteration sequence on a
+loop-detect case is explicit and reviewable.
+
+**Rationale:** original logic was an off-by-one with invisible exposure
+(no worked example to validate against). The bug would have caused the
+cascade to terminate one tier short on every loop-detect-firing case,
+producing user-facing exhaustion when GPT-4.1 might have healed the
+artifact.
+
+**Impact on other decisions:** Decision 9 unchanged in intent,
+implementation made correct. New acceptance criterion: on Flash + Pro
+producing identical errors, cascade reaches GPT-4.1 (skipping Kimi).
+
+---
+
 ### Amendment 1 — 2026-04-29 — Decision 1 (validator binary for JS/JSX)
 
 **Original (Decision 1):** *"Use `node --check` for `.js`/`.jsx`,
@@ -305,47 +420,55 @@ The deviation is logged in §4 "Decision amendments since spec authoring."
 TS/TSX path below is unchanged from Decision 1.
 
 **JS/JSX path: `@babel/parser` via Node CLI wrapper.** The wrapper script
-lives in `app/services/forge_validators/check_jsx.cjs`:
+lives in `app/services/forge_validators/check_jsx.cjs` and reads source
+**from stdin** (avoids tmpfile creation, race conditions, and cleanup):
 
 ```javascript
-// check_jsx.cjs — minimal JSX/JS syntax check via @babel/parser
-const fs = require('fs');
+// check_jsx.cjs — minimal JSX/JS syntax check via @babel/parser.
+// Reads source from stdin (avoids tmpfile race + cleanup).
 const parser = require('@babel/parser');
-const path = process.argv[2];
-const code = fs.readFileSync(path, 'utf8');
-try {
-    parser.parse(code, {
-        sourceType: 'module',
-        plugins: ['jsx'],
-        errorRecovery: false,
-    });
-    process.exit(0);
-} catch (err) {
-    // Babel error: { loc: { line, column }, message, ... }
-    process.stderr.write(JSON.stringify({
-        kind: 'parse_error',
-        line: err.loc?.line ?? 0,
-        column: err.loc?.column ?? 0,
-        message: err.message ?? 'Unknown parse error',
-    }) + '\n');
-    process.exit(1);
-}
+const chunks = [];
+process.stdin.on('data', (chunk) => chunks.push(chunk));
+process.stdin.on('end', () => {
+    const code = Buffer.concat(chunks).toString('utf8');
+    try {
+        parser.parse(code, {
+            sourceType: 'module',
+            plugins: ['jsx'],
+            errorRecovery: false,
+        });
+        process.exit(0);
+    } catch (err) {
+        // Babel error: { loc: { line, column }, message, ... }
+        process.stderr.write(JSON.stringify({
+            kind: 'parse_error',
+            line: err.loc?.line ?? 0,
+            column: err.loc?.column ?? 0,
+            message: err.message ?? 'Unknown parse error',
+        }) + '\n');
+        process.exit(1);
+    }
+});
 ```
 
-Subprocess call:
+Subprocess call (content fed via stdin, no tmpfile):
 
 ```python
 proc = await asyncio.create_subprocess_exec(
-    'node', str(CHECK_JSX_SCRIPT), tmpfile_path,
+    'node', str(CHECK_JSX_SCRIPT),
+    stdin=asyncio.subprocess.PIPE,
     stdout=asyncio.subprocess.PIPE,
     stderr=asyncio.subprocess.PIPE,
 )
 try:
-    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=3.0)
+    stdout, stderr = await asyncio.wait_for(
+        proc.communicate(input=file_content.encode('utf-8')),
+        timeout=3.0,
+    )
 except asyncio.TimeoutError:
     proc.kill()
     await proc.wait()
-    logger.warning(f"Forge validator timeout on {path}")
+    logger.warning(f"Forge validator timeout on {file_path}")
     return None  # caller treats as ok=True (Decision 11)
 ```
 
@@ -407,11 +530,14 @@ existing cascade #1 can call it on its successful exit too:
 forge_metrics = {
     'forge_validation_attempted': False,
     'forge_validation_passed_first_try': True,
-    'forge_healed_at_iter': None,        # 1-4, or None if exhausted/skipped
+    'forge_healed_at_iter': None,        # cascade index (0-based) at which
+                                          # we healed; None if exhausted/skipped
     'forge_total_retry_tokens': 0,
     'forge_time_to_heal_ms': None,
     'forge_budget_exhausted': False,
     'forge_loop_detected_skip': False,
+    'forge_validation_failed': False,    # True iff exhausted without heal
+    'forge_errors': [],                  # validator errors at terminal state
 }
 
 if routing and routing.artifact_payload:
@@ -424,39 +550,74 @@ if routing and routing.artifact_payload:
         if not result.ok:
             forge_metrics['forge_validation_passed_first_try'] = False
             previous_error_signature = _signature(result.errors)
-            previous_skip_count = 0
-            cascade_iter = 0
+            
+            # Stream model already had its turn — advance past it in cascade.
+            # If stream_model is the LAST cascade entry, no retries possible.
+            try:
+                start_idx = FORGE_VALIDATION_CASCADE.index(stream_model) + 1
+            except ValueError:
+                start_idx = 0  # stream_model not in cascade — start from top
+            
+            cascade_iter = start_idx
+            
+            # ─────────────────────────────────────────────────────────────
+            # Worked example — loop-detect with cascade [Flash, Pro, Kimi, GPT-4.1]
+            # stream_model = Flash, fails. start_idx = 1 (advance past Flash).
+            #   cascade_iter=1 → Pro fails with errors X.       sig=X.   iter=2
+            #   cascade_iter=2 → Kimi fails with errors X.      sig=X — match!
+            #                    skip-detect fires: cascade_iter += 2 + continue
+            #                    iter=4
+            #   cascade_iter=4 → out of bounds, exit loop.
+            #
+            # Result: stream attempt + Pro + Kimi + (GPT-4.1 NOT reached
+            # because Kimi already produced identical errors to Pro — strong
+            # signal that GPT-4.1's family won't help either; we save the
+            # token budget and surface broken-with-warning).
+            #
+            # Compare: WITHOUT loop-detect, cascade would run all 3 retries
+            # (Pro, Kimi, GPT-4.1) producing the same broken output.
+            # ─────────────────────────────────────────────────────────────
             
             while cascade_iter < len(FORGE_VALIDATION_CASCADE):
-                # Loop-detect: skip 2 tiers if errors are byte-identical to prior iter
-                effective_iter = cascade_iter + previous_skip_count
-                if effective_iter >= len(FORGE_VALIDATION_CASCADE):
-                    break
-                retry_model = FORGE_VALIDATION_CASCADE[effective_iter]
-                attempt_num = cascade_iter + 1  # 1-indexed for user-visible
+                retry_model = FORGE_VALIDATION_CASCADE[cascade_iter]
                 
-                # Token budget check
-                if forge_metrics['forge_total_retry_tokens'] >= FORGE_RETRY_TOKEN_BUDGET:
-                    forge_metrics['forge_budget_exhausted'] = True
-                    logger.warning(f"🔥 Forge budget exhausted "
-                                   f"({forge_metrics['forge_total_retry_tokens']} tokens), stopping cascade")
-                    break
-                
-                # Emit retry status to client
-                yield f"data: {json.dumps({
-                    'type': 'status',
-                    'subtype': 'forge_retry',
-                    'attempt': attempt_num,
-                    'model': retry_model,
-                    'reason': _short_reason(result.errors),
-                })}\n\n"
-                
-                # Build prompt (§7.2) and call model
+                # Build prompt (§8) — needed for token pre-flight estimate
                 retry_prompt = build_validation_retry_prompt(
                     payload=routing.artifact_payload,
                     errors=result.errors,
                     original_user_prompt=prompt,
                 )
+                
+                # Pre-flight token-budget check (Decision 8 — hard cap, no overshoot)
+                prompt_estimate = _estimate_input_tokens(retry_prompt)
+                # Conservative output estimate: ~1.2x the broken artifact's
+                # total content size (model regenerates roughly the same shape)
+                output_estimate = int(_artifact_content_tokens(routing.artifact_payload) * 1.2)
+                projected_total = (forge_metrics['forge_total_retry_tokens']
+                                   + prompt_estimate + output_estimate)
+                if projected_total > FORGE_RETRY_TOKEN_BUDGET:
+                    forge_metrics['forge_budget_exhausted'] = True
+                    logger.warning(
+                        f"🔥 Forge budget pre-flight: projected {projected_total} > "
+                        f"budget {FORGE_RETRY_TOKEN_BUDGET}, stopping cascade "
+                        f"(accumulated={forge_metrics['forge_total_retry_tokens']}, "
+                        f"projected_call={prompt_estimate + output_estimate})"
+                    )
+                    break
+                
+                # Emit retry status to client. `attempt` = 1-indexed cascade
+                # position so the user-visible model trail is self-documenting
+                # (skipped tiers leave gaps which the UI can render as "skipped
+                # X (same errors as previous)").
+                yield f"data: {json.dumps({
+                    'type': 'status',
+                    'subtype': 'forge_retry',
+                    'attempt': cascade_iter + 1,
+                    'model': retry_model,
+                    'reason': _short_reason(result.errors),
+                })}\n\n"
+                
+                # Call model
                 try:
                     retry_response, _, _ = get_ai_response(retry_prompt, retry_model)
                     in_tokens, out_tokens = _estimate_tokens(retry_prompt, retry_response)
@@ -477,21 +638,30 @@ if routing and routing.artifact_payload:
                 new_result = validate_artifact_payload(retry_parsed.artifact_payload)
                 if new_result.ok:
                     routing.artifact_payload = retry_parsed.artifact_payload
-                    forge_metrics['forge_healed_at_iter'] = attempt_num
+                    forge_metrics['forge_healed_at_iter'] = cascade_iter + 1
                     forge_metrics['forge_time_to_heal_ms'] = int((time.monotonic() - t_start) * 1000)
                     yield f"data: {json.dumps({
                         'type': 'status',
                         'subtype': 'forge_done',
-                        'healed_at': attempt_num,
+                        'healed_at': cascade_iter + 1,
                     })}\n\n"
                     break
                 
-                # Loop-detect: same errors as last iter? Skip 2 tiers (Dec 9)
+                # Loop-detect (Decision 9): if errors are byte-identical to the
+                # immediately-prior iteration, the current model family is also
+                # stuck on the same pattern. Skip the next tier (advance by 2)
+                # and continue. Single increment site to avoid double-step bugs.
                 new_signature = _signature(new_result.errors)
                 if new_signature == previous_error_signature:
                     forge_metrics['forge_loop_detected_skip'] = True
-                    previous_skip_count += 2
-                    logger.info(f"🔥 Forge loop-detect: same errors as prior iter, skipping 2 tiers")
+                    logger.info(
+                        f"🔥 Forge loop-detect: {retry_model} produced same errors as prior iter, "
+                        f"skipping cascade[{cascade_iter + 1}]"
+                    )
+                    previous_error_signature = new_signature
+                    result = new_result
+                    cascade_iter += 2
+                    continue
                 
                 previous_error_signature = new_signature
                 result = new_result
@@ -499,18 +669,24 @@ if routing and routing.artifact_payload:
             
             # Cascade exhausted without healing
             if forge_metrics['forge_healed_at_iter'] is None:
+                forge_metrics['forge_validation_failed'] = True
+                forge_metrics['forge_errors'] = [_error_to_json(e) for e in result.errors]
                 yield f"data: {json.dumps({
                     'type': 'status',
                     'subtype': 'forge_exhausted',
-                    'attempts': cascade_iter,
-                    'errors': [_error_to_json(e) for e in result.errors],
+                    'attempts': cascade_iter - start_idx,
+                    'errors': forge_metrics['forge_errors'],
                 })}\n\n"
-                # Surface broken-with-warning per Dec 4 — artifact still flows
-                # to artifact_data assembly, but with a warning flag.
-                routing.artifact_payload['_forge_validation_failed'] = True
-                routing.artifact_payload['_forge_errors'] = [
-                    _error_to_json(e) for e in result.errors
-                ]
+                # Surface broken-with-warning per Decision 4. Note: forge_*
+                # fields ride in the message envelope (see §10), NOT mutated
+                # onto routing.artifact_payload. The artifact_payload's data
+                # shape stays clean for downstream consumers (panel, persist,
+                # ContextBuilder); validation status travels alongside as
+                # message metadata. The panel renderer reads forge_validation_failed
+                # / forge_errors from the message envelope to draw the ribbon.
+
+# forge_metrics is then passed alongside artifact_data into the SSE done
+# payload (§9.2) and to save_interaction (§13.3) for persistence.
 
 # === END Forge M1 ===
 
@@ -520,23 +696,50 @@ if routing and routing.artifact_payload:
 ### 7.2 Notes on the cascade pseudo-code
 
 - **`FORGE_RETRY_TOKEN_BUDGET = 80_000`** — module-level constant in
-  `chat_engine.py` next to `FORGE_VALIDATION_CASCADE`.
+  `chat_engine.py` next to `FORGE_VALIDATION_CASCADE`. Hard cap (no
+  overshoot) — pre-flight estimate gates each retry call before invoking
+  the model.
 - **`_has_validatable_files(payload)`** returns `True` iff at least one
   file's `language` is in `_LANGUAGE_VALIDATORS`. Cheap O(n) check; avoids
   spawning subprocess for SVG/HTML/CSS-only artifacts.
 - **`_signature(errors)`** returns a hashable tuple:
   `tuple(sorted((e.file_path, e.line, e.message) for e in errors))`.
-- **`_short_reason(errors)`** picks the first error and formats:
-  `"validator: <kind> @ <file>:<line>"`. For the user-visible status block.
-- **`_estimate_tokens(prompt, response)`** delegates to existing
-  `orchestrator/accountant.py` token estimation utilities.
-- The `previous_skip_count` mechanism implements Decision 9: when iter N
-  produces identical errors to iter N-1, the next iteration takes the
-  cascade entry at `cascade_iter + 2` (skipping two tiers).
-- Even on exhaustion, the artifact still flows downstream — `routing.artifact_payload`
-  remains populated and `persist_decision` runs as normal. The two
-  `_forge_validation_failed` / `_forge_errors` keys are picked up by the
-  panel renderer to draw the warning ribbon (Decision 4).
+  Excludes column to avoid spurious skip-detect misses on minor
+  re-formatting that shifts the column but not the line/message.
+- **`_short_reason(errors)`** handles the multi-file case explicitly:
+  - Single file: `"validator: <kind>-parse @ <file>:<line>"`.
+  - Multi-file (>1 distinct paths): `"validator: N files with syntax
+    errors (<file1>:<line1>, <file2>:<line2>, ...)"` — first error per
+    file, sorted by file path.
+  This ensures the SSE `forge_retry` event surfaces all impacted files,
+  not just the alphabetically-first one.
+- **`_estimate_tokens(prompt, response)`** and `_estimate_input_tokens(prompt)`
+  delegate to existing `orchestrator/accountant.py` token estimation
+  utilities. `_artifact_content_tokens(payload)` sums tokenized file
+  contents (already in payload) for output-size estimation.
+- **Increment discipline (Decision 9 implementation):** there is exactly
+  ONE place `cascade_iter` advances on a non-skip path (`cascade_iter +=
+  1`) and exactly ONE on a skip-detect path (`cascade_iter += 2` followed
+  by `continue`). The `continue` is load-bearing — it bypasses the
+  unconditional `cascade_iter += 1` at the bottom of the loop, preventing
+  double-increment. Worked-example walkthrough in the §7.1 code comment
+  validates that on Flash+Pro=identical-errors, the cascade reaches
+  Kimi(skipped→GPT-4.1 region), as Decision 9 intends.
+- **Stream model handling (Decision 9-adjacent):** if the original stream
+  attempt's model is in `FORGE_VALIDATION_CASCADE`, `start_idx` advances
+  past it. The stream attempt counts as iter 0; cascade starts at the
+  next tier. Avoids burning iter 1 on the same model that just failed.
+  Edge case: stream_model is the LAST cascade entry (e.g. user picked
+  GPT-4.1 directly) → `start_idx = len(cascade)` → no retries fire,
+  artifact surfaces broken-with-warning (E16).
+- **Even on exhaustion, the artifact flows downstream** —
+  `routing.artifact_payload` remains populated AND UNMUTATED;
+  `persist_decision` runs as normal. Validation status (`forge_validation_failed`,
+  `forge_errors`) travels in the message envelope, NOT injected into the
+  artifact payload. The panel renderer reads from the envelope to draw
+  the warning ribbon (Decision 4). This separation matters because other
+  consumers of `artifact_payload` (Firestore persist, ContextBuilder on
+  next turn, replay convergence) shouldn't have to know about Forge meta-keys.
 
 ---
 
@@ -632,6 +835,17 @@ ACTION: create_artifact and the fenced format. Include ALL files.
   ballooning. Conversation history is already in the model's KV cache from
   the original turn; re-paying for it on every retry is wasteful.
 
+**Acknowledged trade-off.** The retry prompt deliberately omits the
+prior conversation history, including any nuanced user preferences from
+earlier turns ("no class components", "use Tailwind", etc.). The retry
+model sees only the validator error, the broken artifact, and the *raw
+user request from this turn*. Fine-grained preferences from turns N-1,
+N-2, etc. are not visible to retry attempts. This is acceptable for
+M1's syntax-fix scope — JSX parser errors are syntactically local and
+rarely require multi-turn context to fix correctly. If M2 expands Forge
+beyond syntax fixes (e.g. semantic / behavioral validation via Run-tool
+output), this trade-off should be revisited.
+
 ---
 
 ## 9. Transcript block (SSE events)
@@ -707,33 +921,53 @@ Visual treatment (high-level — exact CSS in implementation):
 
 ### 10.1 Schema (Firestore)
 
-Firestore is schema-less; "migration" here means: writes start emitting two
-new fields, reads gracefully handle their absence on legacy documents.
+Firestore is schema-less; "migration" here means: writes start emitting
+four new fields, reads gracefully handle their absence on legacy documents.
 
 The chat message record (saved at `:2257` via `save_interaction`) gains:
 
 ```json
 {
   "...existing fields...": "...",
-  "forge_attempts":   integer | null,    // null if validator was skipped
-                                          // (no JSX/TSX/JS/TS files)
-                                          // 0 if first-try-pass
-                                          // 1-4 if retries occurred
-  "forge_healed_at":  integer | null     // null if exhausted OR skipped
-                                          // 1-4 if healed at that iter
+  "forge_attempts":          integer | null,    // null if validator was skipped
+                                                 // (no JSX/TSX/JS/TS files)
+                                                 // 0 if first-try-pass
+                                                 // 1-4 if retries occurred
+  "forge_healed_at":         integer | null,    // null if exhausted, skipped,
+                                                 // OR no retries needed
+                                                 // 1-4 if healed at that iter
+  "forge_validation_failed": boolean | null,    // null if validator skipped;
+                                                 // false if passed (with or
+                                                 // without retries); true iff
+                                                 // cascade exhausted without
+                                                 // healing
+  "forge_errors":            array | null       // null unless
+                                                 // forge_validation_failed=true;
+                                                 // then: list of error dicts
+                                                 // {file_path, line, column,
+                                                 //  message, excerpt}
 }
 ```
 
+Rationale for `forge_validation_failed` + `forge_errors` in the message
+envelope (NOT mutated onto `artifact_payload`): the payload's data shape
+stays clean for downstream consumers (panel renderer, persist_decision,
+ContextBuilder on next turn, replay convergence). Validation status is
+message metadata — it travels alongside the artifact, not inside it.
+The panel renderer reads from the message envelope to draw the warning
+ribbon (Decision 4).
+
 Semantics:
 
-| State | `forge_attempts` | `forge_healed_at` |
-|---|---|---|
-| No validatable files (e.g. SVG) | `null` | `null` |
-| Validated, passed first try | `0` | `null` |
-| Validated, healed at iter 1 | `1` | `1` |
-| Validated, healed at iter 3 | `3` | `3` |
-| Validated, exhausted (4 iters) | `4` | `null` |
-| Validated, budget-stopped at 2 | `2` | `null` |
+| State | `forge_attempts` | `forge_healed_at` | `forge_validation_failed` | `forge_errors` |
+|---|---|---|---|---|
+| No validatable files (e.g. SVG) | `null` | `null` | `null` | `null` |
+| Validated, passed first try | `0` | `null` | `false` | `null` |
+| Validated, healed at iter 1 | `1` | `1` | `false` | `null` |
+| Validated, healed at iter 3 | `3` | `3` | `false` | `null` |
+| Validated, exhausted (4 iters) | `4` | `null` | `true` | `[...errors]` |
+| Validated, budget-stopped at 2 | `2` | `null` | `true` | `[...errors]` |
+| Validated, no retries possible (E16: stream_model = GPT-4.1) | `0` | `null` | `true` | `[...errors]` |
 
 ### 10.2 Write path
 
@@ -769,18 +1003,19 @@ first → render no breadcrumb (current behavior). No data migration needed.
 | E1 | Stream cancelled mid-flight (existing abort path) | Existing abort handling propagates; the cascade loop's `yield` raises `GeneratorExit`, the loop unwinds, no persistence happens. **No new code needed** — verify in implementation that the `try`/`except` around `get_ai_response` does not swallow `GeneratorExit`. |
 | E2 | Validator subprocess errors (binary missing, OS-level fail) | Logged warning, treated as ok=True, artifact flows as if validation passed. Graceful degradation. |
 | E3 | Validator times out (3s/file) | Same as E2. Per-file timeout; doesn't cascade-fail the whole artifact. |
-| E4 | All 4 iterations fail | Per Decision 4: emit `forge_exhausted`, set `_forge_validation_failed=True` on the payload, render artifact with red warning ribbon + inline errors. |
+| E4 | Cascade exhausted (all reachable iters fail) | Per Decision 4: emit `forge_exhausted` SSE event, set `forge_validation_failed=true` and `forge_errors=[...]` in the **message envelope** (NOT mutated onto the artifact payload — see Amendment 5). Panel renderer reads from envelope and draws red warning ribbon + inline errors. Number of "all" reachable iters varies with `stream_model` per E13/E16. |
 | E5 | Multi-file artifact, only one file fails | Validator reports the one failure. Retry prompt includes ALL files (model needs cross-file context per §8.4). On heal, all files are re-saved. |
-| E6 | Model returns identical errors twice | Loop-detection fires (Decision 9), `previous_skip_count += 2`, next iteration jumps two cascade tiers ahead. Logged as `forge_loop_detected_skip=true`. |
+| E6 | Model returns identical errors to the immediately-prior iteration | Loop-detection fires (Decision 9): on byte-identical signature `tuple(sorted((file_path, line, message)))`, `cascade_iter += 2` and `continue` (skipping the next tier). Logged as `forge_loop_detected_skip=true`. Worked example in §7.1 pseudo-code comment. |
 | E7 | Retry token budget (80k) exceeded mid-cascade | Loop breaks immediately. `forge_budget_exhausted=true`. Treated like exhaustion: artifact renders with red ribbon, current errors surfaced. |
 | E8 | Non-validatable artifact (no JSX/TSX/JS/TS files; pure HTML/CSS/SVG/Python) | `_has_validatable_files` returns False, validator never runs. `forge_attempts=null`, `forge_healed_at=null`. Zero overhead. |
 | E9 | Artifact has zero files | Same as E8 — validator skipped. |
 | E10 | User regenerates the same broken artifact in next turn | Each turn is a fresh cascade. No cross-turn state. The previous turn's `forge_attempts` does not influence the new turn. |
 | E11 | Cascade #1 (existing JSON-malform retry) succeeds; Forge runs after | Sequential pipeline: cascade #1 produces a valid `artifact_payload`, Forge then validates it. Both can fire in one turn. |
 | E12 | Patch-apply cascade (#2/#3) succeeds; should Forge also run? | **Yes** — patches can introduce syntax bugs just like full regens. Forge runs on the post-patch `artifact_payload` regardless of how it got built. |
-| E13 | Stream model is one of the cascade models AND fails | Cascade still iterates from index 0. We do not skip the same model — it may have failed for a transient reason. Loop detection (E6) handles the case where it consistently produces the same error. |
-| E14 | Retry prompt exceeds the model's context window | Caught by `get_ai_response` exception path, treated as a failed cascade iteration, loop continues. The §8.3 large-artifact mitigation should rarely allow this in practice. |
-| E15 | Validator finds errors only in `_forge_validation_failed`-flagged retry artifacts | Defensive: never re-validate an artifact already flagged failed. Prevents double-Forge on legacy paths if they ever feed into the hook. |
+| E13 | Stream model is one of the cascade models AND fails | Cascade advances past `stream_model` — `start_idx = FORGE_VALIDATION_CASCADE.index(stream_model) + 1`. The stream attempt counts as iter 0; cascade starts at the next tier up. Avoids burning a retry slot on the same model that just failed in the original stream attempt (a slightly-different error wouldn't trip loop-detect, so without this, iter 1 on Flash-stream-failure would call Flash again). |
+| E14 | Retry prompt exceeds the model's context window | Caught by `get_ai_response` exception path, treated as a failed cascade iteration, loop continues. The §8.3 large-artifact mitigation should rarely allow this in practice. The pre-flight token-budget check (Decision 8) also bounds projected size. |
+| E15 | Validator runs on an artifact already flagged failed in the same turn | Defensive: never re-validate. The `forge_validation_failed` envelope flag (set on cascade exhaustion) is a one-shot terminal state per turn; the validator is not re-entered after it's set. |
+| E16 | Stream model is the LAST cascade entry (e.g. user explicitly picked `gpt-4.1` and validation fails) | `start_idx = len(cascade)` → cascade loop never enters → no retries possible. Artifact surfaces broken-with-warning per Decision 4. Persists as `forge_attempts=0`, `forge_validation_failed=true`, `forge_errors=[...]`. The user gets the broken artifact + the warning ribbon and can manually retry / reword. |
 
 ---
 
@@ -871,23 +1106,26 @@ its merge is upstream of M1 PR opening. M1 PR base = post-V4-merge `main`.
 
 | Path | Purpose | Approx LOC |
 |---|---|---|
-| `app/services/artifact_validator.py` | Validator + `build_validation_retry_prompt` + helpers (`_has_validatable_files`, `_signature`, `_short_reason`, `_error_to_json`) | ~250 |
-| `app/services/forge_validators/check_jsx.cjs` | Babel-based Node CLI wrapper for JSX/JS syntax check | ~25 |
+| `app/services/artifact_validator.py` | Validator + `build_validation_retry_prompt` + helpers (`_has_validatable_files`, `_signature`, `_short_reason`, `_error_to_json`, `_estimate_input_tokens`, `_artifact_content_tokens`) | ~280 |
+| `app/services/forge_validators/check_jsx.cjs` | Babel-based Node CLI wrapper for JSX/JS syntax check (reads from stdin, no tmpfile) | ~25 |
 | `app/services/forge_validators/__init__.py` | Empty package marker | 0 |
-| `tests/test_artifact_validator.py` | Unit tests for the validator (clean React, Netflix bug, multi-file partial-fail, missing import, validator-timeout simulation, missing-binary simulation) | ~200 |
+| `tests/test_artifact_validator.py` | Unit tests for the validator (clean React, Netflix bug, multi-file partial-fail, missing import, validator-timeout simulation, missing-binary simulation, loop-detect tier-skip, budget exhaustion, context-window overflow) | ~280 |
 | `tests/fixtures/artifacts/netflix_broken_jsx.json` | The Netflix bug fixture (line 45 `(<></>) =>` pattern) | ~30 |
 | `tests/fixtures/artifacts/clean_react.json` | Validates clean | ~20 |
 | `tests/fixtures/artifacts/multi_file_partial_fail.json` | 3 files, 1 has a syntax error | ~50 |
 | `tests/fixtures/artifacts/svg_only.json` | SVG, no validatable files (skip path) | ~10 |
+| `tests/fixtures/artifacts/loop_detect_identical_errors.json` | Pre-canned cascade response that returns byte-identical errors twice (exercises Decision 9 tier-skip math) | ~60 |
+| `tests/fixtures/artifacts/budget_exhaustion_large.json` | Artifact whose retry-prompt projected size triggers the 80k pre-flight budget check (E7) | ~80 |
+| `tests/fixtures/artifacts/context_window_overflow.json` | Artifact whose serialized retry prompt exceeds typical model context windows; verifies E14 graceful failure path | ~100 |
 
 ### TOUCHED
 
 | Path | Change | Approx LOC |
 |---|---|---|
-| `app/blueprints/chat_routes.py` | Insert validator cascade between `:1751` and `:2042` (§6/§7/§8); wrap existing cascades #1/#2/#3 with `orchestrator_record_usage` (§13.2); pass `forge_attempts`/`forge_healed_at` to `save_interaction` (§13.3) | ~120 added |
-| `app/services/chat_engine.py` | Add `FORGE_VALIDATION_CASCADE` constant; add `FORGE_RETRY_TOKEN_BUDGET = 80_000`; extend `save_interaction` signature for new fields; add startup guard (§13.1) | ~25 added |
-| `app/static/js/startNewChatModule.js` | SSE handler `type:'status'` switch additions for `forge_retry` / `forge_done` / `forge_exhausted`; small renderers `appendForgeRetryBlock` / `appendForgeHealedBlock` / `appendForgeExhaustedRibbon`; replay-side breadcrumb reconstruction from `forge_attempts`/`forge_healed_at` | ~100 added |
-| `app/static/js/artifactPanel.js` | Read `_forge_validation_failed` / `_forge_errors` flags from incoming artifact; render red warning ribbon (Decision 4) | ~40 added |
+| `app/blueprints/chat_routes.py` | Insert validator cascade between `:1751` and `:2042` (§6/§7/§8); wrap existing cascades #1/#2/#3 with `orchestrator_record_usage` (§13.2); pass all four `forge_*` envelope fields (`forge_attempts`, `forge_healed_at`, `forge_validation_failed`, `forge_errors`) to `save_interaction` (§13.3) and into the SSE done payload | ~130 added |
+| `app/services/chat_engine.py` | Add `FORGE_VALIDATION_CASCADE` constant; add `FORGE_RETRY_TOKEN_BUDGET = 80_000`; extend `save_interaction` signature for the four new envelope fields (§13.3); add startup guard (§13.1) | ~30 added |
+| `app/static/js/startNewChatModule.js` | SSE handler `type:'status'` switch additions for `forge_retry` / `forge_done` / `forge_exhausted`; small renderers `appendForgeRetryBlock` / `appendForgeHealedBlock` / `appendForgeExhaustedRibbon`; replay-side breadcrumb reconstruction from message envelope (`forge_attempts`, `forge_healed_at`); pass envelope `forge_validation_failed`/`forge_errors` to artifactPanel | ~110 added |
+| `app/static/js/artifactPanel.js` | Read `forge_validation_failed` / `forge_errors` from the **message envelope** (NOT the artifact payload) when opening an artifact; render red warning ribbon (Decision 4) when failed=true | ~40 added |
 | `app/static/css/styles.css` (or appropriate stylesheet) | `.forge-retry-card`, `.forge-healed-line`, `.forge-warning-ribbon` styles | ~50 added |
 
 ### DOCS
@@ -911,7 +1149,10 @@ its merge is upstream of M1 PR opening. M1 PR base = post-V4-merge `main`.
 ### Deps added
 
 - `@babel/parser` (Node) — required by `check_jsx.cjs`. Add to
-  `package.json` under `dependencies`. Version: ^7.x latest stable.
+  `package.json` under `dependencies`. Pin a specific minor for
+  reproducibility: `^7.24.0` (verify against latest stable at
+  implementation time and bump the floor if a newer minor has fixes
+  we want; never use `^7.x` floating).
 
 No Python packages added. All Python deps already in `requirements.txt`
 (asyncio is stdlib).
@@ -923,45 +1164,94 @@ No Python packages added. All Python deps already in `requirements.txt`
 The M1 PR is ready to merge when **all** of the following pass:
 
 1. **Netflix bug heals.** Synthetic input artifact with the
-   `return (<></>) =>` pattern on line 45 of `App.jsx` heals on iter 1 or 2
-   without user action. Verified by an integration test that mocks the
-   model cascade to return the Netflix bug on iter 1 and a fixed version on
-   iter 2.
+   `return (<></>) =>` pattern on line 45 of `App.jsx`, with stream_model
+   = `deepseek-v4-flash`, heals on cascade iter 1 (Pro) without user
+   action. Verified by an integration test that mocks the cascade to
+   return the Netflix bug on stream + a fixed version on iter 1
+   (Pro). Asserts `forge_attempts=1`, `forge_healed_at=1`,
+   `forge_validation_failed=false`.
 2. **Clean artifact passes first-try.** Synthetic clean React artifact
    triggers no retry. `forge_attempts=0`, `forge_healed_at=null`,
+   `forge_validation_failed=false`, `forge_errors=null`,
    `forge_total_retry_tokens=0`.
 3. **SVG / pure-CSS artifact bypasses validator.** Synthetic SVG-only
    artifact triggers no subprocess spawn. `forge_attempts=null`,
-   `forge_healed_at=null`. Verified by spy on subprocess invocation.
+   `forge_healed_at=null`, `forge_validation_failed=null`,
+   `forge_errors=null`. Verified by spy on subprocess invocation.
 4. **Impossible artifact exhausts cascade.** Mock-cascade returns
-   syntactically broken artifact for all 4 iters. `forge_exhausted` event
-   emitted, red ribbon renders in panel, validator errors expanded inline.
-   `forge_attempts=4`, `forge_healed_at=null`.
-5. **Identical-error-twice triggers tier skip.** Mock-cascade returns
-   identical errors on iter 1 and 2. `forge_loop_detected_skip=true`,
-   iter 3 entry calls cascade index 3 (gpt-4.1), not index 2 (kimi).
-6. **80k retry budget triggers early stop.** Mock-cascade with very large
-   artifact + 4 retries each consuming ~25k tokens. Cascade stops after
-   iter 3 (cumulative ~75k), `forge_budget_exhausted=true`.
-7. **Validator timeout doesn't block.** Mock validator subprocess sleeps
-   5s (>3s timeout). Logged warning, artifact renders, no cascade kicked
-   off. `forge_validation_attempted=true`,
-   `forge_validation_passed_first_try=true` (treated as pass on timeout).
-8. **All cascade retries debited from accountant.** Spy on
-   `orchestrator_record_usage`: assert it's called once per cascade
-   iteration (not just once for the stream model). Verified for cascades
-   #1/#2/#3 AND the new Forge cascade.
-9. **Reload after healed turn shows breadcrumb.** Save a healed message,
-   reload page, assert "✓ Healed after 2 attempts" string present.
-10. **All `forge_*` metrics emitted.** For every turn that produced an
-    artifact (regardless of validator outcome), the seven fields appear in
-    one structured log line. Verified by parsing test logs.
-11. **No regression in existing artifact flow.** The existing live-patch
-    streaming, patch-apply cascade #2/#3, and JSON-malform cascade #1 all
-    continue to work — the M1 changes are additive, not replacing.
+   syntactically broken artifact for all reachable iters (varies with
+   stream_model: V4-Flash stream → 3 cascade attempts; V4-Pro stream →
+   2; Kimi stream → 1; GPT-4.1 stream → 0). `forge_exhausted` event
+   emitted, red ribbon renders in panel from message envelope (NOT
+   from artifact payload), validator errors expanded inline.
+   `forge_validation_failed=true`, `forge_errors=[non-empty list of
+   ValidationError dicts]`. **Critical assertion:**
+   `routing.artifact_payload` does NOT contain underscore-prefixed
+   keys — verified by checking `_forge_*` keys are absent from the
+   persisted Firestore artifact document.
+5. **Stream model skip — iter 1 uses next tier.** When `stream_model =
+   deepseek-v4-flash` and the stream attempt fails validation, iter 1
+   of the cascade calls `deepseek-v4-pro`, NOT `deepseek-v4-flash`
+   again. Verified by capturing the model argument on the first
+   `get_ai_response` cascade call.
+6. **Identical-error-twice triggers tier skip — Decision 9 worked
+   example.** Mock setup: `stream_model = deepseek-v4-flash` produces
+   error signature X on the stream attempt. Cascade iter 1 (Pro) also
+   produces X. Assertions:
+   - `forge_loop_detected_skip = true`
+   - The next `get_ai_response` call uses `gpt-4.1`, NOT `kimi-k2.5`
+     (Kimi is the skipped tier).
+   - If GPT-4.1 then fails (4th model attempt counting stream), cascade
+     exits with `forge_validation_failed=true`.
+7. **Stream model is GPT-4.1 — no retries (E16).** When user picks
+   `gpt-4.1` directly and the stream attempt fails validation,
+   `start_idx = len(cascade)` → cascade loop never enters. Asserts
+   zero `get_ai_response` cascade calls, `forge_attempts=0`,
+   `forge_validation_failed=true`, `forge_errors=[non-empty]`.
+   Artifact still surfaces broken-with-warning per Decision 4.
+8. **80k retry budget triggers pre-flight early stop (Decision 8 hard
+   cap).** Mock-cascade with a large artifact whose retry-prompt
+   pre-flight projection exceeds budget on iter 2 (e.g. iter 1
+   accumulates 35k actual; iter 2's pre-flight projects another 50k →
+   85k projected total). Assertions:
+   - `forge_budget_exhausted = true`.
+   - Iter 2's `get_ai_response` is NOT called (pre-flight gates the
+     call before it fires).
+   - `forge_total_retry_tokens` reflects only iter 1's actual usage
+     (no iter 2 overshoot).
+9. **Validator timeout doesn't block.** Mock validator subprocess
+   sleeps 5s (>3s timeout). Logged warning, artifact renders, no
+   cascade kicked off. `forge_validation_attempted=true`,
+   `forge_validation_passed_first_try=true` (treated as pass on
+   timeout per graceful degradation).
+10. **All cascade retries debited from accountant (Decision 7).** Spy
+    on `orchestrator_record_usage`: assert it's called once per
+    cascade iteration (not just once for the stream model). Verified
+    for the existing cascades #1/#2/#3 AND the new Forge cascade.
+11. **Multi-file `_short_reason` formats correctly.** Mock validator
+    returns errors in 2 distinct files (`App.jsx:45`, `Hero.jsx:12`).
+    Captured `forge_retry` SSE event has
+    `reason: "validator: 2 files with syntax errors (App.jsx:45,
+    Hero.jsx:12)"`. Single-file case still produces
+    `"validator: parse_error @ App.jsx:45"`.
+12. **Reload after healed turn shows breadcrumb (Decision 2 envelope
+    persistence).** Save a healed message
+    (`forge_attempts=2, forge_healed_at=2`), reload page, assert
+    "✓ Healed after 2 attempts" string present in DOM. Save an
+    exhausted message (`forge_validation_failed=true`), reload, assert
+    red warning ribbon renders in artifact panel. Both reads come from
+    the message envelope, NOT from the artifact payload.
+13. **All `forge_*` telemetry metrics emitted (Decision 10).** For
+    every turn that produced an artifact (regardless of validator
+    outcome), the seven fields appear in one structured log line.
+    Verified by parsing test logs.
+14. **No regression in existing artifact flow.** The existing
+    live-patch streaming, patch-apply cascade #2/#3, and JSON-malform
+    cascade #1 all continue to work — the M1 changes are additive, not
+    replacing.
 
 The implementation plan (separate doc, `superpowers:writing-plans`) decomposes
-these 11 acceptance criteria into ordered TDD tasks.
+these 14 acceptance criteria into ordered TDD tasks.
 
 ---
 
