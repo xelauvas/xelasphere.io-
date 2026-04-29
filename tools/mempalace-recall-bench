@@ -1,0 +1,363 @@
+#!/usr/bin/env python3
+"""Mempalace recall-bench — automated retrieval-quality rubric per persona.
+
+Reads a shadow JSONL file (default: today's `/var/log/mempalace/shadow/`)
+and a rubric YAML defining personas with `recall_queries` (query keyword
++ expected truth substring) and `crosstopic_queries` (query keyword +
+project_keyword bleed scoring). Computes per-tier hit rates and emits a
+markdown report.
+
+Substitutes for the calendar-floor P2 weekly rubric under solo-traffic
+conditions where the weekly rubric is statistically meaningless. See
+phase-log P1.x amendment.
+
+Usage:
+    tools/mempalace-recall-bench
+    tools/mempalace-recall-bench --rubric tools/mempalace-recall-bench.yaml
+    tools/mempalace-recall-bench --shadow-log /var/log/mempalace/shadow/shadow-2026-04-29.jsonl
+    tools/mempalace-recall-bench --output docs/mempalace-shadow/recall-bench-2026-04-29.md
+
+Pass criteria (per persona):
+    recall_l2_or_l3 >= 0.80
+    crosstopic_l2_l3_avg <= 0.40
+
+Exit code 0 if all personas pass; 1 otherwise.
+"""
+from __future__ import annotations
+
+import datetime
+import json
+import sys
+from pathlib import Path
+
+import click
+import yaml
+
+
+def _load_records(shadow_log_path: Path) -> list[dict]:
+    if not shadow_log_path.exists():
+        raise FileNotFoundError(f"Shadow log not found: {shadow_log_path}")
+    out = []
+    for line in shadow_log_path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def _records_for_user(records: list[dict], user_id: str) -> list[dict]:
+    return [r for r in records if r.get("user_id") == user_id]
+
+
+def _truth_in_items(items: list[dict], truth: str) -> bool:
+    needle = truth.lower()
+    return any(needle in (i.get("text", "") or "").lower() for i in items)
+
+
+def _truth_in_legacy(record: dict, truth: str) -> bool:
+    return truth.lower() in (record.get("legacy") or "").lower()
+
+
+def score_recall_query(record: dict, truth: str) -> dict:
+    """Score a single recall query record against expected truth.
+
+    Returns dict with keys: legacy, l0_recent, l1_session, l2_topic,
+    l3_semantic. Each value is True iff `truth` appears in the
+    corresponding tier of the mempalace retrieval (or in the legacy
+    string).
+    """
+    mp = record.get("mempalace") or {}
+    tiers = ["l0_recent", "l1_session", "l2_topic", "l3_semantic"]
+    return {
+        "legacy": _truth_in_legacy(record, truth),
+        **{t: _truth_in_items(mp.get(t, []) or [], truth) for t in tiers},
+    }
+
+
+def score_crosstopic_query(record: dict, project_keywords: list[str]) -> dict:
+    """For an off-topic query, count how many items in each tier contain
+    project keywords (lower = cleaner). Returns counts per tier as
+    (project_count, total_count).
+    """
+    mp = record.get("mempalace") or {}
+    tiers = ["l0_recent", "l1_session", "l2_topic", "l3_semantic"]
+    needles = [k.lower() for k in project_keywords]
+    counts = {}
+    for t in tiers:
+        items = mp.get(t, []) or []
+        proj = sum(
+            1 for i in items
+            if any(n in (i.get("text", "") or "").lower() for n in needles)
+        )
+        counts[t] = (proj, len(items))
+    return counts
+
+
+def _find_query_match(records: list[dict], keyword: str) -> dict | None:
+    """Return the most recent record whose query contains `keyword`
+    (case-insensitive substring match). None if no match.
+    """
+    needle = keyword.lower()
+    matches = [r for r in records if needle in (r.get("query") or "").lower()]
+    if not matches:
+        return None
+    return matches[-1]
+
+
+def evaluate_persona(persona: dict, all_records: list[dict]) -> dict:
+    """Run all recall + crosstopic queries for a persona; return tally."""
+    user_id = persona["user_id"]
+    records = _records_for_user(all_records, user_id)
+
+    recall_results: list[dict] = []
+    for spec in persona.get("recall_queries", []) or []:
+        rec = _find_query_match(records, spec["query"])
+        if rec is None:
+            recall_results.append({
+                "label": spec["label"],
+                "query": spec["query"],
+                "truth": spec["truth"],
+                "matched": False,
+                "scores": None,
+            })
+            continue
+        recall_results.append({
+            "label": spec["label"],
+            "query": spec["query"],
+            "truth": spec["truth"],
+            "matched": True,
+            "scores": score_recall_query(rec, spec["truth"]),
+        })
+
+    crosstopic_results: list[dict] = []
+    project_keywords = persona.get("project_keywords", []) or []
+    for spec in persona.get("crosstopic_queries", []) or []:
+        rec = _find_query_match(records, spec["query"])
+        if rec is None:
+            crosstopic_results.append({
+                "label": spec["label"],
+                "query": spec["query"],
+                "matched": False,
+                "counts": None,
+            })
+            continue
+        crosstopic_results.append({
+            "label": spec["label"],
+            "query": spec["query"],
+            "matched": True,
+            "counts": score_crosstopic_query(rec, project_keywords),
+        })
+
+    matched_recalls = [r for r in recall_results if r["matched"]]
+    n_recall = len(matched_recalls)
+    tier_hits = {t: 0 for t in ["legacy", "l0_recent", "l1_session", "l2_topic", "l3_semantic"]}
+    for r in matched_recalls:
+        for t, hit in r["scores"].items():
+            tier_hits[t] += int(hit)
+    recall_l2_or_l3 = 0.0
+    if n_recall:
+        l2_or_l3 = sum(
+            1 for r in matched_recalls
+            if r["scores"]["l2_topic"] or r["scores"]["l3_semantic"]
+        )
+        recall_l2_or_l3 = l2_or_l3 / n_recall
+
+    matched_crosstopic = [r for r in crosstopic_results if r["matched"]]
+    crosstopic_l2_l3_avg = None
+    if matched_crosstopic:
+        ratios = []
+        for r in matched_crosstopic:
+            for t in ("l2_topic", "l3_semantic"):
+                proj, total = r["counts"][t]
+                if total > 0:
+                    ratios.append(proj / total)
+        if ratios:
+            crosstopic_l2_l3_avg = sum(ratios) / len(ratios)
+
+    pass_recall = recall_l2_or_l3 >= 0.80 if n_recall else None
+    pass_crosstopic = (
+        crosstopic_l2_l3_avg <= 0.40
+        if crosstopic_l2_l3_avg is not None else None
+    )
+
+    return {
+        "name": persona.get("description", user_id),
+        "user_id": user_id,
+        "n_recall_total": len(persona.get("recall_queries", []) or []),
+        "n_recall_matched": n_recall,
+        "tier_hits": tier_hits,
+        "recall_l2_or_l3": recall_l2_or_l3,
+        "n_crosstopic_total": len(persona.get("crosstopic_queries", []) or []),
+        "n_crosstopic_matched": len(matched_crosstopic),
+        "crosstopic_l2_l3_avg": crosstopic_l2_l3_avg,
+        "pass_recall": pass_recall,
+        "pass_crosstopic": pass_crosstopic,
+        "recall_results": recall_results,
+        "crosstopic_results": crosstopic_results,
+    }
+
+
+def render_markdown(evaluations: list[dict], shadow_log_path: Path) -> str:
+    today = datetime.date.today().isoformat()
+    lines: list[str] = []
+    lines.append(f"# Mempalace recall-bench — {today}")
+    lines.append("")
+    lines.append(f"Source: `{shadow_log_path}`")
+    lines.append("")
+    lines.append("Pass criteria per persona:")
+    lines.append("- `recall_l2_or_l3` ≥ 0.80")
+    lines.append("- `crosstopic_l2_l3_avg` ≤ 0.40")
+    lines.append("")
+
+    lines.append("## Summary")
+    lines.append("")
+    lines.append("| Persona | Recall hits (l2∨l3) | Cross-topic l2/l3 noise | Verdict |")
+    lines.append("|---|---|---|---|")
+    for e in evaluations:
+        if e["n_recall_matched"]:
+            recall_str = f"{e['recall_l2_or_l3']:.0%} ({e['n_recall_matched']}/{e['n_recall_total']})"
+        else:
+            recall_str = "n/a (no records)"
+        if e["crosstopic_l2_l3_avg"] is not None:
+            ct_str = f"{e['crosstopic_l2_l3_avg']:.0%}"
+        elif e["n_crosstopic_total"]:
+            ct_str = "n/a (no records)"
+        else:
+            ct_str = "n/a (no tests)"
+
+        verdicts = []
+        if e["pass_recall"] is True:
+            verdicts.append("recall OK")
+        elif e["pass_recall"] is False:
+            verdicts.append("recall FAIL")
+        if e["pass_crosstopic"] is True:
+            verdicts.append("crosstopic OK")
+        elif e["pass_crosstopic"] is False:
+            verdicts.append("crosstopic FAIL")
+        verdict = " · ".join(verdicts) or "skip (no data)"
+        lines.append(f"| {e['name']} | {recall_str} | {ct_str} | {verdict} |")
+    lines.append("")
+
+    for e in evaluations:
+        lines.append(f"## {e['name']} (`{e['user_id'][:18]}...`)")
+        lines.append("")
+        if e["n_recall_matched"]:
+            lines.append(
+                f"Recall queries matched: {e['n_recall_matched']}/{e['n_recall_total']} | "
+                f"l2∨l3 hit rate: **{e['recall_l2_or_l3']:.0%}**"
+            )
+            lines.append("")
+            lines.append("| Test | Legacy | l0 | l1 | l2 | l3 |")
+            lines.append("|---|---|---|---|---|---|")
+            for r in e["recall_results"]:
+                if not r["matched"]:
+                    lines.append(f"| {r['label']} | _no record found_ | | | | |")
+                    continue
+                s = r["scores"]
+                mk = lambda x: "✓" if x else "✗"
+                lines.append(
+                    f"| {r['label']} | {mk(s['legacy'])} | {mk(s['l0_recent'])} "
+                    f"| {mk(s['l1_session'])} | {mk(s['l2_topic'])} | {mk(s['l3_semantic'])} |"
+                )
+            n = e["n_recall_matched"]
+            t = e["tier_hits"]
+            lines.append(
+                f"| **HIT RATE** | {t['legacy']}/{n} | {t['l0_recent']}/{n} | "
+                f"{t['l1_session']}/{n} | {t['l2_topic']}/{n} | {t['l3_semantic']}/{n} |"
+            )
+            lines.append("")
+        if e["n_crosstopic_matched"]:
+            lines.append("Cross-topic queries (lower = cleaner):")
+            lines.append("")
+            lines.append("| Test | l0 | l1 | l2 | l3 |")
+            lines.append("|---|---|---|---|---|")
+            for r in e["crosstopic_results"]:
+                if not r["matched"]:
+                    lines.append(f"| {r['label']} | _no record found_ | | | |")
+                    continue
+                c = r["counts"]
+                lines.append(
+                    f"| {r['label']} | {c['l0_recent'][0]}/{c['l0_recent'][1]} | "
+                    f"{c['l1_session'][0]}/{c['l1_session'][1]} | "
+                    f"{c['l2_topic'][0]}/{c['l2_topic'][1]} | "
+                    f"{c['l3_semantic'][0]}/{c['l3_semantic'][1]} |"
+                )
+            lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
+def overall_pass(evaluations: list[dict]) -> bool:
+    """All personas with recall data must pass; cross-topic only counts
+    when present. Personas with no matched data are skipped (don't fail).
+    """
+    has_data = False
+    for e in evaluations:
+        if e["pass_recall"] is False:
+            return False
+        if e["pass_crosstopic"] is False:
+            return False
+        if e["pass_recall"] is True or e["pass_crosstopic"] is True:
+            has_data = True
+    return has_data
+
+
+@click.command()
+@click.option(
+    "--rubric",
+    type=click.Path(exists=True, dir_okay=False),
+    default="tools/mempalace-recall-bench.yaml",
+    help="Path to rubric YAML.",
+)
+@click.option(
+    "--shadow-log",
+    type=click.Path(),
+    default=None,
+    help="Path to shadow JSONL (default: today's file in /var/log/mempalace/shadow).",
+)
+@click.option(
+    "--output",
+    type=click.Path(),
+    default=None,
+    help="Optional output markdown path (writes to stdout if omitted).",
+)
+@click.option(
+    "--shadow-log-dir",
+    type=click.Path(),
+    default="/var/log/mempalace/shadow",
+    help="Default shadow log directory if --shadow-log omitted.",
+)
+def main(rubric: str, shadow_log: str | None, output: str | None,
+         shadow_log_dir: str) -> None:
+    rubric_path = Path(rubric)
+    spec = yaml.safe_load(rubric_path.read_text())
+
+    if shadow_log:
+        shadow_path = Path(shadow_log)
+    else:
+        today = datetime.date.today().isoformat()
+        shadow_path = Path(shadow_log_dir) / f"shadow-{today}.jsonl"
+
+    records = _load_records(shadow_path)
+
+    evaluations = [
+        evaluate_persona(p, records)
+        for p in spec.get("personas", {}).values()
+    ]
+
+    md = render_markdown(evaluations, shadow_path)
+    if output:
+        Path(output).write_text(md)
+        click.echo(f"Wrote {output}")
+    else:
+        click.echo(md, nl=False)
+
+    sys.exit(0 if overall_pass(evaluations) else 1)
+
+
+if __name__ == "__main__":
+    main()
