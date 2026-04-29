@@ -8,6 +8,7 @@ import atexit
 import hashlib
 import json
 import logging
+import os
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -262,3 +263,23 @@ def check_guest_ip_limit(ip_hash: str) -> tuple:
 # ==================== Firestore db reference ====================
 # Re-export db for convenience
 db = db
+
+
+# ==================== Admin gating ====================
+DEFAULT_ADMIN_EMAILS = ('a.savu.stefan@gmail.com',)
+
+
+def is_admin_user(user):
+    """Return True when the session user is an admin.
+
+    Admin email allowlist is read from the ADMIN_EMAILS env var
+    (comma-separated) and falls back to DEFAULT_ADMIN_EMAILS when unset.
+    """
+    if not isinstance(user, dict):
+        return False
+    email = user.get('email')
+    if not email:
+        return False
+    env_emails = os.environ.get('ADMIN_EMAILS', '')
+    allowed = tuple(e.strip() for e in env_emails.split(',') if e.strip()) or DEFAULT_ADMIN_EMAILS
+    return email in allowed
