@@ -339,27 +339,27 @@
     flex-shrink: 0;
 }
 
-/* ---------- toggle (44×24 iOS/ChatGPT ratio, hardened against flex squash) ---------- */
+/* ---------- toggle (button[role=switch] — ARIA pattern, no input/label) ---------- */
+/* Using <button role="switch"> instead of <label><input> sidesteps the
+   responsive-foundation.css `label:has(input[type="checkbox"])` rule that
+   was forcing min-height: 44px. .settings-toggle (class, specificity 0,1,0)
+   cleanly beats `button` (element, 0,0,1) — no !important needed. */
 .settings-toggle {
     position: relative;
     display: inline-flex;
     align-items: center;
+    flex: 0 0 44px;
     width: 44px;
     min-width: 44px;
     max-width: 44px;
     height: 24px;
     min-height: 24px;
-    flex: 0 0 44px;
-    margin: 0;
     padding: 0;
+    margin: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
     box-sizing: border-box;
-}
-
-.settings-toggle input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-    position: absolute;
 }
 
 .settings-toggle-slider {
@@ -367,8 +367,8 @@
     inset: 0;
     background: #d1d5db;
     border-radius: 999px;
-    cursor: pointer;
     transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
 }
 
 .settings-toggle-slider::before {
@@ -388,48 +388,27 @@
     background: #c5cad1;
 }
 
-.settings-toggle input:checked + .settings-toggle-slider {
+.settings-toggle[aria-checked="true"] .settings-toggle-slider {
     background: #3b82f6;
 }
 
-.settings-toggle input:checked + .settings-toggle-slider::before {
+.settings-toggle[aria-checked="true"] .settings-toggle-slider::before {
     transform: translateX(20px);
 }
 
-.settings-toggle:hover input:checked + .settings-toggle-slider {
+.settings-toggle[aria-checked="true"]:hover .settings-toggle-slider {
     background: #2f6fe5;
 }
 
-.settings-toggle input:focus-visible + .settings-toggle-slider {
+.settings-toggle:focus-visible {
     outline: 2px solid rgba(59, 130, 246, 0.5);
     outline-offset: 2px;
+    border-radius: 999px;
 }
 
-.settings-toggle input:disabled + .settings-toggle-slider {
+.settings-toggle:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-}
-
-/* Override responsive-foundation.css touch-target rules that force
-   min-height: 44px on labels containing checkboxes and on all inputs
-   (those rules turn our toggle into a 44px-tall blob with a visible
-   default-styled checkbox stuffed inside). */
-.settings-toggle {
-    min-height: 24px !important;
-    max-height: 24px !important;
-    padding: 0 !important;
-    gap: 0 !important;
-}
-
-.settings-toggle input[type="checkbox"] {
-    min-width: 0 !important;
-    min-height: 0 !important;
-    width: 0 !important;
-    height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    appearance: none !important;
-    -webkit-appearance: none !important;
 }
 
 /* ---------- custom dropdown (popover) ---------- */
@@ -790,11 +769,11 @@
     background: #5a5a5f;
 }
 
-[data-theme="dark"] .settings-toggle input:checked + .settings-toggle-slider {
+[data-theme="dark"] .settings-toggle[aria-checked="true"] .settings-toggle-slider {
     background: #3b82f6;
 }
 
-[data-theme="dark"] .settings-toggle:hover input:checked + .settings-toggle-slider {
+[data-theme="dark"] .settings-toggle[aria-checked="true"]:hover .settings-toggle-slider {
     background: #2f6fe5;
 }
 

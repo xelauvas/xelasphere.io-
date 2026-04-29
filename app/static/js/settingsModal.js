@@ -231,16 +231,24 @@
 
     function refreshPrefToggles() {
         const prefs = loadPrefs();
-        document.querySelectorAll('[data-pref-toggle]').forEach(input => {
-            const key = input.dataset.prefToggle;
-            if (key in prefs) input.checked = !!prefs[key];
+        document.querySelectorAll('[data-pref-toggle]').forEach(btn => {
+            const key = btn.dataset.prefToggle;
+            if (key in prefs) setToggleState(btn, !!prefs[key]);
         });
     }
 
-    function bindPrefToggles() {
-        document.querySelectorAll('[data-pref-toggle]').forEach(input => {
-            input.addEventListener('change', () => {
-                setPref(input.dataset.prefToggle, input.checked);
+    function bindToggleClicks() {
+        // Memory toggles + pref toggles share click semantics: flip
+        // aria-checked on click, then dispatch the appropriate save handler.
+        document.querySelectorAll('[data-memory-toggle], [data-pref-toggle]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const newValue = !getToggleState(btn);
+                setToggleState(btn, newValue);
+                if (btn.dataset.memoryToggle) {
+                    saveMemoryToggle(btn.dataset.memoryToggle, newValue);
+                } else if (btn.dataset.prefToggle) {
+                    setPref(btn.dataset.prefToggle, newValue);
+                }
             });
         });
     }
@@ -330,14 +338,22 @@
        Memory toggles + Manage memory child modal
        ==================================================================== */
 
+    function setToggleState(btn, value) {
+        btn.setAttribute('aria-checked', value ? 'true' : 'false');
+    }
+
+    function getToggleState(btn) {
+        return btn.getAttribute('aria-checked') === 'true';
+    }
+
     async function loadMemoryToggleState() {
         try {
             const resp = await fetch('/user/memory-toggles', { credentials: 'same-origin' });
             if (!resp.ok) return;
             const state = await resp.json();
-            document.querySelectorAll('[data-memory-toggle]').forEach(input => {
-                const key = input.dataset.memoryToggle;
-                if (key in state) input.checked = !!state[key];
+            document.querySelectorAll('[data-memory-toggle]').forEach(btn => {
+                const key = btn.dataset.memoryToggle;
+                if (key in state) setToggleState(btn, !!state[key]);
             });
         } catch (e) {
             console.warn('[SettingsModal] failed to load memory toggles', e);
@@ -405,14 +421,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         bindDropdowns();
-        bindPrefToggles();
-
-        // Memory toggles
-        document.querySelectorAll('[data-memory-toggle]').forEach(input => {
-            input.addEventListener('change', () => {
-                saveMemoryToggle(input.dataset.memoryToggle, input.checked);
-            });
-        });
+        bindToggleClicks();
 
         // Manage memory button
         document.querySelectorAll('[data-action="open-memory-modal"]').forEach(btn => {

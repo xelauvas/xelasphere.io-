@@ -96,6 +96,10 @@ def test_general_pane_has_voice_dropdown_with_play_button(authenticated_client, 
 def test_general_pane_has_separate_voice_toggle(authenticated_client, mock_firestore):
     resp = _render(authenticated_client)
     assert b'data-pref-toggle="separate_voice"' in resp.data
+    # Toggle must use button[role="switch"] with aria-checked, not <input type="checkbox">
+    # (avoids the responsive-foundation.css :has(input) rule that forced 44px min-height)
+    assert b'role="switch"' in resp.data
+    assert b'aria-checked' in resp.data
 
 
 def test_general_pane_has_delete_all_and_logout(authenticated_client, mock_firestore):
