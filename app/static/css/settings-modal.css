@@ -339,12 +339,12 @@
     flex-shrink: 0;
 }
 
-/* ---------- toggle ---------- */
+/* ---------- toggle (iOS-style spring + ChatGPT green) ---------- */
 .settings-toggle {
     position: relative;
     display: inline-block;
-    width: 36px;
-    height: 20px;
+    width: 42px;
+    height: 24px;
     flex-shrink: 0;
 }
 
@@ -352,15 +352,21 @@
     opacity: 0;
     width: 0;
     height: 0;
+    position: absolute;
 }
 
 .settings-toggle-slider {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.18);
+    background: #d4d4d8;
     border-radius: 999px;
-    transition: background 150ms ease;
     cursor: pointer;
+    transition:
+        background 220ms cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 220ms ease;
+    box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.04),
+        inset 0 1px 1px rgba(0, 0, 0, 0.06);
 }
 
 .settings-toggle-slider::before {
@@ -368,20 +374,51 @@
     position: absolute;
     top: 2px;
     left: 2px;
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
     background: #ffffff;
     border-radius: 50%;
-    transition: transform 150ms ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+    transition:
+        transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        box-shadow 200ms ease;
+    box-shadow:
+        0 1px 1px rgba(0, 0, 0, 0.04),
+        0 2px 6px rgba(0, 0, 0, 0.18),
+        0 0 0 0.5px rgba(0, 0, 0, 0.05);
+}
+
+.settings-toggle:hover .settings-toggle-slider {
+    background: #c4c4c8;
 }
 
 .settings-toggle input:checked + .settings-toggle-slider {
-    background: #2563eb;
+    background: #19c37d;
+    box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.06),
+        0 0 0 0 rgba(25, 195, 125, 0);
 }
 
 .settings-toggle input:checked + .settings-toggle-slider::before {
-    transform: translateX(16px);
+    transform: translateX(18px);
+    box-shadow:
+        0 1px 1px rgba(0, 0, 0, 0.04),
+        0 2px 8px rgba(0, 0, 0, 0.22),
+        0 0 0 0.5px rgba(0, 0, 0, 0.05);
+}
+
+.settings-toggle:hover input:checked + .settings-toggle-slider {
+    background: #16a96b;
+}
+
+.settings-toggle input:focus-visible + .settings-toggle-slider {
+    box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.04),
+        0 0 0 3px rgba(25, 195, 125, 0.35);
+}
+
+.settings-toggle input:disabled + .settings-toggle-slider {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 /* ---------- custom dropdown (popover) ---------- */
@@ -735,11 +772,25 @@
 }
 
 [data-theme="dark"] .settings-toggle-slider {
-    background: rgba(255, 255, 255, 0.18);
+    background: #4a4a4f;
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+        inset 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .settings-toggle:hover .settings-toggle-slider {
+    background: #5a5a5f;
 }
 
 [data-theme="dark"] .settings-toggle input:checked + .settings-toggle-slider {
-    background: #3b82f6;
+    background: #19c37d;
+    box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.2),
+        0 0 0 0 rgba(25, 195, 125, 0);
+}
+
+[data-theme="dark"] .settings-toggle:hover input:checked + .settings-toggle-slider {
+    background: #16a96b;
 }
 
 [data-theme="dark"] .settings-dropdown-trigger {
