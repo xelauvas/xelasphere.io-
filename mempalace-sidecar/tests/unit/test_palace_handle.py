@@ -646,6 +646,114 @@ def test_semantic_search_keeps_long_substantive_hedge_phrased_answer(
     assert out[0]["text"] == text
 
 
+def test_semantic_search_drops_near_duplicate_user_question(handle, monkeypatch):
+    """Surfaced by Marcus bench (2026-04-29): on the recall probe
+    'Hey, what's my A-race target time again?' the top two retrieved
+    items were past phrasings of the same question at similarities
+    0.972 and 0.958, displacing the real ``sub-3:00`` establishment
+    turn from top-K. Drop them — a past identical question doesn't
+    answer the present one.
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [
+            # Past phrasings of the same question (drop):
+            {"text": "What's my A-race target time again?", "similarity": 0.972},
+            {"text": "Hey, picking up. What's my A-race target time again?",
+             "similarity": 0.958},
+            # Real establishment turn — user statement, no question mark:
+            {"text": '"I\'m Marcus, marathoner in Asheville. Training for '
+                     'Boston 2027 — my first Boston, sub-3:00 goal. "',
+             "similarity": 0.32},
+        ]},
+    )
+    out = handle.semantic_search("any-query", k=5)
+    assert len(out) == 1
+    assert "sub-3:00" in out[0]["text"]
+
+
+def test_semantic_search_keeps_user_question_below_similarity_threshold(
+    handle, monkeypatch,
+):
+    """A user question that scored lower (e.g., 0.42) is NOT a near-
+    duplicate of the current query — it's a tangentially related past
+    question that may still carry context. Keep it.
+    """
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [
+            # Tangentially related question at moderate similarity:
+            {"text": "What did I decide about the Saturday long-run time change?",
+             "similarity": 0.42},
+        ]},
+    )
+    out = handle.semantic_search("a-race", k=5)
+    assert len(out) == 1
+
+
+def test_semantic_search_keeps_long_user_message_ending_in_question(
+    handle, monkeypatch,
+):
+    """A long user message that ends with a clarifying question still
+    carries establishment-grade signal in the body. The 200-char length
+    cap protects this case — a 280-char message with a question at the
+    end is not a 'near-duplicate question.'
+    """
+    long_user_msg = (
+        "I've been dealing with right-foot plantar fasciitis for about "
+        "six months now. It's worse in the morning, gets better as I run, "
+        "but flares up after long runs. Coach Jenny has me doing daily "
+        "calf stretches and a heel-up sleep brace. Should I cut peak "
+        "mileage from 90 to 80?"
+    )
+    assert len(long_user_msg) >= 200  # invariant for the test premise
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [
+            {"text": long_user_msg, "similarity": 0.92},
+        ]},
+    )
+    out = handle.semantic_search("plantar", k=5)
+    assert len(out) == 1
+
+
+def test_semantic_search_keeps_assistant_question_at_high_similarity(
+    handle, monkeypatch,
+):
+    """Assistant turns ('ACTION: chat\\n...?') even at high similarity
+    are not near-dup user questions — different concern. They're caught
+    by the hedge filter if hedge-shaped, otherwise retained.
+    """
+    text = (
+        "ACTION: chat\nWould you like me to build the training plan "
+        "around the sub-3:00 target, or shift to a more conservative "
+        "sub-3:10 with the plantar fasciitis recovery in mind?"
+    )
+    # Substantive assistant question — not a hedge.
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [{"text": text, "similarity": 0.91}]},
+    )
+    out = handle.semantic_search("any", k=5)
+    assert len(out) == 1
+
+
+def test_semantic_search_keeps_user_statement_at_high_similarity(
+    handle, monkeypatch,
+):
+    """A user statement (no '?') at high similarity is a real
+    establishment turn — keep it. Marcus's intro turn at sim 0.93 to
+    'tell me about myself' should not be dropped.
+    """
+    statement = '"I\'m Marcus, marathoner in Asheville, sub-3:00 Boston 2027 goal."'
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        lambda *a, **kw: {"results": [{"text": statement, "similarity": 0.93}]},
+    )
+    out = handle.semantic_search("about-me", k=5)
+    assert len(out) == 1
+
+
 def test_semantic_search_hedge_filter_complements_score_floor(handle, monkeypatch):
     """Both filters apply — a high-similarity hedge that passes the
     score floor still gets dropped by the hedge filter, and a low-

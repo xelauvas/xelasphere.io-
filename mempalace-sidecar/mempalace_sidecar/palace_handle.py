@@ -203,6 +203,45 @@ def _is_assistant_hedge_result(item: dict) -> bool:
     return any(p.search(text) for p in _HEDGE_PATTERNS)
 
 
+# Near-duplicate user-question filter — drop search results that are
+# essentially the user's current query asked previously. A past
+# "What's my A-race target time again?" doesn't help answer the present
+# "What's my A-race target time again?"; it just eats top-K slots.
+# Surfaced 2026-04-29 by Marcus bench: two past-identical questions at
+# similarities 0.97 and 0.96 occupied ranks 0-1, displacing the real
+# ``sub-3:00`` establishment turn at internal rank 9 past top-5 even
+# after PR #108's hedge expansion.
+#
+# A "near-duplicate question" is:
+#   1. similarity >= ``_NEAR_DUPLICATE_QUESTION_SIM_THRESHOLD`` (0.85)
+#   2. text does NOT start with ``ACTION: chat`` (so it's a user turn,
+#      not an assistant answer that happens to be very similar)
+#   3. text rstrip ends with ``?`` (it's a question)
+#   4. text length < ``_NEAR_DUPLICATE_QUESTION_MAX_LEN`` (200) so a
+#      long substantive user message that ends with a clarifying
+#      question stays.
+_NEAR_DUPLICATE_QUESTION_SIM_THRESHOLD = 0.85
+_NEAR_DUPLICATE_QUESTION_MAX_LEN = 200
+
+
+def _is_near_duplicate_user_question(item: dict) -> bool:
+    """True iff a search result is a short user question near-identical
+    to the present query (similarity >= 0.85). Drops past phrasings of
+    the same question without dropping legitimate user-turn signal.
+    """
+    text = item.get("text") if isinstance(item, dict) else None
+    if not isinstance(text, str):
+        return False
+    if text.startswith(_HEDGE_ASSISTANT_PREFIX):
+        return False  # assistant turn — different concern
+    if not text.rstrip().endswith("?"):
+        return False
+    if len(text) >= _NEAR_DUPLICATE_QUESTION_MAX_LEN:
+        return False
+    sim = item.get("similarity") or 0.0
+    return sim >= _NEAR_DUPLICATE_QUESTION_SIM_THRESHOLD
+
+
 # turns.sqlite DDL — literal schema from spec §5.3. Don't add columns.
 # The indexes are spec-mandated and used by ``session_drawers`` (ordered
 # session lookup) and the M0.4.2 pair-id retrieval path respectively.
@@ -658,6 +697,12 @@ class PalaceHandle:
         post-filter trim back to ``k`` doesn't truncate when items get
         dropped. The library may still return fewer candidates than
         requested if the palace is small — caller may receive < k.
+
+        Near-duplicate-question filter: short user questions
+        (no ``ACTION: chat`` prefix, ends with ``?``, length < 200) at
+        similarity >= 0.85 are dropped. They're past phrasings of the
+        present query and don't help answer it; they just eat top-K
+        slots that should hold establishment turns or paired answers.
         """
         multiplier = _retrieval_buffer_multiplier()
         n_results = min(k * multiplier, DEFAULT_RETRIEVAL_BUFFER_CAP)
@@ -670,6 +715,7 @@ class PalaceHandle:
             r for r in items
             if (r.get("similarity") or 0.0) >= threshold
             and not _is_assistant_hedge_result(r)
+            and not _is_near_duplicate_user_question(r)
         ]
         return filtered[:k]
 
