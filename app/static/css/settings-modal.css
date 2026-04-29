@@ -410,6 +410,28 @@
     cursor: not-allowed;
 }
 
+/* Override responsive-foundation.css touch-target rules that force
+   min-height: 44px on labels containing checkboxes and on all inputs
+   (those rules turn our toggle into a 44px-tall blob with a visible
+   default-styled checkbox stuffed inside). */
+.settings-toggle {
+    min-height: 24px !important;
+    max-height: 24px !important;
+    padding: 0 !important;
+    gap: 0 !important;
+}
+
+.settings-toggle input[type="checkbox"] {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+}
+
 /* ---------- custom dropdown (popover) ---------- */
 .settings-dropdown {
     position: relative;
