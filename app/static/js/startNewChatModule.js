@@ -657,8 +657,15 @@ class ChatManager {
         this.temporaryCentered = false;
         this.isTemporaryUiActive = false;
 
+        // temp_ sessions are never persisted server-side; skip the /chat/delete
+        // round-trip (would return 404 "Chat session not found") and clean up
+        // local state only.
+        const isTempPrefixed = typeof tempSessionId === 'string' && tempSessionId.startsWith('temp_');
+
         try {
-            await this.fetchApi('/chat/delete', 'POST', { session_id: tempSessionId });
+            if (!isTempPrefixed) {
+                await this.fetchApi('/chat/delete', 'POST', { session_id: tempSessionId });
+            }
         } catch (error) {
             console.error('Failed to remove temporary chat session', error);
         } finally {
