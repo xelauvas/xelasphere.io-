@@ -137,7 +137,43 @@ active
 
 ## P3 — Active, legacy standby
 
-- Entered: `<YYYY-MM-DD>`
+- Entered: `2026-04-29` (12:19 UTC)
+- Config: `MEMPALACE_MODE=active`, `LEGACY_MEMORY=on`
+- Entry path: substitute synthetic-bench gate per P1.x amendment.
+  Marcus persona bench passed both criteria (recall 100%, crosstopic
+  20%) after PRs #107, #111, #112, #113. Cross-persona bench (Tom +
+  Maya) drove additional calibration via PRs #114-#117. End-to-end
+  user dogfood (Riley persona, fresh Firebase user) verified retrieval
+  → LLM-context wiring via PR #118 (ACTIVE-mode injection) + PR #119
+  (semantic-cache bypass). Riley recall: 5/5 correct facts surfaced
+  through the actual chat UI.
+- Approver: Unilateral with full bench math + dogfood evidence in
+  `docs/mempalace-shadow/active-mode-decision-2026-04-29.md` and the
+  PR descriptions for #107-#119.
+
+### Notable wins from P3 entry day
+
+- PR #118 closed a latent design gap — the ACTIVE-mode chat-route
+  branch was previously a no-op (the comment said "ACTIVE mode not
+  exercised pre-P3"); under shadow mode this didn't matter, but it
+  meant flipping the mode flag alone was insufficient. Now the
+  formatter wraps mempalace recall in a `<conversation_recall>`
+  block with explicit user-precedence semantics.
+- PR #119 closed a user-context leak in the semantic cache. The
+  cache was keyed on prompt-text only; per-user mempalace recall
+  was bypassing the LLM and returning whatever response had
+  previously been cached for that prompt-text — typically a
+  pre-mempalace hallucination. Cache is now bypassed (read AND
+  write) when ACTIVE has injected user-specific context.
+- The Riley editor response — *"You've got Devon editing your
+  documentary pro bono, although in our previous conversation, it
+  was mentioned that Sarah Johnson is an experienced editor you've
+  worked with before, and there might have been a mix-up in the
+  names or roles. To clarify, Devon is the one currently editing
+  your documentary."* — demonstrated the LLM correctly resolving
+  user-statement vs. assistant-prior-response conflicts via the
+  formatter's user-first ordering and explicit precedence comment.
+
 - Config: `MEMPALACE_MODE=active`, `LEGACY_MEMORY=on`
 - Entry check: P2 flip criterion met + **written approval here** (this section).
 - Exit criterion: zero rollbacks; hot p95 ≤150ms sustained; day-30 and day-55 rubric re-run confirms `mempalace_only ≥ v3_only` at both checkpoints; two monthly capacity reviews.
