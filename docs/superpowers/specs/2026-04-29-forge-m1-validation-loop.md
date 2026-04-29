@@ -98,7 +98,7 @@ implementation, escalate to spec-author rather than re-opening the decision.
    produces same error → skip kimi, jump to gpt-4.1). Compare on
    `(file_path, line, message)` tuples sorted ascending.
 10. **Telemetry contract (mandatory):** every artifact-bearing turn emits
-    the seven `forge_*` metrics named in §11.
+    the seven `forge_*` metrics named in §12.
 11. **Validator scope rationale:** JSX/TSX/JS/TS only. Documented because
     JSX/TSX is uniquely failure-prone — it requires context-sensitive
     parsing of a hybrid syntax that the model frequently corrupts. Vanilla
@@ -115,7 +115,7 @@ fall back to `DEFAULT_MODEL` for these IDs.
 
 **M1 PR therefore depends on `feat/deepseek-v4-swap` merging first.** The
 V4 swap branch is already deployed to `/opt/xelasphere/` via file-copy and
-verified working. Merging the V4 PR is a precondition listed in §12.
+verified working. Merging the V4 PR is a precondition listed in §13.
 
 If the V4 swap merge slips, the fallback is to add minimal `MODEL_CATALOG`
 entries for v4-flash/v4-pro as part of M1 PR (cherry-pick from the swap
@@ -123,9 +123,40 @@ branch). This is documented but not the recommended path.
 
 ---
 
-## 4. Architecture
+## 4. Decision amendments since spec authoring
 
-### 4.1 Where Forge fits in the existing pipeline
+This section is the standing audit trail of decisions amended after the
+spec was first authored. Future-you (or future-agent) reading this spec in
+six months needs to see amendments at a glance, not buried in section
+bodies. Add new amendments at the top of this section, dated.
+
+### Amendment 1 — 2026-04-29 — Decision 1 (validator binary for JS/JSX)
+
+**Original (Decision 1):** *"Use `node --check` for `.js`/`.jsx`,
+`tsc --noEmit --jsx preserve` for `.ts`/`.tsx`. Subprocess via `asyncio`
+with 3s timeout per file. No esbuild-WASM, no client-side validation."*
+
+**Amended to:** *"Use `@babel/parser` via a thin Node CLI wrapper for
+`.js`/`.jsx`. `tsc --noEmit --jsx preserve` for `.ts`/`.tsx` is
+unchanged. Subprocess + 3s timeout + no-client-side-validation
+constraints all preserved."*
+
+**Rationale:** vanilla `node --check` does not parse JSX (Node has no
+native JSX parser). Decision 1's letter would cause `.jsx` validation to
+silently no-op, defeating the M1 goal of catching the Netflix-clone-class
+JSX bug. The substitution preserves Decision 1's spirit — server-side,
+Node-family subprocess, single binary, one timeout pattern — while
+handling the JSX gap. Full alternative analysis (`tsc`-for-everything;
+revert-to-Decision-1) in §6.3 "Deviation note (from Decision 1)".
+
+**Impact on other decisions:** none. Decisions 2–11 unchanged. Telemetry
+field names unchanged. Cascade unchanged. Persistence schema unchanged.
+
+---
+
+## 5. Architecture
+
+### 5.1 Where Forge fits in the existing pipeline
 
 ```
 [user message]
@@ -154,7 +185,7 @@ branch). This is documented but not the recommended path.
    │               if not result.ok:
    │                   loop FORGE_VALIDATION_CASCADE (Dec 3)
    │                     emit SSE forge_retry status
-   │                     build retry prompt (§6)
+   │                     build retry prompt (§7)
    │                     get_ai_response(retry_model)  + record_usage
    │                     parse + re-validate
    │                     check loop-detect (Dec 9)
@@ -182,12 +213,12 @@ endpoints, new background workers, or new async machinery. The streaming
 SSE channel stays open throughout — retry status events are yielded
 between `data:` frames the client already handles.
 
-### 4.2 Component boundaries
+### 5.2 Component boundaries
 
 | Component | Location | Responsibility |
 |---|---|---|
 | **Validator** | `app/services/artifact_validator.py` (NEW) | Pure function: `(payload) → (ok, errors[])`. No I/O beyond subprocess. No state. |
-| **Retry-prompt builder** | same module, helper function | Build the synthetic retry prompt (§6). Pure string construction. |
+| **Retry-prompt builder** | same module, helper function | Build the synthetic retry prompt (§7). Pure string construction. |
 | **Cascade orchestrator** | `app/blueprints/chat_routes.py` (extend `chunk_type=='done'` branch) | Loop, escalate, emit SSE, enforce budget, detect loop. |
 | **Cascade constant** | `app/services/chat_engine.py` (NEW: `FORGE_VALIDATION_CASCADE`) | Source of truth for retry order. |
 | **Telemetry collector** | inline in cascade orchestrator | Emit metrics per Decision 10. |
@@ -196,9 +227,9 @@ between `data:` frames the client already handles.
 
 ---
 
-## 5. The validator
+## 6. The validator
 
-### 5.1 Module API
+### 6.1 Module API
 
 `app/services/artifact_validator.py`:
 
@@ -232,7 +263,7 @@ def validate_artifact_payload(payload: dict) -> ValidationResult:
     """
 ```
 
-### 5.2 Per-language dispatch
+### 6.2 Per-language dispatch
 
 ```python
 _LANGUAGE_VALIDATORS = {
@@ -248,20 +279,33 @@ do not block the artifact. Examples that are skipped: `css`, `html`,
 `python`, `markdown`, `json`, `yaml`. Skip is silent (no warning) — these
 languages are correctly out of scope per Decision 11.
 
-### 5.3 Subprocess invocation
+### 6.3 Subprocess invocation
 
-**Primary path: `node --check` for JS/JSX**
+**Deviation note (from Decision 1).** Decision 1 prescribed `node --check`
+for `.js`/`.jsx`. Vanilla `node --check` does not parse JSX (Node has no
+native JSX parser; `--check` only validates the JS subset). Considered
+alternatives:
 
-```
-node --check /tmp/forge_<uuid>.<jsx|js>
-```
+(a) **`@babel/parser` via a thin Node CLI wrapper** *(picked)* —
+    preserves Decision 1's spirit (server-side, Node-family subprocess,
+    single binary) while handling the JSX gap. Adds `@babel/parser`
+    (~250 KB single npm package) as a Node dependency.
+(b) **`tsc --noEmit --jsx preserve --allowJs` for all four languages** —
+    one binary, one error format, one stderr parser. Architecturally
+    cleaner but adds TypeScript as an ops dependency on the deploy host
+    (not currently a dep). Slower startup (~500 ms vs ~200 ms for
+    Node+Babel).
+(c) **Revert to Decision 1 verbatim, accept JSX silently no-ops** —
+    rejected; defeats the M1 goal of catching the Netflix-clone-class
+    JSX-syntax bug.
 
-`node --check` parses the file and exits 0 on success, non-zero on syntax
-error. JSX support requires Node ≥ 16 with experimental flags OR a
-`--experimental-vm-modules` setting. **For M1 we instead use
-`@babel/parser` via a tiny Node CLI wrapper** because vanilla `node --check`
-does not handle JSX. The wrapper script lives in
-`app/services/forge_validators/check_jsx.cjs`:
+**Picked (a).** Tightness of fit (parse-only library scoped to the
+validation job) wins over (b)'s consolidation, and (c) is a non-starter.
+The deviation is logged in §4 "Decision amendments since spec authoring."
+TS/TSX path below is unchanged from Decision 1.
+
+**JS/JSX path: `@babel/parser` via Node CLI wrapper.** The wrapper script
+lives in `app/services/forge_validators/check_jsx.cjs`:
 
 ```javascript
 // check_jsx.cjs — minimal JSX/JS syntax check via @babel/parser
@@ -305,7 +349,7 @@ except asyncio.TimeoutError:
     return None  # caller treats as ok=True (Decision 11)
 ```
 
-**Secondary path: `tsc --noEmit --jsx preserve` for TS/TSX**
+**TS/TSX path: `tsc --noEmit --jsx preserve` (unchanged from Decision 1).**
 
 ```
 tsc --noEmit --jsx preserve --target ESNext --module ESNext \
@@ -320,7 +364,7 @@ stderr format (TS6133 etc.):
 
 Parsed via regex: `^.+?\((\d+),(\d+)\): error TS\d+: (.+)$`.
 
-### 5.4 Timeout, error, and missing-binary handling
+### 6.4 Timeout, error, and missing-binary handling
 
 | Condition | Behavior |
 |---|---|
@@ -337,7 +381,7 @@ The cost: an artifact with broken JSX could slip through if the validator
 binary is missing. That's an operational concern (alert on the warning
 log) and acceptable for M1.
 
-### 5.5 Error normalization
+### 6.5 Error normalization
 
 Both Babel and tsc report `(line, column, message)` per parse error. Babel
 columns are 0-indexed, tsc columns are 1-indexed. Normalize all columns to
@@ -350,9 +394,9 @@ inline (no syntax highlighting in the excerpt itself; that's a UI concern).
 
 ---
 
-## 6. The retry loop
+## 7. The retry loop
 
-### 6.1 Cascade pseudo-code
+### 7.1 Cascade pseudo-code
 
 Inserted in `chat_routes.py` between line 1751 (existing cascade #1 end)
 and line 2042 (artifact_data assembly start). Wrapped in a function so the
@@ -407,7 +451,7 @@ if routing and routing.artifact_payload:
                     'reason': _short_reason(result.errors),
                 })}\n\n"
                 
-                # Build prompt (§6.2) and call model
+                # Build prompt (§7.2) and call model
                 retry_prompt = build_validation_retry_prompt(
                     payload=routing.artifact_payload,
                     errors=result.errors,
@@ -473,7 +517,7 @@ if routing and routing.artifact_payload:
 # Existing artifact_data assembly continues at :2049...
 ```
 
-### 6.2 Notes on the cascade pseudo-code
+### 7.2 Notes on the cascade pseudo-code
 
 - **`FORGE_RETRY_TOKEN_BUDGET = 80_000`** — module-level constant in
   `chat_engine.py` next to `FORGE_VALIDATION_CASCADE`.
@@ -496,9 +540,9 @@ if routing and routing.artifact_payload:
 
 ---
 
-## 7. Retry-prompt construction
+## 8. Retry-prompt construction
 
-### 7.1 Function signature
+### 8.1 Function signature
 
 In `app/services/artifact_validator.py`:
 
@@ -514,7 +558,7 @@ def build_validation_retry_prompt(
     """
 ```
 
-### 7.2 Exact prompt format
+### 8.2 Exact prompt format
 
 ```
 Your previous response produced an artifact that failed syntax validation.
@@ -551,7 +595,7 @@ Regenerate the COMPLETE artifact with the syntax error fixed. Use
 ACTION: create_artifact and the fenced format. Include ALL files.
 ```
 
-### 7.3 Construction rules
+### 8.3 Construction rules
 
 - All errors are listed, not just the first. Models often introduce
   fix-the-symptom-create-a-new-bug patterns; showing all errors helps
@@ -575,7 +619,7 @@ ACTION: create_artifact and the fenced format. Include ALL files.
   full regen because the patch-apply path has its own existing cascade
   (#2/#3) and Forge does not interleave with it.
 
-### 7.4 Why this beats simpler alternatives
+### 8.4 Why this beats simpler alternatives
 
 - **vs "just send same prompt to next model":** existing cascade #1 does
   this and demonstrably fails for syntax bugs (the Netflix bug arose at
@@ -590,9 +634,9 @@ ACTION: create_artifact and the fenced format. Include ALL files.
 
 ---
 
-## 8. Transcript block (SSE events)
+## 9. Transcript block (SSE events)
 
-### 8.1 Event shapes
+### 9.1 Event shapes
 
 The cascade emits three event subtypes, all under the existing `type:
 status` umbrella the client already routes:
@@ -629,7 +673,7 @@ status` umbrella the client already routes:
 }
 ```
 
-### 8.2 Client rendering
+### 9.2 Client rendering
 
 In `app/static/js/startNewChatModule.js`, the SSE handler routes
 `type: 'status'` events. Add a switch on `subtype`:
@@ -659,9 +703,9 @@ Visual treatment (high-level — exact CSS in implementation):
 
 ---
 
-## 9. Persistence & replay
+## 10. Persistence & replay
 
-### 9.1 Schema (Firestore)
+### 10.1 Schema (Firestore)
 
 Firestore is schema-less; "migration" here means: writes start emitting two
 new fields, reads gracefully handle their absence on legacy documents.
@@ -691,13 +735,13 @@ Semantics:
 | Validated, exhausted (4 iters) | `4` | `null` |
 | Validated, budget-stopped at 2 | `2` | `null` |
 
-### 9.2 Write path
+### 10.2 Write path
 
 In the existing `save_interaction(...)` call site (`:2257`), pass the two
 new fields. The function itself needs a small extension to accept and
 forward them to the Firestore document update.
 
-### 9.3 Replay path
+### 10.3 Replay path
 
 On history replay (`startNewChatModule.js`'s `renderMessage` or its
 StreamRenderer-replay successor per `replay-convergence-design.md`),
@@ -711,14 +755,14 @@ message timestamp:
 No per-iteration cards reconstructed. The live `forge_retry` cards are
 DOM-only and not persisted.
 
-### 9.4 Backward compatibility
+### 10.4 Backward compatibility
 
 Legacy messages have neither field. Reads check `if forge_attempts is None`
 first → render no breadcrumb (current behavior). No data migration needed.
 
 ---
 
-## 10. Edge cases
+## 11. Edge cases
 
 | # | Case | Behavior |
 |---|---|---|
@@ -726,7 +770,7 @@ first → render no breadcrumb (current behavior). No data migration needed.
 | E2 | Validator subprocess errors (binary missing, OS-level fail) | Logged warning, treated as ok=True, artifact flows as if validation passed. Graceful degradation. |
 | E3 | Validator times out (3s/file) | Same as E2. Per-file timeout; doesn't cascade-fail the whole artifact. |
 | E4 | All 4 iterations fail | Per Decision 4: emit `forge_exhausted`, set `_forge_validation_failed=True` on the payload, render artifact with red warning ribbon + inline errors. |
-| E5 | Multi-file artifact, only one file fails | Validator reports the one failure. Retry prompt includes ALL files (model needs cross-file context per §7.4). On heal, all files are re-saved. |
+| E5 | Multi-file artifact, only one file fails | Validator reports the one failure. Retry prompt includes ALL files (model needs cross-file context per §8.4). On heal, all files are re-saved. |
 | E6 | Model returns identical errors twice | Loop-detection fires (Decision 9), `previous_skip_count += 2`, next iteration jumps two cascade tiers ahead. Logged as `forge_loop_detected_skip=true`. |
 | E7 | Retry token budget (80k) exceeded mid-cascade | Loop breaks immediately. `forge_budget_exhausted=true`. Treated like exhaustion: artifact renders with red ribbon, current errors surfaced. |
 | E8 | Non-validatable artifact (no JSX/TSX/JS/TS files; pure HTML/CSS/SVG/Python) | `_has_validatable_files` returns False, validator never runs. `forge_attempts=null`, `forge_healed_at=null`. Zero overhead. |
@@ -735,12 +779,12 @@ first → render no breadcrumb (current behavior). No data migration needed.
 | E11 | Cascade #1 (existing JSON-malform retry) succeeds; Forge runs after | Sequential pipeline: cascade #1 produces a valid `artifact_payload`, Forge then validates it. Both can fire in one turn. |
 | E12 | Patch-apply cascade (#2/#3) succeeds; should Forge also run? | **Yes** — patches can introduce syntax bugs just like full regens. Forge runs on the post-patch `artifact_payload` regardless of how it got built. |
 | E13 | Stream model is one of the cascade models AND fails | Cascade still iterates from index 0. We do not skip the same model — it may have failed for a transient reason. Loop detection (E6) handles the case where it consistently produces the same error. |
-| E14 | Retry prompt exceeds the model's context window | Caught by `get_ai_response` exception path, treated as a failed cascade iteration, loop continues. The §7.3 large-artifact mitigation should rarely allow this in practice. |
+| E14 | Retry prompt exceeds the model's context window | Caught by `get_ai_response` exception path, treated as a failed cascade iteration, loop continues. The §8.3 large-artifact mitigation should rarely allow this in practice. |
 | E15 | Validator finds errors only in `_forge_validation_failed`-flagged retry artifacts | Defensive: never re-validate an artifact already flagged failed. Prevents double-Forge on legacy paths if they ever feed into the hook. |
 
 ---
 
-## 11. Telemetry contract
+## 12. Telemetry contract
 
 Per Decision 10, every artifact-bearing turn emits these metrics. Sink:
 existing `logger.info` with structured fields (parseable by the metrics
@@ -767,9 +811,9 @@ skipped), at the existing accountant log site (`:2346` neighborhood).
 
 ---
 
-## 12. Prerequisite work in M1 PR
+## 13. Prerequisite work in M1 PR
 
-### 12.1 V4 swap merge (hard prerequisite)
+### 13.1 V4 swap merge (hard prerequisite)
 
 `feat/deepseek-v4-swap` (commit `537050c`, PR open) **must merge first**.
 Decision 3's hardcoded `["deepseek-v4-flash", ...]` cascade depends on
@@ -787,18 +831,18 @@ for _m in FORGE_VALIDATION_CASCADE:
             f"FORGE_VALIDATION_CASCADE references unknown model {_m!r}. "
             f"Did feat/deepseek-v4-swap merge? See "
             f"docs/superpowers/specs/2026-04-29-forge-m1-validation-loop.md "
-            f"§3 / §12."
+            f"§3 / §13."
         )
 ```
 
 This fails at app startup (gunicorn worker spawn) rather than at first
 artifact request — fast feedback during deploy.
 
-### 12.2 Accountant fix (Decision 7)
+### 13.2 Accountant fix (Decision 7)
 
 Wrap every existing `get_ai_response` call in cascades #1, #2, #3 with
 `orchestrator_record_usage(<retry_model>, in_tokens, out_tokens)`. Token
-estimation reuses the same estimator the §6 cascade pseudo-code uses.
+estimation reuses the same estimator the §7 cascade pseudo-code uses.
 
 Files:
 - `app/blueprints/chat_routes.py` — three call sites at `:1734`, `:1806`,
@@ -807,21 +851,21 @@ Files:
 This is a non-feature change shipped under M1 PR. Without it, M1's amplified
 retry traffic silently drains the daily token budget.
 
-### 12.3 Schema fields (Decision 2)
+### 13.3 Schema fields (Decision 2)
 
 Extend `save_interaction` (in `app/services/chat_engine.py` per the
 investigation doc, around `:1292-1450`) to accept and forward
 `forge_attempts` and `forge_healed_at` fields. No schema migration script
 needed (Firestore-schema-less).
 
-### 12.4 No prerequisite outside the M1 PR
+### 13.4 No prerequisite outside the M1 PR
 
 Everything M1 needs ships in this PR. The V4 swap is a separate PR, but
 its merge is upstream of M1 PR opening. M1 PR base = post-V4-merge `main`.
 
 ---
 
-## 13. File-by-file change manifest
+## 14. File-by-file change manifest
 
 ### NEW
 
@@ -840,8 +884,8 @@ its merge is upstream of M1 PR opening. M1 PR base = post-V4-merge `main`.
 
 | Path | Change | Approx LOC |
 |---|---|---|
-| `app/blueprints/chat_routes.py` | Insert validator cascade between `:1751` and `:2042` (§5/§6/§7); wrap existing cascades #1/#2/#3 with `orchestrator_record_usage` (§12.2); pass `forge_attempts`/`forge_healed_at` to `save_interaction` (§12.3) | ~120 added |
-| `app/services/chat_engine.py` | Add `FORGE_VALIDATION_CASCADE` constant; add `FORGE_RETRY_TOKEN_BUDGET = 80_000`; extend `save_interaction` signature for new fields; add startup guard (§12.1) | ~25 added |
+| `app/blueprints/chat_routes.py` | Insert validator cascade between `:1751` and `:2042` (§6/§7/§8); wrap existing cascades #1/#2/#3 with `orchestrator_record_usage` (§13.2); pass `forge_attempts`/`forge_healed_at` to `save_interaction` (§13.3) | ~120 added |
+| `app/services/chat_engine.py` | Add `FORGE_VALIDATION_CASCADE` constant; add `FORGE_RETRY_TOKEN_BUDGET = 80_000`; extend `save_interaction` signature for new fields; add startup guard (§13.1) | ~25 added |
 | `app/static/js/startNewChatModule.js` | SSE handler `type:'status'` switch additions for `forge_retry` / `forge_done` / `forge_exhausted`; small renderers `appendForgeRetryBlock` / `appendForgeHealedBlock` / `appendForgeExhaustedRibbon`; replay-side breadcrumb reconstruction from `forge_attempts`/`forge_healed_at` | ~100 added |
 | `app/static/js/artifactPanel.js` | Read `_forge_validation_failed` / `_forge_errors` flags from incoming artifact; render red warning ribbon (Decision 4) | ~40 added |
 | `app/static/css/styles.css` (or appropriate stylesheet) | `.forge-retry-card`, `.forge-healed-line`, `.forge-warning-ribbon` styles | ~50 added |
@@ -940,5 +984,5 @@ be pushed back:
 Spec written. **No implementation in the M1 PR until this spec is reviewed
 and approved by the human reviewer.** The next deliverable is the
 implementation plan via `superpowers:writing-plans`, which decomposes
-§13 manifest + §10 acceptance into ordered TDD tasks. **Only after both
+§14 manifest + §11 acceptance into ordered TDD tasks. **Only after both
 spec AND plan are approved does any code get written.**
