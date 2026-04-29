@@ -256,48 +256,186 @@
 
                 <section class="settings-pane" data-pane="personalization">
                     <h2 class="settings-pane-title">Personalization</h2>
-                    <p class="settings-pane-hint">Control what XelaSphere remembers about you.</p>
 
-                    <div class="settings-row">
+                    {# 1. Base style and tone #}
+                    <div class="settings-row settings-row--with-helper">
                         <div class="settings-row-text">
-                            <strong>Memory</strong>
-                            <span>Save and reuse details from past conversations.</span>
+                            <strong>Base style and tone</strong>
+                            <p class="settings-row-helper">Set the style and tone of how XelaSphere responds to you. This doesn't impact XelaSphere's capabilities.</p>
                         </div>
-                        <button type="button" class="settings-toggle" role="switch" aria-checked="false" data-memory-toggle="master">
-                            <span class="settings-toggle-slider"></span>
+                        <div class="settings-dropdown" data-dropdown="p-base-style">
+                            <button type="button" class="settings-dropdown-trigger" data-dropdown-trigger>
+                                <span data-dropdown-label>Default</span>
+                                <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                            </button>
+                            <ul class="settings-dropdown-menu" data-dropdown-menu role="listbox">
+                                <li class="settings-dropdown-option is-selected" data-dropdown-option="default" role="option">Default</li>
+                                <li class="settings-dropdown-option" data-dropdown-option="concise" role="option">Concise</li>
+                                <li class="settings-dropdown-option" data-dropdown-option="friendly" role="option">Friendly</li>
+                                <li class="settings-dropdown-option" data-dropdown-option="professional" role="option">Professional</li>
+                                <li class="settings-dropdown-option" data-dropdown-option="playful" role="option">Playful</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    {# 2. Characteristics #}
+                    <div class="settings-pane-section">
+                        <h3 class="settings-pane-subhead">Characteristics</h3>
+                        <p class="settings-pane-section-helper">Choose additional customizations on top of your base style and tone.</p>
+
+                        {% for c in [
+                            ('p-warm', 'Warm'),
+                            ('p-enthusiastic', 'Enthusiastic'),
+                            ('p-headers-lists', 'Headers &amp; Lists'),
+                            ('p-emoji', 'Emoji'),
+                        ] %}
+                        <div class="settings-row">
+                            <div class="settings-row-text">
+                                <strong>{{ c[1] | safe }}</strong>
+                            </div>
+                            <div class="settings-dropdown" data-dropdown="{{ c[0] }}">
+                                <button type="button" class="settings-dropdown-trigger" data-dropdown-trigger>
+                                    <span data-dropdown-label>Default</span>
+                                    <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                                </button>
+                                <ul class="settings-dropdown-menu" data-dropdown-menu role="listbox">
+                                    <li class="settings-dropdown-option is-selected" data-dropdown-option="default" role="option">Default</li>
+                                    <li class="settings-dropdown-option" data-dropdown-option="less" role="option">Less</li>
+                                    <li class="settings-dropdown-option" data-dropdown-option="more" role="option">More</li>
+                                </ul>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    {# 3. Fast answers #}
+                    <div class="settings-pane-section">
+                        <div class="settings-row settings-row--with-helper">
+                            <div class="settings-row-text">
+                                <strong>Fast answers</strong>
+                                <p class="settings-row-helper">XelaSphere can sometimes use its general knowledge to give fast, in-depth answers. These aren't personalized and don't use your memory.</p>
+                            </div>
+                            <button type="button" class="settings-toggle" role="switch" aria-checked="true" data-personalization-toggle="p-fast-answers">
+                                <span class="settings-toggle-slider"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {# 4. Custom instructions #}
+                    <div class="settings-pane-section">
+                        <h3 class="settings-pane-subhead">Custom instructions</h3>
+                        <input type="text" class="settings-input" placeholder="Additional behavior, style, and tone preferences"
+                               data-personalization-input="p-custom-instructions"
+                               aria-label="Custom instructions">
+                    </div>
+
+                    {# 5. About you #}
+                    <div class="settings-pane-section">
+                        <h3 class="settings-pane-subhead">About you</h3>
+                        <div class="settings-input-group">
+                            <label class="settings-input-label">
+                                <span>Nickname</span>
+                                <input type="text" class="settings-input" placeholder="What should XelaSphere call you?"
+                                       data-personalization-input="p-nickname">
+                            </label>
+                            <label class="settings-input-label">
+                                <span>Occupation</span>
+                                <input type="text" class="settings-input" placeholder="What do you do?"
+                                       data-personalization-input="p-occupation">
+                            </label>
+                            <label class="settings-input-label">
+                                <span>More about you</span>
+                                <input type="text" class="settings-input" placeholder="Interests, values, or preferences to keep in mind"
+                                       data-personalization-input="p-more-about-you">
+                            </label>
+                        </div>
+                    </div>
+
+                    {# 6. Memory — KEEP master toggle (privacy kill-switch). 3 toggles + Manage. #}
+                    <div class="settings-pane-section">
+                        <div class="settings-pane-subhead-row">
+                            <h3 class="settings-pane-subhead">
+                                Memory
+                                <i class="fas fa-circle-question settings-help-icon" aria-hidden="true" title="What XelaSphere remembers and uses across conversations"></i>
+                            </h3>
+                            <button type="button" class="btn-pill" data-action="open-memory-modal">Manage</button>
+                        </div>
+
+                        <div class="settings-row settings-row--with-helper">
+                            <div class="settings-row-text">
+                                <strong>Memory</strong>
+                                <p class="settings-row-helper">Master switch — turn off all memory recall and writes for your account.</p>
+                            </div>
+                            <button type="button" class="settings-toggle" role="switch" aria-checked="false" data-memory-toggle="master">
+                                <span class="settings-toggle-slider"></span>
+                            </button>
+                        </div>
+
+                        <div class="settings-row settings-row--with-helper">
+                            <div class="settings-row-text">
+                                <strong>Reference saved memories</strong>
+                                <p class="settings-row-helper">Let XelaSphere save and use memories when responding.</p>
+                            </div>
+                            <button type="button" class="settings-toggle" role="switch" aria-checked="false" data-memory-toggle="ref_v2">
+                                <span class="settings-toggle-slider"></span>
+                            </button>
+                        </div>
+
+                        <div class="settings-row settings-row--with-helper">
+                            <div class="settings-row-text">
+                                <strong>Reference chat history</strong>
+                                <p class="settings-row-helper">Let XelaSphere reference all previous conversations when responding.</p>
+                            </div>
+                            <button type="button" class="settings-toggle" role="switch" aria-checked="false" data-memory-toggle="ref_mempalace">
+                                <span class="settings-toggle-slider"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {# 7. Record mode #}
+                    <div class="settings-pane-section">
+                        <h3 class="settings-pane-subhead">
+                            Record mode
+                            <i class="fas fa-circle-question settings-help-icon" aria-hidden="true" title="Reference recording transcripts in responses"></i>
+                        </h3>
+                        <div class="settings-row settings-row--with-helper">
+                            <div class="settings-row-text">
+                                <strong>Reference record history</strong>
+                                <p class="settings-row-helper">Let XelaSphere reference all previous recording transcripts and notes when responding.</p>
+                            </div>
+                            <button type="button" class="settings-toggle" role="switch" aria-checked="false" data-personalization-toggle="p-record-history">
+                                <span class="settings-toggle-slider"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {# 8. Advanced (collapsible) #}
+                    <div class="settings-pane-section settings-collapsible" data-collapsible id="personalization-advanced">
+                        <button type="button" class="settings-collapsible-toggle" aria-expanded="false" data-collapsible-trigger
+                                aria-controls="personalization-advanced-panel">
+                            <span class="settings-pane-subhead">Advanced</span>
+                            <i class="fas fa-chevron-down settings-collapsible-chevron" aria-hidden="true"></i>
                         </button>
-                    </div>
-
-                    <div class="settings-row">
-                        <div class="settings-row-text">
-                            <strong>Reference saved memories</strong>
-                            <span>Use stored memories when answering.</span>
+                        <div class="settings-collapsible-panel" id="personalization-advanced-panel" data-collapsible-panel>
+                            {% for t in [
+                                ('p-web-search', 'Web search', 'Let XelaSphere automatically search the web for answers.'),
+                                ('p-canvas', 'Canvas', 'Collaborate with XelaSphere on text and code.'),
+                                ('p-voice', 'XelaSphere Voice', 'Enable Voice in XelaSphere.'),
+                                ('p-advanced-voice', 'Advanced voice', 'Have more natural conversations in Voice.'),
+                                ('p-connector-search', 'Connector search', 'Let XelaSphere automatically search connected sources for answers.'),
+                            ] %}
+                            <div class="settings-row settings-row--with-helper">
+                                <div class="settings-row-text">
+                                    <strong>{{ t[1] }}</strong>
+                                    <p class="settings-row-helper">{{ t[2] }}</p>
+                                </div>
+                                <button type="button" class="settings-toggle" role="switch" aria-checked="true" data-personalization-toggle="{{ t[0] }}">
+                                    <span class="settings-toggle-slider"></span>
+                                </button>
+                            </div>
+                            {% endfor %}
                         </div>
-                        <button type="button" class="settings-toggle" role="switch" aria-checked="false" data-memory-toggle="ref_v2">
-                            <span class="settings-toggle-slider"></span>
-                        </button>
                     </div>
-
-                    <div class="settings-row">
-                        <div class="settings-row-text">
-                            <strong>Reference chat history</strong>
-                            <span>Use prior conversation turns when answering.</span>
-                        </div>
-                        <button type="button" class="settings-toggle" role="switch" aria-checked="false" data-memory-toggle="ref_mempalace">
-                            <span class="settings-toggle-slider"></span>
-                        </button>
-                    </div>
-
-                    <div class="settings-row">
-                        <div class="settings-row-text">
-                            <strong>Manage memory</strong>
-                            <span>View, edit, and delete saved memories.</span>
-                        </div>
-                        <button type="button" class="btn btn-secondary" data-action="open-memory-modal">Manage</button>
-                    </div>
-
-                    <h3 class="settings-pane-subhead">Custom instructions</h3>
-                    <p class="settings-pane-empty">Coming Soon.</p>
                 </section>
 
                 <section class="settings-pane" data-pane="apps">

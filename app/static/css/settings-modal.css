@@ -339,6 +339,174 @@
     flex-shrink: 0;
 }
 
+/* ---------- pane sections (Personalization & friends) ---------- */
+/* A pane-section groups a subhead + helper + rows. The first row inside a
+   section drops its top border so the subhead acts as the visual divider. */
+.settings-pane-section {
+    margin-top: 0;
+}
+
+.settings-pane-section .settings-row:first-of-type {
+    border-top: none;
+}
+
+.settings-pane-section-helper {
+    margin: 0 0 12px;
+    font-size: 0.8125rem;
+    color: rgba(0, 0, 0, 0.55);
+    line-height: 1.45;
+    max-width: 540px;
+}
+
+.settings-pane-subhead {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.settings-pane-subhead-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 24px 0 8px;
+}
+
+.settings-pane-subhead-row .settings-pane-subhead {
+    margin: 0;
+}
+
+.settings-help-icon {
+    font-size: 0.8rem;
+    color: rgba(0, 0, 0, 0.4);
+    cursor: help;
+}
+
+.btn-pill {
+    display: inline-flex;
+    align-items: center;
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.16);
+    color: rgba(0, 0, 0, 0.85);
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease;
+    flex-shrink: 0;
+}
+
+.btn-pill:hover {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.24);
+}
+
+.btn-pill:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.5);
+    outline-offset: 2px;
+}
+
+/* ---------- text inputs (Personalization About-you / Custom instructions) ---------- */
+.settings-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 12px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.025);
+    color: rgba(0, 0, 0, 0.92);
+    font-family: inherit;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.settings-input::placeholder {
+    color: rgba(0, 0, 0, 0.4);
+}
+
+.settings-input:hover {
+    border-color: rgba(0, 0, 0, 0.18);
+}
+
+.settings-input:focus {
+    outline: none;
+    border-color: rgba(59, 130, 246, 0.55);
+    background: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.settings-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.settings-input-label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    cursor: text;
+}
+
+.settings-input-label > span {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.78);
+}
+
+/* ---------- collapsible (Advanced section) ---------- */
+.settings-collapsible-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    font-family: inherit;
+    text-align: left;
+    margin: 24px 0 0;
+}
+
+.settings-collapsible-toggle:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.5);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.settings-collapsible-toggle .settings-pane-subhead {
+    margin: 0;
+}
+
+.settings-collapsible-chevron {
+    font-size: 0.78rem;
+    color: rgba(0, 0, 0, 0.5);
+    transition: transform 200ms ease;
+}
+
+.settings-collapsible-toggle[aria-expanded="true"] .settings-collapsible-chevron {
+    transform: rotate(180deg);
+}
+
+.settings-collapsible-panel {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.settings-collapsible-toggle[aria-expanded="true"] + .settings-collapsible-panel {
+    max-height: 1600px;
+}
+
+.settings-collapsible-panel > .settings-row:first-of-type {
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    margin-top: 8px;
+}
+
 /* ---------- toggle (button[role=switch] — ARIA pattern, no input/label) ---------- */
 /* Using <button role="switch"> instead of <label><input> sidesteps the
    responsive-foundation.css `label:has(input[type="checkbox"])` rule that
@@ -1481,6 +1649,56 @@
 
 [data-theme="dark"] .settings-row-helper {
     color: rgba(255, 255, 255, 0.5);
+}
+
+[data-theme="dark"] .settings-pane-section-helper {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+[data-theme="dark"] .settings-help-icon {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+[data-theme="dark"] .btn-pill {
+    border-color: rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.92);
+}
+
+[data-theme="dark"] .btn-pill:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+[data-theme="dark"] .settings-input {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.92);
+}
+
+[data-theme="dark"] .settings-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+[data-theme="dark"] .settings-input:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+[data-theme="dark"] .settings-input:focus {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(96, 165, 250, 0.7);
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+[data-theme="dark"] .settings-input-label > span {
+    color: rgba(255, 255, 255, 0.78);
+}
+
+[data-theme="dark"] .settings-collapsible-chevron {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+[data-theme="dark"] .settings-collapsible-panel > .settings-row:first-of-type {
+    border-top-color: rgba(255, 255, 255, 0.06);
 }
 
 [data-theme="dark"] .settings-toggle-slider {
