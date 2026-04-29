@@ -944,6 +944,7 @@ def chat_stream():
     #                 LLM never saw the results — every fact hallucinated.
     # Exception-swallowing: any mempalace-side failure must NOT break legacy
     # chat flow. H9 no-automated-coverage: manual-verification backstop only.
+    _mp_active_injected = False  # set True iff ACTIVE mode injects recall
     try:
         _mp_mode = _mempalace_mode()
         if _mp_mode != _MempalaceMode.OFF and user_id:
@@ -967,6 +968,7 @@ def chat_stream():
                         )
                     else:
                         long_term_memory_stream = _mp_context
+                    _mp_active_injected = True
                     logger.info(
                         f"🧠 [Stream] Mempalace ACTIVE: injected "
                         f"{len(_mp_context)} chars of recall context"
@@ -1356,7 +1358,20 @@ def chat_stream():
             r'weather|forecast|score|scores|live|war|election|crypto|bitcoin|ethereum)\b',
             re.IGNORECASE,
         )
-        _skip_cache = bool(_time_sensitive_re.search(user_prompt_raw or '')) or _mode_forced
+        # Skip cache when mempalace ACTIVE injected user-specific recall —
+        # the response is keyed on the user's project context, not just the
+        # prompt text. The cache is keyed on prompt-only (see
+        # app/orchestrator/cache.py:_make_key) so a cache hit would serve
+        # one user's response (or a previous turn's hallucination) to
+        # everyone asking the same question. Surfaced 2026-04-29 by Riley
+        # dogfood: "What camera am I shooting on?" returned a cached
+        # "Arri Alexa" hallucination from a prior shadow-mode turn even
+        # after mempalace ACTIVE was injecting the correct Sony FX3 context.
+        _skip_cache = (
+            bool(_time_sensitive_re.search(user_prompt_raw or ''))
+            or _mode_forced
+            or _mp_active_injected
+        )
 
         # Explicit mode override — short-circuit BEFORE cache + first-LLM.
         # The UI toggle is authoritative: user asked for this pipeline.
@@ -2268,7 +2283,13 @@ def chat_stream():
                             full_content
                             and len(full_content.strip()) > 50
                             and not _used_web_search
+                            and not _mp_active_injected
                         ):
+                            # Skip cache write when mempalace ACTIVE injected
+                            # user-specific recall — caching this response
+                            # would leak one user's project context to anyone
+                            # else asking the same prompt. See _skip_cache at
+                            # the read site for the matching read-path guard.
                             orchestrator_store_cache(user_prompt_raw, full_content, stream_model, _cache_job)
                     except Exception:
                         pass
