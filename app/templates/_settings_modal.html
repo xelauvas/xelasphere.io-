@@ -1,0 +1,80 @@
+{# Settings modal — ChatGPT-parity. Included once in index.html. #}
+<div class="settings-modal-backdrop" id="settings-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+    <div class="settings-modal-dialog" role="document">
+        <header class="settings-modal-header">
+            <h2 id="settings-modal-title">Settings</h2>
+            <button type="button" class="settings-modal-close" data-settings-close aria-label="Close settings">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </header>
+
+        <div class="settings-modal-body">
+            <nav class="settings-modal-rail" aria-label="Settings sections">
+                <button type="button" class="settings-rail-item is-active" data-tab="general">
+                    <i class="fas fa-gear"></i><span>General</span>
+                </button>
+                <button type="button" class="settings-rail-item" data-tab="notifications">
+                    <i class="fas fa-bell"></i><span>Notifications</span>
+                </button>
+                <button type="button" class="settings-rail-item" data-tab="personalization">
+                    <i class="fas fa-user"></i><span>Personalization</span>
+                </button>
+                <button type="button" class="settings-rail-item" data-tab="speech">
+                    <i class="fas fa-microphone"></i><span>Speech</span>
+                </button>
+                <button type="button" class="settings-rail-item" data-tab="data">
+                    <i class="fas fa-shield-halved"></i><span>Data Controls</span>
+                </button>
+                <button type="button" class="settings-rail-item" data-tab="connected">
+                    <i class="fas fa-plug"></i><span>Connected apps</span>
+                </button>
+                <button type="button" class="settings-rail-item" data-tab="security">
+                    <i class="fas fa-lock"></i><span>Security</span>
+                </button>
+                {% if is_admin %}
+                <div class="settings-rail-divider"></div>
+                <button type="button" class="settings-rail-item settings-rail-item--admin" data-tab="api-keys">
+                    <i class="fas fa-key"></i><span>API Keys</span>
+                </button>
+                {% endif %}
+            </nav>
+
+            <main class="settings-modal-content">
+                <section class="settings-pane is-active" data-pane="general">
+                    <h3>General</h3>
+                    <p class="settings-pane-empty">Coming Soon — placeholder until PR 4 wires Theme, Archived chats, and Delete all chats.</p>
+                </section>
+                <section class="settings-pane" data-pane="notifications">
+                    <h3>Notifications</h3>
+                    <p class="settings-pane-empty">Coming Soon.</p>
+                </section>
+                <section class="settings-pane" data-pane="personalization">
+                    <h3>Personalization</h3>
+                    <p class="settings-pane-empty">Coming Soon — placeholder until PR 3 wires memory toggles.</p>
+                </section>
+                <section class="settings-pane" data-pane="speech">
+                    <h3>Speech</h3>
+                    <p class="settings-pane-empty">Coming Soon.</p>
+                </section>
+                <section class="settings-pane" data-pane="data">
+                    <h3>Data Controls</h3>
+                    <p class="settings-pane-empty">Coming Soon — placeholder until PR 4 wires Shared links and Export.</p>
+                </section>
+                <section class="settings-pane" data-pane="connected">
+                    <h3>Connected apps</h3>
+                    <p class="settings-pane-empty">Coming Soon.</p>
+                </section>
+                <section class="settings-pane" data-pane="security">
+                    <h3>Security</h3>
+                    <p class="settings-pane-empty">Coming Soon.</p>
+                </section>
+                {% if is_admin %}
+                <section class="settings-pane" data-pane="api-keys">
+                    <h3>API Keys</h3>
+                    <p class="settings-pane-empty">Coming Soon — placeholder until PR 2 ports the form.</p>
+                </section>
+                {% endif %}
+            </main>
+        </div>
+    </div>
+</div>

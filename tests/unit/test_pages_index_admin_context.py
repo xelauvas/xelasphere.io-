@@ -1,11 +1,5 @@
-"""index.html renders is_admin flag based on session user.
-
-Skipped until Task 1.3 lands the modal partial that consumes is_admin.
-"""
-import pytest
+"""index.html renders is_admin flag based on session user."""
 from unittest.mock import patch
-
-pytestmark = pytest.mark.skip(reason='Unblocked by Task 1.3 (modal partial)')
 
 
 def test_index_renders_is_admin_true_for_admin(authenticated_client, mock_firestore):
