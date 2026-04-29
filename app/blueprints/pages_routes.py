@@ -21,6 +21,7 @@ from app.limiter import csrf_required
 from app.blueprints.shared import (
     login_required, guest_allowed, error_handler, task_generator,
     is_guest, get_guest_message_count, get_client_ip, hash_ip,
+    is_admin_user,
     GUEST_MESSAGE_LIMIT, GUEST_BANNER_THRESHOLD
 )
 
@@ -197,7 +198,8 @@ def _render_home(initial_surface='chat'):
             guest_message_limit=GUEST_MESSAGE_LIMIT,
             guest_banner_threshold=GUEST_BANNER_THRESHOLD,
             session_has_messages=False,
-            initial_surface=initial_surface
+            initial_surface=initial_surface,
+            is_admin=is_admin_user(session.get('user'))
         )
     except Exception as e:
         logger.error(f"Failed to load the index page: {e}")
@@ -308,7 +310,8 @@ def open_shared_session(session_id):
             is_guest=guest_mode,
             guest_message_count=guest_count,
             guest_message_limit=GUEST_MESSAGE_LIMIT,
-            guest_banner_threshold=GUEST_BANNER_THRESHOLD
+            guest_banner_threshold=GUEST_BANNER_THRESHOLD,
+            is_admin=is_admin_user(session.get('user'))
         )
     except Exception as e:
         logger.error(f"Failed to load shared session {session_id}: {e}")
