@@ -215,15 +215,62 @@
     });
 
     /**
-     * Theme radio group wiring. Calls window.ThemeManager.setTheme(theme)
-     * which is the existing global theme controller.
+     * Theme radio group wiring (System / Dark / Light).
+     *
+     * - 'dark' / 'light': call window.ThemeManager.setTheme() — persists to
+     *   localStorage and applies the theme.
+     * - 'system': read the current OS preference via matchMedia, apply that
+     *   theme (so the page updates immediately), then remove the stored key
+     *   so the next page load re-reads the OS preference.
+     *
+     * The "active" indicator reads localStorage directly:
+     *   no key → System
+     *   'light' / 'dark' → that explicit choice
      */
+    const THEME_STORAGE_KEY = 'xelasphere-theme';
+
+    function getStoredTheme() {
+        try {
+            return localStorage.getItem(THEME_STORAGE_KEY);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function getSystemTheme() {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+            return 'light';
+        }
+        return 'dark';
+    }
+
     function refreshThemeRadios() {
-        const current = (document.documentElement.getAttribute('data-theme') === 'light')
-            ? 'light' : 'dark';
+        const stored = getStoredTheme();
+        const active = (stored === 'light' || stored === 'dark') ? stored : 'system';
         document.querySelectorAll('[data-theme-option]').forEach(btn => {
-            btn.classList.toggle('is-active', btn.dataset.themeOption === current);
+            btn.classList.toggle('is-active', btn.dataset.themeOption === active);
         });
+    }
+
+    function selectTheme(option) {
+        if (option === 'system') {
+            // Apply OS preference immediately, then clear the stored key so
+            // future loads continue to follow the OS.
+            const osTheme = getSystemTheme();
+            if (window.ThemeManager && typeof window.ThemeManager.setTheme === 'function') {
+                window.ThemeManager.setTheme(osTheme, true);
+            } else {
+                document.documentElement.setAttribute('data-theme', osTheme);
+            }
+            try { localStorage.removeItem(THEME_STORAGE_KEY); } catch (e) {}
+        } else if (option === 'light' || option === 'dark') {
+            if (window.ThemeManager && typeof window.ThemeManager.setTheme === 'function') {
+                window.ThemeManager.setTheme(option, true);
+            } else {
+                document.documentElement.setAttribute('data-theme', option);
+            }
+        }
+        refreshThemeRadios();
     }
 
     /**
@@ -265,16 +312,10 @@
     };
 
     document.addEventListener('DOMContentLoaded', () => {
-        // Theme radio buttons
+        // Theme radio buttons (System / Dark / Light)
         document.querySelectorAll('[data-theme-option]').forEach(btn => {
             btn.addEventListener('click', () => {
-                const theme = btn.dataset.themeOption;
-                if (window.ThemeManager && typeof window.ThemeManager.setTheme === 'function') {
-                    window.ThemeManager.setTheme(theme, true);
-                } else {
-                    document.documentElement.setAttribute('data-theme', theme);
-                }
-                refreshThemeRadios();
+                selectTheme(btn.dataset.themeOption);
             });
         });
 
