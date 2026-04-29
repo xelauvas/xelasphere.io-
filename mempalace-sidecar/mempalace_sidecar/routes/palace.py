@@ -428,4 +428,48 @@ async def list_drawers(
     )
 
 
+@router.delete("/{user_id}/drawers/{drawer_id}", status_code=200)
+async def delete_drawer(
+    user_id: str,
+    drawer_id: str,
+    request: Request,
+):
+    """Surgical per-drawer delete. Idempotent on missing drawer_id.
+
+    Per-drawer delete is the trust-contract Week 1 feature: users need
+    to clean up individual indexed turns (e.g., hallucinated assistant
+    responses indexed in prior shadow-mode usage).
+
+    Acquires the per-user writer_lock — same discipline as ``/ingest``.
+    """
+    if not user_id or not drawer_id:
+        raise HTTPException(status_code=400, detail="missing user_id or drawer_id")
+
+    registry = _registry(request)
+    settings = request.app.state.settings
+    uid_hash = _hash_uid(user_id, settings.user_id_hash_salt)
+
+    log.info(
+        "delete_drawer",
+        extra={"user_id": uid_hash, "drawer_id": drawer_id},
+    )
+
+    try:
+        entry = await registry.open(user_id)
+    except RuntimeError as exc:
+        if "shutting down" in str(exc).lower():
+            raise HTTPException(
+                status_code=503, detail="sidecar shutting down"
+            ) from exc
+        raise HTTPException(
+            status_code=500, detail="delete_drawer open failed"
+        ) from exc
+
+    lock = registry.lock_for(user_id)
+    async with lock.writer_lock:
+        await asyncio.to_thread(entry.handle.delete_drawer, drawer_id)
+
+    return {"status": "ok", "drawer_id": drawer_id}
+
+
 __all__ = ["router"]
