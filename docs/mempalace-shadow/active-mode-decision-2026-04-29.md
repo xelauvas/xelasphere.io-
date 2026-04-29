@@ -90,3 +90,34 @@ Wall time target: <60s end-to-end. Phase-log entry to record the rollback per sp
 
 - Spec §7.4 calendar floors (3 weeks weekly rubric, 55 days for P3) are not formally amended in this commit. The recall-bench is being applied as the substitute gate per the P1.x reasoning, but a permanent spec amendment ("calendar floors apply when daily shadow turn count ≥ N; below N, validation is by single-user benchmark") is a separate PR worth opening if active-mode lands cleanly.
 - Issue #24 (single-user rebuild benchmark — wall time / LLM cost / Chroma throughput / peak RSS) stays open. Different concern from recall quality; one-shot at week 3.
+
+## Bench result — addendum 2026-04-29 08:30 UTC
+
+**Decision: HOLD in shadow.** The validation probes were sent ~01:12 UTC; the bench harness ran against the resulting shadow records. Both criteria failed.
+
+| Metric | Result | Threshold | Verdict |
+|---|---|---|---|
+| Marcus recall l2∨l3 | 0% (1/4 — only target-time probe ran) | ≥80% | FAIL |
+| Marcus crosstopic l2/l3 avg | 60% (book-rec only — NYC-coffee not run) | ≤40% | FAIL |
+
+The pre-flip theoretical analysis — "noise scored 0.17-0.21, real hits 0.33+, floor is 0.25, therefore crosstopic ~0% post-fix" — was wrong on observation. Calibration breakdown:
+
+| Tier-result band | Theoretical (pre-flip) | Observed (bench) |
+|---|---|---|
+| Real recall hits | 0.33 – 0.46 | 0.32 – 0.46 ✓ |
+| Cross-topic noise | 0.17 – 0.21 | **0.34 – 0.42** ✗ |
+
+Three root causes, in priority order:
+
+1. **Pre-deploy hedge contamination at retrieval.** PR #103 filters hedges at write time but doesn't retroactively clean already-indexed entries. Marcus's seed run was 2026-04-28 23:48 — ~80 minutes before PR #103 deployed at 01:04 UTC. Pre-deploy hedges sit in the palace at similarities 0.705 and 0.509 (well above the 0.25 floor) and outrank real establishment turns. **Fixed by PR #107 (read-time hedge filter).** Verified post-deploy via direct sidecar probe: short pre-deploy hedges no longer surface; one longer hedge variant (~280 chars, 0.71) survives the length gate by design.
+
+2. **Score floor 0.25 underestimates project bleed.** Cross-topic project context (Boston Marathon training, Elena/marathoner-partner, low-carb running diet) scores 0.34-0.42 on completely off-topic queries (book recommendations). The "real hits 0.33+" / "noise 0.17-0.21" calibration assumed noise is semantically unrelated; in practice, *any* item from a strong topical wing scores ≥ 0.33 even on unrelated queries. **Open: needs higher floor or query-context-aware filtering.**
+
+3. **Question-vs-answer ranking inversion + retrieval-depth truncation.** Past identical/near-identical questions and "Full recap: ..." prompts score higher than the answer turns that contain the data. On the recall probe, the question itself returned at 0.993 and 0.907; the actual establishment turn ("sub-3:00 goal") scored 0.316 — above the 0.25 floor but at chroma's internal rank 4-5. With `k=5` sidecar fetch, two of those top-5 slots are short hedges that PR #107 now filters out — but the slots aren't backfilled from rank 6+, so the final result is truncated to 3 items and `sub-3:00` never surfaces. **Open: needs Q→A pair-aware retrieval or buffer-fetch (retrieve k×N, filter, trim to k).**
+
+## Decision: HOLD until calendar week-3 (2026-05-18)
+
+- Mode stays `shadow`. PR #106 stays open as the record of what was tried.
+- The "validate then flip" framing was a reasonable bet that didn't pay out. The original spec §7.4 calendar floor is the right gate after all — three weeks of soak makes the rubric statistically meaningful, and the integration earns the slope of weekly observation rather than a single-user inference.
+- PR #107 (read-time hedge filter) is the structural fix from this round and ships even though the flip doesn't.
+- Follow-up issues filed for items 2 and 3 above. Issue #24 (rebuild benchmark) still applies at week 3.
