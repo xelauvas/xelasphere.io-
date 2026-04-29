@@ -973,6 +973,7 @@
         let dreamActivityLoaded = false;
 
         // Tab switching
+        let conversationMemoryLoaded = false;
         memoryTabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const target = btn.dataset.memoryTab;
@@ -981,7 +982,76 @@
                 if (target === 'activity' && !dreamActivityLoaded) {
                     loadDreamActivity();
                 }
+                if (target === 'conversation' && !conversationMemoryLoaded) {
+                    fetchConversationMemory('all');
+                    conversationMemoryLoaded = true;
+                }
             });
+        });
+
+        // ─── Conversation memory tab (mempalace turns) ───
+        function escapeHtmlConv(s) {
+            const div = document.createElement('div');
+            div.textContent = s || '';
+            return div.innerHTML;
+        }
+
+        async function fetchConversationMemory(filter = 'all') {
+            const loading = document.getElementById('conversation-loading');
+            const empty = document.getElementById('conversation-empty');
+            const error = document.getElementById('conversation-error');
+            const list = document.getElementById('conversation-list');
+            if (!list) return;
+
+            loading.style.display = 'flex';
+            empty.style.display = 'none';
+            error.style.display = 'none';
+            list.innerHTML = '';
+
+            try {
+                const resp = await fetch('/user/conversation-memory', { credentials: 'same-origin' });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const turns = (data.turns || []);
+                const filtered = filter === 'user'
+                    ? turns.filter(t => t.role === 'user')
+                    : turns;
+
+                loading.style.display = 'none';
+                if (filtered.length === 0) {
+                    empty.style.display = 'flex';
+                    return;
+                }
+                list.innerHTML = filtered.map(t => `
+                    <div class="conv-row" data-drawer-id="${escapeHtmlConv(t.drawer_id)}">
+                        <span class="conv-role-badge conv-role-${t.role === 'assistant' ? 'assistant' : 'user'}">[${escapeHtmlConv(t.role)}]</span>
+                        <span class="conv-text">${escapeHtmlConv(t.text)}</span>
+                        <button type="button" class="conv-delete-btn" data-drawer-id="${escapeHtmlConv(t.drawer_id)}" title="Delete this turn" disabled>
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.warn('[conversation-memory] fetch failed:', e);
+                loading.style.display = 'none';
+                error.style.display = 'flex';
+            }
+        }
+
+        // Filter chips
+        document.querySelectorAll('.conv-filter-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                document.querySelectorAll('.conv-filter-chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                const filter = chip.getAttribute('data-conv-filter');
+                fetchConversationMemory(filter);
+            });
+        });
+
+        document.getElementById('conversation-retry')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            const activeFilter = document.querySelector('.conv-filter-chip.active')?.getAttribute('data-conv-filter') || 'all';
+            fetchConversationMemory(activeFilter);
         });
 
         async function loadDreamToggle() {
