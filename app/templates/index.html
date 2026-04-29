@@ -161,7 +161,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/toast.css') }}?v=17">
 
     <!-- Settings Modal -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/settings-modal.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/settings-modal.css') }}?v=2">
 
     <!-- Text Selection Quote -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/text-selection-quote.css') }}">
@@ -1081,7 +1081,7 @@
         window.sharedSessionId = "{{ shared_session_id|default('', true) }}";
     </script>
     <script src="{{ url_for('static', filename='js/toast.js') }}?v=7"></script>
-    <script src="{{ url_for('static', filename='js/settingsModal.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='js/settingsModal.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=15"></script>
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
@@ -1268,5 +1268,6 @@
 </div>
 
 {% include "_settings_modal.html" %}
+{% include "_settings_memory_modal.html" %}
 </body>
 </html>
