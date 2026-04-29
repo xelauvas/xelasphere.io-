@@ -84,3 +84,38 @@ def test_get_conversation_memory_pagination_cursor_round_trip(authenticated_clie
     assert resp.status_code == 200
     assert seen == {"limit": 50, "offset": 200}
     assert resp.get_json()["next_cursor"] == "250"
+
+
+def test_delete_conversation_memory_item_happy_path(authenticated_client):
+    """Per-row delete: Flask wrapper bridges to sidecar DELETE.
+
+    CSRF is decorated via ``@csrf_required`` which calls
+    ``validate_csrf``. In tests we patch ``validate_csrf`` to a no-op
+    so the test exercises the route logic, not the CSRF wiring (which
+    is tested separately).
+    """
+    headers = {"X-CSRFToken": "test-token"}
+    with patch("app.limiter.validate_csrf", return_value=None), \
+         patch("app.blueprints.memory_routes._sidecar_delete_drawer",
+               return_value=True) as mock_call:
+        resp = authenticated_client.delete(
+            "/user/conversation-memory/drawer_xxx",
+            headers=headers,
+        )
+    assert resp.status_code == 200
+    mock_call.assert_called_once_with("test_user_123", "drawer_xxx")
+
+
+def test_delete_conversation_memory_item_sidecar_failure_returns_503(authenticated_client):
+    headers = {"X-CSRFToken": "test-token"}
+
+    def boom(*a, **kw):
+        raise ConnectionError("sidecar down")
+    with patch("app.limiter.validate_csrf", return_value=None), \
+         patch("app.blueprints.memory_routes._sidecar_delete_drawer",
+               side_effect=boom):
+        resp = authenticated_client.delete(
+            "/user/conversation-memory/drawer_xxx",
+            headers=headers,
+        )
+    assert resp.status_code == 503
