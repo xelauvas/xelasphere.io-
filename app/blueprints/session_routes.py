@@ -474,6 +474,15 @@ def get_chat_history():
 @login_required
 def get_single_chat_session(session_id):
     """Get a single chat session by ID."""
+    # Temp ("incognito") sessions never have a Firestore doc by design.
+    # Returning 404 with "Chat session not found" surfaces a "Failed to
+    # load shared session" toast on every page reload after an incognito
+    # session leaves a stale cookie. Return 410 Gone with empty session
+    # data — the canonical "this resource existed in your browser
+    # session but is intentionally unrecoverable" status.
+    if isinstance(session_id, str) and session_id.startswith('temp_'):
+        return jsonify({'error': 'Temporary session — not retained'}), 410
+
     user_id = session['user']['uid']
     session_data = chat_session.get_session(user_id, session_id)
     if not session_data:
