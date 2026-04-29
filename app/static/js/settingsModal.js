@@ -383,6 +383,92 @@
     }
 
     /* ====================================================================
+       Voice preview — Kokoro TTS via existing /tts/groq endpoint
+       (Kokoro local sidecar → Gemini → Groq fallback chain on the server)
+       ==================================================================== */
+
+    const VOICE_PREVIEW_TEXT = 'Hi, I\'m your XelaSphere voice assistant.';
+    const PLAY_BTN_DEFAULT_HTML = '<i class="fas fa-play"></i> Play';
+    const PLAY_BTN_LOADING_HTML = '<i class="fas fa-spinner fa-spin"></i> Loading';
+    const PLAY_BTN_STOP_HTML = '<i class="fas fa-stop"></i> Stop';
+    let _activePreviewAudio = null;
+
+    function getSelectedVoice() {
+        // Stored as the backend voice name (Sulafat, Charon, etc.) under
+        // pref key 'voice' by the dropdown change router.
+        const prefs = loadPrefs();
+        return prefs.voice || 'Sulafat';
+    }
+
+    function resetPlayButton(btn) {
+        if (!btn) return;
+        btn.disabled = false;
+        btn.innerHTML = PLAY_BTN_DEFAULT_HTML;
+    }
+
+    async function playVoicePreview(btn) {
+        // Click-while-playing toggles to stop (no refetch).
+        if (_activePreviewAudio) {
+            _activePreviewAudio.pause();
+            _activePreviewAudio.src = '';
+            _activePreviewAudio = null;
+            resetPlayButton(btn);
+            return;
+        }
+
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+                  || document.querySelector('input[name="csrf_token"]')?.value
+                  || '';
+
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = PLAY_BTN_LOADING_HTML;
+        }
+
+        try {
+            const resp = await fetch('/tts/groq', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf
+                },
+                body: JSON.stringify({
+                    text: VOICE_PREVIEW_TEXT,
+                    voice: getSelectedVoice(),
+                    lang: 'en'
+                })
+            });
+            if (!resp.ok) {
+                if (resp.status === 503) throw new Error('Voice service is busy, try again');
+                throw new Error(`Voice preview failed (${resp.status})`);
+            }
+            const blob = await resp.blob();
+            const audioUrl = URL.createObjectURL(blob);
+            const audio = new Audio(audioUrl);
+            _activePreviewAudio = audio;
+
+            const cleanup = () => {
+                URL.revokeObjectURL(audioUrl);
+                if (_activePreviewAudio === audio) _activePreviewAudio = null;
+                resetPlayButton(btn);
+            };
+            audio.addEventListener('ended', cleanup);
+            audio.addEventListener('error', cleanup);
+
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = PLAY_BTN_STOP_HTML;
+            }
+            await audio.play();
+        } catch (e) {
+            console.error('[SettingsModal] voice preview failed:', e);
+            if (window.Toast) window.Toast.error(e.message || 'Voice preview failed');
+            resetPlayButton(btn);
+        }
+    }
+
+    /* ====================================================================
        Delete all chats — exposed as window-global
        ==================================================================== */
 
@@ -462,11 +548,10 @@
             });
         });
 
-        // Voice preview play (no-op for now)
+        // Voice preview play — call /tts/groq with the selected voice and a
+        // short sample sentence, then play the returned audio.
         document.querySelectorAll('[data-action="play-voice-preview"]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                console.log('[SettingsModal] play voice preview');
-            });
+            btn.addEventListener('click', () => playVoicePreview(btn));
         });
 
         // Delete all chats
