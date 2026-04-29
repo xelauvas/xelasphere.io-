@@ -18,19 +18,26 @@
         .dream-toggle-info { display: flex; flex-direction: column; gap: 2px; }
         .dream-toggle-label { font-size: 0.85rem; font-weight: 600; color: #f5f6fb; }
         .dream-toggle-desc { font-size: 0.72rem; color: #888; }
-        .dream-switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
-        .dream-switch input { opacity: 0; width: 0; height: 0; }
+        .dream-switch {
+            position: relative; display: inline-flex; align-items: center;
+            flex: 0 0 40px; width: 40px; min-width: 40px; max-width: 40px;
+            height: 22px; min-height: 22px;
+            padding: 0; margin: 0; background: transparent; border: none;
+            cursor: pointer; box-sizing: border-box;
+        }
         .dream-switch-slider {
-            position: absolute; inset: 0; cursor: pointer; border-radius: 999px;
+            position: absolute; inset: 0; border-radius: 999px;
             background: rgba(255,255,255,0.12); transition: background 0.2s;
+            pointer-events: none;
         }
         .dream-switch-slider::before {
             content: ''; position: absolute; left: 3px; top: 3px;
             width: 16px; height: 16px; border-radius: 50%;
             background: #fff; transition: transform 0.2s;
         }
-        .dream-switch input:checked + .dream-switch-slider { background: #4b6bff; }
-        .dream-switch input:checked + .dream-switch-slider::before { transform: translateX(18px); }
+        .dream-switch[aria-checked="true"] .dream-switch-slider { background: #4b6bff; }
+        .dream-switch[aria-checked="true"] .dream-switch-slider::before { transform: translateX(18px); }
+        .dream-switch:focus-visible { outline: 2px solid rgba(75, 107, 255, 0.5); outline-offset: 2px; border-radius: 999px; }
 
         /* Memory Tab Toggle */
         .memory-tab-toggle {
@@ -900,17 +907,23 @@
         });
 
         // ─── Memory toggles (master + per-system) ───
+        // Markup is <button role="switch" aria-checked="..."> — read/write
+        // aria-checked, not input.checked.
+        function setSwitchState(btn, value) {
+            if (btn) btn.setAttribute('aria-checked', value ? 'true' : 'false');
+        }
+        function getSwitchState(btn) {
+            return btn ? btn.getAttribute('aria-checked') === 'true' : false;
+        }
+
         async function loadMemoryToggles() {
             try {
                 const resp = await fetch('/user/memory-toggles', { credentials: 'same-origin' });
                 if (!resp.ok) return;
                 const t = await resp.json();
-                const master = document.getElementById('memory-toggle-master');
-                const refV2 = document.getElementById('memory-toggle-ref-v2');
-                const refMp = document.getElementById('memory-toggle-ref-mempalace');
-                if (master) master.checked = t.master !== false;
-                if (refV2) refV2.checked = t.ref_v2 !== false;
-                if (refMp) refMp.checked = t.ref_mempalace !== false;
+                setSwitchState(document.getElementById('memory-toggle-master'), t.master !== false);
+                setSwitchState(document.getElementById('memory-toggle-ref-v2'), t.ref_v2 !== false);
+                setSwitchState(document.getElementById('memory-toggle-ref-mempalace'), t.ref_mempalace !== false);
             } catch (e) {
                 console.warn('[memory-toggles] load failed:', e);
             }
@@ -929,8 +942,7 @@
                 });
                 if (!resp.ok) {
                     // Revert UI optimistic state
-                    const el = document.getElementById(fieldId);
-                    if (el) el.checked = !value;
+                    setSwitchState(document.getElementById(fieldId), !value);
                     alert('Could not save preference; please retry.');
                 }
             } catch (e) {
@@ -938,15 +950,18 @@
             }
         }
 
-        document.getElementById('memory-toggle-master')?.addEventListener('change', (e) => {
-            persistMemoryToggle('master', e.target.checked, 'memory-toggle-master');
-        });
-        document.getElementById('memory-toggle-ref-v2')?.addEventListener('change', (e) => {
-            persistMemoryToggle('ref_v2', e.target.checked, 'memory-toggle-ref-v2');
-        });
-        document.getElementById('memory-toggle-ref-mempalace')?.addEventListener('change', (e) => {
-            persistMemoryToggle('ref_mempalace', e.target.checked, 'memory-toggle-ref-mempalace');
-        });
+        function bindMemorySwitch(id, field) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.addEventListener('click', () => {
+                const newValue = !getSwitchState(btn);
+                setSwitchState(btn, newValue);
+                persistMemoryToggle(field, newValue, id);
+            });
+        }
+        bindMemorySwitch('memory-toggle-master', 'master');
+        bindMemorySwitch('memory-toggle-ref-v2', 'ref_v2');
+        bindMemorySwitch('memory-toggle-ref-mempalace', 'ref_mempalace');
 
         // Conversation memory: per-row delete (delegated)
         document.addEventListener('click', async (e) => {
@@ -980,23 +995,25 @@
             try {
                 const res = await fetch('/user/dream-settings', { headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json();
-                if (dreamToggle) dreamToggle.checked = data.dream_enabled !== false;
+                setSwitchState(dreamToggle, data.dream_enabled !== false);
             } catch (e) {
                 console.warn('Failed to load dream settings:', e);
             }
         }
 
         if (dreamToggle) {
-            dreamToggle.addEventListener('change', async () => {
+            dreamToggle.addEventListener('click', async () => {
+                const newValue = !getSwitchState(dreamToggle);
+                setSwitchState(dreamToggle, newValue);
                 try {
                     await fetch('/user/dream-settings', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                        body: JSON.stringify({ dream_enabled: dreamToggle.checked })
+                        body: JSON.stringify({ dream_enabled: newValue })
                     });
                 } catch (e) {
                     console.error('Failed to save dream setting:', e);
-                    dreamToggle.checked = !dreamToggle.checked; // revert
+                    setSwitchState(dreamToggle, !newValue); // revert
                 }
             });
         }
