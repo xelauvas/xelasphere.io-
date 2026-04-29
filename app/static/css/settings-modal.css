@@ -341,11 +341,36 @@
     cursor: not-allowed;
 }
 
-/* memory child modal stacks above settings modal */
-.modal-backdrop#memory-modal {
+/* ---------- memory child modal (legacy markup, globally included) ----------
+   Default styles for the memory modal lived in api-keys.css which only loaded
+   on /account/manage. After we started including the modal partial globally
+   from index.html, those divs render in normal flow on the chat page,
+   pushing the layout downward. These rules give them the same fixed-overlay
+   behaviour everywhere. Z-index stacks them above the settings modal (2100). */
+
+#memory-modal,
+#clear-memory-confirm-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 8, 15, 0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+#memory-modal[aria-hidden="false"],
+#clear-memory-confirm-modal[aria-hidden="false"],
+#memory-modal.open,
+#clear-memory-confirm-modal.open {
+    display: flex;
+}
+
+#memory-modal {
     z-index: 2200;
 }
-.modal-backdrop#clear-memory-confirm-modal {
+
+#clear-memory-confirm-modal {
     z-index: 2300;
 }
 
