@@ -874,6 +874,35 @@ class PalaceHandle:
             "next_offset": next_offset,
         }
 
+    def delete_drawer(self, drawer_id: str) -> None:
+        """Surgical per-drawer delete: chroma collection + turns.sqlite.
+
+        Idempotent — missing drawer is not an error. Both stores are
+        updated; on partial failure (e.g., chroma succeeds but sqlite
+        errors), the partial state is logged but not rolled back —
+        eventual consistency wins for this op.
+
+        Surfaced 2026-04-29 by trust-contract Week 1 design: users need
+        a way to delete individual conversation turns from their palace
+        (e.g., to remove hallucinated assistant responses indexed in
+        prior shadow-mode usage).
+        """
+        if not drawer_id:
+            return
+        # Step 1: chroma — idempotent on missing IDs by default
+        try:
+            self._collection.delete(ids=[drawer_id])
+        except Exception:
+            log.exception("delete_drawer: chroma delete failed for %s", drawer_id)
+        # Step 2: turns.sqlite
+        try:
+            self.turns.execute(
+                "DELETE FROM turns WHERE drawer_id = ?", (drawer_id,)
+            )
+            self.turns.commit()
+        except Exception:
+            log.exception("delete_drawer: turns.sqlite delete failed for %s", drawer_id)
+
     # ------------------------------------------------------------------
     # Knowledge graph (M0.7)
     # ------------------------------------------------------------------
