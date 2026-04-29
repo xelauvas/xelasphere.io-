@@ -212,7 +212,10 @@ def test_semantic_search_returns_search_memories_shape(handle, monkeypatch):
     assert out == fixed["results"]
     assert len(calls) == 1
     assert calls[0]["query"] == "anything"
-    assert calls[0]["n_results"] == 5
+    # Buffer-fetch contract: ask the library for k * multiplier candidates
+    # so post-filter trim back to k doesn't truncate. Default multiplier
+    # is 3 (see DEFAULT_RETRIEVAL_BUFFER_MULTIPLIER).
+    assert calls[0]["n_results"] == 15
     # palace_path passed as a string, per library signature.
     assert isinstance(calls[0]["palace_path"], str)
 
@@ -407,6 +410,130 @@ def test_semantic_search_keeps_long_assistant_response_with_hedge_phrase(
     out = handle.semantic_search("mileage", k=5)
     assert len(out) == 1
     assert out[0]["text"] == long_assistant
+
+
+def test_semantic_search_buffer_fetch_trims_to_k_after_filter(handle, monkeypatch):
+    """Buffer-fetch contract: ask the library for k * multiplier
+    candidates so post-filter trim back to k doesn't truncate. Surfaced
+    2026-04-29 — at fetch=k=5, two slots were pre-deploy hedges; PR #107
+    dropped them but the result truncated to 3 with no backfill, burying
+    the real ``sub-3:00`` answer at chroma rank 4.
+
+    This test simulates: caller asks k=3, library returns 9 candidates,
+    6 are filtered (4 hedges + 2 below floor), the 3 best survivors fill
+    the result. Without buffer-fetch the result would be 1 item.
+    """
+    captured: dict = {}
+
+    def capture_n_results(query, palace_path, wing=None, room=None,
+                         n_results=5, max_distance=0.0):
+        captured["n_results"] = n_results
+        return {
+            "results": [
+                # 4 short hedges (filtered):
+                {"text": "ACTION: chat\nI don't know.", "similarity": 0.95},
+                {"text": "ACTION: chat\nCould you clarify?", "similarity": 0.92},
+                {"text": "ACTION: chat\nI don't have any info.", "similarity": 0.90},
+                {"text": "ACTION: chat\nI'm not sure.", "similarity": 0.85},
+                # 3 substantive items (kept):
+                {"text": "real answer one", "similarity": 0.60},
+                {"text": "real answer two", "similarity": 0.55},
+                {"text": "real answer three", "similarity": 0.50},
+                # 2 below-floor (filtered):
+                {"text": "noise one", "similarity": 0.10},
+                {"text": "noise two", "similarity": 0.05},
+            ],
+        }
+
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories",
+        capture_n_results,
+    )
+    out = handle.semantic_search("query", k=3)
+    # Library must have been asked for k * multiplier = 9 candidates.
+    assert captured["n_results"] == 9
+    # Caller gets up to k=3 substantive items.
+    assert len(out) == 3
+    assert [r["text"] for r in out] == [
+        "real answer one", "real answer two", "real answer three",
+    ]
+
+
+def test_semantic_search_buffer_fetch_caps_at_absolute_ceiling(handle, monkeypatch):
+    """The buffer multiplier is bounded by ``DEFAULT_RETRIEVAL_BUFFER_CAP``
+    (50) so a caller passing absurdly large k doesn't blow up the chroma
+    fetch. With multiplier=3, k=20 would be 60; cap clamps to 50.
+    """
+    captured: dict = {}
+
+    def capture(query, palace_path, wing=None, room=None,
+                n_results=5, max_distance=0.0):
+        captured["n_results"] = n_results
+        return {"results": []}
+
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories", capture,
+    )
+    handle.semantic_search("query", k=20)
+    assert captured["n_results"] == 50  # capped at DEFAULT_RETRIEVAL_BUFFER_CAP
+
+
+def test_semantic_search_buffer_multiplier_configurable_via_env(handle, monkeypatch):
+    """``MEMPALACE_RETRIEVAL_BUFFER_MULTIPLIER`` env var overrides the
+    default so prod ops can tune the buffer width without a code deploy.
+    """
+    monkeypatch.setenv("MEMPALACE_RETRIEVAL_BUFFER_MULTIPLIER", "5")
+    captured: dict = {}
+
+    def capture(query, palace_path, wing=None, room=None,
+                n_results=5, max_distance=0.0):
+        captured["n_results"] = n_results
+        return {"results": []}
+
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories", capture,
+    )
+    handle.semantic_search("query", k=4)
+    assert captured["n_results"] == 20  # k=4 * multiplier=5
+
+
+def test_semantic_search_invalid_buffer_multiplier_falls_back(handle, monkeypatch):
+    """Bad env var falls back to default — defensive against ops typos.
+    """
+    monkeypatch.setenv("MEMPALACE_RETRIEVAL_BUFFER_MULTIPLIER", "not-a-number")
+    captured: dict = {}
+
+    def capture(query, palace_path, wing=None, room=None,
+                n_results=5, max_distance=0.0):
+        captured["n_results"] = n_results
+        return {"results": []}
+
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories", capture,
+    )
+    handle.semantic_search("query", k=5)
+    assert captured["n_results"] == 15  # default multiplier=3
+
+
+def test_semantic_search_zero_or_negative_buffer_multiplier_falls_back(
+    handle, monkeypatch,
+):
+    """Multiplier < 1 doesn't make sense (would shrink the fetch); fall
+    back to default rather than break retrieval.
+    """
+    monkeypatch.setenv("MEMPALACE_RETRIEVAL_BUFFER_MULTIPLIER", "0")
+    captured: dict = {}
+
+    def capture(query, palace_path, wing=None, room=None,
+                n_results=5, max_distance=0.0):
+        captured["n_results"] = n_results
+        return {"results": []}
+
+    monkeypatch.setattr(
+        "mempalace_sidecar.palace_handle._library_search_memories", capture,
+    )
+    handle.semantic_search("query", k=5)
+    assert captured["n_results"] == 15  # default multiplier=3
 
 
 def test_semantic_search_hedge_filter_complements_score_floor(handle, monkeypatch):

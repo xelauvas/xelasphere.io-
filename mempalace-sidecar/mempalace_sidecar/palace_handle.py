@@ -96,6 +96,43 @@ def _semantic_score_threshold() -> float:
         return DEFAULT_SEMANTIC_SCORE_THRESHOLD
 
 
+# Retrieval buffer multiplier — fetch ``k * multiplier`` candidates from
+# the library so post-filter trim back to ``k`` doesn't truncate when
+# items are dropped by the score floor or the hedge filter. Surfaced
+# 2026-04-29 alongside PR #107: at chroma fetch=k=5, two slots were
+# pre-deploy short hedges; PR #107 dropped them but the result truncated
+# to 3 with no backfill — burying the real ``sub-3:00`` answer at chroma
+# rank 4. With multiplier=3 + cap=50, fetch=15 candidates, 10 may drop,
+# the 5 best survivors fill k.
+DEFAULT_RETRIEVAL_BUFFER_MULTIPLIER = 3
+
+# Absolute cap on chroma fetch size — caller-controlled k can in theory
+# be unbounded, but multiplier × k must not blow up retrieval cost. 50
+# is a soft ceiling; bump if larger k usage proves real.
+DEFAULT_RETRIEVAL_BUFFER_CAP = 50
+
+
+def _retrieval_buffer_multiplier() -> int:
+    raw = os.environ.get("MEMPALACE_RETRIEVAL_BUFFER_MULTIPLIER")
+    if raw is None:
+        return DEFAULT_RETRIEVAL_BUFFER_MULTIPLIER
+    try:
+        n = int(raw)
+        if n < 1:
+            log.warning(
+                "MEMPALACE_RETRIEVAL_BUFFER_MULTIPLIER=%r must be >= 1; "
+                "using default %d", raw, DEFAULT_RETRIEVAL_BUFFER_MULTIPLIER,
+            )
+            return DEFAULT_RETRIEVAL_BUFFER_MULTIPLIER
+        return n
+    except (TypeError, ValueError):
+        log.warning(
+            "Invalid MEMPALACE_RETRIEVAL_BUFFER_MULTIPLIER=%r; using default %d",
+            raw, DEFAULT_RETRIEVAL_BUFFER_MULTIPLIER,
+        )
+        return DEFAULT_RETRIEVAL_BUFFER_MULTIPLIER
+
+
 # Read-time hedge filter (companion to PR #103 write-time filter in
 # ``app/mempalace/adapter.py``). PR #103 prevents new "I don't know"
 # assistant turns from being indexed; this filter drops pre-deploy hedges
@@ -592,17 +629,26 @@ class PalaceHandle:
           that pre-date the write-time filter and still outrank real
           turns. Items missing the ``similarity`` field are treated as
           0.0 and dropped.
+
+        Buffer-fetch contract: we ask the library for ``k * multiplier``
+        candidates (capped at ``DEFAULT_RETRIEVAL_BUFFER_CAP``) so the
+        post-filter trim back to ``k`` doesn't truncate when items get
+        dropped. The library may still return fewer candidates than
+        requested if the palace is small — caller may receive < k.
         """
+        multiplier = _retrieval_buffer_multiplier()
+        n_results = min(k * multiplier, DEFAULT_RETRIEVAL_BUFFER_CAP)
         result = _library_search_memories(
-            query, str(self.palace_path), n_results=k,
+            query, str(self.palace_path), n_results=n_results,
         )
         items = result.get("results", []) or []
         threshold = _semantic_score_threshold()
-        return [
+        filtered = [
             r for r in items
             if (r.get("similarity") or 0.0) >= threshold
             and not _is_assistant_hedge_result(r)
         ]
+        return filtered[:k]
 
     # Our L2: v1 behaves identically to semantic_search. Topic-filter
     # logic is deferred — see spec §10 Open Question.
