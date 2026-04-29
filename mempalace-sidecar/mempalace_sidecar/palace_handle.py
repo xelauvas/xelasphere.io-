@@ -146,16 +146,39 @@ def _retrieval_buffer_multiplier() -> int:
 # ``ACTION: chat`` marker (the legacy adapter's prefix). User turns,
 # even short ones with hedge phrasing, carry establishment-grade signal
 # and are kept.
-_HEDGE_LEN_THRESHOLD = 250
+# Length threshold raised from 250 to 350 (2026-04-29) after Marcus
+# bench surfaced two real-world hedges that survived: a 257-char
+# "didn't decide anything... beginning of our conversation" assistant
+# turn, and a 212-char "isn't specified... if you provide more details"
+# turn whose phrasing didn't match any v1 pattern. Substantive answers
+# remain protected at 350+; an answer like "I don't know exactly, but
+# here's a 400-char explanation of what I do know" is a real signal.
+_HEDGE_LEN_THRESHOLD = 350
 _HEDGE_ASSISTANT_PREFIX = "ACTION: chat"
 
 _HEDGE_PATTERNS = [
+    # v1 patterns (PR #103, ported here for read-time):
     re.compile(r"\bi don'?t have (any|the)?\s*info", re.IGNORECASE),
     re.compile(r"(you|i) haven'?t (been |yet )?(told|mentioned|said|provided)", re.IGNORECASE),
     re.compile(r"\bcould you (please )?(provide|clarify|share|tell)", re.IGNORECASE),
     re.compile(r"\bwithout (more )?(context|information|details)", re.IGNORECASE),
     re.compile(r"\bi don'?t know\b", re.IGNORECASE),
     re.compile(r"\bi'?m (sorry|not sure)\b", re.IGNORECASE),
+    # v2 patterns (added 2026-04-29 from Marcus bench gap-analysis):
+    # "Your X isn't specified" / "X is not specified" — assistant
+    # acknowledging missing data.
+    re.compile(r"\bisn'?t specified\b", re.IGNORECASE),
+    re.compile(r"\bis not specified\b", re.IGNORECASE),
+    # "didn't decide" — assistant claiming nothing was decided when
+    # asked to recall; pure-hedge except in rare meta-conversational
+    # contexts the length gate filters out.
+    re.compile(r"\bdidn'?t decide\b", re.IGNORECASE),
+    # "beginning of our/this conversation" — assistant claiming no
+    # prior context exists; common opener for hedges.
+    re.compile(r"\bbeginning of (our|this) conversation\b", re.IGNORECASE),
+    # "if you provide more details" / "if you can share more" — the
+    # offer-to-help-if-info-given pattern that masks a non-answer.
+    re.compile(r"\bif you (provide|share|give( me)?|can provide|can share) (more|additional) (details|context|information)", re.IGNORECASE),
 ]
 
 
