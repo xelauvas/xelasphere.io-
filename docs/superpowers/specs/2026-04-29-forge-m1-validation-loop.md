@@ -132,6 +132,62 @@ spec was first authored. Future-you (or future-agent) reading this spec in
 six months needs to see amendments at a glance, not buried in section
 bodies. Add new amendments at the top of this section, dated.
 
+### Amendment 9 — 2026-04-29 — telemetry-correctness fixes (§7.1, §7.2, §10.1, §12, AC#16)
+
+Three fixes bundled — all concern telemetry signal quality, none change
+user-visible behavior:
+
+**(a) `forge_loop_detected_skip` guard against false-positive on final
+cascade position.** When loop-detect's signature match fires on the
+*last* reachable cascade entry (e.g. `stream_model = Flash` →
+`cascade_iter = 3 = GPT-4.1` produces same errors X), the existing
+`cascade_iter += 2; continue` branch was setting
+`forge_loop_detected_skip = true` even though no reachable tier was
+actually skipped (out-of-bounds exit happens regardless). Fix: guard
+the flag flip with `if cascade_iter + 2 < len(FORGE_VALIDATION_CASCADE)`.
+Cascade still exits correctly via the next while-check; metric only
+flips when a *reachable* tier was actually skipped. Worked example's
+Branch B narrative updated. New AC #16 verifies the metric stays
+correct in this edge case.
+
+**(b) `forge_output_estimate_actual_ratio` median, not mean.** Original
+used arithmetic mean across cascade iters. A single-iter outlier (model
+rambles 4x larger than projected) would skew the per-turn aggregate and
+push calibration analysis toward an incorrectly-higher multiplier.
+Median is robust against single-point outliers and is the standard for
+percentile-style metrics. One-line change: replace
+`sum(_ratio_log) / len(_ratio_log)` with the standard sorted-list
+median computation. §10.1 schema comment + §12 telemetry table updated
+to say "median."
+
+**(c) Terminology unification.** Spec was mixing "iter N,"
+"cascade-position N," and "cascade index N" across §7.1, §10.1, §11,
+and the AC list. Sweep:
+- "**Cascade position N**" (1-indexed): used in prose for the model's
+  slot in `FORGE_VALIDATION_CASCADE` (1=Flash, 2=Pro, 3=Kimi, 4=GPT-4.1).
+- "**`cascade_iter`**" (0-indexed): used only as the literal Python
+  variable in pseudo-code.
+- "**Stream attempt**" (no number): the original streaming model's
+  call. Replaces ambiguous "iter 0."
+- "**First cascade call / second cascade call / …**": sequential
+  reference within a turn's cascade.
+
+§11 E13 + AC #1, #5, #6, #8 prose updated. Worked-example Python
+variables (`cascade_iter=N`) unchanged because they're code, not prose.
+
+**Rationale (all three):** telemetry quality dictates how trustworthy
+the calibration data and the loop-detect signal are. Issue (a) was a
+real correctness bug in the metric (false positive). Issue (b) was a
+robustness improvement. Issue (c) was a clarity sweep that prevents
+implementation-time confusion about which numbering system applies
+where.
+
+**Impact on other decisions:** none. No behavior change for end users.
+Decision 9 unchanged. Decision 10's metric definitions tightened
+(median + guarded skip flag).
+
+---
+
 ### Amendment 8 — 2026-04-29 — pre-flight calibration telemetry (§7.1, §7.2, §12, §10.1, AC#15)
 
 **Original (review-of-spec, pre-second-pass):** §7.1 used a magic 1.2x
@@ -211,10 +267,11 @@ matched the code; the worked example didn't.
 
 **Amended to:** rewrite the worked example to match the actual baseline
 behavior. The example now shows stream-Flash fails with X →
-`previous_error_signature = X` set pre-loop → cascade iter 1 (Pro)
-returns X → loop-detect fires immediately → `cascade_iter += 2 = 3` →
-GPT-4.1 called. Both heal and fail branches shown. The example also
-includes a "why baseline = stream errors" rationale paragraph.
+`previous_error_signature = X` set pre-loop → the first cascade call
+(cascade position 2 = Pro) returns X → loop-detect fires immediately →
+`cascade_iter += 2 = 3` → GPT-4.1 (cascade position 4) called. Both
+heal and fail branches shown. The example also includes a "why
+baseline = stream errors" rationale paragraph.
 
 **Rationale:** internal inconsistency between code, worked example,
 and acceptance test = guaranteed implementation-time confusion. The
@@ -269,11 +326,12 @@ errors — slightly-different errors on the second Flash attempt would
 slip through and burn iter 1 for no value.
 
 **Amended to:** `start_idx = FORGE_VALIDATION_CASCADE.index(stream_model) + 1`
-when `stream_model` is in the cascade. The stream attempt counts as
-iter 0; cascade starts at the next tier up. New edge case **E16**: if
-`stream_model` is the LAST cascade entry (e.g. user explicitly picked
-`gpt-4.1`), `start_idx = len(cascade)` → no retries fire → artifact
-surfaces broken-with-warning per Decision 4.
+when `stream_model` is in the cascade. The stream attempt is the
+loop-detect baseline (no cascade-position number assigned); the first
+cascade call goes to the next cascade position. New edge case **E16**:
+if `stream_model` is the LAST cascade entry (e.g. user explicitly
+picked `gpt-4.1`), `start_idx = len(cascade)` → no retries fire →
+artifact surfaces broken-with-warning per Decision 4.
 
 **Rationale:** user's review caught that Decision 9's loop-detect was
 being asked to do work that belongs at cascade-startup. Skipping past
@@ -282,7 +340,8 @@ mid-cascade identical-error-twice patterns.
 
 **Impact on other decisions:** Decision 9 unchanged. Decision 4
 unchanged. New acceptance criterion: when `stream_model` is V4-Flash
-and validation fails, iter 1 uses V4-Pro, not V4-Flash again.
+and validation fails, the first cascade call uses V4-Pro (cascade
+position 2), not V4-Flash (cascade position 1) again.
 
 ---
 
@@ -693,18 +752,25 @@ if routing and routing.artifact_payload:
             #                      position of GPT-4.1, since GPT-4.1 sits
             #                      at cascade index 3). break.
             #                    Branch B (still fails X):
-            #                      Loop-detect fires again, cascade_iter += 2
-            #                      → 5. continue. Out of bounds → exit.
+            #                      Signature matches but cascade_iter+2=5
+            #                      ≥ len(cascade)=4 → no reachable tier to
+            #                      skip → forge_loop_detected_skip stays
+            #                      true (already set by the Pro→Kimi skip
+            #                      one iter ago) but is NOT set again by
+            #                      this final-tier match (no skip occurred).
+            #                      cascade_iter += 2 → 5. continue.
+            #                      Out of bounds → exit normally.
             #                      forge_attempts=2,
             #                      forge_validation_failed=true.
             #
-            # Why baseline = stream errors and not iter-1's errors: the
-            # stream model was already given a turn. If iter 1 (Pro)
-            # produces the SAME errors, the family has demonstrably failed
-            # to fix the bug class — escalate aggressively to a different
-            # family (skip Kimi, jump to GPT-4.1). This captures the most
-            # useful signal: "stream + first retry produced identical
-            # errors, so don't waste a tier on more of the same."
+            # Why baseline = stream errors and not the first cascade
+            # call's errors: the stream model was already given a turn.
+            # If the first cascade call (Pro) produces the SAME errors,
+            # the family has demonstrably failed to fix the bug class —
+            # escalate aggressively to a different family (skip Kimi,
+            # jump to GPT-4.1). This captures the most useful signal:
+            # "stream + first retry produced identical errors, so don't
+            # waste a tier on more of the same."
             #
             # Compare: WITHOUT loop-detect, cascade would run Pro + Kimi
             # + GPT-4.1 (3 retries) in sequence even when the first two
@@ -796,13 +862,25 @@ if routing and routing.artifact_payload:
                 # immediately-prior iteration, the current model family is also
                 # stuck on the same pattern. Skip the next tier (advance by 2)
                 # and continue. Single increment site to avoid double-step bugs.
+                #
+                # Telemetry guard: only flip forge_loop_detected_skip when a
+                # tier is *actually being skipped*. On the final cascade entry,
+                # cascade_iter += 2 still happens (out-of-bounds exit on the
+                # next while-check), but no reachable tier was skipped — the
+                # metric should not fire in that case.
                 new_signature = _signature(new_result.errors)
                 if new_signature == previous_error_signature:
-                    forge_metrics['forge_loop_detected_skip'] = True
-                    logger.info(
-                        f"🔥 Forge loop-detect: {retry_model} produced same errors as prior iter, "
-                        f"skipping cascade[{cascade_iter + 1}]"
-                    )
+                    if cascade_iter + 2 < len(FORGE_VALIDATION_CASCADE):
+                        forge_metrics['forge_loop_detected_skip'] = True
+                        logger.info(
+                            f"🔥 Forge loop-detect: {retry_model} produced same errors as prior iter, "
+                            f"skipping cascade position {cascade_iter + 2}"
+                        )
+                    else:
+                        logger.info(
+                            f"🔥 Forge loop-detect: {retry_model} (final cascade position) produced same "
+                            f"errors as prior iter — no tier left to skip; cascade exits"
+                        )
                     previous_error_signature = new_signature
                     result = new_result
                     cascade_iter += 2
@@ -823,12 +901,18 @@ if routing and routing.artifact_payload:
                     'errors': forge_metrics['forge_errors'],
                 })}\n\n"
         
-        # Aggregate per-turn calibration ratio (mean across iters in this turn).
-        # None if no cascade fired. Used post-launch to validate / re-tune the
-        # 1.2x output multiplier in pre-flight estimation.
+        # Aggregate per-turn calibration ratio — MEDIAN (not mean) across
+        # iters in this turn (Amendment 9). Median is robust against single-
+        # iter outliers (e.g. one runaway retry where the model rambled
+        # 4x larger than projected). None if no cascade fired. Used post-
+        # launch to validate / re-tune the 1.2x output multiplier in
+        # pre-flight estimation.
         if forge_metrics['_ratio_log']:
+            sorted_ratios = sorted(forge_metrics['_ratio_log'])
+            n = len(sorted_ratios)
             forge_metrics['forge_output_estimate_actual_ratio'] = (
-                sum(forge_metrics['_ratio_log']) / len(forge_metrics['_ratio_log'])
+                sorted_ratios[n // 2] if n % 2 == 1
+                else (sorted_ratios[n // 2 - 1] + sorted_ratios[n // 2]) / 2
             )
         # Drop the internal _ratio_log key before persistence (it's a working
         # buffer, not an envelope field).
@@ -881,13 +965,24 @@ if routing and routing.artifact_payload:
   double-increment. Worked-example walkthrough in the §7.1 code comment
   validates that on Flash+Pro=identical-errors, the cascade reaches
   Kimi(skipped→GPT-4.1 region), as Decision 9 intends.
+- **Loop-detect on the final cascade position is a no-op for telemetry
+  (Amendment 9):** when `cascade_iter` is already at the last reachable
+  cascade position and the signature still matches, `cascade_iter += 2`
+  still executes (the loop exits on next while-check anyway), but the
+  metric `forge_loop_detected_skip` only flips when a *reachable* tier
+  was actually skipped. Guarded by `if cascade_iter + 2 < len(cascade)`.
+  The metric only fires true when a skip actually skipped a reachable
+  tier; on the final-position case there's nothing to skip and the
+  metric stays false. Avoids noise in calibration analysis.
 - **Stream model handling (Decision 9-adjacent):** if the original stream
   attempt's model is in `FORGE_VALIDATION_CASCADE`, `start_idx` advances
-  past it. The stream attempt counts as iter 0; cascade starts at the
-  next tier. Avoids burning iter 1 on the same model that just failed.
-  Edge case: stream_model is the LAST cascade entry (e.g. user picked
-  GPT-4.1 directly) → `start_idx = len(cascade)` → no retries fire,
-  artifact surfaces broken-with-warning (E16).
+  past it. The stream attempt is the loop-detect baseline (no cascade-
+  position number assigned to it); the first cascade call goes to the
+  next cascade position. Avoids burning the first cascade call on the
+  same model that just failed in the stream attempt. Edge case:
+  `stream_model` is the LAST cascade entry (e.g. user picked GPT-4.1
+  directly) → `start_idx = len(cascade)` → no retries fire, artifact
+  surfaces broken-with-warning (E16).
 - **Even on exhaustion, the artifact flows downstream** —
   `routing.artifact_payload` remains populated AND UNMUTATED;
   `persist_decision` runs as normal. Validation status (`forge_validation_failed`,
@@ -1131,10 +1226,13 @@ The chat message record (saved at `:2257` via `save_interaction`) gains:
                                                  // then: list of error dicts
                                                  // {file_path, line, column,
                                                  //  message, excerpt}
-  "forge_output_estimate_actual_ratio": float | null  // mean of
+  "forge_output_estimate_actual_ratio": float | null  // MEDIAN of
                                                  // (actual_out / projected_out)
                                                  // across all cascade iters
-                                                 // in this turn. null if no
+                                                 // in this turn (Amendment 9
+                                                 // — median, not mean, to be
+                                                 // robust against single-iter
+                                                 // outliers). null if no
                                                  // cascade fired. Used post-
                                                  // launch for calibrating the
                                                  // 1.2x output multiplier in
@@ -1224,7 +1322,7 @@ first → render no breadcrumb (current behavior). No data migration needed.
 | E10 | User regenerates the same broken artifact in next turn | Each turn is a fresh cascade. No cross-turn state. The previous turn's `forge_attempts` does not influence the new turn. |
 | E11 | Cascade #1 (existing JSON-malform retry) succeeds; Forge runs after | Sequential pipeline: cascade #1 produces a valid `artifact_payload`, Forge then validates it. Both can fire in one turn. |
 | E12 | Patch-apply cascade (#2/#3) succeeds; should Forge also run? | **Yes** — patches can introduce syntax bugs just like full regens. Forge runs on the post-patch `artifact_payload` regardless of how it got built. |
-| E13 | Stream model is one of the cascade models AND fails | Cascade advances past `stream_model` — `start_idx = FORGE_VALIDATION_CASCADE.index(stream_model) + 1`. The stream attempt counts as iter 0; cascade starts at the next tier up. Avoids burning a retry slot on the same model that just failed in the original stream attempt (a slightly-different error wouldn't trip loop-detect, so without this, iter 1 on Flash-stream-failure would call Flash again). |
+| E13 | Stream model is one of the cascade models AND fails | Cascade advances past `stream_model` — `start_idx = FORGE_VALIDATION_CASCADE.index(stream_model) + 1`. The stream attempt is treated as the loop-detect baseline (no cascade-position number assigned to it); the first cascade call goes to the next cascade position. Avoids burning a retry slot on the same model that just failed in the original stream attempt (a slightly-different error wouldn't trip loop-detect, so without this, the first cascade call after a Flash-stream failure would call Flash again). |
 | E14 | Retry prompt exceeds the model's context window | Caught by `get_ai_response` exception path, treated as a failed cascade iteration, loop continues. The §8.3 large-artifact mitigation should rarely allow this in practice. The pre-flight token-budget check (Decision 8) also bounds projected size. |
 | E15 | Validator runs on an artifact already flagged failed in the same turn | Defensive: never re-validate. The `forge_validation_failed` envelope flag (set on cascade exhaustion) is a one-shot terminal state per turn; the validator is not re-entered after it's set. |
 | E16 | Stream model is the LAST cascade entry (e.g. user explicitly picked `gpt-4.1` and validation fails) | `start_idx = len(cascade)` → cascade loop never enters → no retries possible. Artifact surfaces broken-with-warning per Decision 4. Persists as `forge_attempts=0`, `forge_validation_failed=true`, `forge_errors=[...]`. The user gets the broken artifact + the warning ribbon and can manually retry / reword. |
@@ -1247,7 +1345,7 @@ names are exact:
 | `forge_time_to_heal_ms` | int \| null | ms from first-validate-fail to successful heal. null if not healed. |
 | `forge_budget_exhausted` | bool | True iff cascade stopped due to 80k pre-flight retry budget. |
 | `forge_loop_detected_skip` | bool | True iff Decision 9's tier-skip mechanism fired at least once during the cascade. |
-| `forge_output_estimate_actual_ratio` | float \| null | Per-turn aggregate (mean) of per-iter `actual_output_tokens / projected_output_tokens`. null if no cascade fired. **Calibration metric** — used post-launch to validate / re-tune the 1.2x multiplier in pre-flight estimation (§7.2). Per Amendment 8 + the M2 follow-up issue. |
+| `forge_output_estimate_actual_ratio` | float \| null | Per-turn **median** of per-iter `actual_output_tokens / projected_output_tokens` (Amendment 9 — median, not mean, to be robust against single-iter outliers where the model rambled). null if no cascade fired. **Calibration metric** — used post-launch to validate / re-tune the 1.2x multiplier in pre-flight estimation (§7.2). Per Amendment 8 + the M2 follow-up issue. |
 
 Per-iter calibration log lines also fire (one per cascade call), at
 `logger.info` level, prefixed `🔥 forge_calibration:`. These are
@@ -1392,11 +1490,11 @@ The M1 PR is ready to merge when **all** of the following pass:
 
 1. **Netflix bug heals.** Synthetic input artifact with the
    `return (<></>) =>` pattern on line 45 of `App.jsx`, with stream_model
-   = `deepseek-v4-flash`, heals on cascade iter 1 (Pro) without user
-   action. Verified by an integration test that mocks the cascade to
-   return the Netflix bug on stream + a fixed version on iter 1
-   (Pro). Asserts `forge_attempts=1`, `forge_healed_at=1`,
-   `forge_validation_failed=false`.
+   = `deepseek-v4-flash`, heals on the first cascade call (cascade
+   position 2 = Pro) without user action. Verified by an integration
+   test that mocks the cascade to return the Netflix bug on the stream
+   attempt + a fixed version on the first cascade call. Asserts
+   `forge_attempts=1`, `forge_healed_at=2`, `forge_validation_failed=false`.
 2. **Clean artifact passes first-try.** Synthetic clean React artifact
    triggers no retry. `forge_attempts=0`, `forge_healed_at=null`,
    `forge_validation_failed=false`, `forge_errors=null`,
@@ -1425,20 +1523,22 @@ The M1 PR is ready to merge when **all** of the following pass:
      `_forge_*` keys are absent from the persisted Firestore artifact
      document. This guards against a future change accidentally
      reintroducing payload-mutation (Amendment 5's specific anti-goal).
-5. **Stream model skip — iter 1 uses next tier.** When `stream_model =
-   deepseek-v4-flash` and the stream attempt fails validation, iter 1
-   of the cascade calls `deepseek-v4-pro`, NOT `deepseek-v4-flash`
-   again. Verified by capturing the model argument on the first
-   `get_ai_response` cascade call.
+5. **Stream model skip — first cascade call uses next position.** When
+   `stream_model = deepseek-v4-flash` (cascade position 1) and the
+   stream attempt fails validation, the first cascade `get_ai_response`
+   call uses `deepseek-v4-pro` (cascade position 2), NOT
+   `deepseek-v4-flash` again. Verified by capturing the model argument
+   on the first cascade call.
 6. **Identical-error-twice triggers tier skip — Decision 9 worked
    example.** Mock setup: `stream_model = deepseek-v4-flash` produces
-   error signature X on the stream attempt. Cascade iter 1 (Pro) also
-   produces X. Assertions:
-   - `forge_loop_detected_skip = true`
-   - The next `get_ai_response` call uses `gpt-4.1`, NOT `kimi-k2.5`
-     (Kimi is the skipped tier).
-   - If GPT-4.1 then fails (4th model attempt counting stream), cascade
-     exits with `forge_validation_failed=true`.
+   error signature X on the stream attempt. The first cascade call
+   (cascade position 2 = Pro) also produces X. Assertions:
+   - `forge_loop_detected_skip = true` (a reachable tier — Kimi at
+     cascade position 3 — was skipped).
+   - The next `get_ai_response` call uses `gpt-4.1` (cascade position
+     4), NOT `kimi-k2.5` (cascade position 3 — the skipped tier).
+   - If GPT-4.1 then fails with the same X, cascade exits with
+     `forge_validation_failed=true`, `forge_attempts=2`.
 7. **Stream model is GPT-4.1 — no retries (E16).** When user picks
    `gpt-4.1` directly and the stream attempt fails validation,
    `start_idx = len(cascade)` → cascade loop never enters. Asserts
@@ -1447,14 +1547,15 @@ The M1 PR is ready to merge when **all** of the following pass:
    Artifact still surfaces broken-with-warning per Decision 4.
 8. **80k retry budget triggers pre-flight early stop (Decision 8 hard
    cap).** Mock-cascade with a large artifact whose retry-prompt
-   pre-flight projection exceeds budget on iter 2 (e.g. iter 1
-   accumulates 35k actual; iter 2's pre-flight projects another 50k →
-   85k projected total). Assertions:
+   pre-flight projection exceeds budget on the second cascade call
+   (e.g. first cascade call accumulates 35k actual; second cascade
+   call's pre-flight projects another 50k → 85k projected total).
+   Assertions:
    - `forge_budget_exhausted = true`.
-   - Iter 2's `get_ai_response` is NOT called (pre-flight gates the
-     call before it fires).
-   - `forge_total_retry_tokens` reflects only iter 1's actual usage
-     (no iter 2 overshoot).
+   - The second cascade call's `get_ai_response` is NOT made
+     (pre-flight gates the call before it fires).
+   - `forge_total_retry_tokens` reflects only the first cascade call's
+     actual usage (no second-call overshoot).
 9. **Validator timeout doesn't block.** Mock validator subprocess
    sleeps 5s (>3s timeout). Logged warning, artifact renders, no
    cascade kicked off. `forge_validation_attempted=true`,
@@ -1490,16 +1591,34 @@ The M1 PR is ready to merge when **all** of the following pass:
     `get_ai_response` call, a `🔥 forge_calibration:` log line is
     emitted with `model`, `projected_out`, `actual_out`, and `ratio`
     fields. The per-turn aggregate `forge_output_estimate_actual_ratio`
-    is the mean of those iter ratios (or `null` if no cascade fired).
-    Verified by parsing test logs for both per-iter and per-turn lines.
-    Note for M2: aggregate the per-iter logs across the first ~100
-    production retries and recalibrate the 1.2x output multiplier in
+    is the **median** (not mean — Amendment 9) of those per-iter
+    ratios, or `null` if no cascade fired. Verified by parsing test
+    logs for both per-iter and per-turn lines. Note for M2: aggregate
+    the per-iter logs across the first ~100 production retries and
+    recalibrate the 1.2x output multiplier in
     `output_estimate = _artifact_content_tokens(payload) * 1.2`.
     Tracked by the follow-up issue *"calibrate Forge pre-flight output
-    estimate against measured retry sizes"*.
+    estimate against measured retry sizes"* (#149).
+16. **Loop-detect on final cascade position does not falsely flip
+    `forge_loop_detected_skip` (Amendment 9).** Mock cascade where
+    `stream_model = deepseek-v4-flash` and the stream attempt, the
+    first cascade call (Pro), and the third cascade call (GPT-4.1)
+    all fail with identical errors X. Pro→Kimi skip fires at the
+    first cascade call, flipping `forge_loop_detected_skip=true`.
+    GPT-4.1's subsequent failure with same errors X triggers a
+    signature match BUT `cascade_iter+2 ≥ len(cascade)` — no
+    reachable tier left to skip. Assertions:
+    - `forge_loop_detected_skip=true` (set by the earlier Pro→Kimi
+      skip; NOT re-flipped by the final-position match).
+    - `forge_validation_failed=true`.
+    - `forge_attempts=2` (Pro and GPT-4.1; Kimi was skipped).
+    - The `🔥 Forge loop-detect:` log line for GPT-4.1 reads
+      "(final cascade position) produced same errors as prior iter —
+      no tier left to skip; cascade exits", distinguishing it from
+      the standard skip-emitted log.
 
 The implementation plan (separate doc, `superpowers:writing-plans`) decomposes
-these 15 acceptance criteria into ordered TDD tasks.
+these 16 acceptance criteria into ordered TDD tasks.
 
 ---
 
