@@ -3320,24 +3320,30 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         console.log('[Chart] Rendering:', { assetType, asset });
 
                         if (asset) {
-                            // Add intro text above chart
+                            // DOM order matches the refresh path
+                            // (startNewChatModule.js:4400-4408):
+                            //   [introText] [chartWrapper] [...AI text...]
+                            // Stream used to append both AFTER the text — so the
+                            // chart sat below the response while live, then jumped
+                            // above the text on refresh. Prepend matches refresh.
+                            const chartWrapper = document.createElement('div');
+                            chartWrapper.className = 'crypto-chart-wrapper';
+                            messageContent.insertBefore(chartWrapper, messageContent.firstChild);
+
                             const introText = document.createElement('p');
                             introText.className = 'chart-intro-text';
                             introText.textContent = generateChartIntroText(asset, assetType);
-                            messageContent.appendChild(introText);
+                            messageContent.insertBefore(introText, chartWrapper);
 
-                            // Create chart container after the intro text
-                            const chartWrapper = document.createElement('div');
-                            chartWrapper.className = 'crypto-chart-wrapper';
-                            messageContent.appendChild(chartWrapper);
-
-                            // Render the chart
-                            window.CryptoChartModule.render(chartWrapper, asset, {
+                            // Render as compact sparkline (refresh path uses the
+                            // same default). Range MAX matches the refresh default.
+                            const renderFn = (window.CryptoChartModule.renderSparkline || window.CryptoChartModule.render);
+                            Promise.resolve(renderFn(chartWrapper, asset, {
                                 currency: streamCryptoChart.currency || 'usd',
-                                range: streamCryptoChart.range || '1D',
+                                range: streamCryptoChart.range || 'MAX',
                                 assetType: assetType
-                            }).catch(err => console.error('[Chart] Render error:', err));
-                            console.log(`[Chart] ${assetType} chart rendered for:`, asset);
+                            })).catch(err => console.error('[Chart] Render error:', err));
+                            console.log(`[Chart] ${assetType} sparkline rendered for:`, asset);
                         } else {
                             console.warn('[Chart] No asset found in crypto chart data:', streamCryptoChart);
                         }
@@ -3958,24 +3964,23 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 console.log('[Chart] Rendering (non-stream):', { assetType, asset });
 
                 if (asset) {
-                    // Add intro text above chart
+                    // DOM order matches refresh path: [introText][chartWrapper][text]
+                    const chartWrapper = document.createElement('div');
+                    chartWrapper.className = 'crypto-chart-wrapper';
+                    messageContent.insertBefore(chartWrapper, messageContent.firstChild);
+
                     const introText = document.createElement('p');
                     introText.className = 'chart-intro-text';
                     introText.textContent = generateChartIntroText(asset, assetType);
-                    messageContent.appendChild(introText);
+                    messageContent.insertBefore(introText, chartWrapper);
 
-                    // Create chart container after the intro text
-                    const chartWrapper = document.createElement('div');
-                    chartWrapper.className = 'crypto-chart-wrapper';
-                    messageContent.appendChild(chartWrapper);
-
-                    // Render the chart
-                    window.CryptoChartModule.render(chartWrapper, asset, {
+                    const renderFn = (window.CryptoChartModule.renderSparkline || window.CryptoChartModule.render);
+                    Promise.resolve(renderFn(chartWrapper, asset, {
                         currency: data.crypto_chart.currency || 'usd',
-                        range: data.crypto_chart.range || '1D',
+                        range: data.crypto_chart.range || 'MAX',
                         assetType: assetType
-                    }).catch(err => console.error('[Chart] Render error:', err));
-                    console.log(`[Chart] ${assetType} chart rendered for:`, asset);
+                    })).catch(err => console.error('[Chart] Render error:', err));
+                    console.log(`[Chart] ${assetType} sparkline rendered (non-stream) for:`, asset);
                 } else {
                     console.warn('[Chart] No asset found in crypto chart data:', data.crypto_chart);
                 }

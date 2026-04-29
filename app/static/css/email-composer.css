@@ -1,108 +1,205 @@
-/* Email Composer Card Styles - Themed with XelaSphere Design Tokens */
+/* ==========================================================================
+   Email Composer Card — "Letter on the desk"
+   --------------------------------------------------------------------------
+   Design intent:
+   - The card reads as a sheet of paper sitting on the chat: deeper shadow,
+     larger radius, a hairline accent stroke at the very top edge so the
+     card has a subtle "wax-seal" signature.
+   - Subject is the visible headline of the message (big, medium-weight) —
+     it's how a real email reads to a reader, not as a labeled form field.
+   - Body uses a system serif stack so the letter is *typographically*
+     distinct from the surrounding chat (which uses sans). It feels written,
+     not generated.
+   - Body sits on a faintly tinted surface — same idea as a paper-cream
+     interior in a cream envelope: the eye registers a writing surface
+     without any heavy border.
+   - Send button is a pill with text + icon and a soft accent glow so the
+     primary action is unmistakable.
+   - Whole-row focus glow (no border shifts) keeps editing calm.
+   - Width matches the rounded input bar exactly.
+   ========================================================================== */
 
 .email-composer-card {
-    background: var(--bg-elevated, #2a2a38);
-    border: 1px solid var(--border-secondary, #262626);
-    border-radius: var(--radius-xl, 12px);
-    padding: var(--space-4, 16px);
-    margin: var(--space-3, 12px) 0;
-    animation: emailSlideIn 0.25s var(--ease-out);
+    position: relative;
+    /* Soft warm interior — a top-down gradient that fades from a faint
+       peach-cream wash into the chat canvas. Reads as "lamplight on
+       paper" without painting the card heavily. */
+    background:
+        linear-gradient(180deg,
+            rgba(255, 215, 165, 0.025) 0%,
+            rgba(255, 215, 165, 0.008) 60%,
+            transparent 100%);
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
+    border-radius: 16px;
+    padding: 20px 22px 16px;
+    margin: 14px 0;
+    overflow: visible;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset,
+                0 10px 32px -18px rgba(0, 0, 0, 0.35);
+    animation: emailSlideIn 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* Width-match the rounded input bar — same recipe as .crypto-chart-wrapper.
+       Card sits inside .ai-message → .message-content (32px parent-chain
+       padding); the input chain has ~15.2px (--composer-side-pad). The
+       transform offsets that asymmetry so left/right edges align exactly. */
+    width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+    max-width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box;
+    transform: translateX(calc(
+        var(--composer-side-pad, 0.95rem) - 32px
+        + (var(--composer-shell-max-width, 768px) - var(--content-max-width, 768px)) / 2
+    )) !important;
 }
+
+/* Card background removed per user — no seal stripe needed either. */
 
 @keyframes emailSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(8px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ==========================================================================
+   Header — micro-label on the left, ghost icon + pill Send on the right
+   ========================================================================== */
 .email-composer-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: var(--space-3, 12px);
-    padding-bottom: var(--space-3, 12px);
-    border-bottom: 1px solid var(--border-secondary, #262626);
+    margin-bottom: 14px;
 }
 
 .email-composer-title {
     display: flex;
     align-items: center;
-    gap: var(--space-2, 8px);
-    font-weight: var(--font-semibold, 600);
-    color: var(--text-primary, #f5f5f5);
-    font-size: var(--text-sm, 14px);
+    gap: 9px;
+    color: var(--text-secondary, #9ca3af);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
 }
 
+/* The envelope icon is recolored to the brand accent at low alpha — it ties
+   to the seal stroke without dominating the header. */
 .email-composer-title i {
-    color: var(--text-secondary, #a3a3a3);
+    width: auto;
+    height: auto;
+    background: none;
+    color: var(--accent, #5b46d6);
+    font-size: 13px;
+    filter: drop-shadow(0 0 6px rgba(91, 70, 214, 0.3));
 }
 
 .email-composer-actions {
     display: flex;
-    gap: var(--space-2, 8px);
+    align-items: center;
+    gap: 6px;
 }
 
+/* Ghost icon button — neutral at rest, soft fill on hover. */
 .email-composer-btn {
-    background: var(--bg-elevated, #2a2a2a);
-    color: var(--text-primary, #f5f5f5);
-    border: 1px solid var(--border-primary, #404040);
-    border-radius: var(--radius-lg, 8px);
-    padding: var(--space-2, 8px);
-    width: 36px;
-    height: 36px;
-    font-size: var(--text-sm, 14px);
+    background: transparent;
+    color: var(--text-secondary, #9ca3af);
+    border: none;
+    border-radius: 10px;
+    width: 34px;
+    height: 34px;
+    font-size: 13px;
     cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: all var(--duration-fast, 150ms) var(--ease-in-out);
+    transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease,
+                box-shadow 0.18s ease;
 }
 
 .email-composer-btn:hover {
-    background: var(--bg-hover, rgba(255, 255, 255, 0.08));
-    border-color: rgba(255, 255, 255, 0.3);
+    background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+    color: var(--text-primary, #f5f5f5);
 }
 
+.email-composer-btn:active {
+    transform: scale(0.96);
+}
+
+/* Primary = brand-accent pill with "Send" text. The ::after appends the
+   text so the JS template (icon-only button) doesn't need to change. */
 .email-composer-btn.primary {
-    background: var(--color-primary-600, #0284c7);
-    border-color: var(--color-primary-600, #0284c7);
-    color: white;
+    background: linear-gradient(135deg, var(--accent, #5b46d6), var(--accent-hover, #4a38c2));
+    color: #ffffff;
+    width: auto;
+    height: 34px;
+    padding: 0 16px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    box-shadow: 0 4px 12px -2px rgba(91, 70, 214, 0.40);
+}
+
+.email-composer-btn.primary i {
+    font-size: 11px;
+}
+
+.email-composer-btn.primary::after {
+    content: 'Send';
+    margin-left: 8px;
 }
 
 .email-composer-btn.primary:hover {
-    background: var(--color-primary-500, #0ea5e9);
-    border-color: var(--color-primary-500, #0ea5e9);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px -4px rgba(91, 70, 214, 0.55);
+    color: #ffffff;
 }
 
-/* Professional Email Fields - Gmail/Outlook Style */
+.email-composer-btn.primary:active {
+    transform: translateY(0);
+}
+
+/* ==========================================================================
+   Fields — borderless, hairline-divided, whole-row focus highlight
+   Subject is the headline (large, medium-weight, no visible label).
+   ========================================================================== */
 .email-composer-fields {
     display: flex;
     flex-direction: column;
     gap: 0;
-    border: 1px solid var(--border-secondary, #333);
-    border-radius: var(--radius-lg, 8px);
-    overflow: hidden;
-    background: var(--bg-input, #1e1e2a);
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    overflow: visible;
 }
 
+/* No per-row borders — fields sit naked on the warm card interior.
+   Separation comes from typography (label tier + value tier) and a single
+   hairline below the subject row that gates the form from the body. */
 .email-field-row {
     display: flex;
     align-items: center;
-    border-bottom: 1px solid var(--border-secondary, #333);
-}
-
-.email-field-row:last-child {
-    border-bottom: none;
+    border: none;
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+    transition: background 0.18s ease;
 }
 
 .email-field-row.body-row {
     flex-direction: column;
     align-items: stretch;
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+
+/* Single hairline separating the form (To + Subject) from the body.
+   Selects the subject row (the row right before the body row) — gives
+   the form-vs-letter structure with exactly one line. */
+.email-field-row + .email-field-row.body-row {
+    margin-top: 6px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.06));
 }
 
 .email-field {
@@ -112,66 +209,93 @@
     padding: 0;
 }
 
+/* Tiny uppercase labels — no divider line; pure typography. */
 .email-field label {
-    display: flex;
-    align-items: center;
-    min-width: 70px;
-    padding: 10px 12px;
-    font-size: var(--text-sm, 14px);
-    color: var(--text-secondary, #888);
-    font-weight: var(--font-medium, 500);
+    min-width: 60px;
+    padding: 12px 14px 12px 0;
+    margin: 0;
+    border: none;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-tertiary, #5a5a70);
     background: transparent;
-    text-transform: none;
-    letter-spacing: normal;
-    margin-bottom: 0;
+    opacity: 0.75;
+    transition: color 0.18s ease, opacity 0.18s ease;
+}
+
+.email-field-row:focus-within label {
+    color: var(--accent, #5b46d6);
+    opacity: 1;
 }
 
 .email-field input {
     flex: 1;
     background: transparent;
     border: none;
+    border-bottom: 1px solid transparent;
     border-radius: 0;
     color: var(--text-primary, #f5f5f5);
-    padding: 10px 12px 10px 0;
+    padding: 12px 0;
     font-family: var(--font-sans, inherit);
-    font-size: var(--text-sm, 14px);
+    font-size: 14px;
     box-sizing: border-box;
-    caret-color: var(--text-primary, #ffffff);
+    caret-color: var(--accent, #5b46d6);
     cursor: text;
+    transition: border-bottom-color 0.20s ease;
 }
 
 .email-field input:focus {
     outline: none;
+    /* Subtle underline grows on focus — Material-style, but quieter. */
+    border-bottom-color: rgba(91, 70, 214, 0.45);
 }
 
 .email-field input::placeholder {
-    color: var(--text-tertiary, #555);
+    color: var(--text-tertiary, #5a5a70);
+    opacity: 0.55;
 }
 
-/* Body field - special styling */
+/* The Subject input becomes the visual headline — same row geometry as To,
+   but bigger and heavier. Reads as the "title" of the message. */
+.email-field input.email-subject {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.008em;
+    padding: 14px 0;
+}
+
+/* ==========================================================================
+   Body field — serif type on a faintly tinted "paper" surface
+   ========================================================================== */
 .email-field.body-field {
     flex-direction: column;
     align-items: stretch;
+    margin-top: 14px;
 }
 
-.email-field.body-field label {
-    display: none;
-}
+.email-field.body-field label { display: none; }
 
-/* Contenteditable email body */
 .email-field .email-body {
     width: 100%;
     background: transparent;
     border: none;
     border-radius: 0;
     color: var(--text-primary, #f5f5f5);
-    padding: 12px 14px;
-    font-family: var(--font-sans, inherit);
-    font-size: var(--text-sm, 14px);
-    line-height: 1.6;
+    /* Generous side padding so the body reads as a column of letter-text
+       inset from the form fields above, not flush against the card edge. */
+    padding: 6px 4px 8px 4px;
+    /* System serif stack — distinctive vs the chat's sans. Charter and
+       Iowan Old Style ship on Apple platforms; Source Serif and Georgia
+       cover Linux/Windows respectably. */
+    font-family: 'Charter', 'Iowan Old Style', 'Source Serif Pro',
+                 'Georgia', 'Times New Roman', serif;
+    font-size: 15.5px;
+    line-height: 1.7;
     min-height: 150px;
     box-sizing: border-box;
-    caret-color: var(--text-primary, #ffffff);
+    caret-color: var(--accent, #5b46d6);
     cursor: text;
     outline: none;
     overflow-y: auto;
@@ -179,71 +303,117 @@
     word-wrap: break-word;
 }
 
-/* Placeholder for contenteditable */
 .email-field .email-body:empty:before {
     content: attr(data-placeholder);
-    color: var(--text-tertiary, #555);
+    color: var(--text-tertiary, #5a5a70);
+    opacity: 0.6;
+    font-style: italic;
     pointer-events: none;
 }
 
-/* Bold and italic styling in contenteditable */
 .email-field .email-body b,
-.email-field .email-body strong {
-    font-weight: 700;
-}
-
+.email-field .email-body strong { font-weight: 700; }
 .email-field .email-body i,
-.email-field .email-body em {
-    font-style: italic;
-}
+.email-field .email-body em { font-style: italic; }
 
-/* Headings in contenteditable */
 .email-field .email-body h1 {
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
-    margin: 12px 0 8px 0;
+    margin: 14px 0 8px 0;
     color: var(--text-primary, #f5f5f5);
+    letter-spacing: -0.01em;
+    font-family: inherit;
 }
-
 .email-field .email-body h2 {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 600;
-    margin: 10px 0 6px 0;
+    margin: 12px 0 6px 0;
     color: var(--text-primary, #f5f5f5);
+    font-family: inherit;
 }
-
 .email-field .email-body h3 {
     font-size: 16px;
     font-weight: 600;
-    margin: 8px 0 4px 0;
+    margin: 10px 0 4px 0;
     color: var(--text-primary, #f5f5f5);
+    font-family: inherit;
 }
 
-/* Lists in contenteditable */
 .email-field .email-body ul,
 .email-field .email-body ol {
     margin: 8px 0;
-    padding-left: 24px;
+    padding-left: 22px;
 }
 
 .email-field .email-body li {
     margin: 4px 0;
 }
 
+/* ==========================================================================
+   Hint footer
+   ========================================================================== */
 .email-composer-hint {
-    font-size: var(--text-xs, 12px);
-    color: var(--text-tertiary, #737373);
-    margin-top: var(--space-3, 12px);
+    font-size: 11px;
+    color: var(--text-tertiary, #5a5a70);
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.05));
     display: flex;
     align-items: center;
-    gap: var(--space-2, 6px);
+    gap: 8px;
+    opacity: 0.85;
+    letter-spacing: 0.005em;
 }
 
 .email-composer-hint i {
-    color: var(--color-warning-500, #f59e0b);
+    color: var(--text-tertiary, #5a5a70);
+    opacity: 0.55;
+    font-size: 11px;
 }
 
-/* Send Modal Overlay */
+/* ==========================================================================
+   Light theme — warm paper, warm shadow, warm dividers
+   ========================================================================== */
+/* Card frame + warm interior on cream. The interior gradient gets warmer
+   in light theme — peach-cream wash on warm-cream paper, like reading
+   a letter under afternoon sun. */
+[data-theme="light"] .email-composer-card,
+.light-theme .email-composer-card {
+    border-color: rgba(40, 30, 15, 0.10);
+    background:
+        linear-gradient(180deg,
+            rgba(255, 178, 110, 0.08) 0%,
+            rgba(255, 178, 110, 0.025) 60%,
+            transparent 100%);
+    box-shadow: 0 1px 0 rgba(40, 30, 15, 0.02) inset,
+                0 10px 32px -18px rgba(40, 30, 15, 0.16);
+}
+
+/* The single hairline separating form from body */
+[data-theme="light"] .email-field-row + .email-field-row.body-row,
+.light-theme .email-field-row + .email-field-row.body-row {
+    border-top-color: rgba(40, 30, 15, 0.08);
+}
+
+/* Subject/To focus underline */
+[data-theme="light"] .email-field input:focus,
+.light-theme .email-field input:focus {
+    border-bottom-color: rgba(91, 70, 214, 0.50);
+}
+
+[data-theme="light"] .email-composer-btn:hover,
+.light-theme .email-composer-btn:hover {
+    background: rgba(40, 30, 15, 0.06);
+}
+
+[data-theme="light"] .email-composer-hint,
+.light-theme .email-composer-hint {
+    border-top-color: rgba(40, 30, 15, 0.07);
+}
+
+/* ==========================================================================
+   Send Modal Overlay (provider-picker; visual continuity with the card)
+   ========================================================================== */
 .email-send-modal-overlay {
     position: fixed;
     inset: 0;
@@ -257,9 +427,7 @@
     animation: modalFadeIn 0.2s var(--ease-out);
 }
 
-.email-send-modal-overlay.active {
-    display: flex;
-}
+.email-send-modal-overlay.active { display: flex; }
 
 @keyframes modalFadeIn {
     from { opacity: 0; }
@@ -277,19 +445,11 @@
 }
 
 @keyframes modalScaleIn {
-    from {
-        opacity: 0;
-        transform: scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
 }
 
-.email-send-modal-header {
-    margin-bottom: var(--space-4, 16px);
-}
+.email-send-modal-header { margin-bottom: var(--space-4, 16px); }
 
 .email-send-modal-title {
     font-size: var(--text-lg, 18px);
@@ -338,24 +498,11 @@
     font-size: var(--text-lg, 18px);
 }
 
-.email-send-option-icon.gmail {
-    background: linear-gradient(135deg, #ea4335, #fbbc05);
-    color: white;
-}
+.email-send-option-icon.gmail   { background: linear-gradient(135deg, #ea4335, #fbbc05); color: white; }
+.email-send-option-icon.outlook { background: linear-gradient(135deg, #0078d4, #00bcf2); color: white; }
+.email-send-option-icon.default { background: linear-gradient(135deg, var(--color-neutral-600, #525252), var(--color-neutral-500, #737373)); color: white; }
 
-.email-send-option-icon.outlook {
-    background: linear-gradient(135deg, #0078d4, #00bcf2);
-    color: white;
-}
-
-.email-send-option-icon.default {
-    background: linear-gradient(135deg, var(--color-neutral-600, #525252), var(--color-neutral-500, #737373));
-    color: white;
-}
-
-.email-send-option-text {
-    flex: 1;
-}
+.email-send-option-text { flex: 1; }
 
 .email-send-option-name {
     font-weight: var(--font-semibold, 600);
@@ -397,20 +544,38 @@
     background: var(--bg-hover, rgba(255, 255, 255, 0.05));
 }
 
-/* Mobile Responsive */
+/* ==========================================================================
+   Mobile tightening
+   ========================================================================== */
 @media (max-width: 600px) {
-    /* Stack To and Subject fields vertically */
-    .email-field-row.split {
-        flex-direction: column;
+    .email-composer-card {
+        padding: 20px 18px 16px;
+        border-radius: 16px;
     }
 
-    .email-field input,
-    .email-field textarea {
+    .email-field label {
+        min-width: 52px;
+        font-size: 9px;
+        padding: 12px 10px 12px 0;
+    }
+
+    .email-field input {
+        padding: 12px 0;
         /* 16px prevents iOS zoom on focus */
         font-size: 16px;
     }
 
-    /* Modal slides up from bottom on mobile */
+    .email-field input.email-subject {
+        font-size: 17px;
+    }
+
+    .email-field .email-body {
+        font-size: 16px;
+        padding: 16px 16px;
+    }
+
+    .email-composer-btn.primary { padding: 0 14px; }
+
     .email-send-modal-overlay {
         padding: var(--space-3, 12px);
         align-items: flex-end;
