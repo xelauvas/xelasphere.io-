@@ -188,15 +188,30 @@ def start_new_chat():
             'status': 'guest'
         }), 201
 
+    # Temporary chat ("incognito"): true ephemeral, NO Firestore session document.
+    # Mirrors the guest_mode pattern. The previous behavior wrote
+    # is_temporary=True to Firestore but didn't actually skip downstream
+    # writes — the UI promised "no history saved" but the backend saved
+    # everything (mempalace, memory_v2, session doc itself). PR 6 of the
+    # trust-contract sequence makes the promise true.
+    if temporary:
+        session_id = f"temp_{uuid.uuid4().hex[:16]}"
+        session['current_session_id'] = session_id
+        return jsonify({
+            'message': 'Temporary chat session created',
+            'session_id': session_id,
+            'status': 'temporary',
+        }), 201
+
     # Regular user: create persistent session
     user_id = session['user']['uid']
-    session_id = chat_session.create_session(user_id, session_name=session_name, temporary=temporary)
+    session_id = chat_session.create_session(user_id, session_name=session_name)
     session['current_session_id'] = session_id
 
     return jsonify({
         'message': 'Chat session created',
         'session_id': session_id,
-        'status': 'temporary' if temporary else 'active'
+        'status': 'active'
     }), 201
 
 
@@ -578,6 +593,20 @@ def chat_stream():
     else:
         user_id = session.get('guest', {}).get('id')
 
+    # Temporary chat ("incognito") detection — mirrors guest_mode.
+    # Set during start_new_chat() when temporary=True; session_id starts
+    # with f"temp_{...}". Skips ALL persistent writes downstream:
+    # mempalace adapter, memory_v2 retrieval/extraction, Firestore session
+    # message append. The greeting "Incognito mode. No history saved." is
+    # finally true.
+    _current_session_id_check = (request.form.get('session_id') or '').strip() \
+        or session.get('current_session_id', '')
+    is_temp_session = (
+        isinstance(_current_session_id_check, str)
+        and _current_session_id_check.startswith('temp_')
+    )
+    skip_writes = guest_mode or is_temp_session
+
     prompt = request.form.get('prompt', '').strip()
     # Style-clean prompt for display/persistence. Client-side styleManager
     # prepends an instruction (e.g. "Respond with thorough explanation: …")
@@ -663,7 +692,7 @@ def chat_stream():
                 logger.warning(f"[Stream] Client sent session_id {client_session_id} that doesn't exist; falling back to cookie")
         except Exception as e:
             logger.warning(f"[Stream] Client session reconciliation failed: {e}")
-    if not guest_mode and user_id:
+    if not skip_writes and user_id:
         try:
             session_id, session_data = load_or_create_session(user_id)
             # Load previous messages for follow-up question context detection
@@ -894,7 +923,9 @@ def chat_stream():
     _mp_allowed = _mem_toggles["master"] and _mem_toggles["ref_mempalace"]
     _v2_allowed = _mem_toggles["master"] and _mem_toggles["ref_v2"]
 
-    if not guest_mode and user_id and _v2_allowed:
+    # Temp sessions skip memory entirely (read AND write) — matches
+    # ChatGPT's "Temporary chat" promise of true ephemeral isolation.
+    if not skip_writes and user_id and _v2_allowed:
         try:
             memory_session_ctx = SessionContext(
                 user_id=user_id,
@@ -982,7 +1013,11 @@ def chat_stream():
     _mp_active_injected = False  # set True iff ACTIVE mode injects recall
     try:
         _mp_mode = _mempalace_mode()
-        if _mp_mode != _MempalaceMode.OFF and user_id and _mp_allowed:
+        # Temp sessions skip mempalace wake-up too (read AND write)
+        if (_mp_mode != _MempalaceMode.OFF
+                and user_id
+                and _mp_allowed
+                and not is_temp_session):
             _mp_adapter = _mempalace_get_adapter()
             _mp_wake = _mp_adapter.wake_up_sync(user_id, display_prompt, session_id=session_id)
             if _mp_mode == _MempalaceMode.SHADOW:
