@@ -177,52 +177,7 @@
                 </section>
 
                 <section class="tab-panel active" data-panel="api">
-                    <form id="api-key-form">
-                        <section class="api-keys-card">
-                            <h2>Groq</h2>
-                            <p>Use your Groq API key for all Groq-hosted models such as Llama 3.1 and Qwen.</p>
-                            <span class="status-pill {% if api_keys.groq %}active{% endif %}">
-                                {% if api_keys.groq %}<i class="fas fa-check"></i> Key stored
-                                {% else %}<i class="fas fa-circle"></i> Not configured{% endif %}
-                            </span>
-                            <div class="input-group">
-                                <label for="groq_api_key">Groq API Key</label>
-                                <input type="password" id="groq_api_key" name="groq_api_key" placeholder="groq_xxx" autocomplete="off">
-                            </div>
-                        </section>
-
-                        <section class="api-keys-card">
-                            <h2>OpenRouter</h2>
-                            <p>Connect your OpenRouter account to access community and premium models.</p>
-                            <span class="status-pill {% if api_keys.openrouter %}active{% endif %}">
-                                {% if api_keys.openrouter %}<i class="fas fa-check"></i> Key stored
-                                {% else %}<i class="fas fa-circle"></i> Not configured{% endif %}
-                            </span>
-                            <div class="input-group">
-                                <label for="openrouter_api_key">OpenRouter API Key</label>
-                                <input type="password" id="openrouter_api_key" name="openrouter_api_key" placeholder="sk-or-v1-..." autocomplete="off">
-                            </div>
-                        </section>
-
-                        <section class="api-keys-card">
-                            <h2>DeepSeek</h2>
-                            <p>Use DeepSeek models directly for advanced coding and reasoning tasks.</p>
-                            <span class="status-pill {% if api_keys.deepseek %}active{% endif %}">
-                                {% if api_keys.deepseek %}<i class="fas fa-check"></i> Key stored
-                                {% else %}<i class="fas fa-circle"></i> Not configured{% endif %}
-                            </span>
-                            <div class="input-group">
-                                <label for="deepseek_api_key">DeepSeek API Key</label>
-                                <input type="password" id="deepseek_api_key" name="deepseek_api_key" placeholder="sk-..." autocomplete="off">
-                            </div>
-                        </section>
-
-                        <div class="api-key-actions">
-                            <button type="button" class="btn btn-secondary" id="clear-fields">Clear fields</button>
-                            <button type="submit" class="btn btn-primary">Save API keys</button>
-                        </div>
-                        <p id="api-key-status" class="api-key-status" role="status" aria-live="polite"></p>
-                    </form>
+                    {% include "_settings_api_keys_form.html" %}
                 </section>
 
                 <section class="tab-panel" data-panel="data">
