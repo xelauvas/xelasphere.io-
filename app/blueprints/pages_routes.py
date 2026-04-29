@@ -101,6 +101,28 @@ def images_page():
     return _render_home(initial_surface='images')
 
 
+def _load_api_key_state(user_id):
+    """Read which providers have keys stored for the given user.
+
+    Used by index.html to render the API Keys form inside the settings
+    modal (admin only). Returns a dict with boolean flags per provider.
+    Returns all-False on any error so the template renders harmlessly.
+    """
+    state = {'groq': False, 'openrouter': False, 'deepseek': False}
+    if not user_id:
+        return state
+    try:
+        snapshot = db.collection('users').document(user_id).get()
+        if snapshot.exists:
+            keys = (snapshot.to_dict() or {}).get('api_keys') or {}
+            state['groq'] = bool(keys.get('groq'))
+            state['openrouter'] = bool(keys.get('openrouter'))
+            state['deepseek'] = bool(keys.get('deepseek'))
+    except Exception as e:
+        logger.warning(f"Unable to load API key state for {user_id}: {e}")
+    return state
+
+
 def _render_home(initial_surface='chat'):
     """Main index page."""
     try:
@@ -199,7 +221,8 @@ def _render_home(initial_surface='chat'):
             guest_banner_threshold=GUEST_BANNER_THRESHOLD,
             session_has_messages=False,
             initial_surface=initial_surface,
-            is_admin=is_admin_user(session.get('user'))
+            is_admin=is_admin_user(session.get('user')),
+            api_keys=_load_api_key_state(session.get('user', {}).get('uid'))
         )
     except Exception as e:
         logger.error(f"Failed to load the index page: {e}")
@@ -311,7 +334,8 @@ def open_shared_session(session_id):
             guest_message_count=guest_count,
             guest_message_limit=GUEST_MESSAGE_LIMIT,
             guest_banner_threshold=GUEST_BANNER_THRESHOLD,
-            is_admin=is_admin_user(session.get('user'))
+            is_admin=is_admin_user(session.get('user')),
+            api_keys=_load_api_key_state(session.get('user', {}).get('uid'))
         )
     except Exception as e:
         logger.error(f"Failed to load shared session {session_id}: {e}")

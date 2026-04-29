@@ -70,8 +70,7 @@
                 </section>
                 {% if is_admin %}
                 <section class="settings-pane" data-pane="api-keys">
-                    <h3>API Keys</h3>
-                    <p class="settings-pane-empty">Coming Soon — placeholder until PR 2 ports the form.</p>
+                    {% include "_settings_api_keys_form.html" %}
                 </section>
                 {% endif %}
             </main>
