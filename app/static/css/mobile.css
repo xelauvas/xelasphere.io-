@@ -2724,13 +2724,10 @@ body.is-ios .arrow-down {
     }
 
     /* === Toast Notifications === */
+    /* Container is fixed top-center on body; sizing is handled by .toast-container.
+       Cards inside flow normally — no bottom-anchored offset on mobile. */
     .toast {
-        left: 50%;
-        right: auto;
-        transform: translateX(-50%);
-        width: calc(100% - 2rem);
         max-width: 400px;
-        bottom: 6rem;
     }
 }
 
@@ -2753,7 +2750,6 @@ body.is-ios .arrow-down {
     }
 
     .toast {
-        bottom: 5rem;
         font-size: 0.75rem;
     }
 }

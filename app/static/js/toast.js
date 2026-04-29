@@ -32,13 +32,9 @@
         this.container = document.createElement('div');
         this.container.className = 'toast-container';
         this.container.setAttribute('aria-live', 'polite');
-
-        const inputContainer = document.querySelector('.input-container');
-        if (inputContainer) {
-          inputContainer.insertBefore(this.container, inputContainer.firstChild);
-        } else {
-          document.body.appendChild(this.container);
-        }
+        // Mount on body so the container is anchored to the viewport
+        // (top-center, ChatGPT-style) and decoupled from the composer.
+        document.body.appendChild(this.container);
       }
     }
 

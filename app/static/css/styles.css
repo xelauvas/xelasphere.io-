@@ -879,12 +879,12 @@ body.temporary-chat-centered .input-container {
     bottom: auto;
     left: calc(
         var(--left-sidebar-width, 0px) +
-        (100% - var(--left-sidebar-width, 0px) - var(--right-sidebar-width, 0px)) / 2
+        (100% - var(--left-sidebar-width, 0px) - var(--active-right-sidebar-width, 0px)) / 2
     );
     right: auto;
     width: min(
         var(--composer-shell-max-width),
-        calc(100% - var(--left-sidebar-width, 0px) - var(--right-sidebar-width, 0px) - 2.5rem)
+        calc(100% - var(--left-sidebar-width, 0px) - var(--active-right-sidebar-width, 0px) - 2.5rem)
     );
     transform: translate(-50%, -50%);
     padding: 0;
@@ -901,7 +901,7 @@ body.composer-animating-to-bottom .input-container {
     bottom: calc(var(--composer-safe-area-bottom, 0px) + 16px) !important;
     left: calc(
         var(--left-sidebar-width, 0px) +
-        (100% - var(--left-sidebar-width, 0px) - var(--right-sidebar-width, 0px)) / 2
+        (100% - var(--left-sidebar-width, 0px) - var(--active-right-sidebar-width, 0px)) / 2
     ) !important;
     transform: translate(-50%, 0) !important;
     transition: top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
