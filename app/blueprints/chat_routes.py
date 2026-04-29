@@ -188,15 +188,30 @@ def start_new_chat():
             'status': 'guest'
         }), 201
 
+    # Temporary chat ("incognito"): true ephemeral, NO Firestore session document.
+    # Mirrors the guest_mode pattern. The previous behavior wrote
+    # is_temporary=True to Firestore but didn't actually skip downstream
+    # writes — the UI promised "no history saved" but the backend saved
+    # everything (mempalace, memory_v2, session doc itself). PR 6 of the
+    # trust-contract sequence makes the promise true.
+    if temporary:
+        session_id = f"temp_{uuid.uuid4().hex[:16]}"
+        session['current_session_id'] = session_id
+        return jsonify({
+            'message': 'Temporary chat session created',
+            'session_id': session_id,
+            'status': 'temporary',
+        }), 201
+
     # Regular user: create persistent session
     user_id = session['user']['uid']
-    session_id = chat_session.create_session(user_id, session_name=session_name, temporary=temporary)
+    session_id = chat_session.create_session(user_id, session_name=session_name)
     session['current_session_id'] = session_id
 
     return jsonify({
         'message': 'Chat session created',
         'session_id': session_id,
-        'status': 'temporary' if temporary else 'active'
+        'status': 'active'
     }), 201
 
 
