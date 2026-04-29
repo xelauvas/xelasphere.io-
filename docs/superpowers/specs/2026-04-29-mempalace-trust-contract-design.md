@@ -33,7 +33,7 @@ This design brings XelaSphere to that bar.
 
 - Inline "Memory updated" notifications (Week 2)
 - Memory search inside the panel (Week 2)
-- Memory ON/OFF master toggle separately from per-system toggles (Week 2 — overlaps with toggle plumbing here)
+- Toggle UX polish — animations, smart-default heuristics, per-toggle help tooltips (Week 2). Note: the basic on/off plumbing for all three toggles (master, ref_v2, ref_mempalace) IS in Week 1; only the polish is deferred.
 - Categorized memory display, confidence display, provenance display (Weeks 3-4)
 - Full memory edit (not just delete) — Tier 3 future
 - "Erase all my data" account-deletion flow (future)
@@ -237,7 +237,7 @@ User clicks "Forget Me" → confirmation modal → confirms
     a. sidecar DELETE /palace/{uid}                  → wipes whole palace
     b. SQLite outbox: DELETE FROM outbox WHERE user_id=?
     c. Firestore users/{uid}/memory_v2: collection delete
-    d. Firestore users/{uid}/memory_events: collection delete
+    d. Firestore users/{uid}/memory_events: collection delete (memory_v3 state)
     e. Firestore users/{uid}/smart_suggestions: collection delete
 
   step 3: build response
@@ -309,14 +309,13 @@ skip_writes = guest_mode or is_temp_session
 
 Then gate every existing write site:
 
-- **mempalace adapter `wake_up_sync`**: still call for context (maybe; see below) — but `record_turn` for both user-half and assistant-half: skip when `skip_writes`.
+- **mempalace adapter `wake_up_sync`**: skip when `is_temp_session` (true ephemeral means no recall either, matching ChatGPT). Note this is a READ skip, not a write skip — distinct gate from `skip_writes`. Frontend already handles guest_mode read-skip via the same upstream check.
+- **mempalace adapter `record_turn`** (both user-half and assistant-half): skip when `skip_writes`.
 - **memory_v2 extraction post-turn**: skip when `skip_writes`.
 - **Firestore session message append**: skip when `skip_writes`.
-- **Semantic cache write** (PR #119 logic): unchanged — skip already covers temp via `_mp_active_injected` being false (no recall used).
+- **Semantic cache write** (PR #119 logic): unchanged — already skipped for temp because `_mp_active_injected` will be false (no mempalace recall was injected).
 
-**Open design point for `wake_up_sync` in temp mode:** ChatGPT's temp chat skips memory recall too — the conversation is fully isolated. We mirror that — skip mempalace `wake_up_sync` as well. Implementation: gate the wake-up call on `skip_writes` is wrong (it's not a write, it's a read), so explicitly: also skip wake_up_sync for `is_temp_session`.
-
-Final temp-mode behavior: zero contact with persistent stores in either direction.
+Final temp-mode behavior: zero contact with persistent stores in either direction. The conversation exists only in the browser's JS memory + the Flask session for the duration of the request.
 
 ### Delete-chat copy fix
 
