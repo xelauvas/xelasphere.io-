@@ -346,6 +346,16 @@ def select_chat_session():
         session['current_session_id'] = session_id
         return jsonify({'message': 'Guest session selected.'}), 200
 
+    # Temporary chat ("incognito") sessions never have a Firestore document
+    # by design — mirrors guest_mode. Skip the existence check; the temp_
+    # prefix identifies them and setting the cookie is enough. Without
+    # this branch, /chat/select 404s for every incognito chat, the
+    # frontend's switchSession shows "Failed to switch chat session" toast,
+    # and the user sees a phantom error notification on every ghost click.
+    if isinstance(session_id, str) and session_id.startswith('temp_'):
+        session['current_session_id'] = session_id
+        return jsonify({'message': 'Temporary session selected.'}), 200
+
     user_id = session['user']['uid']
     try:
         session_ref = db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
