@@ -88,13 +88,31 @@ def test_general_pane_has_voice_dropdown_with_play_button(authenticated_client, 
     resp = _render(authenticated_client)
     assert b'data-dropdown="voice"' in resp.data
     assert b'data-action="play-voice-preview"' in resp.data
-    # Voice options use real Kokoro/Gemini-named voices as values; friendly
-    # ChatGPT-style display labels (Ember/Maple/Sol/Vale/Arbor/Cove).
-    for voice in [b'Sulafat', b'Vindemiatrix', b'Aoede', b'Orus', b'Gacrux', b'Enceladus']:
+    # Voice dropdown uses raw Kokoro voice IDs as values (sidecar accepts these
+    # directly via media_routes.py:736 prefix-whitelist).
+    # Curated "Recommended" voices keep their friendly display names.
+    for voice in [b'af_heart', b'af_sarah', b'am_adam', b'bm_george']:
         assert b'data-dropdown-option="' + voice + b'"' in resp.data
-    # Friendly display labels
-    for label in [b'>Ember<', b'>Maple<', b'>Sol<', b'>Vale<', b'>Arbor<', b'>Cove<']:
-        assert label in resp.data
+    # Recommended display labels still present
+    assert b'Ember' in resp.data
+    assert b'Arbor' in resp.data
+
+
+def test_voice_dropdown_includes_all_kokoro_languages(authenticated_client, mock_firestore):
+    """Dropdown exposes every Kokoro language: a/b/e/f/h/i/j/p/z."""
+    resp = _render(authenticated_client)
+    # Sample one voice from each language code prefix
+    for prefix in [b'af_', b'am_', b'bf_', b'bm_', b'ef_', b'em_', b'ff_',
+                   b'hf_', b'hm_', b'if_', b'im_', b'jf_', b'jm_',
+                   b'pf_', b'pm_', b'zf_', b'zm_']:
+        assert b'data-dropdown-option="' + prefix in resp.data, f'missing {prefix}'
+
+
+def test_voice_dropdown_has_section_headers(authenticated_client, mock_firestore):
+    resp = _render(authenticated_client)
+    # At least the language section labels should render
+    for header in [b'>Recommended<', b'>English \xc2\xb7 American<', b'>Mandarin Chinese<']:
+        assert header in resp.data
 
 
 def test_general_pane_has_separate_voice_toggle(authenticated_client, mock_firestore):
