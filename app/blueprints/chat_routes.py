@@ -935,8 +935,13 @@ def chat_stream():
     #   mode=off    → no adapter call; legacy long_term_memory_stream used.
     #   mode=shadow → adapter.wake_up_sync() + log_shadow comparison;
     #                 legacy still used in prompt.
-    #   mode=active → adapter result would replace legacy (P3+); at M0.18
-    #                 legacy is still used (ACTIVE mode not exercised pre-P3).
+    #   mode=active → adapter result is formatted and APPENDED to
+    #                 long_term_memory_stream so the LLM sees both legacy
+    #                 V2 context (profile/preferences) AND mempalace
+    #                 conversational recall. They're complementary, not
+    #                 competing. Wired 2026-04-29 after Riley persona
+    #                 user-test exposed that retrieval was clean but the
+    #                 LLM never saw the results — every fact hallucinated.
     # Exception-swallowing: any mempalace-side failure must NOT break legacy
     # chat flow. H9 no-automated-coverage: manual-verification backstop only.
     try:
@@ -952,6 +957,20 @@ def chat_stream():
                     "legacy": long_term_memory_stream,
                     "mempalace": _mp_wake,
                 })
+            elif _mp_mode == _MempalaceMode.ACTIVE:
+                from app.mempalace.format import format_wakeup_for_prompt
+                _mp_context = format_wakeup_for_prompt(_mp_wake)
+                if _mp_context:
+                    if long_term_memory_stream:
+                        long_term_memory_stream = (
+                            long_term_memory_stream + "\n\n" + _mp_context
+                        )
+                    else:
+                        long_term_memory_stream = _mp_context
+                    logger.info(
+                        f"🧠 [Stream] Mempalace ACTIVE: injected "
+                        f"{len(_mp_context)} chars of recall context"
+                    )
     except Exception as _mp_exc:
         logger.warning(f"[Stream] Mempalace wiring failed (legacy unaffected): {_mp_exc}")
 
@@ -2775,6 +2794,20 @@ def chat():
                         "legacy": long_term_memory,
                         "mempalace": _mp_wake,
                     })
+                elif _mp_mode == _MempalaceMode.ACTIVE:
+                    from app.mempalace.format import format_wakeup_for_prompt
+                    _mp_context = format_wakeup_for_prompt(_mp_wake)
+                    if _mp_context:
+                        if long_term_memory:
+                            long_term_memory = (
+                                long_term_memory + "\n\n" + _mp_context
+                            )
+                        else:
+                            long_term_memory = _mp_context
+                        logger.info(
+                            f"🧠 Mempalace ACTIVE: injected "
+                            f"{len(_mp_context)} chars of recall context"
+                        )
         except Exception as _mp_exc:
             logger.warning(f"Mempalace wiring failed (legacy unaffected): {_mp_exc}")
 
