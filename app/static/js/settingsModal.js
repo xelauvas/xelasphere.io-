@@ -131,4 +131,93 @@
             });
         });
     });
+
+    /**
+     * Memory toggle wiring. Mirrors the legacy settings_api_keys.html flow
+     * but lives in this controller so it survives PR 5's deletion of that
+     * template.
+     */
+    async function loadMemoryToggleState() {
+        try {
+            const resp = await fetch('/user/memory-toggles', { credentials: 'same-origin' });
+            if (!resp.ok) return;
+            const state = await resp.json();
+            document.querySelectorAll('[data-memory-toggle]').forEach(input => {
+                const key = input.dataset.memoryToggle;
+                if (key in state) input.checked = !!state[key];
+            });
+        } catch (e) {
+            console.warn('[SettingsModal] failed to load memory toggles', e);
+        }
+    }
+
+    async function saveMemoryToggle(key, value) {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+                  || document.querySelector('input[name="csrf_token"]')?.value
+                  || '';
+        try {
+            const resp = await fetch('/user/memory-toggles', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf
+                },
+                body: JSON.stringify({ [key]: value })
+            });
+            if (!resp.ok) throw new Error(`status ${resp.status}`);
+            if (window.Toast) window.Toast.success('Saved', { duration: 1800 });
+        } catch (e) {
+            console.error('[SettingsModal] failed to save memory toggle', e);
+            if (window.Toast) window.Toast.error('Could not save preference');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Toggle change handlers
+        document.querySelectorAll('[data-memory-toggle]').forEach(input => {
+            input.addEventListener('change', () => {
+                saveMemoryToggle(input.dataset.memoryToggle, input.checked);
+            });
+        });
+
+        // Manage memory button → open the memory child modal. Markup is
+        // rendered globally from _settings_memory_modal.html.
+        document.querySelectorAll('[data-action="open-memory-modal"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const memoryModal = document.getElementById('memory-modal');
+                if (memoryModal) {
+                    memoryModal.setAttribute('aria-hidden', 'false');
+                } else {
+                    console.warn('[SettingsModal] #memory-modal not in DOM');
+                }
+            });
+        });
+
+        // Backdrop + close button close the memory child modal. The legacy
+        // settings_api_keys.html inline JS wires the same handlers, but it
+        // doesn't run on /chat pages, so we wire them here for the global
+        // path. Setting aria-hidden twice is a no-op.
+        const memoryModal = document.getElementById('memory-modal');
+        if (memoryModal) {
+            memoryModal.addEventListener('click', e => {
+                if (e.target === memoryModal) {
+                    memoryModal.setAttribute('aria-hidden', 'true');
+                }
+            });
+            const closeBtn = document.getElementById('close-memory-modal');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    memoryModal.setAttribute('aria-hidden', 'true');
+                });
+            }
+        }
+    });
+
+    // Wrap open() so memory toggle state loads each time the modal opens.
+    const _origOpen = window.SettingsModal.open.bind(window.SettingsModal);
+    window.SettingsModal.open = function(tabId) {
+        _origOpen(tabId);
+        loadMemoryToggleState();
+    };
 })();
