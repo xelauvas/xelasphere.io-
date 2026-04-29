@@ -49,8 +49,52 @@
                     <p class="settings-pane-empty">Coming Soon.</p>
                 </section>
                 <section class="settings-pane" data-pane="personalization">
-                    <h3>Personalization</h3>
-                    <p class="settings-pane-empty">Coming Soon — placeholder until PR 3 wires memory toggles.</p>
+                    <h3>Memory</h3>
+                    <p class="settings-pane-hint">Control what XelaSphere remembers about you.</p>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <strong>Memory</strong>
+                            <span>Save and reuse details from past conversations.</span>
+                        </div>
+                        <label class="settings-toggle">
+                            <input type="checkbox" data-memory-toggle="master">
+                            <span class="settings-toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <strong>Reference saved memories</strong>
+                            <span>Use stored memories when answering.</span>
+                        </div>
+                        <label class="settings-toggle">
+                            <input type="checkbox" data-memory-toggle="ref_v2">
+                            <span class="settings-toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <strong>Reference chat history</strong>
+                            <span>Use prior conversation turns when answering.</span>
+                        </div>
+                        <label class="settings-toggle">
+                            <input type="checkbox" data-memory-toggle="ref_mempalace">
+                            <span class="settings-toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <strong>Manage memory</strong>
+                            <span>View, edit, and delete saved memories.</span>
+                        </div>
+                        <button type="button" class="btn btn-secondary" data-action="open-memory-modal">Manage</button>
+                    </div>
+
+                    <h3 style="margin-top: 24px;">Custom instructions</h3>
+                    <p class="settings-pane-empty">Coming Soon.</p>
                 </section>
                 <section class="settings-pane" data-pane="speech">
                     <h3>Speech</h3>
