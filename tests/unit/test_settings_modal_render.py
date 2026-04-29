@@ -88,9 +88,13 @@ def test_general_pane_has_voice_dropdown_with_play_button(authenticated_client, 
     resp = _render(authenticated_client)
     assert b'data-dropdown="voice"' in resp.data
     assert b'data-action="play-voice-preview"' in resp.data
-    # Voice options
-    for voice in [b'ember', b'maple', b'sol', b'vale', b'arbor']:
+    # Voice options use real Kokoro/Gemini-named voices as values; friendly
+    # ChatGPT-style display labels (Ember/Maple/Sol/Vale/Arbor/Cove).
+    for voice in [b'Sulafat', b'Vindemiatrix', b'Aoede', b'Orus', b'Gacrux', b'Enceladus']:
         assert b'data-dropdown-option="' + voice + b'"' in resp.data
+    # Friendly display labels
+    for label in [b'>Ember<', b'>Maple<', b'>Sol<', b'>Vale<', b'>Arbor<', b'>Cove<']:
+        assert label in resp.data
 
 
 def test_general_pane_has_separate_voice_toggle(authenticated_client, mock_firestore):
