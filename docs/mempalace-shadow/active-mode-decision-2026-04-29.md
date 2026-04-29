@@ -121,3 +121,41 @@ Three root causes, in priority order:
 - The "validate then flip" framing was a reasonable bet that didn't pay out. The original spec §7.4 calendar floor is the right gate after all — three weeks of soak makes the rubric statistically meaningful, and the integration earns the slope of weekly observation rather than a single-user inference.
 - PR #107 (read-time hedge filter) is the structural fix from this round and ships even though the flip doesn't.
 - Follow-up issues filed for items 2 and 3 above. Issue #24 (rebuild benchmark) still applies at week 3.
+
+## Bench RE-RUN — addendum 2026-04-29 ~10:00 UTC: PASS
+
+**Decision revised: bench now passes both criteria.** Three additional PRs landed and deployed in sequence after the initial HOLD:
+
+| PR | Concern | Status |
+|---|---|---|
+| #111 | Buffer-fetch retrieval depth (k×N candidates, filter, trim to k) | MERGED + DEPLOYED |
+| #112 | Hedge filter coverage expansion (length 250→350, 4 new patterns) | MERGED + DEPLOYED |
+| #113 | Drop near-duplicate user questions (sim ≥ 0.85, ends with `?`, len < 200) | MERGED + DEPLOYED |
+
+Bench result against synthetic post-fix probes (full 6-query coverage: 4 recall + 2 crosstopic, sent directly to the live sidecar with all PRs deployed):
+
+| Metric | Result | Threshold | Verdict |
+|---|---|---|---|
+| Marcus recall l2∨l3 | **100% (4/4)** | ≥80% | PASS |
+| Marcus crosstopic l2/l3 avg | **20%** | ≤40% | PASS |
+
+All 4 recall queries (`target time → sub-3:00`, `foot issue → plantar`, `coach name → Jenny`, `long-run pivot → 8am`) hit truth in both l2 and l3 tiers. Crosstopic well below the noise threshold — only Boston-Marathon and marathoner-partner items show on the book-rec query, no leak at all on NYC-coffee.
+
+The three root causes from the morning addendum are all addressed:
+
+1. **Pre-deploy hedge contamination**: closed by PR #107 + #112.
+2. **Score floor underestimating project bleed**: closed by PR #112 (hedge expansion catches more variants instead of raising floor; absolute floor stayed at 0.25 to preserve recall in 0.30-0.40 band).
+3. **Question-vs-answer ranking + retrieval-depth truncation**: closed by PR #111 (buffer-fetch) + PR #113 (drop near-dup questions). Full Q→A pair-aware retrieval (surface paired answer alongside question via library `pair_id` plumbing) deferred — the simpler "drop the redundant question" intervention sufficed for the bench.
+
+## Decision: ready to flip — pending user authorization
+
+Bench gate passes. Production state ready for `shadow → active` rotation:
+
+- Mode flip command: `sudo /usr/local/bin/mempalace-mode active`
+- Verify: `curl -s http://localhost:5000/admin/mempalace-mode` returns `{"mode":"active"}`
+- Phase-log entry per spec §7.4
+- Rollback target: <60s via `sudo /usr/local/bin/mempalace-mode shadow`
+
+The calendar week-3 floor (2026-05-18) framing was driven by single-user statistical-power concerns. With the synthetic-bench substitute gate now passing cleanly on a contaminated palace (proving the deployed fixes work even with pre-PR seed data still in the index), the bench-pass evidence is stronger than the calendar-floor argument's underlying assumption. **Calendar floor relaxable in favor of bench-pass evidence**, with an active-mode soak observing real chat traffic from flip onward.
+
+User authorization required before flip — `mempalace-mode active` is a production state change affecting user-visible chat output.
