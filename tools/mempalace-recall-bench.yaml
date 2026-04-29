@@ -1,0 +1,98 @@
+# Mempalace recall-bench rubric — automated per-persona retrieval quality.
+#
+# Built 2026-04-29 to substitute for the calendar-floor P2 weekly rubric
+# under solo-traffic conditions where the weekly rubric is statistically
+# meaningless (see spec §7.4 amendment, phase-log P1.x).
+#
+# Each persona's recall_queries are matched against shadow JSONL records;
+# tier-by-tier hit rates are computed against the `truth` substring (case-
+# insensitive). crosstopic_queries score how MUCH project context bleeds
+# in (lower = better — ideal is 0/N).
+#
+# Pass criterion (overall, per persona):
+#   - recall_l2_or_l3 >= 0.80 (eighty percent of recall queries find the
+#     truth in either the topic or semantic tier)
+#   - crosstopic_l2_l3_avg <= 0.40 (semantic + topic tiers should not
+#     overwhelmingly return project context on off-topic queries)
+
+personas:
+
+  marcus:
+    user_id: "rRThYRtGkIW93Jv9PnPDhKGC7G73"
+    description: "Marathoner training for Boston 2027"
+    recall_queries:
+      - {query: "A-race target time again", truth: "sub-3:00",     label: "target time"}
+      - {query: "foot issue I've been dealing", truth: "plantar",  label: "foot issue"}
+      - {query: "who's my coach",          truth: "Jenny",          label: "coach name"}
+      - {query: "Saturday long-run time change", truth: "8am",     label: "long-run pivot"}
+    crosstopic_queries:
+      - {query: "non-fiction book",        label: "book rec"}
+      - {query: "coffee shop in NYC",      label: "NYC coffee"}
+    project_keywords:
+      - marcus
+      - asheville
+      - boston
+      - marathon
+      - jenny
+      - hadfield
+      - plantar
+      - elena
+      - "er physician"
+      - sub-3
+      - "sub 3"
+      - peak
+      - "low-carb"
+      - altitude
+      - "black mountain"
+      - "strength training"
+
+  tom:
+    user_id: "m6xGfa7pULePm7kbxxGEgOvPc632"
+    description: "Backend engineer building a private reading tracker"
+    recall_queries:
+      - {query: "What's my deadline again",  truth: "June 8",      label: "deadline"}
+      - {query: "Who's my first beta user",  truth: "Sarah",       label: "beta user"}
+      - {query: "What box am I deploying",   truth: "Hetzner",     label: "deploy box"}
+      - {query: "What date am I launching",  truth: "June 8",      label: "launch date"}
+    crosstopic_queries:
+      - {query: "Recommend me a book to read this weekend", label: "book rec"}
+      - {query: "What time of day works best for solo dev", label: "time of day"}
+    project_keywords:
+      - tom
+      - sqlite
+      - postgres
+      - duckdb
+      - hetzner
+      - sarah
+      - isbn
+      - librarian
+      - litestream
+      - streaks
+      - oauth
+      - "reading tracker"
+      - "beta user"
+      - sqlx
+      - "database/sql"
+      - "june 8"
+
+  maya:
+    user_id: "UNsBoTIjafPvQj17ly118kZwOY63"
+    description: "Illustrator pitching a children's book"
+    recall_queries:
+      - {query: "main character's name again",  truth: "Ember",     label: "character name"}
+      - {query: "When's my pitch",              truth: "May",       label: "pitch date"}
+      - {query: "Where am I pitching",          truth: "Chronicle", label: "pitch venue"}
+    crosstopic_queries: []
+    project_keywords:
+      - maya
+      - portland
+      - ember
+      - chronicle
+      - pitch
+      - lily
+      - daughter
+      - illustrator
+      - "afraid of fire"
+      - "may 22"
+      - dragon
+      - "picture book"
