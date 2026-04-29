@@ -562,3 +562,98 @@ def post_memory_toggles():
         return jsonify({"error": "no valid fields"}), 400
     _toggle_doc_ref(user_id).set(update, merge=True)
     return jsonify({"status": "ok", "updated": update})
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Forget Me cascade — Tier-1 trust contract (PR 5)
+# ─────────────────────────────────────────────────────────────────────
+
+import sqlite3 as _sqlite3
+
+
+def _sidecar_delete_palace(user_id: str) -> bool:
+    """Sidecar DELETE /palace/{user_id} — wipes whole palace."""
+    url = f"{_sidecar_base_url()}/palace/{user_id}"
+    resp = _requests.delete(
+        url,
+        headers={"X-Sidecar-Token": _sidecar_token()},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return True
+
+
+def _wipe_outbox_for_user(user_id: str) -> int:
+    """DELETE FROM outbox WHERE user_id = ?  → returns row count."""
+    outbox_path = os.getenv("MEMPALACE_OUTBOX_PATH", "/var/lib/xelasphere/outbox.db")
+    conn = _sqlite3.connect(outbox_path)
+    try:
+        cur = conn.execute("DELETE FROM outbox WHERE user_id = ?", (user_id,))
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
+def _wipe_firestore_subcollection(user_id: str, subcollection: str) -> int:
+    """Delete every doc in users/{user_id}/{subcollection}. Returns count."""
+    from app.config import db
+    coll = db.collection("users").document(user_id).collection(subcollection)
+    deleted = 0
+    while True:
+        batch = list(coll.limit(500).stream())
+        if not batch:
+            break
+        for d in batch:
+            d.reference.delete()
+            deleted += 1
+        if len(batch) < 500:
+            break
+    return deleted
+
+
+@memory_bp.route('/user/forget-me', methods=['DELETE'])
+@error_handler
+@login_required
+@csrf_required
+def forget_me():
+    """Cascade-wipe the user's memory layer.
+
+    Touches: mempalace palace, outbox, memory_v2, memory_events,
+    smart_suggestions. Does NOT touch: chat_sessions, preferences,
+    account doc, audit logs.
+
+    Best-effort cascade — each step independent. Never aborts mid-cascade.
+    """
+    user_id = session['user']['uid']
+    deleted = {}
+    partial_failures = []
+
+    # 1. Mempalace palace (sidecar)
+    try:
+        _sidecar_delete_palace(user_id)
+        deleted["palace"] = "wiped"
+    except Exception as exc:
+        logger.warning("forget-me palace wipe failed: %s", exc)
+        partial_failures.append("palace")
+
+    # 2. Outbox (SQLite)
+    try:
+        deleted["outbox_rows"] = _wipe_outbox_for_user(user_id)
+    except Exception as exc:
+        logger.warning("forget-me outbox wipe failed: %s", exc)
+        partial_failures.append("outbox")
+
+    # 3. Firestore subcollections (memory_v2 + memory_events + smart_suggestions)
+    for subcol in ("memory_v2", "memory_events", "smart_suggestions"):
+        try:
+            deleted[f"{subcol}_docs"] = _wipe_firestore_subcollection(user_id, subcol)
+        except Exception as exc:
+            logger.exception("forget-me %s wipe failed: %s", subcol, exc)
+            partial_failures.append(subcol)
+
+    return jsonify({
+        "deleted": deleted,
+        "partial_failures": partial_failures,
+        "kept": ["chat_sessions", "preferences", "audit_logs", "account_data"],
+    })
