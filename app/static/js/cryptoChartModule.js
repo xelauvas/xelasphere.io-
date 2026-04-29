@@ -18,12 +18,34 @@ const CryptoChartModule = (function() {
     let configCache = null;
     let configLoading = null; // Promise for config loading
 
+    // Theme-aware colors for chart canvas (axis labels, grid, crosshair, scale
+    // borders). These paint onto the canvas — CSS can't reach them — so we
+    // resolve them once at construction and re-apply on every themechange event.
+    function getChartThemeColors() {
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        if (isLight) {
+            return {
+                textColor: 'rgba(40, 30, 15, 0.7)',
+                gridLineColor: 'rgba(40, 30, 15, 0.10)',
+                crosshairColor: 'rgba(40, 30, 15, 0.30)',
+                borderColor: 'rgba(40, 30, 15, 0.10)',
+            };
+        }
+        return {
+            textColor: 'rgba(255, 255, 255, 0.7)',
+            gridLineColor: 'rgba(255, 255, 255, 0.14)',
+            crosshairColor: 'rgba(255, 255, 255, 0.30)',
+            borderColor: 'rgba(255, 255, 255, 0.10)',
+        };
+    }
+
     // Default chart options (lazy-loaded to ensure LightweightCharts is available)
     function getDefaultChartOptions() {
+        const c = getChartThemeColors();
         return {
             layout: {
                 background: { type: 'solid', color: 'transparent' },
-                textColor: 'rgba(255, 255, 255, 0.7)',
+                textColor: c.textColor,
                 fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
                 // Hide the TradingView "TV" attribution badge in the
                 // bottom-right corner. Allowed per the lightweight-charts
@@ -53,23 +75,23 @@ const CryptoChartModule = (function() {
                 // Stronger horizontal gridlines so price levels are
                 // visually anchored. Was 0.06 (almost invisible);
                 // 0.14 reads as clear-but-not-distracting.
-                horzLines: { color: 'rgba(255, 255, 255, 0.14)', style: 1 },
+                horzLines: { color: c.gridLineColor, style: 1 },
             },
             crosshair: {
                 mode: LightweightCharts.CrosshairMode.Normal,
                 vertLine: {
-                    color: 'rgba(255, 255, 255, 0.3)',
+                    color: c.crosshairColor,
                     width: 1,
                     style: LightweightCharts.LineStyle.Dashed,
                 },
                 horzLine: {
-                    color: 'rgba(255, 255, 255, 0.3)',
+                    color: c.crosshairColor,
                     width: 1,
                     style: LightweightCharts.LineStyle.Dashed,
                 },
             },
             timeScale: {
-                borderColor: 'rgba(255, 255, 255, 0.1)',
+                borderColor: c.borderColor,
                 timeVisible: true,
                 secondsVisible: false,
                 // Leave a small empty band on the right of the last bar
@@ -87,7 +109,7 @@ const CryptoChartModule = (function() {
                 minBarSpacing: 0.5,
             },
             rightPriceScale: {
-                borderColor: 'rgba(255, 255, 255, 0.1)',
+                borderColor: c.borderColor,
                 // Explicitly visible + autoScale so price-tick labels
                 // render from the first data load (some lightweight-charts
                 // versions skip rendering until first user interaction
@@ -455,22 +477,30 @@ const CryptoChartModule = (function() {
         const inst = chartInstances.get(chartId);
         if (!inst || inst.loadingMore || inst.historyExhausted) return;
         if (!inst.dataArray || inst.dataArray.length === 0) return;
-        if (inst.assetType !== 'crypto') return;
 
         inst.loadingMore = true;
         const range = inst.currentRange || '1D';
-        let days = TIME_RANGES[range]?.days || '1';
-        if (days === 'ytd') {
-            const startOfYear = new Date(new Date().getFullYear(), 0, 1);
-            days = Math.ceil((Date.now() - startOfYear) / 86400000);
-        }
         // firstLoadedTime is in seconds; backend wants ms. -1ms to
         // strictly precede the earliest loaded bar so we don't fetch
         // a duplicate of it.
         const beforeMs = (inst.firstLoadedTime * 1000) - 1;
 
         try {
-            const data = await fetchChartHistory(inst.asset, days, inst.currency, beforeMs);
+            // Branch by asset type — both backends honor the same
+            // before-ms / response-shape contract; the URL differs.
+            // Crypto pages by `days`; stocks page by `range` (Yahoo's
+            // interval ladder is range-driven).
+            let data;
+            if (inst.assetType === 'stock') {
+                data = await fetchStockChartHistory(inst.asset, range, beforeMs);
+            } else {
+                let days = TIME_RANGES[range]?.days || '1';
+                if (days === 'ytd') {
+                    const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+                    days = Math.ceil((Date.now() - startOfYear) / 86400000);
+                }
+                data = await fetchChartHistory(inst.asset, days, inst.currency, beforeMs);
+            }
             if (data && data.history_exhausted) {
                 inst.historyExhausted = true;
             }
@@ -569,6 +599,30 @@ const CryptoChartModule = (function() {
             return await response.json();
         } catch (error) {
             console.error('[StockChart] Fetch error:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Fetch one historical chunk of stock bars ending at beforeMs.
+     * Mirrors fetchChartHistory's contract for crypto: returns
+     * { success, data, volume_data, history_exhausted, ... }.
+     */
+    async function fetchStockChartHistory(symbol, range, beforeMs, signal) {
+        const url = `/api/stock/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&before=${beforeMs}`;
+        try {
+            const response = await fetch(url, {
+                headers: { 'X-CSRFToken': getCsrfToken() },
+                signal,
+            });
+            if (!response.ok) {
+                throw new Error(`Stock history fetch failed: ${response.status}`);
+            }
+            return await response.json();
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                console.warn('[StockChart] History fetch error:', error);
+            }
             throw error;
         }
     }
@@ -1038,6 +1092,27 @@ const CryptoChartModule = (function() {
         const chartContainer = cardElement.querySelector('.crypto-chart-canvas');
         const loadingElement = cardElement.querySelector('.crypto-chart-loading');
 
+        // If the caller (sparkline expand) handed us seed values, pre-fill
+        // the price/change/trend immediately. loadChartData() will overwrite
+        // these with fresh values when the fetch returns; this only kills
+        // the shimmer gap. No state-machine impact — purely cosmetic pre-fill.
+        if (options.seed && options.seed.trend) {
+            const seedIsPos = options.seed.trend === 'up';
+            cardElement.setAttribute('data-trend', options.seed.trend);
+            const seedPriceEl = cardElement.querySelector('.price-value');
+            const seedChangeEl = cardElement.querySelector('.price-change');
+            if (seedPriceEl && options.seed.price) {
+                setLoadedContent(seedPriceEl, options.seed.price);
+            }
+            if (seedChangeEl && options.seed.change) {
+                setLoadedContent(
+                    seedChangeEl,
+                    options.seed.change,
+                    `price-change ${seedIsPos ? 'positive' : 'negative'}`
+                );
+            }
+        }
+
         // Sync the visually-active range button to initialRange. The
         // HTML template hardcodes MAX as active; this rewrites that
         // so the highlighted button always matches the data being
@@ -1198,7 +1273,7 @@ const CryptoChartModule = (function() {
             chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
                 if (!range || range.from == null) return;
                 const inst = chartInstances.get(chartId);
-                if (!inst || inst.assetType !== 'crypto') return;
+                if (!inst) return;
                 if (inst.loadingMore || inst.historyExhausted) return;
                 if (!inst.dataArray || inst.dataArray.length === 0) return;
                 if (!inst.lazyLoadEnabledAt || Date.now() < inst.lazyLoadEnabledAt) return;
@@ -2251,12 +2326,12 @@ const CryptoChartModule = (function() {
                     <button class="prediction-close" onclick="this.closest('.prediction-popup').remove()">×</button>
                 </div>
                 <div class="prediction-meter">
-                    <span style="font-size:9px;color:rgba(255,255,255,0.3)">SELL</span>
+                    <span class="prediction-meter-edge">SELL</span>
                     <div class="meter-bar">
                         <div class="meter-center"></div>
                         <div class="meter-fill ${meterClass}" style="width: ${meterWidth}%"></div>
                     </div>
-                    <span style="font-size:9px;color:rgba(255,255,255,0.3)">BUY</span>
+                    <span class="prediction-meter-edge">BUY</span>
                     <div class="prediction-signal">
                         <span class="signal-label" style="color: ${prediction.outlookColor}">${prediction.outlook}</span>
                         <span class="prediction-confidence">${prediction.confidence}%</span>
@@ -2345,9 +2420,25 @@ const CryptoChartModule = (function() {
 
         // Click expands the sparkline to the full chart card.
         const expand = () => {
+            // Capture what the sparkline already knows (price/change/trend)
+            // so the expanded card can pre-fill it instantly. The card's
+            // own loadChartData() will overwrite these shortly with the
+            // same/fresher values — this just removes the visible shimmer
+            // gap between click and first data paint.
+            // Only seed when the sparkline finished loading successfully
+            // (data-trend is set in that branch only).
+            let seed = null;
+            const trend = sparkEl.getAttribute('data-trend');
+            if (trend && !priceEl.classList.contains('shimmer-loading')) {
+                seed = {
+                    price: priceEl.textContent,
+                    change: changeEl.textContent,
+                    trend, // 'up' | 'down'
+                };
+            }
             // Replace the sparkline with the full chart, preserving options.
             container.innerHTML = '';
-            renderChart(container, asset, { currency, range: initialRange, assetType });
+            renderChart(container, asset, { currency, range: initialRange, assetType, seed });
         };
         sparkEl.addEventListener('click', expand);
         sparkEl.addEventListener('keydown', (e) => {
@@ -2463,6 +2554,32 @@ const CryptoChartModule = (function() {
 
         return sparklineId;
     }
+
+    // Re-paint all live chart canvases when the user toggles the global theme.
+    // Lightweight Charts' applyOptions deep-merges, so passing only color keys
+    // leaves widths/styles/visibility untouched. No data path is touched —
+    // series, lazy-load state, fetch flows are all unaffected.
+    window.addEventListener('themechange', () => {
+        if (typeof LightweightCharts === 'undefined') return;
+        const c = getChartThemeColors();
+        chartInstances.forEach((inst) => {
+            if (!inst || !inst.chart) return;
+            try {
+                inst.chart.applyOptions({
+                    layout: { textColor: c.textColor },
+                    grid: { horzLines: { color: c.gridLineColor } },
+                    crosshair: {
+                        vertLine: { color: c.crosshairColor },
+                        horzLine: { color: c.crosshairColor },
+                    },
+                    timeScale: { borderColor: c.borderColor },
+                    rightPriceScale: { borderColor: c.borderColor },
+                });
+            } catch (err) {
+                console.warn('[CryptoChartModule] theme switch applyOptions failed:', err);
+            }
+        });
+    });
 
     // Public API
     return {

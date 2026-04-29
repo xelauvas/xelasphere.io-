@@ -699,6 +699,15 @@
     transform: translateX(-50%);
 }
 
+/* SELL / BUY labels flanking the prediction meter. Was an inline style
+   in the JS template using rgba(255,255,255,0.3) — invisible on cream.
+   Routed through --text-tertiary so design-tokens.css drives the color
+   per theme. */
+.prediction-meter-edge {
+    font-size: 9px;
+    color: var(--text-tertiary, rgba(255, 255, 255, 0.3));
+}
+
 .prediction-signal {
     display: flex;
     flex-direction: column;
@@ -1739,7 +1748,108 @@
 
 [data-theme="light"] .news-live-badge,
 .light-theme .news-live-badge {
-    background: rgba(239, 68, 68, 0.1);
+    /* Match the green tint of the dark-theme bg — the previous value
+       was rgba(239,68,68,0.1) which painted a red wash under green
+       "LIVE" text. The original dark rule already uses the same green
+       tint; the light override only needs to exist so we can adjust
+       alpha if the cream bg ever needs more contrast. */
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.25);
+}
+
+/* ---------- Sparkline (chat-history pill) ----------
+   The sparkline uses var(--bg-hover) / var(--border-primary) / var(--text-*)
+   which already adapt via design-tokens.css. These overrides only patch the
+   two hardcoded rgba(255,255,255,X) values that go invisible on cream:
+   the hover border and the icon background wash. */
+[data-theme="light"] .crypto-chart-sparkline:hover,
+.light-theme .crypto-chart-sparkline:hover {
+    border-color: rgba(0, 0, 0, 0.18);
+}
+
+[data-theme="light"] .sparkline-icon,
+.light-theme .sparkline-icon {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+/* ---------- Action buttons (predict / share) ---------- */
+[data-theme="light"] .chart-action-btn:hover,
+.light-theme .chart-action-btn:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.85);
+}
+
+/* ---------- Active range button underline ----------
+   The 12x2 underline indicator at the bottom of the active range button
+   was painted with rgba(255,255,255,0.5), invisible on the cream-colored
+   active state which already uses rgba(0,0,0,0.1) as its background. */
+[data-theme="light"] .range-btn.active::after,
+.light-theme .range-btn.active::after {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+/* ---------- Stat tile hover lift ---------- */
+[data-theme="light"] .stat-item:hover,
+.light-theme .stat-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+/* ---------- Dividend yield badge ----------
+   Dark theme uses #93c5fd light-blue text on a 12% blue tint; on cream
+   that contrast falls below WCAG. Switch to a deeper accent blue (the
+   same tone used for the ticker-headline hover in light theme). */
+[data-theme="light"] .dividend-badge,
+.light-theme .dividend-badge {
+    color: #1d4ed8;
+    background: rgba(29, 78, 216, 0.08);
+    border-color: rgba(29, 78, 216, 0.18);
+}
+
+/* ---------- Whale ticker dollar amount ----------
+   #60a5fa (sky-300) reads ~1.6:1 on cream — same swap as dividend-badge
+   so all blue tickers in the news/whale ribbon read consistently. */
+[data-theme="light"] .whale-usd,
+.light-theme .whale-usd {
+    color: #1d4ed8;
+}
+
+/* ---------- News scrollbar thumb ---------- */
+[data-theme="light"] .crypto-chart-news::-webkit-scrollbar-thumb,
+.light-theme .crypto-chart-news::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.18);
+}
+[data-theme="light"] .crypto-chart-news::-webkit-scrollbar-thumb:hover,
+.light-theme .crypto-chart-news::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* ---------- News-toggle hover color ---------- */
+[data-theme="light"] .news-toggle-link:hover,
+.light-theme .news-toggle-link:hover {
+    color: rgba(0, 0, 0, 0.7);
+}
+
+/* ---------- Prediction-meter center divider ----------
+   The thin 2x8 vertical line marking the bullish/bearish neutral zero
+   was rgba(255,255,255,0.3), invisible on the cream meter-bar. */
+[data-theme="light"] .meter-center,
+.light-theme .meter-center {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* ---------- Shimmer loading sweep ----------
+   The shimmer pseudo-element animates a low-alpha gradient across the
+   loading skeleton; the dark-theme value (8% white) is invisible on the
+   cream skeleton bg. Swap to a low-alpha dark sweep so the shimmer is
+   readable in light theme too. */
+[data-theme="light"] .shimmer-loading::after,
+.light-theme .shimmer-loading::after {
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(0, 0, 0, 0.06) 50%,
+        transparent 100%
+    );
 }
 
 /* ==================== Animation States ==================== */

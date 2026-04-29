@@ -2428,6 +2428,25 @@ def get_stock_price():
         return jsonify({'error': str(e)}), 500
 
 
+# Per-interval pagination window for stocks. Each value is the seconds
+# of history we ask Yahoo for in one historical chunk; chosen to stay
+# within Yahoo's interval-vs-range constraints (intraday intervals are
+# capped — 5m/15m/30m: 60 days max; 1h: 730 days max; daily and coarser
+# are unconstrained). The numbers below are conservative so a single
+# pagination request never trips Yahoo's "Data doesn't exist for
+# startDate" error.
+_STOCK_PAGE_WINDOW_SECONDS = {
+    '5m':  30 * 86400,        # 30 days/page
+    '15m': 60 * 86400,        # 60 days (Yahoo's hard cap for 15m)
+    '30m': 60 * 86400,
+    '1h':  365 * 86400,       # 1 year/page
+    '60m': 365 * 86400,
+    '1d':  5 * 365 * 86400,   # 5 years/page
+    '1wk': 10 * 365 * 86400,  # 10 years/page
+    '1mo': 30 * 365 * 86400,  # 30 years/page (covers most listed equities)
+}
+
+
 @crypto_bp.route('/api/stock/chart', methods=['GET'])
 def get_stock_chart():
     """
@@ -2436,10 +2455,15 @@ def get_stock_chart():
 
     Query params:
         - symbol: Stock ticker symbol
-        - range: Time range (1d, 5d, 1mo, 3mo, 6mo, 1y, 5y)
+        - range: Time range (1d, 5d, 1mo, 3mo, 6mo, 1y, 5y, max)
+        - before: Optional Unix-ms timestamp; when set, returns one
+          historical chunk of bars ending at this time. Interval is
+          derived from `range` so each timeframe paginates at its own
+          resolution (parallels the crypto endpoint's contract).
     """
     symbol = request.args.get('symbol', '').strip().upper()
     range_param = request.args.get('range', '1d')
+    before_raw = request.args.get('before', '').strip()
 
     if not symbol:
         return jsonify({'error': 'Missing symbol parameter'}), 400
@@ -2470,6 +2494,90 @@ def get_stock_chart():
     }
 
     config = range_config.get(range_param, range_config['1d'])
+
+    # Lazy-load historical chunk path: when `before` is set, fetch one
+    # window of older bars ending at that timestamp. Uses Yahoo's
+    # period1/period2 (epoch seconds) instead of the range/interval
+    # shortcut, since `range` doesn't allow arbitrary endpoints.
+    if before_raw:
+        try:
+            before_ms = int(before_raw)
+            if before_ms <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid before parameter'}), 400
+
+        interval = config['interval']
+        window_seconds = _STOCK_PAGE_WINDOW_SECONDS.get(interval, 365 * 86400)
+        period2 = before_ms // 1000
+        period1 = max(0, period2 - window_seconds)
+
+        try:
+            url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
+            params = {
+                'interval': interval,
+                'period1': period1,
+                'period2': period2,
+            }
+            response = requests.get(url, params=params, timeout=15, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            })
+
+            if response.status_code != 200:
+                # Yahoo returns 400 ("Data doesn't exist for startDate")
+                # or 422 when period1 is past the symbol's IPO/listing
+                # date. That's a clean "nothing older" signal, not an
+                # error — tell the frontend to stop paginating.
+                if response.status_code in (400, 422):
+                    return jsonify({
+                        'success': True,
+                        'symbol': symbol,
+                        'range': range_param,
+                        'data': [],
+                        'volume_data': [],
+                        'history_exhausted': True,
+                        'asset_type': 'stock',
+                    })
+                print(f'[StockAPI] Chart history error: {response.status_code}')
+                return jsonify({'error': 'Failed to fetch historical chunk'}), 502
+
+            data = response.json()
+            result = data.get('chart', {}).get('result', [])
+            if not result:
+                return jsonify({
+                    'success': True,
+                    'symbol': symbol,
+                    'range': range_param,
+                    'data': [],
+                    'volume_data': [],
+                    'history_exhausted': True,
+                    'asset_type': 'stock',
+                })
+
+            quote = result[0]
+            timestamps = quote.get('timestamp') or []
+            indicators = quote.get('indicators', {}).get('quote', [{}])[0]
+            closes = indicators.get('close') or []
+
+            chart_data = []
+            for i, ts in enumerate(timestamps):
+                if i < len(closes) and closes[i] is not None:
+                    chart_data.append({'time': ts, 'value': round(closes[i], 2)})
+
+            # If Yahoo returned no usable bars in this window, we've
+            # walked past the listing date — stop paginating.
+            return jsonify({
+                'success': True,
+                'symbol': symbol,
+                'range': range_param,
+                'data': chart_data,
+                'volume_data': [],
+                'history_exhausted': len(chart_data) == 0,
+                'asset_type': 'stock',
+            })
+        except Exception as e:
+            print(f'[StockAPI] History chunk error: {e}')
+            return jsonify({'error': str(e)}), 500
 
     try:
         url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
