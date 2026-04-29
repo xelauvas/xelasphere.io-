@@ -339,14 +339,20 @@
     flex-shrink: 0;
 }
 
-/* ---------- toggle (clean ChatGPT-reference: blue + white circle) ---------- */
+/* ---------- toggle (44×24 iOS/ChatGPT ratio, hardened against flex squash) ---------- */
 .settings-toggle {
     position: relative;
     display: inline-flex;
     align-items: center;
-    width: 32px;
-    height: 18px;
-    flex-shrink: 0;
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    height: 24px;
+    min-height: 24px;
+    flex: 0 0 44px;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 .settings-toggle input {
@@ -370,12 +376,12 @@
     position: absolute;
     top: 2px;
     left: 2px;
-    width: 14px;
-    height: 14px;
+    width: 20px;
+    height: 20px;
     background: #ffffff;
     border-radius: 50%;
     transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
 }
 
 .settings-toggle:hover .settings-toggle-slider {
@@ -387,7 +393,7 @@
 }
 
 .settings-toggle input:checked + .settings-toggle-slider::before {
-    transform: translateX(14px);
+    transform: translateX(20px);
 }
 
 .settings-toggle:hover input:checked + .settings-toggle-slider {
