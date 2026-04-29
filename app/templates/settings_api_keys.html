@@ -99,6 +99,43 @@
         .dream-undo-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Conversation memory tab (mempalace turns) — Tier-1 trust contract */
+        .conversation-memory-filter { padding: 0.5rem 0.75rem; display: flex; gap: 0.4rem; }
+        .conv-filter-chip {
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+            color: #888; padding: 0.3rem 0.7rem; border-radius: 6px;
+            font-size: 0.75rem; cursor: pointer; transition: all 0.2s;
+        }
+        .conv-filter-chip:hover:not(.active) { color: #bbb; }
+        .conv-filter-chip.active { background: rgba(255,255,255,0.1); color: #f5f6fb; border-color: rgba(255,255,255,0.15); }
+        .conversation-memory-container { max-height: 400px; overflow-y: auto; padding: 0.4rem 0.6rem; }
+        .conversation-loading, .conversation-empty, .conversation-error {
+            display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+            padding: 2rem 1rem; color: #888; font-size: 0.85rem;
+        }
+        .conversation-loading i, .conversation-empty i { font-size: 1.4rem; opacity: 0.6; }
+        .conv-row {
+            display: flex; align-items: flex-start; gap: 0.5rem;
+            padding: 0.4rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .conv-row:hover { background: rgba(255,255,255,0.02); }
+        .conv-role-badge {
+            font-size: 0.65rem; font-weight: 600; padding: 0.1rem 0.4rem;
+            border-radius: 4px; flex-shrink: 0; line-height: 1.2; margin-top: 0.1rem;
+        }
+        .conv-role-user { background: rgba(80, 200, 120, 0.15); color: #50c878; }
+        .conv-role-assistant { background: rgba(120, 160, 220, 0.15); color: #78a0dc; }
+        .conv-text {
+            flex: 1; font-size: 0.8rem; color: #ccc;
+            word-break: break-word; line-height: 1.4;
+        }
+        .conv-delete-btn {
+            background: transparent; border: none; color: #888; cursor: pointer;
+            padding: 0.2rem 0.4rem; flex-shrink: 0; transition: color 0.15s;
+        }
+        .conv-delete-btn:hover { color: #f55; }
+        .conv-delete-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     </style>
 </head>
 <body class="api-keys-page">
@@ -338,6 +375,7 @@
             <!-- Tab Toggle -->
             <div class="memory-tab-toggle">
                 <button type="button" class="memory-tab-btn active" data-memory-tab="memories">Memories</button>
+                <button type="button" class="memory-tab-btn" data-memory-tab="conversation">Conversation memory</button>
                 <button type="button" class="memory-tab-btn" data-memory-tab="activity">Activity</button>
             </div>
 
@@ -353,6 +391,28 @@
                         <p>No memories yet. As you chat, the AI will learn your preferences and remember important details.</p>
                     </div>
                     <div class="memory-buckets" id="memory-buckets"></div>
+                </div>
+            </div>
+
+            <!-- Conversation memory tab (mempalace turns, NEW) -->
+            <div class="memory-tab-panel" data-memory-panel="conversation">
+                <div class="conversation-memory-filter">
+                    <button type="button" class="conv-filter-chip active" data-conv-filter="all">All turns</button>
+                    <button type="button" class="conv-filter-chip" data-conv-filter="user">User only</button>
+                </div>
+                <div class="conversation-memory-container">
+                    <div class="conversation-loading" id="conversation-loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Loading conversation memory...</span>
+                    </div>
+                    <div class="conversation-empty" id="conversation-empty" style="display: none;">
+                        <i class="fas fa-comment-dots"></i>
+                        <p>No conversation memory yet. As you chat, the AI saves what you tell it for future recall.</p>
+                    </div>
+                    <div class="conversation-error" id="conversation-error" style="display: none;">
+                        <p>Couldn't load conversation memory. <a href="#" id="conversation-retry">Retry</a></p>
+                    </div>
+                    <div class="conversation-list" id="conversation-list"></div>
                 </div>
             </div>
 
