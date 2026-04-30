@@ -227,5 +227,15 @@ export function createBlockStateMachine(emit) {
             pendingBlankInTable = false;
             closeBlock('finalize');
         },
+        // Chars in the current line that haven't been newline-terminated yet.
+        // Renderers use this to paint partial-line text inside the live block
+        // BETWEEN BLOCK_APPEND events (which only fire on \n). Without this,
+        // a model that streams "long sentence without internal newlines\n"
+        // appears as one big "pop" when the trailing \n arrives. Block
+        // classification still happens on full lines via processLine — this
+        // is rendering-only, no effect on AST shape.
+        getPartialLine() {
+            return rawBuffer.slice(cursor);
+        },
     };
 }
