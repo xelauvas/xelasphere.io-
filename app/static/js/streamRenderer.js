@@ -141,6 +141,16 @@ function rendererFor(blockType) {
     }
 }
 
+// Block types whose renderers paint block.liveText (= block.text + SM's pending
+// partial line) instead of just block.text. Renderers that buffer-then-finalize
+// (math, mermaid) ignore liveText anyway. List items stay line-batched —
+// overlaying mid-item would leak the next item's "- " prefix into the previous
+// item's markdown.
+const _OVERLAY_TYPES = new Set(['paragraph', 'blockquote', 'code']);
+function _supportsLiveOverlay(blockType) {
+    return _OVERLAY_TYPES.has(blockType);
+}
+
 class StreamRenderer {
     constructor(container, { replay = false } = {}) {
         this.container = container;
@@ -250,8 +260,34 @@ class StreamRenderer {
         this.sm.append(slice);
         const live = this.ast.getLive();
         if (live) {
-            const r = rendererFor(live.type);
-            r.update(live);
+            this._paintLive(live);
+        }
+    }
+
+    /**
+     * Paint the live block including the SM's pending partial line. Without
+     * this overlay, prose feels chunky: BLOCK_APPEND only fires on \n, so a
+     * 200-char paragraph without internal newlines sits invisible until the
+     * trailing \n arrives, then pops in all at once. We extend block.text
+     * transiently with the SM's partial — the renderer reads the canonical
+     * field unmodified, but for the duration of this synchronous update()
+     * call it sees text-plus-partial. block.text is restored before this
+     * function returns so finalize() / history replay / the profile
+     * classifier all see canonical line-aligned text.
+     */
+    _paintLive(block) {
+        const r = rendererFor(block.type);
+        const partial = (this.sm.getPartialLine && this.sm.getPartialLine()) || '';
+        if (partial && _supportsLiveOverlay(block.type)) {
+            const canonical = block.text;
+            try {
+                block.text = canonical + partial;
+                r.update(block);
+            } finally {
+                block.text = canonical;
+            }
+        } else {
+            r.update(block);
         }
     }
 
@@ -425,9 +461,8 @@ class StreamRenderer {
         }
         const live = this.ast.getLive();
         if (!live) return;
-        const r = rendererFor(live.type);
         performance.mark('stream-render-start');
-        r.update(live);
+        this._paintLive(live);
         performance.mark('stream-render-end');
         performance.measure('stream-render', 'stream-render-start', 'stream-render-end');
     }
