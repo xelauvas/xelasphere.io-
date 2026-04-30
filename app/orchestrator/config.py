@@ -34,7 +34,8 @@ FREE_TIER_LIMITS = {
 # tier0 = premium paid, tier1 = standard free/cheap, tier2 = degraded/local
 FALLBACK_CHAINS = {
     "coding": [
-        ("deepseek", "deepseek-chat",                          "tier1"),
+        ("deepseek", "deepseek-v4-pro",                        "tier1"),  # best for code, 1M ctx, thinking default
+        ("deepseek", "deepseek-v4-flash",                      "tier1"),  # cheap fallback, 1M ctx
         ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k, SoTA coding
         ("groq",     "qwen/qwen3-32b",                         "tier1"),
         ("cerebras", "qwen-3-235b-a22b-instruct-2507",         "tier1"),
@@ -44,7 +45,7 @@ FALLBACK_CHAINS = {
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
     "reasoning": [
-        ("deepseek", "deepseek-reasoner",                      "tier1"),
+        ("deepseek", "deepseek-v4-pro",                        "tier1"),  # thinking mode default, 1M ctx
         ("moonshot", "kimi-k2-thinking",                       "tier1"),  # deep reasoning + agent, 256k
         ("groq",     "qwen/qwen3-32b",                         "tier1"),
         ("cerebras", "qwen-3-235b-a22b-instruct-2507",         "tier1"),
@@ -58,7 +59,7 @@ FALLBACK_CHAINS = {
         ("cerebras", "qwen-3-235b-a22b-instruct-2507",         "tier1"),
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD
         ("gemini",   "gemma-4-26b-a4b-it",                    "tier1"),  # 1500 RPD
-        ("deepseek", "deepseek-chat",                          "tier1"),
+        ("deepseek", "deepseek-v4-flash",                      "tier1"),  # 1M ctx, cheap
         ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k context
         ("openai",   "gpt-4.1-nano",                           "tier0"),
     ],
@@ -79,7 +80,7 @@ FALLBACK_CHAINS = {
         # keep Flash Lite as a last-resort fallback for raw context size.
         ("moonshot", "kimi-k2.5",                              "tier1"),  # 256k, reliable ACTION format
         ("groq",     "llama-3.3-70b-versatile",                "tier1"),  # 128k, fast + compliant
-        ("deepseek", "deepseek-chat",                          "tier1"),  # 128k
+        ("deepseek", "deepseek-v4-flash",                      "tier1"),  # 1M ctx
         ("gemini",   "gemini-3.1-flash-lite-preview",          "tier1"),  # 500 RPD, 1M context — last
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
@@ -92,7 +93,7 @@ FALLBACK_CHAINS = {
         ("openai",   "gpt-4.1",                                "tier0"),
     ],
     "uncensored": [
-        ("deepseek", "deepseek-chat",                          "tier1"),
+        ("deepseek", "deepseek-v4-flash",                      "tier1"),
         ("groq",     "llama-3.3-70b-versatile",                "tier1"),
         ("openai",   "gpt-4.1",                                "tier0"),
     ],

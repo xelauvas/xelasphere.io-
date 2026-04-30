@@ -1491,7 +1491,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                         console.log('RESUMING live streaming for session:', sessionId);
                         // Show thinking indicator with buffered reasoning
                         if (typeof window.ThinkingIndicator !== 'undefined') {
-                            const isDeepSeekR1 = request.model === 'deepseek-reasoner';
+                            const isDeepSeekR1 = request.model === 'deepseek-v4-pro' || request.model === 'deepseek-v4-flash' || request.model === 'deepseek-reasoner';
                             console.log('Showing ThinkingIndicator, streamMode:', isDeepSeekR1);
                             window.ThinkingIndicator.show(isDeepSeekR1);
                             if (request.reasoning && request.reasoning.length > 0) {

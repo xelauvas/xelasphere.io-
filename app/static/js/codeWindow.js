@@ -2212,7 +2212,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
         // Show indicator AFTER user message (so it appears below, where response will be)
         const currentModelEarly = (window.ghostModel && window.ghostModel.getSelectedModel()) || 'auto';
-        const isDeepSeekEarly = currentModelEarly === 'deepseek-reasoner';
+        const isDeepSeekEarly = currentModelEarly === 'deepseek-v4-pro' || currentModelEarly === 'deepseek-v4-flash' || currentModelEarly === 'deepseek-reasoner';
 
         // Only show full ThinkingIndicator for DeepSeek, simple pulsing dot for others
         if (isDeepSeekEarly) {
@@ -2303,7 +2303,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         const isOpenAI = model.includes('gpt-');
         const isGroq = model.includes('llama') || model.includes('qwen') || model.includes('gpt-oss') || model.includes('gemma');
         const isStreamable = (isDeepSeek || model.includes('kimi') || isOpenAI || isGroq || isAuto) && !hasImages;
-        const isDeepSeekR1 = model === 'deepseek-reasoner';
+        const isDeepSeekR1 = model === 'deepseek-v4-pro' || model === 'deepseek-v4-flash' || model === 'deepseek-reasoner';
 
         // ThinkingIndicator is now shown immediately after user message (see above)
         // No need to show it again here
@@ -3740,7 +3740,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 reasoning: data.reasoning || '',
                 content: displayContent,
                 artifact: data.artifact || null,
-                isDeepSeekR1: model === 'deepseek-reasoner',
+                isDeepSeekR1: model === 'deepseek-v4-pro' || model === 'deepseek-v4-flash' || model === 'deepseek-reasoner',
                 prompt,
                 fullData: data  // Store full response for later
             };

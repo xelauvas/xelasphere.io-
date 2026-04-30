@@ -143,24 +143,30 @@ MODEL_CATALOG = {
 
     # ============================================
     # DEEPSEEK MODELS (Coding)
+    # V4 launched 2026-04 — 1M context, thinking mode default.
+    # Old IDs (deepseek-chat / deepseek-reasoner) are deprecated by DeepSeek;
+    # kept as back-compat aliases below in MODEL_ALIASES.
     # ============================================
 
-    "deepseek-chat": {
-        "label": "DeepSeek V3",
+    "deepseek-v4-flash": {
+        "label": "DeepSeek V4 Flash",
         "provider": "deepseek",
         "selectable": True,
         "speed": "medium",
         "coding": True,
-        "context": 128000,
+        "reasoning": True,  # thinking mode default
+        "context": 1048576,  # 1M
+        "long_context": True,
     },
-    "deepseek-reasoner": {
-        "label": "DeepSeek R1 (Reasoning)",
+    "deepseek-v4-pro": {
+        "label": "DeepSeek V4 Pro (Best Coding)",
         "provider": "deepseek",
         "selectable": True,
         "speed": "slow",
         "coding": True,
-        "reasoning": True,
-        "context": 128000,
+        "reasoning": True,  # thinking mode default
+        "context": 1048576,  # 1M
+        "long_context": True,
     },
 
     # ============================================
@@ -270,7 +276,7 @@ TASK_ROUTES = {
 
     # Specialized tasks
     "vision": "meta-llama/llama-4-scout-17b-16e-instruct",
-    "coding": "deepseek-chat",
+    "coding": "deepseek-v4-pro",
     "reasoning": "qwen/qwen3-32b",
     "uncensored": "dolphin3",
     "long_context": "kimi-latest",
@@ -300,8 +306,16 @@ MODEL_ALIASES = {
     "dolphin": "dolphin3",
     "uncensored": "dolphin3",
     "venice": "dolphin3",
-    "deepseek-v3": "deepseek-chat",
-    "deepseek-r1": "deepseek-reasoner",
+    # DeepSeek V4 (current)
+    "deepseek": "deepseek-v4-pro",
+    "deepseek-v4": "deepseek-v4-pro",
+    "deepseek-flash": "deepseek-v4-flash",
+    "deepseek-pro": "deepseek-v4-pro",
+    # Deprecated by DeepSeek — kept so existing code/configs keep working.
+    "deepseek-chat": "deepseek-v4-flash",
+    "deepseek-reasoner": "deepseek-v4-pro",
+    "deepseek-v3": "deepseek-v4-flash",
+    "deepseek-r1": "deepseek-v4-pro",
     "kimi": "kimi-latest",
     "kimi-k2": "kimi-latest",
     "kimi-k2.5": "kimi-k2.5",

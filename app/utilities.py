@@ -612,7 +612,7 @@ def send_metadata_prompt(
     return None
 
 
-def stream_deepseek_response(prompt: str, model: str = "deepseek-reasoner", system_prompt_override: str = None):
+def stream_deepseek_response(prompt: str, model: str = "deepseek-v4-pro", system_prompt_override: str = None):
     """
     Stream response from DeepSeek, Moonshot, or OpenAI API with real-time content.
 

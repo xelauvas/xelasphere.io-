@@ -55,7 +55,7 @@ class TestMetadataExtraction:
             action_type="chat",
             had_error=False,
             artifact_mutation=None,
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
         )
         assert meta["turn_number"] == 1
         assert meta["action_type"] == "chat"
@@ -71,7 +71,7 @@ class TestMetadataExtraction:
             action_type="patch_artifact",
             had_error=False,
             artifact_mutation={"artifact_id": "art_1", "to_version": "ver_2", "files_changed": ["main.py"]},
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
         )
         assert meta["user_intent_summary"] == "Fix the bug above"
         assert "print" not in meta["user_intent_summary"]
@@ -85,7 +85,7 @@ class TestMetadataExtraction:
             action_type="chat",
             had_error=False,
             artifact_mutation=None,
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
         )
         assert len(meta["user_intent_summary"]) <= 80
 
@@ -98,7 +98,7 @@ class TestMetadataExtraction:
             had_error=True,
             error_detail="old_string mismatch on line 42",
             artifact_mutation=None,
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
         )
         assert meta["had_error"] is True
         assert "old_string mismatch" in meta["error_detail"]
@@ -114,7 +114,7 @@ class TestBuildTier2Summary:
                 "action_type": "chat",
                 "had_error": False,
                 "artifact_mutation": None,
-                "model": "deepseek-chat",
+                "model": "deepseek-v4-flash",
             },
             {
                 "turn_number": 3,
@@ -127,7 +127,7 @@ class TestBuildTier2Summary:
                     "to_version": "ver_1",
                     "files_changed": ["main.py", "style.css"],
                 },
-                "model": "deepseek-chat",
+                "model": "deepseek-v4-flash",
             },
             {
                 "turn_number": 5,
@@ -136,7 +136,7 @@ class TestBuildTier2Summary:
                 "had_error": True,
                 "error_detail": "old_string mismatch",
                 "artifact_mutation": None,
-                "model": "deepseek-chat",
+                "model": "deepseek-v4-flash",
             },
         ]
         summary = build_tier2_summary(metadata_list)
