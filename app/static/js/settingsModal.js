@@ -639,31 +639,11 @@
         bindPersonalizationInputs();
         bindCollapsibles();
 
-        // Manage memory button
-        document.querySelectorAll('[data-action="open-memory-modal"]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const memoryModal = document.getElementById('memory-modal');
-                if (memoryModal) {
-                    memoryModal.setAttribute('aria-hidden', 'false');
-                }
-            });
-        });
-
-        // Memory child modal close (backdrop + X)
-        const memoryModal = document.getElementById('memory-modal');
-        if (memoryModal) {
-            memoryModal.addEventListener('click', e => {
-                if (e.target === memoryModal) {
-                    memoryModal.setAttribute('aria-hidden', 'true');
-                }
-            });
-            const closeBtn = document.getElementById('close-memory-modal');
-            if (closeBtn) {
-                closeBtn.addEventListener('click', () => {
-                    memoryModal.setAttribute('aria-hidden', 'true');
-                });
-            }
-        }
+        // Memory child modal — owned by memoryModalController.js, which wires
+        // open/close, list load, Forget Me, tabs, and dream consolidation.
+        // Both surfaces (#manage-memory-btn on /account/manage AND
+        // [data-action="open-memory-modal"] in this modal's Personalization
+        // pane) are bound there. We just need it loaded before this script.
 
         // MFA card dismiss
         document.querySelectorAll('[data-action="dismiss-mfa"]').forEach(btn => {
