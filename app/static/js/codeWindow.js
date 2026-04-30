@@ -1953,6 +1953,50 @@ function isImagePrompt(prompt = '') {
         || p.startsWith('/img ') || p.startsWith('/img\n') || p === '/img';
 }
 
+// Allocate the AI message bubble at prompt-send so the cursor has somewhere
+// to live during TTFB. Returns the bubble's id; sendMessage stashes it in
+// _preStreamBubbleId, and the response handlers (chat / image / search /
+// error) prefer that id over a freshly-generated one so the same bubble is
+// reused. StreamRenderer detects an existing text-message-container in the
+// constructor and adopts it (streamRenderer.js:153) — the cursor stays in
+// the same DOM node from t=0 to stream-end.
+function createPreStreamBubble(prompt) {
+    const chatDisplay = document.getElementById('chat-display');
+    if (!chatDisplay) return null;
+
+    if (window.setHasMessages) window.setHasMessages(true);
+    else document.body.classList.add('has-messages');
+
+    const id = generateMessageId();
+    const bubbleEl = createMessageDiv(id, 'ai');
+    bubbleEl.dataset.originalPrompt = prompt || '';
+    bubbleEl.dataset.sender = 'ai';
+    bubbleEl.dataset.timestamp = new Date().toISOString();
+    bubbleEl.dataset.preStream = '1';
+    chatDisplay.appendChild(bubbleEl);
+    createHeader('ai', bubbleEl);
+
+    const mc = document.createElement('div');
+    mc.className = 'message-content';
+    bubbleEl.appendChild(mc);
+
+    // Pre-place the structure StreamRenderer adopts. .stream-cursor uses the
+    // same class and same animation as the in-stream cursor — once the first
+    // BLOCK_START fires, transferCursor() moves THIS node into the new block,
+    // animation state preserved (no fade, no swap).
+    const wrapper = document.createElement('div');
+    wrapper.className = 'text-message-container';
+    const inner = document.createElement('div');
+    inner.className = 'text-message';
+    const cursor = document.createElement('span');
+    cursor.className = 'stream-cursor';
+    inner.appendChild(cursor);
+    wrapper.appendChild(inner);
+    mc.appendChild(wrapper);
+
+    return id;
+}
+
 // Enhanced message sending function
 async function sendMessage(promptText, messageId = null, options = {}) {
     const {
@@ -1987,6 +2031,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
     // Hoisted so the outer catch (line ~4435) can clean up on mid-stream errors.
     let _streamRenderer = null;
     let _streamMsgId = null;
+    // Bubble allocated at prompt-send so the cursor has somewhere to live during
+    // TTFB. Response handlers below (chat / image / search / error) prefer this
+    // ID over a freshly-generated one, so the bubble is reused — cursor stays in
+    // the same DOM node from prompt-send through stream-end. No element swap.
+    let _preStreamBubbleId = null;
 
     try {
         // Note: We no longer set global isRequestInProgress - we use per-session tracking
@@ -2040,7 +2089,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             }).filter(Boolean)
             : [];
         const needsImagePlaceholder = prompt && isImagePrompt(prompt) && attachments.length === 0;
-        const placeholderId = needsImagePlaceholder ? generateMessageId() : null;
+        // Reuse the pre-stream bubble for the image placeholder when present,
+        // so the bubble allocated at prompt-send becomes the placeholder slot
+        // (no orphan empty bubble left behind).
+        const placeholderId = needsImagePlaceholder ? (_preStreamBubbleId || generateMessageId()) : null;
 
         // Reject bare /image (or /img) with no description — the backend
         // would otherwise generate something meaningless. Show a toast and
@@ -2165,12 +2217,16 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         const currentModelEarly = (window.ghostModel && window.ghostModel.getSelectedModel()) || 'auto';
         const isDeepSeekEarly = currentModelEarly === 'deepseek-v4-pro' || currentModelEarly === 'deepseek-v4-flash' || currentModelEarly === 'deepseek-reasoner';
 
-        // Only show full ThinkingIndicator for DeepSeek (R1 chain-of-thought
-        // benefits from the expandable reasoning UI). Non-DeepSeek models
-        // wait silently; the bubble appears with its in-stream cursor when
-        // the first content chunk arrives — single cursor, no handoff swap.
         if (isDeepSeekEarly) {
+            // DeepSeek R1: chain-of-thought reasoning. Expandable indicator at
+            // chat bottom; gets hidden when first content chunk arrives.
             ThinkingIndicator.show(true);
+        } else {
+            // Non-DeepSeek: pre-allocate the AI bubble with a cursor inside so
+            // the cursor is visible during TTFB and stays in the same DOM node
+            // when content streams in. Response handlers below fall back to
+            // _preStreamBubbleId so the bubble is reused, not orphaned.
+            _preStreamBubbleId = createPreStreamBubble(prompt);
         }
 
         // Bump session to top of sidebar (most recently active)
@@ -2525,7 +2581,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     // header would otherwise render into its own bubble
                                     // alongside the image, diverging from the refresh path.
                                     if (isSessionActive() && typeof StreamRenderer !== 'undefined' && !pendingImagePlaceholderId) {
-                                        _streamMsgId = searchMsgId || placeholderId || generateMessageId();
+                                        // Prefer reusing the pre-stream bubble allocated at prompt-send
+                                        // (so the cursor stays in the same DOM node); fall back to search /
+                                        // image placeholder ids; last resort generate fresh.
+                                        _streamMsgId = searchMsgId || placeholderId || _preStreamBubbleId || generateMessageId();
                                         var targetEl = document.getElementById(_streamMsgId);
                                         if (!targetEl) {
                                             // Create message element directly — don't use displayMessage
@@ -2543,23 +2602,27 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                                 targetEl.dataset.sender = 'ai';
                                                 targetEl.dataset.timestamp = new Date().toISOString();
                                             }
+                                        } else if (targetEl.dataset.preStream === '1') {
+                                            // Pre-stream bubble: clear the marker now that real
+                                            // streaming is taking over.
+                                            delete targetEl.dataset.preStream;
                                         }
                                         var targetContent = targetEl?.querySelector('.message-content');
                                         if (targetContent) {
-                                            // Kill any existing streaming cursor
+                                            // Kill any existing legacy streaming cursor (the .streaming-cursor
+                                            // class from the now-deleted simple-pulsing-dot system; defensive).
                                             var oldCursor = targetContent.querySelector('.streaming-cursor');
                                             if (oldCursor) oldCursor.remove();
-                                            // Remove everything EXCEPT the search banner in
-                                            // place. Detaching and re-inserting the banner
-                                            // would re-trigger its bannerFadeIn animation
-                                            // (0.3s opacity + translateY) — user perceives
-                                            // a glitch where the banner blinks/shifts.
-                                            // Keeping the node untouched leaves the shimmer
-                                            // running smoothly.
+                                            // Remove everything EXCEPT (a) the search banner — re-inserting
+                                            // would replay its 0.3s bannerFadeIn and look glitchy, and (b) the
+                                            // pre-stream .text-message-container so its cursor stays in place;
+                                            // StreamRenderer's constructor adopts that container instead of
+                                            // creating a fresh one, so the cursor never swaps elements.
                                             var _preservedBanner = targetContent.querySelector('.search-banner');
+                                            var _preservedTextMsg = targetContent.querySelector(':scope > .text-message-container');
                                             console.log('[SEARCH-BANNER] first content chunk. bannerFound=', !!_preservedBanner, 'msgId=', _streamMsgId);
                                             Array.from(targetContent.children).forEach(function (child) {
-                                                if (child !== _preservedBanner) child.remove();
+                                                if (child !== _preservedBanner && child !== _preservedTextMsg) child.remove();
                                             });
                                             _streamRenderer = new StreamRenderer(targetContent);
                                             window._activeStreamRenderer = _streamRenderer;
@@ -2821,7 +2884,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                     _actionStripBuffer = '';
                                 }
                                 if (!searchMsgId) {
-                                    searchMsgId = placeholderId || generateMessageId();
+                                    // Reuse the pre-stream bubble so the search banner lands inside
+                                    // the same bubble allocated at prompt-send.
+                                    searchMsgId = placeholderId || _preStreamBubbleId || generateMessageId();
                                 }
                                 let searchMsgEl = document.getElementById(searchMsgId);
                                 if (!searchMsgEl) {
@@ -4025,6 +4090,16 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             const partialEl = document.getElementById(_streamMsgId);
             if (partialEl) partialEl.remove();
         }
+        // Drop the pre-stream bubble if no response path adopted it (e.g. abort
+        // before first content chunk, network error, etc.). The data-pre-stream
+        // marker is still set when no handler took ownership; if any handler
+        // (image placeholder, search banner, content stream) claimed it, the
+        // marker has been cleared and we leave the bubble alone — handleMessageError
+        // / displayMessage will decide what to render in it.
+        if (_preStreamBubbleId && _preStreamBubbleId !== _streamMsgId) {
+            const orphan = document.getElementById(_preStreamBubbleId);
+            if (orphan && orphan.dataset.preStream === '1') orphan.remove();
+        }
         if (error.name === 'AbortError') {
             console.log('Request was aborted');
         } else {
@@ -4068,6 +4143,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         // Hide thinking indicator if session is still active
         if (stillActive) {
             ThinkingIndicator.hide();
+        }
+
+        // Defensive: if the pre-stream bubble somehow survived without any
+        // response handler claiming it (e.g. server returned 0 events), drop it.
+        if (_preStreamBubbleId && _preStreamBubbleId !== _streamMsgId) {
+            const orphan = document.getElementById(_preStreamBubbleId);
+            if (orphan && orphan.dataset.preStream === '1') orphan.remove();
         }
 
         // Reset typing stopped flag
