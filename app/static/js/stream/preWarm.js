@@ -18,21 +18,12 @@ export function inferLayout(firstChars) {
 
 /**
  * Apply the inferred layout to the message element AND its wrapper/message
- * ancestors. `data-streamLayout` is kept for legacy CSS. `data-ctx` is the
- * current vocabulary — setting it early is what kills the finalize jump.
- *
- * Marks the assignment as `data-ctx-source="prewarm"` so the finalize pass
- * knows its own update is a refinement (may overwrite) rather than a
- * collision with an external authority like the server scaffold event
- * (which marks itself `data-ctx-source="server"` and wins).
+ * ancestors via `data-ctx`, marking the source as `prewarm` so the finalize
+ * pass can transition smoothly to its refinement.
  */
 export function applyLayout(containerEl, firstChars) {
     const layout = inferLayout(firstChars);
-    containerEl.dataset.streamLayout = layout;
 
-    // Bubble data-ctx to the bubble + outer .message so CSS width/rhythm
-    // rules fire during streaming, not only at finalize. Skip if a server
-    // source already claimed the ctx (scaffold event in v2 rollouts).
     const targets = [
         containerEl,
         containerEl.closest('.text-message-container'),
@@ -40,7 +31,6 @@ export function applyLayout(containerEl, firstChars) {
     ];
     for (const el of targets) {
         if (!el) continue;
-        if (el.dataset.ctxSource === 'server') continue;
         el.dataset.ctx = layout;
         el.dataset.ctxSource = 'prewarm';
     }

@@ -52,9 +52,9 @@
         }
     </style>
 
-    <!-- markdown-it and plugins -->
+    <!-- markdown-it (task-list rendering is reimplemented in stream/renderers/list.js
+         because parseItems strips the leading "- " before any plugin can see it). -->
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.0.0/dist/markdown-it.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/markdown-it-task-lists@2.1.1/dist/markdown-it-task-lists.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
     <script>
         // Initialize markdown-it with options
@@ -67,10 +67,6 @@
                                   // cost of losing smart quotes is worth the
                                   // correctness of command-line content.
             breaks: false         // \n\n → <p>, single \n ignored (standard markdown)
-        }).use(window.markdownitTaskLists, {
-            enabled: true,
-            label: true,
-            labelAfter: true
         });
 
         // Create marked.parse compatible function for backwards compatibility
