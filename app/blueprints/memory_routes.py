@@ -593,11 +593,23 @@ import sqlite3 as _sqlite3
 
 
 def _sidecar_delete_palace(user_id: str) -> bool:
-    """Sidecar DELETE /palace/{user_id} — wipes whole palace."""
+    """Sidecar DELETE /palace/{user_id} — wipes whole palace.
+
+    The sidecar requires a JSON body matching mempalace_sidecar.schemas
+    .DeleteRequest (``requested_by`` + ``reason``); without it, Pydantic
+    422s the request before it reaches the handler. Use httpx's request()
+    rather than .delete() because the latter doesn't accept ``json=``.
+    """
+    body = {
+        "requested_by": "xelasphere_flask",
+        "reason": "user_initiated_forget_me",
+    }
     with _sidecar_httpx_client() as client:
-        resp = client.delete(
+        resp = client.request(
+            "DELETE",
             f"/palace/{user_id}",
             headers={"X-Sidecar-Token": _sidecar_token()},
+            json=body,
         )
         resp.raise_for_status()
         return True
