@@ -150,13 +150,21 @@ class StreamRenderer {
         this.destroyed = false;
         this.finalized = false;
 
-        // Message wrapper that callers expect
-        const wrapper = document.createElement('div');
-        wrapper.className = 'text-message-container';
-        const inner = document.createElement('div');
-        inner.className = 'text-message';
-        wrapper.appendChild(inner);
-        this.container.appendChild(wrapper);
+        // Message wrapper that callers expect. Adopt an existing
+        // text-message-container > text-message if the caller pre-created
+        // one (e.g. an empty bubble allocated at prompt-send so the cursor
+        // is visible during TTFB) — that keeps the cursor in the same DOM
+        // node from t=0 to stream-end, no element swap, no flicker.
+        let wrapper = container.querySelector(':scope > .text-message-container');
+        let inner = wrapper && wrapper.querySelector(':scope > .text-message');
+        if (!wrapper || !inner) {
+            wrapper = document.createElement('div');
+            wrapper.className = 'text-message-container';
+            inner = document.createElement('div');
+            inner.className = 'text-message';
+            wrapper.appendChild(inner);
+            this.container.appendChild(wrapper);
+        }
         this.messageEl = inner;
         this.wrapperEl = wrapper;
 
@@ -167,7 +175,8 @@ class StreamRenderer {
         // — leaving the bubble blank until then. The cursor telegraphs
         // "yes, I'm typing" from t=0. transferCursor() finds this node on
         // the first BLOCK_START and moves it to the block atomically.
-        if (!replay) {
+        // Skip seeding if the caller pre-placed one (adoption case above).
+        if (!replay && !inner.querySelector(':scope > .stream-cursor')) {
             inner.appendChild(createCursorElement());
         }
 
