@@ -678,55 +678,6 @@ const ThinkingIndicator = (() => {
 
 window.ThinkingIndicator = ThinkingIndicator;
 
-// ==================== Simple Pulsing Dot (for non-DeepSeek models) ====================
-// Uses the same streaming-cursor style for visual consistency
-let simplePulsingDotElement = null;
-
-function showSimplePulsingDot() {
-    const chatDisplay = document.getElementById('chat-display');
-    if (!chatDisplay) return;
-
-    // Remove existing dot if any
-    hideSimplePulsingDot();
-
-    // Use streaming-cursor class so it looks identical to the cursor that leads text
-    simplePulsingDotElement = document.createElement('div');
-    simplePulsingDotElement.className = 'simple-pulsing-dot';
-    simplePulsingDotElement.innerHTML = '<span class="streaming-cursor"></span>';
-    chatDisplay.appendChild(simplePulsingDotElement);
-}
-
-function hideSimplePulsingDot() {
-    if (simplePulsingDotElement) {
-        // Save scroll position before removing
-        const scrollContainer = document.getElementById('chat-scroll-region');
-        const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
-        const keepAtTop = window._keepMessageAtTop;
-
-        // Quick fade before removing so the handoff from pre-stream dot
-        // to in-stream cursor is a fade-through, not a hard cut. The
-        // new StreamRenderer bubble underneath is also fading in via
-        // contentFadeIn 0.3s — overlapping fades = smooth crossfade.
-        const dotToRemove = simplePulsingDotElement;
-        simplePulsingDotElement = null;
-        dotToRemove.style.transition = 'opacity 120ms ease-out';
-        dotToRemove.style.opacity = '0';
-        setTimeout(() => {
-            if (dotToRemove && dotToRemove.parentNode) {
-                dotToRemove.remove();
-            }
-        }, 130);
-
-        // Restore scroll position if keeping message at top
-        if (keepAtTop && scrollContainer) {
-            scrollContainer.scrollTop = savedScrollTop;
-        }
-    }
-}
-
-window.showSimplePulsingDot = showSimplePulsingDot;
-window.hideSimplePulsingDot = hideSimplePulsingDot;
-
 // ==================== Reasoning Display Component ====================
 const ReasoningDisplay = (() => {
     /**
@@ -2214,12 +2165,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         const currentModelEarly = (window.ghostModel && window.ghostModel.getSelectedModel()) || 'auto';
         const isDeepSeekEarly = currentModelEarly === 'deepseek-v4-pro' || currentModelEarly === 'deepseek-v4-flash' || currentModelEarly === 'deepseek-reasoner';
 
-        // Only show full ThinkingIndicator for DeepSeek, simple pulsing dot for others
+        // Only show full ThinkingIndicator for DeepSeek (R1 chain-of-thought
+        // benefits from the expandable reasoning UI). Non-DeepSeek models
+        // wait silently; the bubble appears with its in-stream cursor when
+        // the first content chunk arrives — single cursor, no handoff swap.
         if (isDeepSeekEarly) {
             ThinkingIndicator.show(true);
-        } else {
-            // Show simple pulsing dot for non-DeepSeek models
-            showSimplePulsingDot();
         }
 
         // Bump session to top of sidebar (most recently active)
@@ -2566,7 +2517,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 if (isFirstContentChunk) {
                                     isFirstContentChunk = false;
                                     window.scrollState?.contentArrived?.();
-                                    ThinkingIndicator.hide(); hideSimplePulsingDot();
+                                    ThinkingIndicator.hide();
 
                                     // Phase 2: Create StreamRenderer on first content chunk
                                     // Skip when an image placeholder is already pending:
@@ -2787,7 +2738,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             // Explicit image request: show placeholder immediately
                             console.log('[Stream] image_generating:', chunk.description);
                             if (isSessionActive()) {
-                                ThinkingIndicator.hide(); hideSimplePulsingDot();
+                                ThinkingIndicator.hide();
                                 // Tear down any narration StreamRenderer that already
                                 // raced ahead of us. Image responses are image-only on
                                 // refresh (suppressText:true), so live must match —
@@ -2822,7 +2773,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             // Inferred image request: show confirmation UI
                             console.log('[Stream] image_confirm:', chunk.description);
                             if (isSessionActive()) {
-                                ThinkingIndicator.hide(); hideSimplePulsingDot();
+                                ThinkingIndicator.hide();
                                 const confirmId = generateMessageId();
                                 const desc = chunk.description || '';
                                 const confirmHtml = `<div class="image-confirm" data-description="${desc.replace(/"/g, '&quot;')}">
@@ -2849,7 +2800,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                    chunk.type === 'search_content' || chunk.type === 'search_complete') {
                             streamHasVisibleOutput = true;
                             if (isSessionActive()) {
-                                ThinkingIndicator.hide(); hideSimplePulsingDot();
+                                ThinkingIndicator.hide();
                                 // Destroy StreamRenderer that has ACTION text from 1st LLM call
                                 if (chunk.type === 'search_started') {
                                     if (_streamRenderer) {
@@ -2972,7 +2923,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 BackgroundRequestManager.errorRequest(requestSessionId, errorText);
                             }
                             if (isSessionActive()) {
-                                ThinkingIndicator.hide(); hideSimplePulsingDot();
+                                ThinkingIndicator.hide();
                                 displayMessage(errorText, 'ai', 'text', prompt, false, generateMessageId());
                             }
                             return 'error';
@@ -3013,7 +2964,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                 // Hide thinking indicator if session is still active
                 if (isSessionActive()) {
-                    ThinkingIndicator.hide(); hideSimplePulsingDot();
+                    ThinkingIndicator.hide();
                 }
 
                 // Prepare completion data — strip internal protocol lines and artifact fences
@@ -3624,7 +3575,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 return messageContainer;
 
             } catch (streamError) {
-                ThinkingIndicator.hide(); hideSimplePulsingDot();
+                ThinkingIndicator.hide();
                 if (streamError.name === 'AbortError') {
                     console.log('Stream request was aborted');
                     return null;
@@ -3676,7 +3627,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
         // Hide thinking indicator once response arrives (only if session still active)
         if (isSessionActive()) {
-            ThinkingIndicator.hide(); hideSimplePulsingDot();
+            ThinkingIndicator.hide();
         }
 
         const contentType = response.headers.get('content-type') || '';
@@ -4116,7 +4067,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
         // Hide thinking indicator if session is still active
         if (stillActive) {
-            ThinkingIndicator.hide(); hideSimplePulsingDot();
+            ThinkingIndicator.hide();
         }
 
         // Reset typing stopped flag
@@ -4200,9 +4151,8 @@ function abortMessage() {
     // Remove all cursors from the DOM
     document.querySelectorAll('.streaming-cursor, .stream-cursor').forEach(el => el.remove());
 
-    // Hide thinking indicator and pulsing dot
+    // Hide thinking indicator
     if (typeof ThinkingIndicator !== 'undefined') ThinkingIndicator.hide();
-    if (typeof hideSimplePulsingDot === 'function') hideSimplePulsingDot();
 
     const promptInput = document.getElementById('prompt');
     if (promptInput) {

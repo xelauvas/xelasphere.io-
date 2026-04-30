@@ -211,7 +211,6 @@ body.prefers-reduced-motion *::after {
 
 /* Exception: Keep thinking indicator pulsing even with reduced motion */
 body.prefers-reduced-motion .thinking-indicator .thinking-dots span,
-body.prefers-reduced-motion .simple-pulsing-dot .streaming-cursor,
 body.prefers-reduced-motion .streaming-cursor {
     animation-duration: 1.5s !important;
     animation-iteration-count: infinite !important;
