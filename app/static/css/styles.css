@@ -3284,15 +3284,6 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     color: var(--text-secondary, #aaa);
 }
 
-/* ==================== Simple Pulsing Dot (non-DeepSeek) ==================== */
-/* Uses streaming-cursor class for visual consistency with streaming text cursor */
-.simple-pulsing-dot {
-    display: flex;
-    align-items: center;
-    padding: 12px 16px;
-    margin: 8px 0;
-}
-
 /* ==================== Reasoning Section (DeepSeek R1) ==================== */
 .reasoning-section {
     margin-bottom: 12px;
