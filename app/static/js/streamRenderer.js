@@ -301,14 +301,10 @@ class StreamRenderer {
         // element so it can override width caps on BOTH .message-content
         // and .text-message-container.
         //
-        // Authority order (highest wins, all three can set data-ctx):
-        //   1. server  — scaffold SSE event (v2). Pre-stream, authoritative.
-        //   2. prewarm — inferLayout() from first ~100 chars. Kills jumps.
-        //   3. finalize — this classifier. Only replaces prewarm, never server.
-        //
-        // Refinement at finalize only re-paints when the answer is genuinely
-        // different from what's on the element — a matching classification
-        // leaves data-ctx untouched and avoids a pointless CSS recompute.
+        // Two sources can set data-ctx: prewarm (inferLayout from first ~100
+        // chars) and finalize (this classifier, refinement). Finalize only
+        // re-paints when the answer is genuinely different — a matching
+        // classification avoids a pointless CSS recompute.
         try {
             const profile = buildMessageProfile(this.ast.blocks());
             const ctx = classifyContext(profile);
@@ -318,74 +314,11 @@ class StreamRenderer {
             ];
             for (const el of targets) {
                 if (!el) continue;
-                if (el.dataset.ctxSource === 'server') continue;  // #2
-                if (el.dataset.ctx === ctx) continue;              // #1 — no jump if stable
+                if (el.dataset.ctx === ctx) continue;
                 el.dataset.ctx = ctx;
                 el.dataset.ctxSource = 'finalize';
             }
         } catch (_e) { /* non-critical */ }
-
-        // ─── DOM-DIFF instrumentation (TEMPORARY — remove after diagnosing
-        // stream-vs-history rendering divergence). Captures the .message
-        // outerHTML at finalize into BOTH window.__domCaptures AND
-        // localStorage so captures survive page refresh. Run
-        // window.__dumpDomDiff() in DevTools to compare stream and replay.
-        try {
-            const mode = this.replay ? 'replay' : 'stream';
-            const msgEl = this.wrapperEl && this.wrapperEl.closest('.message');
-            if (msgEl) {
-                const rawMsgId = msgEl.id || '';
-                // Normalize so the same logical message matches between stream
-                // and replay despite the "ai-" prefix that renderMessage adds.
-                const normMsgId = rawMsgId.replace(/^ai-/, '');
-                const cap = {
-                    mode,
-                    msgId: rawMsgId || null,
-                    normMsgId: normMsgId || null,
-                    ctx: msgEl.dataset?.ctx || null,
-                    ctxSource: msgEl.dataset?.ctxSource || null,
-                    textLen: this.rawBuffer.length,
-                    html: msgEl.outerHTML,
-                    ts: Date.now(),
-                };
-                if (!window.__domCaptures) window.__domCaptures = [];
-                window.__domCaptures.push(cap);
-                try {
-                    const key = `__domDiff:${mode}:${normMsgId}`;
-                    localStorage.setItem(key, JSON.stringify(cap));
-                } catch (_e2) { /* quota / privacy mode */ }
-                console.log(`[DOM-DIFF] captured ${mode} msgId=${rawMsgId} (norm=${normMsgId}) len=${this.rawBuffer.length}`);
-            }
-            if (!window.__dumpDomDiff) {
-                window.__dumpDomDiff = (normMsgId) => {
-                    // If called with no arg, pick the most recent stream
-                    // capture from localStorage across sessions.
-                    const keys = Object.keys(localStorage).filter(k => k.startsWith('__domDiff:'));
-                    const all = keys.map(k => {
-                        try { return JSON.parse(localStorage.getItem(k)); } catch { return null; }
-                    }).filter(Boolean);
-                    const picks = normMsgId
-                        ? all.filter(c => c.normMsgId === normMsgId)
-                        : all;
-                    const lastStream = picks.filter(c => c.mode === 'stream').sort((a,b)=>b.ts-a.ts)[0];
-                    const lastReplay = picks.filter(c => c.mode === 'replay').sort((a,b)=>b.ts-a.ts)[0];
-                    console.log('=== STREAM ===\n', lastStream);
-                    console.log('=== REPLAY ===\n', lastReplay);
-                    if (lastStream && lastReplay) {
-                        console.log('[DOM-DIFF] stream.textLen =', lastStream.textLen, ' replay.textLen =', lastReplay.textLen, ' delta =', lastStream.textLen - lastReplay.textLen);
-                        console.log('[DOM-DIFF] stream.ctx =', lastStream.ctx, ' replay.ctx =', lastReplay.ctx);
-                    }
-                    return { stream: lastStream, replay: lastReplay };
-                };
-                window.__clearDomDiff = () => {
-                    Object.keys(localStorage)
-                        .filter(k => k.startsWith('__domDiff:'))
-                        .forEach(k => localStorage.removeItem(k));
-                    window.__domCaptures = [];
-                    console.log('[DOM-DIFF] cleared');
-                };
-            }
-        } catch (_e) { /* instrumentation must never break the stream */ }
 
         // Fire any callback the caller passed to finalize(). This is how
         // codeWindow.js knows "the paced drain has finished, it's safe to

@@ -8,12 +8,10 @@
 
 const UL_ITEM_RE = /^[-+*] (.*)$/;
 const OL_ITEM_RE = /^\d+\. (.*)$/;
-// Task-list prefixes that the markdown-it-task-lists plugin would normally
-// emit as <input type="checkbox"> elements — but our per-item rendering
-// strips the list bullet before calling md.render, which makes the plugin
-// inert (it needs the full `- [ ] ...` syntax to fire). Detect the prefix
-// here and render the checkbox manually so the CSS at message-styles.css
-// .task-list-item kicks in.
+// Task-list prefixes — render the checkbox manually because parseItems
+// strips the leading list bullet before md.render runs, so any markdown-it
+// task-list plugin would never see the full `- [ ] ...` syntax it needs
+// to fire. Pairing CSS lives at message-styles.css .task-list-item.
 const TASK_PREFIX_RE = /^\[([ xX])\]\s+(.*)$/;
 
 function parseItems(block) {

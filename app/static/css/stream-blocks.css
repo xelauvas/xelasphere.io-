@@ -46,11 +46,6 @@
     pointer-events: none;
 }
 
-@keyframes streamShimmer {
-    from { background-position: 200% 0; }
-    to   { background-position: -200% 0; }
-}
-
 /* Math / mermaid pending placeholder */
 
 .block-math.is-pending,
@@ -89,13 +84,6 @@
     0%, 100% { transform: scale(1);   opacity: 0.4; }
     50%      { transform: scale(1.3); opacity: 1;   }
 }
-
-/* Pre-warm layout variants */
-
-[data-stream-layout="prose"]      { max-width: 65ch; }
-[data-stream-layout="structured"] { max-width: 75ch; }
-[data-stream-layout="code-heavy"] { max-width: 85ch; }
-[data-stream-layout="enumerated"] { max-width: 70ch; }
 
 /* Replay mode — suppress entrance animations across all stream blocks */
 .stream-no-anim {
