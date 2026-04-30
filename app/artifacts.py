@@ -42,7 +42,12 @@ ARTIFACT_UNCLOSED_PATTERN = re.compile(r"```artifact\s*([\s\S]+)", re.IGNORECASE
 ARTIFACT_PATCH_FENCE_PATTERN = re.compile(r"```artifact_patch\s*([\s\S]*?)\s*```", re.IGNORECASE)
 # New fenced format patterns (artifact-meta + artifact-file blocks)
 FENCED_META_RE = re.compile(r"```artifact-meta\s*\n(.*?)\n\s*```", re.DOTALL | re.IGNORECASE)
-FENCED_FILE_RE = re.compile(r"```artifact-file:([^:]+):(\w+)\s*\n([\s\S]*?)```", re.IGNORECASE)
+FENCED_FILE_OPEN_RE = re.compile(
+    r"^```artifact-file:([^:\n]+):([\w.+-]+)[ \t]*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+# Matches a bare closing fence (```) on its own line.
+_BARE_FENCE_LINE_RE = re.compile(r"(?:^|\n)```[ \t]*(?:\n|\Z)")
 MAX_ARTIFACT_FILES = 40
 MAX_ARTIFACT_TOTAL_BYTES = 800_000
 MAX_ARTIFACT_FILE_BYTES = 200_000
@@ -674,6 +679,63 @@ def extract_artifact_block(text: str) -> Optional[Dict[str, Any]]:
     raise ArtifactParseError("Artifact block must contain valid JSON.")
 
 
+def _iter_fenced_files(text: str):
+    """Yield (start, end, path, language, content) for each artifact-file block.
+
+    Walks each block's range (from its opening fence up to the next opening fence
+    or end-of-text) and treats the LAST bare ``` line in that range as the outer
+    closer. This correctly handles markdown content with inner ``` code fences,
+    which the previous regex truncated at the first inner fence.
+    """
+    opens = list(FENCED_FILE_OPEN_RE.finditer(text))
+    for i, open_match in enumerate(opens):
+        path = open_match.group(1).strip()
+        language = open_match.group(2).strip()
+        # Content begins on the line after the opening fence
+        content_start = open_match.end()
+        if content_start < len(text) and text[content_start] == '\n':
+            content_start += 1
+        # The block can extend up to the next opening fence (exclusive) or EOT
+        block_limit = opens[i + 1].start() if i + 1 < len(opens) else len(text)
+        block_text = text[content_start:block_limit]
+        # Find the LAST bare-fence line within the block — that's the outer closer
+        close_match = None
+        for m in _BARE_FENCE_LINE_RE.finditer(block_text):
+            close_match = m
+        if close_match is None:
+            continue
+        # close_match may include a leading \n; strip it from the content boundary
+        close_offset = close_match.start()
+        if close_offset < len(block_text) and block_text[close_offset] == '\n':
+            close_offset += 1
+        content = block_text[:close_offset]
+        if content.endswith('\n'):
+            content = content[:-1]
+        block_end = content_start + close_match.end()
+        yield (open_match.start(), block_end, path, language, content)
+
+
+# Back-compat shim: action_parser.py uses FENCED_FILE_RE.sub() to strip blocks
+# from chat text. Provide a minimal regex object exposing only .sub() that
+# delegates to the parser.
+class _FencedFileStripper:
+    def sub(self, repl, text):  # noqa: D401 — mirrors re.Pattern.sub
+        spans = [(s, e) for s, e, *_ in _iter_fenced_files(text)]
+        if not spans:
+            return text
+        out = []
+        cursor = 0
+        for s, e in spans:
+            out.append(text[cursor:s])
+            out.append(repl if isinstance(repl, str) else repl(None))
+            cursor = e
+        out.append(text[cursor:])
+        return "".join(out)
+
+
+FENCED_FILE_RE = _FencedFileStripper()
+
+
 def extract_fenced_artifact(text: str) -> Optional[dict]:
     """Parse the new fenced artifact format (artifact-meta + artifact-file blocks).
     Returns normalized artifact payload dict, or None if format not found.
@@ -690,12 +752,7 @@ def extract_fenced_artifact(text: str) -> Optional[dict]:
         return None
 
     files = []
-    for file_match in FENCED_FILE_RE.finditer(text):
-        path = file_match.group(1).strip()
-        language = file_match.group(2).strip()
-        content = file_match.group(3)
-        if content.endswith('\n'):
-            content = content[:-1]
+    for _start, _end, path, language, content in _iter_fenced_files(text):
         files.append({
             'path': path,
             'language': language,
