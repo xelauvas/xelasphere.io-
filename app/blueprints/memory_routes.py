@@ -412,16 +412,37 @@ def undo_memory_activity(log_id):
 # ─────────────────────────────────────────────────────────────────────
 
 import os
-import requests as _requests
+import httpx as _httpx
 
 
-def _sidecar_base_url() -> str:
-    """Return the base URL for the mempalace sidecar.
+def _sidecar_socket_path() -> str:
+    """UDS path for the mempalace sidecar.
 
-    Mirrors how ``app.mempalace.adapter`` resolves the sidecar URL —
-    that module is the source of truth for runtime sidecar config.
+    Matches MEMPALACE_SOCKET_PATH (set in /etc/xelasphere/mempalace.env);
+    same default as app/mempalace/__init__.py so a missing env var
+    behaves identically across the codebase.
     """
-    return os.getenv("MEMPALACE_SIDECAR_URL", "http://sidecar")
+    return os.getenv("MEMPALACE_SOCKET_PATH", "/run/mempalace/sidecar.sock")
+
+
+def _sidecar_httpx_client() -> _httpx.Client:
+    """One-shot UDS-aware httpx client for sidecar HTTP calls.
+
+    The sidecar listens on a Unix domain socket, not TCP — so plain
+    requests against ``http://sidecar`` fail DNS resolution. httpx
+    accepts a UDS transport while still using a placeholder host in
+    the URL; SyncSidecarClient does the same in app/mempalace/client.py.
+
+    Each call gets a fresh client (no breaker, no retry — these are
+    user-triggered endpoints where surfacing a failure to the UI is
+    better than tripping a global breaker shared with the wake-up path).
+    """
+    transport = _httpx.HTTPTransport(uds=_sidecar_socket_path())
+    return _httpx.Client(
+        transport=transport,
+        base_url="http://sidecar",
+        timeout=10.0,
+    )
 
 
 def _sidecar_token() -> str:
@@ -432,17 +453,17 @@ def _sidecar_list_drawers(user_id: str, limit: int = 100, offset: int = 0) -> di
     """Call sidecar GET /palace/{user_id}/drawers and return the raw envelope.
 
     Separated as a single seam so tests can monkey-patch this module-level
-    helper without needing to mock the requests library globally.
+    helper without needing to mock the transport globally.
     """
-    url = f"{_sidecar_base_url()}/palace/{user_id}/drawers"
-    resp = _requests.get(
-        url,
-        params={"limit": limit, "offset": offset},
-        headers={"X-Sidecar-Token": _sidecar_token()},
-        timeout=5,
-    )
-    resp.raise_for_status()
-    return resp.json()
+    with _sidecar_httpx_client() as client:
+        resp = client.get(
+            f"/palace/{user_id}/drawers",
+            params={"limit": limit, "offset": offset},
+            headers={"X-Sidecar-Token": _sidecar_token()},
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
 
 
 @memory_bp.route('/user/conversation-memory', methods=['GET'])
@@ -497,14 +518,14 @@ def _sidecar_delete_drawer(user_id: str, drawer_id: str) -> bool:
 
     Separated as a single seam for testing.
     """
-    url = f"{_sidecar_base_url()}/palace/{user_id}/drawers/{drawer_id}"
-    resp = _requests.delete(
-        url,
-        headers={"X-Sidecar-Token": _sidecar_token()},
-        timeout=5,
-    )
-    resp.raise_for_status()
-    return True
+    with _sidecar_httpx_client() as client:
+        resp = client.delete(
+            f"/palace/{user_id}/drawers/{drawer_id}",
+            headers={"X-Sidecar-Token": _sidecar_token()},
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        return True
 
 
 @memory_bp.route('/user/conversation-memory/<drawer_id>', methods=['DELETE'])
@@ -573,14 +594,13 @@ import sqlite3 as _sqlite3
 
 def _sidecar_delete_palace(user_id: str) -> bool:
     """Sidecar DELETE /palace/{user_id} — wipes whole palace."""
-    url = f"{_sidecar_base_url()}/palace/{user_id}"
-    resp = _requests.delete(
-        url,
-        headers={"X-Sidecar-Token": _sidecar_token()},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    return True
+    with _sidecar_httpx_client() as client:
+        resp = client.delete(
+            f"/palace/{user_id}",
+            headers={"X-Sidecar-Token": _sidecar_token()},
+        )
+        resp.raise_for_status()
+        return True
 
 
 def _wipe_outbox_for_user(user_id: str) -> int:
