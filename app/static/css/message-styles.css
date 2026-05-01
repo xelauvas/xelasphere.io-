@@ -28,10 +28,11 @@
     --callout-error-border: #ef4444;
     --callout-error-text: #f87171;
 
-    /* ChatGPT-inspired typography + spacing constants */
-    --chat-font-size: 15px;
-    --chat-line-height: 1.7;
-    --chat-letter-spacing: 0.01em;
+    /* ChatGPT-aligned typography + spacing constants.
+       16px body / 1.65 line-height / 0 letter-spacing matches the reference. */
+    --chat-font-size: 16px;
+    --chat-line-height: 1.65;
+    --chat-letter-spacing: 0;
     --chat-max-line-width: 72ch;
 
     --wrap-normal: normal;
@@ -106,10 +107,10 @@
     --heading-margin-top: 1.6rem;
     --heading-margin-bottom: 0.6rem;
 
-    --list-padding-left: 1.5rem;
+    --list-padding-left: 1.625rem;
     --list-margin-top: 0.6rem;
     --list-margin-bottom: 1rem;
-    --list-item-margin: 0.4rem;
+    --list-item-margin: 0.25rem;
     --list-item-p-margin: 0.4rem;
     --nested-list-margin: 0.3rem;
 
