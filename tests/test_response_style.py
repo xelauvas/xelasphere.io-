@@ -116,3 +116,38 @@ class TestStyleCharters:
         from app.services.response_style import STYLE_CHARTERS, ResponseStyle
         creative = STYLE_CHARTERS[ResponseStyle.CREATIVE].lower()
         assert "no emoji" in creative or "without emoji" in creative
+
+
+class TestClassifyResponseStyle:
+    """Orchestrator: regex fast-path → LLM fallback → default."""
+
+    def test_uses_regex_when_it_matches(self, monkeypatch):
+        from app.services import response_style as rs
+        called = {"llm": False}
+        def _no_llm(msg):
+            called["llm"] = True
+            return None
+        monkeypatch.setattr(rs, "_classify_via_llm", _no_llm)
+
+        result = rs.classify_response_style("hi there")
+        assert result == rs.ResponseStyle.CHAT
+        assert called["llm"] is False, "regex matched; LLM should not have run"
+
+    def test_falls_back_to_llm_on_ambiguous(self, monkeypatch):
+        from app.services import response_style as rs
+        monkeypatch.setattr(rs, "_classify_via_llm",
+                            lambda msg: rs.ResponseStyle.EDITORIAL)
+        result = rs.classify_response_style("the vibes are off in this codebase")
+        assert result == rs.ResponseStyle.EDITORIAL
+
+    def test_returns_default_when_llm_fails(self, monkeypatch):
+        from app.services import response_style as rs
+        monkeypatch.setattr(rs, "_classify_via_llm", lambda msg: None)
+        result = rs.classify_response_style("the vibes are off in this codebase")
+        assert result == rs.ResponseStyle.default()  # MODERN_BLOG
+
+    def test_returns_default_on_empty_input(self, monkeypatch):
+        from app.services import response_style as rs
+        monkeypatch.setattr(rs, "_classify_via_llm", lambda msg: None)
+        # empty falls through regex (returns CHAT) before reaching LLM
+        assert rs.classify_response_style("") == rs.ResponseStyle.CHAT

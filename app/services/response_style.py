@@ -263,3 +263,51 @@ Voice: literary. Considered word choice. Show, don't tell.
 Length: as long as the piece needs. Don't pad, don't truncate.
 """,
 }
+
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _classify_via_llm(message: str) -> ResponseStyle | None:
+    """LLM fallback path. Defers to chat_engine.classify_user_intent's
+    extended return dict (added in Task 5). Returns None on any error
+    so the caller can fall through to the default.
+
+    Imported lazily inside the function to avoid a circular import:
+    chat_engine imports from this module too.
+    """
+    try:
+        from app.services import chat_engine
+        result = chat_engine.classify_user_intent(message)
+        style_str = result.get("style") if isinstance(result, dict) else None
+        if style_str:
+            try:
+                return ResponseStyle(style_str)
+            except ValueError:
+                logger.warning("LLM returned unknown style %r", style_str)
+                return None
+        return None
+    except Exception as exc:
+        logger.warning("classify_via_llm failed: %s", exc)
+        return None
+
+
+def classify_response_style(message: str) -> ResponseStyle:
+    """Pick a ResponseStyle for this user message.
+
+    Order:
+      1. regex fast path (free, ~0ms, covers the obvious 80%)
+      2. LLM fallback (cached, ~3s timeout via existing classify_user_intent)
+      3. ResponseStyle.default()  (always returns a value — never None)
+    """
+    rule_match = classify_by_rules(message)
+    if rule_match is not None:
+        return rule_match
+
+    llm_match = _classify_via_llm(message)
+    if llm_match is not None:
+        return llm_match
+
+    return ResponseStyle.default()
