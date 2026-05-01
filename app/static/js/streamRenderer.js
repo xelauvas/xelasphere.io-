@@ -205,6 +205,12 @@ class StreamRenderer {
         this._paintQueue = '';
         this._pacedRafScheduled = false;
         this._finalizing = false;
+        // Phantom <div> rendered into messageEl while the SM has partial chars
+        // but no block is open yet (i.e. before the first \n of a paragraph).
+        // Without this, the first line of every paragraph is invisible until
+        // its trailing \n arrives — then it pops in all at once. Removed when
+        // BLOCK_START finally opens the real block.
+        this._partialPreviewEl = null;
     }
 
     append(text) {
@@ -260,7 +266,44 @@ class StreamRenderer {
         this.sm.append(slice);
         const live = this.ast.getLive();
         if (live) {
+            this._removePartialPreview();
             this._paintLive(live);
+        } else {
+            this._paintPartialPreview();
+        }
+    }
+
+    // Phantom <div> render path: paints the SM's partial line BEFORE any block
+    // is open. Without this, the first line of every paragraph is invisible
+    // until its trailing \n arrives, because the L2 SM only opens a block on
+    // \n. Existing _paintLive overlay handles the case where a block IS open.
+    _paintPartialPreview() {
+        const partial = (this.sm.getPartialLine && this.sm.getPartialLine()) || '';
+        if (!partial) return;
+        if (!this._partialPreviewEl) {
+            const el = document.createElement('div');
+            el.className = 'stream-block block-paragraph';
+            el.dataset.partialPreview = '1';
+            const cursor = this.messageEl.querySelector(':scope > .stream-cursor');
+            if (cursor) {
+                this.messageEl.insertBefore(el, cursor);
+            } else {
+                this.messageEl.appendChild(el);
+            }
+            this._partialPreviewEl = el;
+        }
+        const html = (typeof window.marked?.parse === 'function')
+            ? window.marked.parse(partial)
+            : partial;
+        this._partialPreviewEl.innerHTML = window.DOMPurify
+            ? window.DOMPurify.sanitize(html)
+            : html;
+    }
+
+    _removePartialPreview() {
+        if (this._partialPreviewEl) {
+            this._partialPreviewEl.remove();
+            this._partialPreviewEl = null;
         }
     }
 
@@ -334,6 +377,10 @@ class StreamRenderer {
             this.sm.append(this._pending);
             this._pending = '';
         }
+        // Remove the phantom preview before sm.finalize fires its own
+        // BLOCK_START for any trailing partial line — the real block element
+        // takes over from here.
+        this._removePartialPreview();
         // sm.finalize() emits BLOCK_END for any still-live block, which runs
         // r.update() + r.finalize() through _handleEvent. Every block is finalized
         // exactly once through that path — do NOT re-iterate the block array here.
@@ -379,12 +426,19 @@ class StreamRenderer {
 
     destroy() {
         this.destroyed = true;
+        this._removePartialPreview();
         removeCursor(this.messageEl);
     }
 
     _handleEvent(event) {
         switch (event.type) {
             case 'BLOCK_START': {
+                // Real block opening — clear the phantom preview NOW. Without this,
+                // single-line blocks (headings, blank-line transitions) that open and
+                // close inside one sm.append cycle leave the preview stuck onscreen,
+                // because _drainPaced sees live=null again at the end and skips the
+                // remove path entirely.
+                this._removePartialPreview();
                 const block = this.ast.startBlock({
                     id: event.id,
                     type: event.blockType,
