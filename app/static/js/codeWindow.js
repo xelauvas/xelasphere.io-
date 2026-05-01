@@ -2336,8 +2336,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
         if (isStreamable) {
             // Use streaming endpoint for DeepSeek and Moonshot/Kimi models
+            // Declared OUTSIDE the try block so the catch handler at the end of
+            // this block can read it — `let` is block-scoped, so a declaration
+            // inside the try{} is invisible inside the corresponding catch{}.
+            // When a stream errored, the catch crashed on "streamHasVisibleOutput
+            // is not defined" instead of doing its proper partial-response recovery.
+            let streamHasVisibleOutput = false;
             try {
-                let streamHasVisibleOutput = false;
                 // SL-1: ensure streamRenderer.js ES module is loaded before attempting to
                 // use window.StreamRenderer. Short timeout so slow loads fall back gracefully.
                 if (window._streamRendererReadyPromise && typeof window.StreamRenderer !== 'function') {
