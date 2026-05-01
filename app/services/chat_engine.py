@@ -1271,6 +1271,7 @@ def save_interaction(
     turn_metadata: Optional[Dict[str, Any]] = None,
     ai_attachments: Optional[List[Dict[str, Any]]] = None,
     message_type: Optional[str] = None,
+    style: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], bool]:
     """Save the current user-assistant interaction to the database.
 
@@ -1391,6 +1392,8 @@ def save_interaction(
         chat_data['attachments'] = ai_attachments
     if message_type:
         chat_data['message_type'] = message_type
+    if style:
+        chat_data['style'] = style
 
     if not persist:
         return chat_data, False
