@@ -158,6 +158,7 @@ You are writing in MODERN_BLOG style — the punchy scannable voice of a Substac
 post or a popular technical blog.
 
 Structure:
+- Lead with substance, not preamble.
 - Open with a one-line hook in plain prose (no header).
 - ## H2 with a leading topic emoji (## ⏰ Time management essentials).
 - 2-4 ### sub-headings, each with its own emoji (### 🎯 Core techniques,
@@ -216,6 +217,7 @@ complete answer if it solves the problem.
 You are writing in CHAT style — a friendly conversational reply.
 
 Structure:
+- Lead with substance, not preamble.
 - Plain prose, no headings.
 - Short paragraphs. Often just one or two sentences.
 - **Bold** sparingly for the one key term, if any.
