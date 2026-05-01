@@ -1,0 +1,185 @@
+/* app/static/css/stream-styles.css
+ *
+ * Per-style typography. Scoped by [data-style="..."] which the streamRenderer
+ * sets on .text-message-container and .text-message immediately after the
+ * server's stream-meta SSE chunk arrives.
+ *
+ * data-style is orthogonal to data-ctx — data-style drives typography
+ * (font/spacing/heading look) and is server-decided; data-ctx drives column
+ * width and layout-tier rules and is client-classified post-stream.
+ *
+ * See docs/superpowers/specs/2026-05-01-content-aware-formatting-organism-design.md
+ */
+
+
+/* ============================================================
+ * EDITORIAL — serif body, italic lede, small-caps section labels
+ * ============================================================ */
+[data-style="editorial"] .text-message {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    line-height: 1.65;
+}
+[data-style="editorial"] .text-message .stream-block.block-paragraph:first-child {
+    font-style: italic;
+    border-left: 3px solid var(--accent, rgba(255, 200, 100, 0.6));
+    padding-left: 12px;
+    opacity: 0.9;
+}
+[data-style="editorial"] .text-message h2 {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+    opacity: 0.75;
+    margin-top: 1.6em;
+}
+
+
+/* ============================================================
+ * MODERN_BLOG — punchy sans, big headings, blockquote callouts
+ * ============================================================ */
+[data-style="modern_blog"] .text-message {
+    font-family: 'Inter', system-ui, sans-serif;
+    line-height: 1.55;
+}
+[data-style="modern_blog"] .text-message h2 {
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    font-size: 1.4rem;
+    margin-top: 1.2em;
+}
+[data-style="modern_blog"] .text-message h3 {
+    font-weight: 700;
+    font-size: 1.05rem;
+    margin-top: 1em;
+}
+[data-style="modern_blog"] .text-message blockquote {
+    /* The MODERN_BLOG charter instructs the model to emit "Bottom line:"
+       lines as `> **Bottom line:** ...`. Style every blockquote in this
+       context as a callout box. */
+    background: rgba(100, 200, 255, 0.08);
+    border-left: 3px solid rgba(100, 200, 255, 0.6);
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 12px 0;
+}
+
+
+/* ============================================================
+ * TECHNICAL — sans body, side-bar accent on code blocks, sparse emoji
+ * ============================================================ */
+[data-style="technical"] .text-message {
+    font-family: 'Inter', system-ui, sans-serif;
+    line-height: 1.55;
+}
+[data-style="technical"] .text-message h2,
+[data-style="technical"] .text-message h3 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+[data-style="technical"] .text-message pre {
+    border-left: 2px solid rgba(120, 200, 255, 0.5);
+}
+[data-style="technical"] .text-message blockquote {
+    /* Charter says use blockquotes for caveats. */
+    background: rgba(255, 200, 80, 0.06);
+    border: 1px solid rgba(255, 200, 80, 0.18);
+    padding: 7px 11px;
+    border-radius: 6px;
+    margin: 12px 0;
+}
+
+
+/* ============================================================
+ * CHAT — plain prose, friendly, generous line-height
+ * ============================================================ */
+[data-style="chat"] .text-message {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.55;
+}
+[data-style="chat"] .text-message h1,
+[data-style="chat"] .text-message h2,
+[data-style="chat"] .text-message h3 {
+    /* Charter forbids headings in chat replies — but if the model
+       slips one in, render it as plain bold text rather than a
+       section break. */
+    font-size: 1em;
+    font-weight: 600;
+    margin: 0;
+    display: inline;
+}
+[data-style="chat"] .text-message ul,
+[data-style="chat"] .text-message ol {
+    margin: 6px 0;
+}
+
+
+/* ============================================================
+ * COMPARISON — verdict accent, full-width table
+ * ============================================================ */
+[data-style="comparison"] .text-message {
+    font-family: 'Inter', system-ui, sans-serif;
+    line-height: 1.55;
+}
+[data-style="comparison"] .text-message .stream-block.block-paragraph:first-child {
+    /* The opening verdict paragraph (charter: "**Verdict:** ..." in bold). */
+    background: linear-gradient(90deg, rgba(120, 255, 180, 0.08), transparent);
+    border-left: 3px solid rgba(120, 255, 180, 0.5);
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 14px;
+}
+[data-style="comparison"] .text-message table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+}
+[data-style="comparison"] .text-message th {
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.76rem;
+    font-weight: 600;
+    opacity: 0.7;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+[data-style="comparison"] .text-message td {
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    font-size: 0.92rem;
+}
+
+
+/* ============================================================
+ * CREATIVE — serif, centered title, scene-break rules
+ * ============================================================ */
+[data-style="creative"] .text-message {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    line-height: 1.7;
+}
+[data-style="creative"] .text-message h2 {
+    font-family: 'Georgia', serif;
+    font-style: italic;
+    font-weight: 400;
+    text-align: center;
+    margin: 1.4em 0 0.8em;
+    opacity: 0.92;
+}
+[data-style="creative"] .text-message em {
+    /* charter says italics for inner thoughts — slightly softer */
+    opacity: 0.88;
+}
+[data-style="creative"] .text-message hr {
+    border: none;
+    text-align: center;
+    margin: 1.6em 0;
+}
+[data-style="creative"] .text-message hr::after {
+    content: '· · ·';
+    letter-spacing: 0.5em;
+    opacity: 0.5;
+    font-size: 0.85rem;
+}
