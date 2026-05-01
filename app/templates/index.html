@@ -133,7 +133,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/code-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tree-view.css') }}?v=1.1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/message-styles.css') }}?v=4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/message-styles.css') }}?v=7">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/recipe-card.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/prism.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
@@ -157,7 +157,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/toast.css') }}?v=17">
 
     <!-- Settings Modal -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/settings-modal.css') }}?v=16">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/settings-modal.css') }}?v=18">
 
     <!-- Text Selection Quote -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/text-selection-quote.css') }}">
@@ -176,6 +176,7 @@
 
     <!-- Stream Blocks -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-blocks.css') }}?v=6">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-styles.css') }}?v=2">
 
     <!-- Lightweight Charts (TradingView) — v5 introduces breaking series-creation API
          (addAreaSeries → addSeries(AreaSeries, ...)) handled in cryptoChartModule.js -->
@@ -1025,14 +1026,14 @@
     <script src="{{ url_for('static', filename='js/memoryModalController.js') }}?v=1"></script>
     <!-- settingsModal must load before TTS/voice modules so that
          window.getPreferredVoice is defined when they read it at init. -->
-    <script src="{{ url_for('static', filename='js/settingsModal.js') }}?v=11"></script>
+    <script src="{{ url_for('static', filename='js/settingsModal.js') }}?v=12"></script>
     <script src="{{ url_for('static', filename='js/speechSynthesisModule.js') }}?v=10"></script>
     <script src="{{ url_for('static', filename='js/dictationModule.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/voiceModeModule.js') }}?v=40"></script>
     <script src="{{ url_for('static', filename='js/filePreview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/scrollState.js') }}"></script>
     <script src="{{ url_for('static', filename='js/recipeDetector.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=60"></script>
+    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=63"></script>
     <script src="{{ url_for('static', filename='script.js') }}?v=5"></script>
     <script src="{{ url_for('static', filename='js/styleManager.js') }}?v=4"></script>
     <script>
@@ -1083,7 +1084,7 @@
         window.sharedSessionId = "{{ shared_session_id|default('', true) }}";
     </script>
     <script src="{{ url_for('static', filename='js/toast.js') }}?v=7"></script>
-    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=17"></script>
+    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=20"></script>
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=7"></script>

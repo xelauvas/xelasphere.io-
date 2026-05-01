@@ -2923,7 +2923,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
         }
     }
 
-    recordLiveMessage({ sender, content, messageType = 'text', attachments = [], user_attachments = [], messageId, prompt, search_results = null } = {}) {
+    recordLiveMessage({ sender, content, messageType = 'text', attachments = [], user_attachments = [], messageId, prompt, search_results = null, style = null } = {}) {
         if (this.isReplayingHistory) return;
         if (!this.activeSessionId) return;
         const normalizedSession = this.ensureSessionPages(this.activeSessionId);
@@ -2973,6 +2973,9 @@ async loadChatHistory(pageToken = null, limit = 10) {
             suppress_text: !hasContent && effectiveType !== 'text',
             timestamp: new Date().toISOString()
         };
+        if (normalizedSender === 'AI' && style) {
+            replacement.style = style;
+        }
 
         if (searchResultsCopy) {
             replacement.search_results = searchResultsCopy;
@@ -3049,6 +3052,46 @@ async loadChatHistory(pageToken = null, limit = 10) {
     normalizePromptText(value) {
         if (typeof value !== 'string') return '';
         return value.replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    resolveHistoricalStyle(message, promptText = '') {
+        const valid = new Set(['editorial', 'modern_blog', 'technical', 'chat', 'comparison', 'creative']);
+        if (message && typeof message.style === 'string') {
+            const stored = message.style.trim();
+            if (valid.has(stored)) return stored;
+        }
+
+        const raw = typeof promptText === 'string' && promptText.trim()
+            ? promptText
+            : (message?.prompt || message?.content || message?.text || '');
+        const text = String(raw || '').trim();
+
+        if (text.length < 4) return 'chat';
+        if (/^(hi|hello|hey|sup|yo|thanks|thank you|ok|okay|sure|cool|nice|got it|right|y(?:eah|es|up|a)|n(?:o|ah|ope))\b/i.test(text)) {
+            return 'chat';
+        }
+        if (/\b(vs\.?|versus|compared? to|differences? between|which is better|which should i (?:use|pick|choose)|should i (?:use|pick|choose) \w+ or \w+)\b/i.test(text)) {
+            return 'comparison';
+        }
+        if (/^(write (?:me )?(?:a |an )?(?:short )?(?:story|poem|haiku|sonnet|scene|essay|monologue|dialogue|fable)|tell me a story|describe (?:a |the )?(?:scene|setting)|continue the story|roleplay\b)/i.test(text)) {
+            return 'creative';
+        }
+        if (/\b(write|implement|fix|debug|refactor|optimi[sz]e|build|create)\b.*?\b(function|method|class|component|module|script|test|loop|query|api|endpoint|migration|hook|reducer|service|controller|middleware|regex|bug|code)\b/i.test(text) ||
+            /```/.test(text) ||
+            /\bin (?:python|javascript|typescript|js|ts|rust|go|golang|java|c\+\+|c#|csharp|sql|bash|zsh|ruby|php|swift|kotlin)\b/i.test(text)) {
+            return 'technical';
+        }
+        if (/^(give me |list |what are )?(?:tips|ways|best practices|hacks|ideas|examples|reasons|techniques|strategies) (?:on|for|to)\b/i.test(text) ||
+            /^how (?:do i|to|can i|should i|do you)\b/i.test(text) ||
+            /^(?:top|best) \d+\b/i.test(text)) {
+            return 'modern_blog';
+        }
+        if (/^(explain|why does|why is|how does|what is the (?:meaning|history|theory|reason|significance|origin)|tell me about)\b/i.test(text) && text.length >= 50) {
+            return 'editorial';
+        }
+
+        // Mirrors ResponseStyle.default() for records saved before `style`.
+        return 'modern_blog';
     }
 
     generatePageId() {
@@ -3270,6 +3313,54 @@ async loadChatHistory(pageToken = null, limit = 10) {
             this.isReplayingHistory = false;
             this.replayUserPromptSet = null;
         }
+
+        // Defensive sweep: ensure every AI bubble carries the persisted
+        // data-style attribute. Whatever render path produced the bubble,
+        // this guarantees replay parity with the live-stream rendering.
+        // Only sets the attribute when missing, so live-set values are
+        // never overwritten.
+        try {
+            const styleByRid = new Map();
+            messages.forEach(m => {
+                if (m && m.response_id) {
+                    styleByRid.set(m.response_id, this.resolveHistoricalStyle(m, m.prompt || ''));
+                }
+            });
+            if (styleByRid.size && this.elements.chatDisplay) {
+                this.elements.chatDisplay.querySelectorAll('.ai-message').forEach(msgEl => {
+                    const id = msgEl.id || msgEl.dataset.messageId || '';
+                    const rid = id.replace(/^ai-/, '');
+                    const style = styleByRid.get(rid);
+                    if (!style) return;
+                    const tmc = msgEl.querySelector('.text-message-container');
+                    const inner = tmc && tmc.querySelector('.text-message');
+                    if (tmc && !tmc.hasAttribute('data-style')) tmc.setAttribute('data-style', style);
+                    if (inner && !inner.hasAttribute('data-style')) inner.setAttribute('data-style', style);
+                });
+            }
+
+            // Invariant: every AI bubble whose persisted message has a `style`
+            // must carry that `data-style` after the sweep runs. If any
+            // bubble is missing it, a future change has broken the sweep —
+            // fail loudly in console so it's caught in real sessions.
+            const violations = [];
+            if (this.elements.chatDisplay) {
+                this.elements.chatDisplay.querySelectorAll('.ai-message').forEach(msgEl => {
+                    const id = msgEl.id || msgEl.dataset.messageId || '';
+                    const rid = id.replace(/^ai-/, '');
+                    const expected = styleByRid.get(rid);
+                    if (!expected) return;
+                    const actual = msgEl.querySelector('.text-message-container')?.getAttribute('data-style');
+                    if (actual !== expected) {
+                        violations.push({ rid, expected, actual: actual || '(missing)' });
+                    }
+                });
+            }
+            if (violations.length) {
+                console.error('[style-replay] invariant violated for', violations.length, 'bubble(s):', violations);
+            }
+        } catch (_e) { /* sweep is best-effort */ }
+
         this.renderInlinePageAnchors(sessionId);
         if (options?.anchorId && this.scrollToAnchor(options.anchorId)) {
             this.updateFirstMessageFlag(messages.length > 0);
@@ -3682,6 +3773,9 @@ async loadChatHistory(pageToken = null, limit = 10) {
         if (update.responseId) {
             entry.response_id = update.responseId;
         }
+        if (typeof update.style === 'string' && update.style.trim()) {
+            entry.style = update.style.trim();
+        }
 
         this.markSessionDirty(this.activeSessionId);
     }
@@ -3749,6 +3843,9 @@ async loadChatHistory(pageToken = null, limit = 10) {
             auto_selected: autoSelected,
             task_type: taskType
         };
+        if (messageData.style) {
+            messageEntry.style = messageData.style;
+        }
 
         // Persist search results (web, images, videos, render_hint, embed_video)
         if (messageData.search_results && typeof messageData.search_results === 'object') {
@@ -4202,6 +4299,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 timestamp: message.timestamp,
                 attachments: userAttachments,
                 suppressText: !!message.suppress_text_user,
+                style: message.style,
                 messageKey
             });
             if (
@@ -4223,6 +4321,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 timestamp: message.timestamp,
                 attachments: userAttachments,
                 suppressText: false,
+                style: message.style,
                 messageKey
             });
             if (
@@ -4238,6 +4337,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
         if (message.sender === 'AI' || hasAiContent || hasAiAttachments || message.suppress_text) {
             const messageId = message.response_id || message.id || generateMessageId();
             const hasAiImages = aiAttachments.some(att => this.isAttachmentImage(att));
+            const replayStyle = this.resolveHistoricalStyle(message, userPromptSource);
 
             const sources = message.search_results && typeof message.search_results === 'object'
                 ? message.search_results : [];
@@ -4266,6 +4366,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                     originalPrompt: userPromptSource,
                     sources,
                     messageKey,
+                    style: replayStyle,
                     email: message.email || null
                 });
                 if (typeof window !== 'undefined' && typeof window.updateSourcesButton === 'function') {
@@ -4306,6 +4407,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 originalPrompt: userPromptSource,
                 sources,
                 messageKey,
+                style: replayStyle,
                 email: message.email || null,
                 modelMeta: {
                     auto_selected: !!message.auto_selected,
@@ -4461,7 +4563,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
      * @param {boolean} [options.isCode=false] - Whether the content contains code.
      * @param {boolean} [options.isHistory=false] - Whether the message is historical.
      */
-    renderMessage({ id, sender, content, isCode = false, timestamp, isHistory = false, attachments = [], suppressText = false, forceButtons = false, originalPrompt = null, sources = null, messageKey = null, email = null, modelMeta = null }) {
+    renderMessage({ id, sender, content, isCode = false, timestamp, isHistory = false, attachments = [], suppressText = false, forceButtons = false, originalPrompt = null, sources = null, messageKey = null, email = null, modelMeta = null, style = null }) {
         const chatDisplay = this.elements.chatDisplay;
 
         let messageDiv = document.getElementById(id);
@@ -4550,7 +4652,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 if (typeof safeContent === 'string' && safeContent.includes('<')) {
                     console.warn('[replay] AI content contains "<" — unexpected, expected raw markdown only');
                 }
-                const renderer = new window.StreamRenderer(messageContent, { replay: true });
+                const renderer = new window.StreamRenderer(messageContent, { replay: true, streamMeta: style ? { style } : {} });
                 renderer.append(safeContent);
                 renderer.finalize();
                 // KaTeX inline math — live stream runs this post-finalize, replay must too
@@ -4569,7 +4671,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 }
             } else if (sender === 'ai') {
                 // Non-history AI or AI path that missed the streaming branch
-                renderAiTextImmediate(messageContent, safeContent, id, showButtons);
+                renderAiTextImmediate(messageContent, safeContent, id, showButtons, style);
             } else {
                 // User message (history or live re-render)
                 renderUserMessage(messageContent, safeContent, id);

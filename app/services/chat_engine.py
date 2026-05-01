@@ -285,62 +285,18 @@ DEVELOPER_INSTRUCTIONS = (
     "Use plain text and Markdown formatting ONLY. No HTML.\n\n"
 
     """
-═══════════════════════════════════════════════════════════════
-RESPONSE FORMATTING
-═══════════════════════════════════════════════════════════════
+FOLLOW-UP MESSAGES. In ongoing conversations, respond to what was just said — not to the entire conversation history. Don't recap, don't re-establish context.
 
-### Core principle
-Format serves the content. Never the other way around.
-A short question gets a short answer. Default to prose. Structure only earns its place.
+CORRECTIONS. State the correction first; explain why after.
 
-### Markdown
-Use markdown only when it will be rendered and genuinely aids comprehension.
-In ambiguous contexts, prefer plain prose.
+UNCERTAINTY. Say it once, briefly. Don't hedge every sentence.
 
-- **Headers (## ###):** Only when the response is explicitly a document or reference the user will navigate non-linearly. Never in conversational replies. Never for single-topic responses regardless of length.
-- **Bold:** Only for the single most critical term or takeaway when missing it would cost the reader. Default is no bold.
-- **Lists:** Only when items are truly parallel and there are four or more. For three or fewer, use prose. Never as a substitute for writing a sentence. Never nested more than one level.
-- **Code blocks:** Always for code, commands, file paths, technical strings.
-- **Tables:** Only when comparing 3+ items across 3+ attributes.
-- **Blockquotes:** Required for any verbatim quotation longer than a short phrase — literary quotes, cited speech, quoted user text, lyrics. Use `>` at the start of each line. The quoted text goes on its own line(s), not inline inside a paragraph. Never use blockquotes for anything that isn't a direct quotation.
-
-### Length
-Match length to the question. A conversational message gets a conversational reply — one to three sentences is correct, not a failure. Complex technical questions get full treatment. Never pad. Never summarise what you just said. Stop when you're done.
-
-### Answer first
-The first sentence answers the question. Context, caveats, and elaboration follow.
-Never precede the answer with preamble or a description of what you're about to say.
-
-### Follow-up messages
-In ongoing conversations, respond to what was just said — not to the entire conversation history. Don't recap, don't re-establish context, don't restate what was already covered.
-
-### Technical and coding contexts
-Lead with the solution. Explanation is secondary unless the user is clearly learning rather than fixing. Skip preamble entirely — show the code or the answer, then explain if needed.
-
-### Recommendations and comparisons
-When asked which is better, give a direct verdict first. Present reasoning after the verdict, not instead of it. Don't list pros and cons and leave the user to decide when they asked for a recommendation.
-
-### Corrections
-When correcting a misconception, state the correction first, then explain. Don't soften a correction into ambiguity.
-
-### Uncertainty
-When uncertain, say so once, briefly. Don't hedge every sentence. Don't apologise for not knowing.
-
-### Emojis
-Mirror the user's register. If they write formally, respond formally. If they use emojis, you may use them sparingly. If they don't, don't. Never use emojis in technical, error, or code-heavy responses regardless of context.
-
-### Tone
-Warm but direct. Confident without being stiff. Write like a knowledgeable person, not a formatted document.
-
-### Never
+NEVER:
 - Open with "Certainly!", "Great question!", "Of course!" or any affirmation
+- Describe what you're about to say
 - End with "I hope this helps!" or similar
-- Use headers, bullets, and bold all in the same response
 - Repeat the user's question before answering
-- Produce a structured response when a paragraph would do
-- Hedge every sentence when uncertain — say it once and move on
-- Give pros and cons when a direct recommendation was asked for
-- Greet back with a name or a simple "Hi!" and stop — never ask "how can I help you today?" or any variant after a greeting
+- Greet back with a name and stop — never ask "how can I help you today?" after a greeting
 
 """
 
@@ -600,10 +556,13 @@ Respond with this exact JSON format (no other text):
 "asset_symbol": "<symbol like BTC, ETH, AAPL or null if none>",
 "wants_chart": <true if wants price chart/graph, false otherwise>,
 "wants_image": <true if wants AI-generated image, false otherwise>,
-"wants_code": <true if wants code/mermaid/diagram code, false otherwise>}}
+"wants_code": <true if wants code/mermaid/diagram code, false otherwise>,
+"style": "<one of: editorial, modern_blog, technical, chat, comparison, creative>"}}
 
-IMPORTANT: Words like "create", "make", "build" at the start usually mean creative_task, NOT cryptocurrency.
-Only set has_crypto_mention=true if they're clearly asking about crypto PRICES or MARKET data."""
+IMPORTANT:
+- Words like "create", "make", "build" at the start usually mean creative_task, NOT cryptocurrency.
+- Only set has_crypto_mention=true if they're clearly asking about crypto PRICES or MARKET data.
+- For "style": pick `editorial` for longform explainers/opinion ("tell me about X"); `modern_blog` for tips/how-tos/listicles ("ways to Y"); `technical` for code questions/debugging; `chat` for greetings/thanks/short factual; `comparison` for "X vs Y"/"which is better"; `creative` for stories/poems/fiction. Prefer `modern_blog` when uncertain."""
 
     try:
         # Use a fast model for classification
@@ -1312,6 +1271,7 @@ def save_interaction(
     turn_metadata: Optional[Dict[str, Any]] = None,
     ai_attachments: Optional[List[Dict[str, Any]]] = None,
     message_type: Optional[str] = None,
+    style: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], bool]:
     """Save the current user-assistant interaction to the database.
 
@@ -1432,6 +1392,8 @@ def save_interaction(
         chat_data['attachments'] = ai_attachments
     if message_type:
         chat_data['message_type'] = message_type
+    if style:
+        chat_data['style'] = style
 
     if not persist:
         return chat_data, False

@@ -1614,7 +1614,7 @@ function appendUserMessage(messageDiv, message, messageId) {
     });
 }
 // Function to display messages in the chatbox
-function displayMessage(message, sender, messageType, originalPrompt, showButtons = true, messageId = null, attachmentsMeta = null, searchResults = null, modelMeta = null) {
+function displayMessage(message, sender, messageType, originalPrompt, showButtons = true, messageId = null, attachmentsMeta = null, searchResults = null, modelMeta = null, style = null) {
     // Prevent rapid duplicate messages
     if (message === lastDisplayedMessage && Date.now() - lastMessageTimestamp < 1000) {
         console.log('Rapid duplicate message detected and prevented.');
@@ -1729,7 +1729,7 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
                 appendFileMessage(messageContent, safeMessage);
                 break;
             default:
-                renderAiTextImmediate(messageContent, safeMessage, messageId, showButtons);
+                renderAiTextImmediate(messageContent, safeMessage, messageId, showButtons, style);
         }
     }
 
@@ -1767,6 +1767,9 @@ function displayMessage(message, sender, messageType, originalPrompt, showButton
             messageId,
             prompt: originalPrompt
         };
+        if (normalizedSender === 'ai' && style) {
+            payload.style = style;
+        }
         if (attachmentsMeta && Array.isArray(attachmentsMeta) && attachmentsMeta.length) {
             // Use user_attachments for user messages, attachments for AI messages
             if (normalizedSender === 'user') {
@@ -2336,8 +2339,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
         if (isStreamable) {
             // Use streaming endpoint for DeepSeek and Moonshot/Kimi models
+            // Declared OUTSIDE the try block so the catch handler at the end of
+            // this block can read it — `let` is block-scoped, so a declaration
+            // inside the try{} is invisible inside the corresponding catch{}.
+            // When a stream errored, the catch crashed on "streamHasVisibleOutput
+            // is not defined" instead of doing its proper partial-response recovery.
+            let streamHasVisibleOutput = false;
             try {
-                let streamHasVisibleOutput = false;
                 // SL-1: ensure streamRenderer.js ES module is loaded before attempting to
                 // use window.StreamRenderer. Short timeout so slow loads fall back gracefully.
                 if (window._streamRendererReadyPromise && typeof window.StreamRenderer !== 'function') {
@@ -2416,6 +2424,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let streamDreamNotification = null;
                 let streamArtifactPatches = null;
                 let streamModelMeta = null;
+                let streamMeta = {};   // captured from the first 'stream-meta' SSE chunk
                 let patchStreamActive = false;
                 let patchStreamBuffer = '';
                 let patchParsedPatches = [];
@@ -2492,6 +2501,13 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             // If user is viewing this session, they'll see live updates
                             // If not, ThinkingIndicator is hidden anyway, so this is harmless
                             ThinkingIndicator.appendReasoning(chunk.text || '');
+                        } else if (chunk.type === 'stream-meta') {
+                            // First chunk from server when RESPONSE_STYLE_ORGANISM_ENABLED is on.
+                            // Captures the chosen visual style. Passed into StreamRenderer when
+                            // the first content chunk creates one.
+                            streamMeta = chunk;  // {type, style, via}
+                            console.log('[StreamMeta] received:', chunk.style, '(via', chunk.via + ')');
+                            return;
                         } else if (chunk.type === 'content') {
                             if (chunk.text) {
                                 streamHasVisibleOutput = true;
@@ -2624,7 +2640,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             Array.from(targetContent.children).forEach(function (child) {
                                                 if (child !== _preservedBanner && child !== _preservedTextMsg) child.remove();
                                             });
-                                            _streamRenderer = new StreamRenderer(targetContent);
+                                            _streamRenderer = new StreamRenderer(targetContent, { streamMeta });
                                             window._activeStreamRenderer = _streamRenderer;
                                         } else {
                                             console.warn('[StreamRenderer] No target element — falling back');
@@ -2680,7 +2696,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             if (typeof targetContent !== 'undefined' && targetContent) {
                                                 targetContent.innerHTML = '';
                                                 if (proseOnly && typeof StreamRenderer !== 'undefined') {
-                                                    const proseRenderer = new StreamRenderer(targetContent, { replay: true });
+                                                    const proseRenderer = new StreamRenderer(targetContent, { replay: true, streamMeta });
                                                     proseRenderer.append(proseOnly);
                                                     proseRenderer.finalize();
                                                 }
@@ -3201,7 +3217,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             if (mc) {
                                 mc.innerHTML = '';
                                 if (streamChatSummary && typeof StreamRenderer !== 'undefined') {
-                                    const reseedRenderer = new StreamRenderer(mc, { replay: true });
+                                    const reseedRenderer = new StreamRenderer(mc, { replay: true, streamMeta });
                                     reseedRenderer.append(streamChatSummary);
                                     reseedRenderer.finalize();
                                 }
@@ -3413,7 +3429,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         artifact_reference: streamArtifactRef,
                         crypto_chart: streamCryptoChart || null,
                         model_meta: streamModelMeta || null,
-                        search_results: (_sd && _sd.searchResults) || null
+                        search_results: (_sd && _sd.searchResults) || null,
+                        style: streamMeta?.style || null
                     });
                     // Also update with artifact fields via updateLastAiMessage for full persistence
                     if (streamArtifactRef && manager.updateLastAiMessage) {
@@ -3843,7 +3860,8 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     model_provider: data.model_provider || null,
                     model_provider_label: data.model_provider_label || null,
                     task_type: data.task_type || null,
-                }
+                },
+                data.style || null
             );
 
             // Add reasoning section if DeepSeek R1 returned reasoning content
@@ -3868,6 +3886,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     model_provider: data.model_provider || null,
                     model_provider_label: data.model_provider_label || null,
                     task_type: data.task_type || null,
+                    style: data.style || null,
                 });
                 // Persist to backend immediately so reasoning survives refresh
                 if (manager.saveSession && manager.activeSessionId) {
@@ -4286,7 +4305,7 @@ function renderUserMessage(container, text, messageId) {
  *
  * `container` is the .message-content element; this function appends to it.
  */
-function renderAiTextImmediate(container, text, messageId, showButtons) {
+function renderAiTextImmediate(container, text, messageId, showButtons, style) {
     if (container && container.dataset.emailComposer === 'true') {
         return;
     }
@@ -4294,10 +4313,16 @@ function renderAiTextImmediate(container, text, messageId, showButtons) {
         return;
     }
 
+    const applyStyle = (wrapper) => {
+        const valid = new Set(['editorial', 'modern_blog', 'technical', 'chat', 'comparison', 'creative']);
+        if (style && valid.has(style)) wrapper.dataset.style = style;
+    };
+
     // Special widget: tree view
     if (typeof isTreeStructure === 'function' && isTreeStructure(text, null)) {
         const wrapper = document.createElement('div');
         wrapper.classList.add('text-message-container');
+        applyStyle(wrapper);
         wrapper.appendChild(createTreeView(text));
         container.appendChild(wrapper);
         if (showButtons && typeof appendActionButtons === 'function') {
@@ -4310,6 +4335,7 @@ function renderAiTextImmediate(container, text, messageId, showButtons) {
     if (window.RecipeDetector && window.RecipeDetector.isRecipe(text, null)) {
         const wrapper = document.createElement('div');
         wrapper.classList.add('text-message-container');
+        applyStyle(wrapper);
         wrapper.appendChild(window.RecipeDetector.createRecipeCard(text));
         container.appendChild(wrapper);
         if (showButtons && typeof appendActionButtons === 'function') {
@@ -4319,7 +4345,7 @@ function renderAiTextImmediate(container, text, messageId, showButtons) {
     }
 
     // Default: StreamRenderer in replay mode (no typing animation, DOM matches live)
-    const renderer = new StreamRenderer(container, { replay: true });
+    const renderer = new StreamRenderer(container, { replay: true, streamMeta: style ? { style } : {} });
     renderer.append(text);
     renderer.finalize();
 

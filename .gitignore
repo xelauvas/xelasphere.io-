@@ -27,3 +27,4 @@ gcloud init/
 # Local TTS model binaries — fetched separately, too large for git
 kokoro-onnx/
 claude-code
+.superpowers/

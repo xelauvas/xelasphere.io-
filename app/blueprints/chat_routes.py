@@ -1181,6 +1181,26 @@ def chat_stream():
     if system_addition:
         base_system = base_system + "\n\n" + system_addition
         logger.info(f"[Stream] system_addition applied ({len(system_addition)} chars)")
+
+    # Content-aware formatting organism: classify the user's message into one of
+    # six styles, then inject the matching charter as a system_addition so the
+    # model writes in that voice. Style is also broadcast to the client via
+    # the stream-meta SSE chunk so typography can match.
+    chosen_style = None
+    if os.environ.get("RESPONSE_STYLE_ORGANISM_ENABLED", "false").lower() == "true":
+        try:
+            from app.services.response_style import (
+                classify_response_style, STYLE_CHARTERS,
+            )
+            chosen_style = classify_response_style(user_prompt_raw or prompt)
+            charter = STYLE_CHARTERS.get(chosen_style, "")
+            if charter:
+                base_system = base_system + "\n\n" + charter
+                logger.info(f"[Stream] style={chosen_style.value} charter injected ({len(charter)} chars)")
+        except Exception as exc:
+            logger.warning(f"[Stream] response-style classification failed: {exc}")
+            chosen_style = None
+
     built_context = context_builder.build(
         system_prompt=base_system,
         full_history=previous_messages,
@@ -1246,6 +1266,13 @@ def chat_stream():
 
     def generate():
         import json
+
+        # Emit stream-meta as the first SSE chunk so the client knows the
+        # visual style before any content arrives. Same wire format as
+        # every other event in this generator: `data: {json}\n\n`, with
+        # the `type` field discriminating.
+        if chosen_style is not None:
+            yield f"data: {json.dumps({'type': 'stream-meta', 'style': chosen_style.value, 'via': 'organism'})}\n\n"
 
         # ── Emit voice selection before any content — frontend locks this for all TTS chunks ──
         from app.blueprints.media_routes import _pick_voice_for_content, _detect_language, KOKORO_VOICES, KOKORO_LANG_MAP
@@ -2274,6 +2301,7 @@ def chat_stream():
                                 model_id=resolve_model_id(stream_model),
                                 task_type=task_type if (model == 'auto' or not model) else None,
                                 auto_selected=(model == 'auto' or not model),
+                                style=chosen_style.value if chosen_style else None,
                             )
                             logger.info(f"Streaming response saved to history for session {session_id}")
 
@@ -3028,6 +3056,21 @@ def chat():
             # Preserve the user-facing prompt before any system injections
             display_prompt = user_prompt
 
+            chosen_style = None
+            style_charter = ""
+            if os.environ.get("RESPONSE_STYLE_ORGANISM_ENABLED", "false").lower() == "true":
+                try:
+                    from app.services.response_style import (
+                        classify_response_style, STYLE_CHARTERS,
+                    )
+                    chosen_style = classify_response_style(display_prompt)
+                    style_charter = STYLE_CHARTERS.get(chosen_style, "")
+                    logger.info(f"[NonStream] style={chosen_style.value}")
+                except Exception as exc:
+                    logger.warning(f"[NonStream] response-style classification failed: {exc}")
+                    chosen_style = None
+                    style_charter = ""
+
             if is_recipe_request:
                 recipe_format_reminder = (
                     "[SYSTEM: Recipe response format required]\n"
@@ -3087,8 +3130,12 @@ def chat():
             #     search_text = "Web search results:\n" + "\n\n".join(search_parts)
             #     enriched_prompt = f"{search_text}\n\n{enriched_prompt}"
 
+            base_system = SYSTEM_INSTRUCTIONS + "\n" + get_developer_instructions(model)
+            if style_charter:
+                base_system = base_system + "\n\n" + style_charter
+
             built_context = context_builder.build(
-                system_prompt=SYSTEM_INSTRUCTIONS + "\n" + get_developer_instructions(model),
+                system_prompt=base_system,
                 full_history=prev_msgs_for_prompt,
                 artifact_state=artifact_tracker if should_inject_artifact else None,
                 user_message=enriched_prompt,
@@ -3756,6 +3803,7 @@ def chat():
                 task_type=selected_task_type,
                 auto_selected=bool(smart_routing_enabled) or (session.get('selected_model') == AUTO_MODEL),
                 turn_metadata=chat_turn_metadata,
+                style=chosen_style.value if chosen_style else None,
             )
             if artifact_payload and not persisted:
                 chat_data['artifact_draft'] = artifact_payload
@@ -4005,7 +4053,8 @@ def chat():
             'is_email': is_email,
             'email': email_data,
             # Crypto chart data
-            'crypto_chart': crypto_chart
+            'crypto_chart': crypto_chart,
+            'style': chosen_style.value if chosen_style else None,
         }
 
         # Include per-message model provenance when available (for Auto details UI)
