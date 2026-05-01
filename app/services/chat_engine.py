@@ -672,10 +672,13 @@ Respond with this exact JSON format (no other text):
 "asset_symbol": "<symbol like BTC, ETH, AAPL or null if none>",
 "wants_chart": <true if wants price chart/graph, false otherwise>,
 "wants_image": <true if wants AI-generated image, false otherwise>,
-"wants_code": <true if wants code/mermaid/diagram code, false otherwise>}}
+"wants_code": <true if wants code/mermaid/diagram code, false otherwise>,
+"style": "<one of: editorial, modern_blog, technical, chat, comparison, creative>"}}
 
-IMPORTANT: Words like "create", "make", "build" at the start usually mean creative_task, NOT cryptocurrency.
-Only set has_crypto_mention=true if they're clearly asking about crypto PRICES or MARKET data."""
+IMPORTANT:
+- Words like "create", "make", "build" at the start usually mean creative_task, NOT cryptocurrency.
+- Only set has_crypto_mention=true if they're clearly asking about crypto PRICES or MARKET data.
+- For "style": pick `editorial` for longform explainers/opinion ("tell me about X"); `modern_blog` for tips/how-tos/listicles ("ways to Y"); `technical` for code questions/debugging; `chat` for greetings/thanks/short factual; `comparison` for "X vs Y"/"which is better"; `creative` for stories/poems/fiction. Prefer `modern_blog` when uncertain."""
 
     try:
         # Use a fast model for classification

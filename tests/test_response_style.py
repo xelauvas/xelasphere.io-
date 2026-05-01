@@ -151,3 +151,65 @@ class TestClassifyResponseStyle:
         monkeypatch.setattr(rs, "_classify_via_llm", lambda msg: None)
         # empty falls through regex (returns CHAT) before reaching LLM
         assert rs.classify_response_style("") == rs.ResponseStyle.CHAT
+
+
+class TestClassifyUserIntentStyleField:
+    """The existing classify_user_intent now returns a `style` key
+    when the LLM supplies one. Mocked — does not hit Groq."""
+
+    def test_returns_style_field(self, monkeypatch, client):
+        """Test that classify_user_intent parses the style field from LLM response."""
+        class _Resp:
+            status_code = 200
+            def json(self):
+                return {"choices": [{"message": {"content": '''{"intent_type":"general_chat",
+                                          "has_crypto_mention":false,
+                                          "has_stock_mention":false,
+                                          "asset_symbol":null,
+                                          "wants_chart":false,
+                                          "wants_image":false,
+                                          "wants_code":false,
+                                          "style":"editorial"}'''}}]}
+
+        def _post(*args, **kwargs):
+            return _Resp()
+
+        monkeypatch.setattr("requests.post", _post)
+        monkeypatch.setenv("GROQ_API_KEY", "test-key")
+
+        # Import after Flask app is set up to avoid circular import
+        from app.services.chat_engine import classify_user_intent, _intent_cache
+        _intent_cache.clear()
+
+        result = classify_user_intent("the vibes are off in this codebase",
+                                       use_cache=False)
+        assert result.get("style") == "editorial"
+
+    def test_missing_style_field_does_not_break_existing_callers(self, monkeypatch, client):
+        # Older LLM responses (or stripped-down JSON) may not include `style`.
+        # Existing callers read intent_type — they must not crash.
+        class _Resp:
+            status_code = 200
+            def json(self):
+                return {"choices": [{"message": {"content": '''{"intent_type":"question",
+                                          "has_crypto_mention":false,
+                                          "has_stock_mention":false,
+                                          "asset_symbol":null,
+                                          "wants_chart":false,
+                                          "wants_image":false,
+                                          "wants_code":false}'''}}]}
+
+        def _post(*args, **kwargs):
+            return _Resp()
+
+        monkeypatch.setattr("requests.post", _post)
+        monkeypatch.setenv("GROQ_API_KEY", "test-key")
+
+        # Import after Flask app is set up
+        from app.services.chat_engine import classify_user_intent, _intent_cache
+        _intent_cache.clear()
+
+        result = classify_user_intent("hello world stuff",
+                                       use_cache=False)
+        assert result.get("intent_type") == "question"
+        assert result.get("style") is None  # absent → None, not KeyError
