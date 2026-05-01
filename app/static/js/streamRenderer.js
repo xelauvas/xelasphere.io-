@@ -151,8 +151,13 @@ function _supportsLiveOverlay(blockType) {
     return _OVERLAY_TYPES.has(blockType);
 }
 
+const VALID_STYLES = new Set([
+    'editorial', 'modern_blog', 'technical',
+    'chat', 'comparison', 'creative',
+]);
+
 class StreamRenderer {
-    constructor(container, { replay = false } = {}) {
+    constructor(container, { replay = false, streamMeta = {} } = {}) {
         this.container = container;
         this.replay = replay;
         this.rawBuffer = '';
@@ -177,6 +182,16 @@ class StreamRenderer {
         }
         this.messageEl = inner;
         this.wrapperEl = wrapper;
+
+        // Apply server-decided visual style. Set on both .text-message and
+        // .text-message-container so CSS can scope to either depending on the
+        // rule. Whitelist the value so a malformed/unknown style from the
+        // server is silently ignored — falls back to existing default styling.
+        const _style = streamMeta && streamMeta.style;
+        if (_style && VALID_STYLES.has(_style)) {
+            inner.dataset.style = _style;
+            wrapper.dataset.style = _style;
+        }
 
         // Seed a cursor immediately so there's never a visible gap between
         // "thinking indicator hid" and "first block gets its cursor". The
