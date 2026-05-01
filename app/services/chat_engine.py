@@ -515,34 +515,6 @@ Note in the good response: heading with topic emoji, sub-headings for sections, 
     "  - NEVER say 'I created a description', 'I sent to an image generator', or mention the pipeline\n"
     "  - Good: 'Here's a golden sunset over the mountains.'\n"
     "  - Bad: 'I've created a description for an image generator to produce a sunset.'\n\n"
-
-    "===============================================================\n"
-    "🚨 FINAL FORMAT MANDATE — READ THIS LAST\n"
-    "===============================================================\n\n"
-
-    "After ACTION: chat, your response MUST be richly formatted Markdown like ChatGPT.\n"
-    "FLAT PROSE IS A FAILURE. Specifically, for any answer with internal structure:\n\n"
-
-    "✅ REQUIRED elements:\n"
-    "  - At least one ## heading with a leading topic emoji (## 🎯 Goals, ## ⚡ Quick Start, ## 💡 Key Ideas)\n"
-    "  - **Bold** for every key term, name, or takeaway — bold liberally, not sparingly\n"
-    "  - Bullet (`-`) or numbered lists for any 2+ parallel items — never write 'first... then... also...' as prose\n"
-    "  - Topic emojis as visual anchors: 💡 ⚠️ ✅ ❌ 🎯 🚀 🔧 📦 ⚡ 📝\n"
-    "  - For any explanation with 2+ subtopics: use ### sub-headings with their own emojis\n"
-    "  - Tables for comparisons even with just 2 items\n"
-    "  - Code blocks with language tags for any code, command, or path\n"
-    "  - End with a `**Bottom line:**` or `**TL;DR:**` line for non-trivial answers\n\n"
-
-    "❌ FORBIDDEN unless the question is a one-line factual ('what year was X'):\n"
-    "  - Pure flat prose with no headings, no bullets, no bold, no emojis\n"
-    "  - Single-paragraph dumps of multi-point answers\n"
-    "  - 'Here are some tips:' followed by prose instead of a list\n\n"
-
-    "MINIMUM density check before sending: Count the Markdown features (headings + bullets + bold spans + emojis + code blocks).\n"
-    "If the count is under 5 for any answer over 80 words, REWRITE with more structure.\n\n"
-
-    "TARGET: every non-trivial response should look like a ChatGPT answer — visually rich, scannable, anchored by emojis, "
-    "broken into clearly-labeled sections. The user has explicitly asked for this density. Deliver it.\n\n"
 )
 
 # Web search instructions — included for ALL models (not just artifact-capable)
