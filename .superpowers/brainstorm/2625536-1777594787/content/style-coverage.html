@@ -1,0 +1,118 @@
+<h2>Locked in: A (editorial) and B (modern blog)</h2>
+<p class="subtitle">A handles longform "professor" explainers. B handles tips, how-tos, listicles. Now — what about the OTHER question types? Pick which extra styles you want the organism to know.</p>
+
+<style>
+  .style-card { padding: 22px; border-radius: 12px; min-height: 380px; }
+  .style-card .label { font-size: 11px; opacity: 0.7; }
+  .style-card .name { font-size: 15px; margin-bottom: 4px; font-weight: 600; }
+  .style-card .triggers { font-size: 11px; opacity: 0.7; margin: 6px 0 12px; padding: 6px 8px; border-radius: 6px; background: rgba(255,255,255,0.04); }
+  .style-card .preview { padding: 14px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); font-size: 12.5px; line-height: 1.55; min-height: 200px; }
+
+  /* Style C — Code/Technical */
+  .style-c .preview { font-family: 'Inter', system-ui, sans-serif; }
+  .style-c .preview h3.demo-h { font-weight: 600; font-size: 15px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .style-c .preview pre.demo-code {
+    font-family: 'JetBrains Mono', 'Menlo', monospace; font-size: 11px;
+    background: rgba(0,0,0,0.4); padding: 10px; border-radius: 6px;
+    border-left: 2px solid rgba(120,200,255,0.5); margin: 8px 0; overflow-x: auto;
+  }
+  .style-c .preview .demo-callout {
+    display: flex; gap: 6px; padding: 7px 10px; border-radius: 6px;
+    background: rgba(255,200,80,0.08); border: 1px solid rgba(255,200,80,0.2);
+    margin: 8px 0; font-size: 11.5px;
+  }
+  .style-c .preview code { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 3px; }
+
+  /* Style D — Conversational */
+  .style-d .preview { font-family: 'Inter', system-ui, sans-serif; font-size: 13.5px; }
+  .style-d .preview p { margin: 8px 0; }
+  .style-d .preview b { font-weight: 600; }
+
+  /* Style E — Comparison/Table */
+  .style-e .preview { font-family: 'Inter', system-ui, sans-serif; }
+  .style-e .preview h3.demo-h { font-size: 13px; font-weight: 700; margin: 0 0 10px; }
+  .style-e .preview .demo-verdict { background: linear-gradient(90deg, rgba(120,255,180,0.08), transparent); border-left: 3px solid rgba(120,255,180,0.5); padding: 8px 10px; margin: 0 0 12px; border-radius: 4px; font-size: 12px; }
+  .style-e .preview table.demo-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .style-e .preview table.demo-table th, .style-e .preview table.demo-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .style-e .preview table.demo-table th { font-weight: 600; opacity: 0.7; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* Style F — Creative */
+  .style-f .preview { font-family: 'Georgia', serif; font-size: 13.5px; }
+  .style-f .preview h3.demo-h { font-family: 'Georgia', serif; font-style: italic; font-weight: 400; font-size: 18px; margin: 0 0 14px; opacity: 0.9; text-align: center; }
+  .style-f .preview p { margin: 10px 0; }
+  .style-f .preview p.demo-dialogue { font-style: italic; padding-left: 14px; opacity: 0.85; }
+  .style-f .preview hr.demo-rule { border: none; text-align: center; margin: 14px 0; opacity: 0.5; font-size: 10px; }
+  .style-f .preview hr.demo-rule:after { content: '· · ·'; letter-spacing: 0.5em; }
+</style>
+
+<div class="cards" data-multiselect>
+  <div class="card style-c" data-choice="c" onclick="toggleSelect(this)">
+    <div class="label">C · CODE / TECHNICAL</div>
+    <div class="name">Mono code blocks, side-bar accents, sparse emoji</div>
+    <div class="triggers">For: "write a function", "fix this bug", "explain this code", "what does X mean in [language]"</div>
+    <div class="preview">
+      <h3 class="demo-h">Throttle a function in JS</h3>
+      <p style="margin:0 0 6px;font-size:12px;">Wrap the call so it runs at most once per <code>delay</code> ms:</p>
+      <pre class="demo-code"><span style="color:#6c7;">function</span> <span style="color:#9cf;">throttle</span>(fn, delay) {
+  <span style="color:#6c7;">let</span> last = 0;
+  <span style="color:#6c7;">return</span> (...args) =&gt; {
+    <span style="color:#6c7;">const</span> now = Date.now();
+    <span style="color:#6c7;">if</span> (now - last &gt;= delay) {
+      last = now;
+      fn(...args);
+    }
+  };
+}</pre>
+      <div class="demo-callout">⚠️ <span><b>Edge case:</b> trailing call is dropped. Use <code>debounce</code> if you need it.</span></div>
+    </div>
+  </div>
+
+  <div class="card style-d" data-choice="d" onclick="toggleSelect(this)">
+    <div class="label">D · CONVERSATIONAL / CHAT</div>
+    <div class="name">Plain prose, no headings, light bold for key terms</div>
+    <div class="triggers">For: greetings, "thanks", "ok", short factual ("what year was X"), one-off questions, banter</div>
+    <div class="preview">
+      <p>Sure thing — coffee's at the corner shop on 5th, opens at <b>7am</b>. The pour-over is what they're known for. ☕</p>
+      <p>You doing a sit-down or grabbing it to go?</p>
+    </div>
+  </div>
+
+  <div class="card style-e" data-choice="e" onclick="toggleSelect(this)">
+    <div class="label">E · COMPARISON / TABLE</div>
+    <div class="name">Verdict-first callout, then comparison table</div>
+    <div class="triggers">For: "X vs Y", "which is better", "should I use A or B", "differences between X and Y"</div>
+    <div class="preview">
+      <h3 class="demo-h">React vs Vue — which to pick</h3>
+      <div class="demo-verdict"><b>Verdict:</b> React if you want the bigger ecosystem and hireability. Vue if you want gentler learning and less boilerplate.</div>
+      <table class="demo-table">
+        <thead><tr><th></th><th>React</th><th>Vue</th></tr></thead>
+        <tbody>
+          <tr><td>Learning curve</td><td>Steeper</td><td>Gentler</td></tr>
+          <tr><td>Job market</td><td>Massive</td><td>Solid, smaller</td></tr>
+          <tr><td>Boilerplate</td><td>More</td><td>Less</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card style-f" data-choice="f" onclick="toggleSelect(this)">
+    <div class="label">F · CREATIVE / NARRATIVE</div>
+    <div class="name">Centered serif title, italic dialogue, scene breaks</div>
+    <div class="triggers">For: "write me a story", "poem about X", "describe the scene", roleplay, fiction prompts</div>
+    <div class="preview">
+      <h3 class="demo-h">The Last Train</h3>
+      <p>The platform was empty. <em>She should have been here by now.</em></p>
+      <p class="demo-dialogue">"All aboard!" the conductor called.</p>
+      <hr class="demo-rule">
+      <p>Three hours later, everything had changed.</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top: 22px;">
+  Each style is independent — pick any subset. The fewer you pick, the simpler the organism is to build and maintain. Recommended minimum: <b>C and D</b> (code differs visually too much to share with B; casual chat shouldn't have headings + emoji clutter). E and F are optional polish.
+</p>
+
+<p class="subtitle" style="margin-top: 8px; opacity: 0.7;">
+  After this, the next question is architectural — terminal, no browser: <i>where does the "organism" decide which style to use — server-side classifier, or model picks per-question?</i>
+</p>

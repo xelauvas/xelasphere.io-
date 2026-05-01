@@ -478,3 +478,23 @@
         </div>
     </div>
 </div>
+
+<!-- Delete all chats confirmation modal (themed) -->
+<div class="modal-backdrop" id="delete-all-chats-confirm-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="delete-all-chats-modal-title">
+    <div class="modal-card">
+        <button type="button" class="modal-close-btn" id="close-delete-all-chats-modal" aria-label="Close">
+            <i class="fas fa-xmark"></i>
+        </button>
+        <div class="modal-icon caution">
+            <i class="fas fa-triangle-exclamation"></i>
+        </div>
+        <div>
+            <h3 id="delete-all-chats-modal-title">Delete all chats?</h3>
+            <p>This permanently removes every conversation. This cannot be undone.</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="cancel-delete-all-chats">Cancel</button>
+            <button type="button" class="btn btn-danger" id="confirm-delete-all-chats">Delete all</button>
+        </div>
+    </div>
+</div>
