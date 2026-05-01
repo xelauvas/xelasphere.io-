@@ -1181,6 +1181,26 @@ def chat_stream():
     if system_addition:
         base_system = base_system + "\n\n" + system_addition
         logger.info(f"[Stream] system_addition applied ({len(system_addition)} chars)")
+
+    # Content-aware formatting organism: classify the user's message into one of
+    # six styles, then inject the matching charter as a system_addition so the
+    # model writes in that voice. Style is also broadcast to the client via
+    # the stream-meta SSE chunk so typography can match.
+    chosen_style = None
+    if os.environ.get("RESPONSE_STYLE_ORGANISM_ENABLED", "false").lower() == "true":
+        try:
+            from app.services.response_style import (
+                classify_response_style, STYLE_CHARTERS,
+            )
+            chosen_style = classify_response_style(user_prompt_raw or prompt)
+            charter = STYLE_CHARTERS.get(chosen_style, "")
+            if charter:
+                base_system = base_system + "\n\n" + charter
+                logger.info(f"[Stream] style={chosen_style.value} charter injected ({len(charter)} chars)")
+        except Exception as exc:
+            logger.warning(f"[Stream] response-style classification failed: {exc}")
+            chosen_style = None
+
     built_context = context_builder.build(
         system_prompt=base_system,
         full_history=previous_messages,
@@ -1246,6 +1266,13 @@ def chat_stream():
 
     def generate():
         import json
+
+        # Emit stream-meta as the first SSE chunk so the client knows the
+        # visual style before any content arrives. Same wire format as
+        # every other event in this generator: `data: {json}\n\n`, with
+        # the `type` field discriminating.
+        if chosen_style is not None:
+            yield f"data: {json.dumps({'type': 'stream-meta', 'style': chosen_style.value, 'via': 'organism'})}\n\n"
 
         # ── Emit voice selection before any content — frontend locks this for all TTS chunks ──
         from app.blueprints.media_routes import _pick_voice_for_content, _detect_language, KOKORO_VOICES, KOKORO_LANG_MAP
