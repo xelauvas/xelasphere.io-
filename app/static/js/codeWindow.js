@@ -2498,6 +2498,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             // Captures the chosen visual style. Passed into StreamRenderer when
                             // the first content chunk creates one.
                             streamMeta = chunk;  // {type, style, via}
+                            console.log('[StreamMeta] received:', chunk.style, '(via', chunk.via + ')');
                             return;
                         } else if (chunk.type === 'content') {
                             if (chunk.text) {
