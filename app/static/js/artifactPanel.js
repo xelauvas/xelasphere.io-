@@ -146,17 +146,26 @@
                 // Check if this is a complete HTML document (single file with everything)
                 const isCompleteDocument = /<!doctype\s+html|<html[\s>]/i.test(htmlContent);
 
-                // Build file lookup map for resolving external references
+                // Build file lookup map for resolving external references.
+                // Models routinely emit href="./style.css" or "/style.css" — normalize on both sides.
+                const normalizeRef = p => (p || '').replace(/^\.?\//, '');
                 const cssFileMap = {};
                 const jsFileMap = {};
                 version.files.forEach(file => {
-                    const path = (file.path || '').toLowerCase();
-                    if (path.endsWith('.css')) {
-                        cssFileMap[file.path] = file.content || '';
-                        cssFileMap[path] = file.content || '';
-                    } else if (path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.tsx') || path.endsWith('.ts') || (file.language || '').toLowerCase() === 'javascript') {
-                        jsFileMap[file.path] = file.content || '';
-                        jsFileMap[path] = file.content || '';
+                    const raw = file.path || '';
+                    const lower = raw.toLowerCase();
+                    const normRaw = normalizeRef(raw);
+                    const normLower = normalizeRef(lower);
+                    if (lower.endsWith('.css')) {
+                        cssFileMap[raw] = file.content || '';
+                        cssFileMap[lower] = file.content || '';
+                        cssFileMap[normRaw] = file.content || '';
+                        cssFileMap[normLower] = file.content || '';
+                    } else if (lower.endsWith('.js') || lower.endsWith('.jsx') || lower.endsWith('.tsx') || lower.endsWith('.ts') || (file.language || '').toLowerCase() === 'javascript') {
+                        jsFileMap[raw] = file.content || '';
+                        jsFileMap[lower] = file.content || '';
+                        jsFileMap[normRaw] = file.content || '';
+                        jsFileMap[normLower] = file.content || '';
                     }
                 });
 
@@ -170,7 +179,10 @@
                         const hrefMatch = match.match(/href\s*=\s*["']([^"']+)["']/i);
                         if (hrefMatch) {
                             const href = hrefMatch[1];
-                            const cssContent = cssFileMap[href] || cssFileMap[href.toLowerCase()];
+                            const cssContent = cssFileMap[href]
+                                || cssFileMap[href.toLowerCase()]
+                                || cssFileMap[normalizeRef(href)]
+                                || cssFileMap[normalizeRef(href.toLowerCase())];
                             if (cssContent) {
                                 return `<style>${cssContent}</style>`;
                             }
@@ -180,7 +192,10 @@
 
                     // Replace <script src="..."></script> with inline <script>
                     doc = doc.replace(/<script\s+[^>]*src\s*=\s*["']([^"']+)["'][^>]*>\s*<\/script>/gi, (match, src) => {
-                        const jsContent = jsFileMap[src] || jsFileMap[src.toLowerCase()];
+                        const jsContent = jsFileMap[src]
+                            || jsFileMap[src.toLowerCase()]
+                            || jsFileMap[normalizeRef(src)]
+                            || jsFileMap[normalizeRef(src.toLowerCase())];
                         if (jsContent) {
                             return `<script>${escapeScript(stripImports(jsContent))}</script>`;
                         }
@@ -2545,6 +2560,16 @@ window.addEventListener('load', function() {
                     body: JSON.stringify({code, files: fileList, entry}),
                     credentials: 'same-origin'
                 });
+
+                if (!resp.ok) {
+                    let detail = `${resp.status} ${resp.statusText}`;
+                    try {
+                        const errBody = await resp.json();
+                        if (errBody && errBody.error) detail = errBody.error;
+                    } catch(_) { /* non-JSON body — keep status text */ }
+                    append('Server error: ' + detail + '\n', 'stderr');
+                    return;
+                }
 
                 const reader = resp.body.getReader();
                 const decoder = new TextDecoder();
