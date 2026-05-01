@@ -2416,6 +2416,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let streamDreamNotification = null;
                 let streamArtifactPatches = null;
                 let streamModelMeta = null;
+                let streamMeta = {};   // captured from the first 'stream-meta' SSE chunk
                 let patchStreamActive = false;
                 let patchStreamBuffer = '';
                 let patchParsedPatches = [];
@@ -2492,6 +2493,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             // If user is viewing this session, they'll see live updates
                             // If not, ThinkingIndicator is hidden anyway, so this is harmless
                             ThinkingIndicator.appendReasoning(chunk.text || '');
+                        } else if (chunk.type === 'stream-meta') {
+                            // First chunk from server when RESPONSE_STYLE_ORGANISM_ENABLED is on.
+                            // Captures the chosen visual style. Passed into StreamRenderer when
+                            // the first content chunk creates one.
+                            streamMeta = chunk;  // {type, style, via}
+                            return;
                         } else if (chunk.type === 'content') {
                             if (chunk.text) {
                                 streamHasVisibleOutput = true;
@@ -2624,7 +2631,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             Array.from(targetContent.children).forEach(function (child) {
                                                 if (child !== _preservedBanner && child !== _preservedTextMsg) child.remove();
                                             });
-                                            _streamRenderer = new StreamRenderer(targetContent);
+                                            _streamRenderer = new StreamRenderer(targetContent, { streamMeta });
                                             window._activeStreamRenderer = _streamRenderer;
                                         } else {
                                             console.warn('[StreamRenderer] No target element — falling back');
