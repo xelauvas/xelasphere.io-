@@ -157,7 +157,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/toast.css') }}?v=17">
 
     <!-- Settings Modal -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/settings-modal.css') }}?v=16">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/settings-modal.css') }}?v=18">
 
     <!-- Text Selection Quote -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/text-selection-quote.css') }}">
@@ -176,6 +176,7 @@
 
     <!-- Stream Blocks -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-blocks.css') }}?v=6">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-styles.css') }}?v=1">
 
     <!-- Lightweight Charts (TradingView) — v5 introduces breaking series-creation API
          (addAreaSeries → addSeries(AreaSeries, ...)) handled in cryptoChartModule.js -->
@@ -1025,7 +1026,7 @@
     <script src="{{ url_for('static', filename='js/memoryModalController.js') }}?v=1"></script>
     <!-- settingsModal must load before TTS/voice modules so that
          window.getPreferredVoice is defined when they read it at init. -->
-    <script src="{{ url_for('static', filename='js/settingsModal.js') }}?v=11"></script>
+    <script src="{{ url_for('static', filename='js/settingsModal.js') }}?v=12"></script>
     <script src="{{ url_for('static', filename='js/speechSynthesisModule.js') }}?v=10"></script>
     <script src="{{ url_for('static', filename='js/dictationModule.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/voiceModeModule.js') }}?v=40"></script>
