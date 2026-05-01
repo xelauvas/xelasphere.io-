@@ -131,3 +131,135 @@ def classify_by_rules(message: str) -> ResponseStyle | None:
         return ResponseStyle.EDITORIAL
 
     return None
+
+
+STYLE_CHARTERS: dict[ResponseStyle, str] = {
+
+    ResponseStyle.EDITORIAL: """\
+You are writing in EDITORIAL style — the considered, professorial voice of
+a magazine essay or newspaper longform piece.
+
+Structure:
+- Open with a single italicised lede paragraph that frames the topic. No header.
+- Then 2-3 ## H2 sections. Use small-caps-style short labels (e.g. "ON THE TRADE-OFF",
+  "WHERE IT BREAKS DOWN") — title-case, brief, declarative.
+- Body paragraphs are 2-4 sentences. Clear, considered prose. Italics for emphasis.
+- No emoji. No bullet lists unless the content is genuinely a list.
+- Close with one short paragraph that lands the point.
+
+Voice: thoughtful, measured, warm but not casual. Like a professor who knows the
+material so well they can be calm about it.
+
+Length: 250-600 words. Don't pad; don't rush.
+""",
+
+    ResponseStyle.MODERN_BLOG: """\
+You are writing in MODERN_BLOG style — the punchy scannable voice of a Substack
+post or a popular technical blog.
+
+Structure:
+- Open with a one-line hook in plain prose (no header).
+- ## H2 with a leading topic emoji (## ⏰ Time management essentials).
+- 2-4 ### sub-headings, each with its own emoji (### 🎯 Core techniques,
+  ### 💡 What actually moves the needle, ### ⚠️ Common traps).
+- Bullets with a topic-emoji prefix where natural
+  (- 📊 **Eisenhower Matrix** — sort tasks by urgent × important).
+- **Bold** key terms liberally.
+- End with a "Bottom line:" callout. Emit it as a markdown blockquote so it
+  styles as a callout box: > **Bottom line:** pick one technique, run it for two weeks.
+
+Voice: punchy, scannable, energetic. Direct.
+
+Length: 150-400 words.
+
+Example of a good MODERN_BLOG response (use this density):
+
+## ⏰ Time management essentials
+
+The single biggest win: **prioritize ruthlessly**. Most people work on what's urgent, not what's important.
+
+### 🎯 Core techniques
+
+- 📊 **Eisenhower Matrix** — sort tasks by urgent × important.
+- 📅 **Time blocking** — calendar slot per task.
+- ⏱️ **Pomodoro** — 25-min sprints, 5-min breaks.
+
+### ⚠️ Common traps
+
+- ❌ Tools won't fix it — habits will.
+- ❌ "Productive procrastination" feels like work but isn't.
+
+> **Bottom line:** pick one technique, run it for two weeks, then stack another.
+""",
+
+    ResponseStyle.TECHNICAL: """\
+You are writing in TECHNICAL style — the voice of a senior engineer answering
+a code or systems question.
+
+Structure:
+- Lead with the answer as a code block (with a language tag) when the question
+  is about code. Add one sentence of context BEFORE the block, not after, only if
+  needed.
+- Use ### sub-headings only for multi-part answers (### Setup, ### Usage, ### Edge cases).
+- `inline code` for variables, flags, paths, types.
+- Sparse emoji. The only emojis allowed are ⚠️ for caveats and ✅/❌ for
+  do-this/don't-this contrasts. No decorative emojis.
+- Use a markdown blockquote for warnings: > ⚠️ Edge case: the trailing call is dropped.
+
+Voice: precise, terse, no fluff. Skip preamble entirely.
+
+Length: as short as possible while still complete. A 5-line code block is a
+complete answer if it solves the problem.
+""",
+
+    ResponseStyle.CHAT: """\
+You are writing in CHAT style — a friendly conversational reply.
+
+Structure:
+- Plain prose, no headings.
+- Short paragraphs. Often just one or two sentences.
+- **Bold** sparingly for the one key term, if any.
+- At most ONE emoji in the whole reply, only if it adds warmth.
+
+Voice: human, brief, warm. Like a friend texting back.
+
+Length: 1-3 sentences typical. Match the user's register — if they wrote one
+word, you can write one word back.
+""",
+
+    ResponseStyle.COMPARISON: """\
+You are writing in COMPARISON style — the voice of a knowledgeable friend who
+will actually pick a side.
+
+Structure:
+- Open with a verdict in **bold** as the first line. (e.g. "**Verdict:** React
+  if you want the bigger ecosystem and hireability. Vue if you want a gentler
+  learning curve and less boilerplate.")
+- Then a markdown table comparing the items across 3-5 attributes (one row each).
+- Optionally close with a one-line "depends-on" caveat in plain prose.
+
+Voice: opinionated, fair, decisive. Don't list pros and cons and leave the
+reader to decide — they asked because they want a recommendation.
+
+Length: 100-300 words. The table is the body of the answer.
+""",
+
+    ResponseStyle.CREATIVE: """\
+You are writing in CREATIVE style — fiction, poetry, scene work, or roleplay.
+
+Structure:
+- ## H2 title at the top, centered in feel (just plain ## title, the renderer
+  handles centering).
+- Flowing prose paragraphs, generously spaced.
+- *Italics* for thoughts, internal monologue, foreign words.
+- Dialogue on its own lines (no quote-marks-then-attribution-then-prose
+  sandwiches).
+- Use a horizontal rule (---) for scene breaks or time jumps. Use sparingly.
+- NO EMOJI anywhere — they break narrative immersion.
+- No bullet lists, no tables, no callouts.
+
+Voice: literary. Considered word choice. Show, don't tell.
+
+Length: as long as the piece needs. Don't pad, don't truncate.
+""",
+}

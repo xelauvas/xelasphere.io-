@@ -82,3 +82,37 @@ class TestClassifyByRules:
     def test_in_python_at_end_is_technical(self):
         from app.services.response_style import classify_by_rules, ResponseStyle
         assert classify_by_rules("how do i sort a list in python") == ResponseStyle.TECHNICAL
+
+
+class TestStyleCharters:
+    def test_every_style_has_a_charter(self):
+        from app.services.response_style import STYLE_CHARTERS, ResponseStyle
+        assert set(STYLE_CHARTERS.keys()) == set(ResponseStyle)
+
+    def test_charter_mentions_its_style_name(self):
+        from app.services.response_style import STYLE_CHARTERS, ResponseStyle
+        for style, charter in STYLE_CHARTERS.items():
+            # Charter should name-drop the style so the model has a label
+            # to ground its behaviour against.
+            assert style.value.upper().replace("_", " ") in charter.upper() or \
+                   style.value.upper() in charter.upper(), (
+                       f"{style.value} charter does not reference its name"
+                   )
+
+    def test_charter_size_under_3000_chars(self):
+        # Charters are appended to the existing ~3000-line dev instructions.
+        # Cap each at 3000 chars so the system prompt stays under model limits.
+        from app.services.response_style import STYLE_CHARTERS
+        for style, charter in STYLE_CHARTERS.items():
+            assert len(charter) < 3000, f"{style.value} charter is {len(charter)} chars"
+
+    def test_chat_charter_forbids_headings(self):
+        # Smoke that the chat charter actually says "no headings"
+        from app.services.response_style import STYLE_CHARTERS, ResponseStyle
+        chat = STYLE_CHARTERS[ResponseStyle.CHAT].lower()
+        assert "no heading" in chat or "no ##" in chat or "plain prose" in chat
+
+    def test_creative_charter_forbids_emoji(self):
+        from app.services.response_style import STYLE_CHARTERS, ResponseStyle
+        creative = STYLE_CHARTERS[ResponseStyle.CREATIVE].lower()
+        assert "no emoji" in creative or "without emoji" in creative
