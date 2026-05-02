@@ -64,19 +64,13 @@
     --space-5: 1.5rem;
     --space-6: 2rem;
     --space-7: 3rem;
-    --content-max-width: 768px;
-    --chat-stage-max-width: 1200px;
-    --composer-max-width: var(--chat-content-width);
-    --composer-shell-max-width: 800px;
     --composer-gutter: var(--space-5);
     --composer-reserved-height: 150px;
-    --chat-shell-max-width: var(--chat-stage-max-width);
     /* New canonical width tokens (sub-project 1).
-     * --chat-content-width replaces --content-max-width, --composer-max-width,
-     * --composer-shell-max-width, --chat-shell-max-width.
+     * --chat-content-width replaces the obsolete --content-max-width, --composer-max-width,
+     * --composer-shell-max-width, --chat-shell-max-width, --chat-stage-max-width.
      * --chat-right-panel-width is the canonical fallback for the artifact panel
-     * when JS hasn't yet set the live --artifact-panel-width.
-     * Old tokens stay for now; deleted in Task 6 after consumers migrate. */
+     * when JS hasn't yet set the live --artifact-panel-width. */
     --chat-content-width: 768px;
     --chat-right-panel-width: 50vw;
     --composer-mobile-height: 190px;

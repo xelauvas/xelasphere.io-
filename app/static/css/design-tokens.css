@@ -238,7 +238,6 @@
   /* ==================== */
 
   /* Panel Dimensions */
-  --panel-width-default: 480px;
   --panel-width-min: 320px;
   --panel-width-max: 720px;
   --panel-border-width: 1px;

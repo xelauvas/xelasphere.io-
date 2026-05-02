@@ -177,7 +177,7 @@
 
 /* Adjust when artifact panel is open */
 body.artifact-panel-open .theme-toggle {
-  right: calc(var(--artifact-panel-width, var(--panel-width-default, 480px)) + var(--space-6));
+  right: calc(var(--artifact-panel-width, var(--chat-right-panel-width)) + var(--space-6));
   transition: right var(--duration-normal) var(--ease-smooth);
 }
 
