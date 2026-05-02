@@ -4925,6 +4925,22 @@ body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
     pointer-events: none;
 }
 
+/* Soft fade strip above the composer top edge — makes scroll content
+ * dissolve into the opaque composer instead of hitting a hard line.
+ * Matches ChatGPT/Claude scroll-into-composer pattern. The mask on
+ * .chat-shell__messages handles the lower 64px (covered area); this
+ * handles the visible 64px immediately above the composer. */
+.chat-shell__composer::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: linear-gradient(to bottom, transparent 0%, var(--bg-primary) 100%);
+    pointer-events: none;
+}
+
 
 body.right-sidebar-open .chat-shell__composer {
     width: calc(100% - var(--left-sidebar-width, 0px) - var(--right-sidebar-width, 0px));
