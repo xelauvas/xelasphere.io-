@@ -4652,6 +4652,12 @@ body.share-modal-open {
     display: flex;
     flex-direction: column;
     width: 100%;
+    /* Override global .container horizontal padding so the scroll
+     * container reaches the viewport edge — scrollbar sits flush
+     * against it, ChatGPT/Claude pattern. The narrow message column
+     * stays constrained by .conversation-panel's max-width. */
+    padding-left: 0;
+    padding-right: 0;
     height: 100vh;
     max-height: 100vh;
     overflow: hidden;
