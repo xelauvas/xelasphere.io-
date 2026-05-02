@@ -146,7 +146,11 @@
      * Keeping bottom + sides for definition, dropping the top so the
      * fade strip dissolves cleanly into the pill with no edge. */
     border-top-color: transparent !important;
-    box-shadow: var(--shadow-sm) !important;
+    /* Custom shadow with offset_y == blur, so the shadow doesn't
+     * extend above the pill. --shadow-sm (offset 1, blur 2) was
+     * casting a faint 1px dark line above the pill top on dark
+     * theme, visible even after border + fade-color fixes. */
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.35) !important;
     transition:
         background 160ms ease,
         border-color 160ms ease,
@@ -261,7 +265,7 @@
     background: var(--bg-elevated) !important;
     border-color: var(--border-primary, rgba(40, 30, 15, 0.08)) !important;
     border-top-color: transparent !important;
-    box-shadow: var(--shadow-sm) !important;
+    box-shadow: 0 2px 2px rgba(40, 30, 15, 0.06) !important;
 }
 [data-theme="light"] .chat-shell__composer .input-row:focus-within {
     background: var(--bg-elevated) !important;
