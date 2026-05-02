@@ -203,36 +203,6 @@ body {
     overflow: hidden; /* DOAR #chat-scroll-region scrollează */
 }
 
-body,
-.chat-shell__messages {
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-primary, rgba(255, 255, 255, 0.35)) transparent;
-}
-
-body::-webkit-scrollbar,
-.chat-shell__messages::-webkit-scrollbar {
-    width: 12px;
-}
-
-body::-webkit-scrollbar-track,
-.chat-shell__messages::-webkit-scrollbar-track {
-    background: transparent;
-    border-radius: 999px;
-}
-
-body::-webkit-scrollbar-thumb,
-.chat-shell__messages::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.15));
-    border: 2px solid rgba(0, 0, 0, 0);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
-}
-
-body::-webkit-scrollbar-thumb:hover,
-.chat-shell__messages::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.25));
-}
-
 .offline-status {
     display: none;
     margin: 0 auto 1rem;
