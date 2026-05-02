@@ -75,6 +75,7 @@
     --chat-right-panel-width: 50vw;
     --composer-mobile-height: 190px;
     --composer-side-pad: 0.95rem;
+    --composer-fade-height: 64px;
     --composer-font-size: 15px;
     --composer-line-height: 1.6;
     --composer-letter-spacing: 0.005em;
@@ -119,7 +120,7 @@
     --composer-input-pad-x: 0.75rem;
     --composer-margin-top: 0.75rem;
     --composer-safe-area-bottom: env(safe-area-inset-bottom, 0px);
-    --composer-surface: rgba(48, 48, 48, 0.92);
+    --composer-surface: rgba(20, 20, 22, 0.72);
     --composer-border-color: rgba(255, 255, 255, 0.1);
     --sidebar-bg: #0b0b10;
     --conversation-panel-bg: rgba(18, 18, 28, 0.92);
@@ -140,7 +141,7 @@
     --edit-textarea-focus-bg: rgba(0, 0, 0, 0.05);
     --edit-textarea-focus-border: rgba(91, 70, 214, 0.5);
     --composer-selection-bg: rgba(91, 70, 214, 0.2);
-    --composer-surface: rgba(255, 255, 255, 0.97);
+    --composer-surface: rgba(255, 255, 255, 0.78);
     --composer-border-color: rgba(0, 0, 0, 0.1);
     --sidebar-bg: #eef2f6;
     --conversation-panel-bg: rgba(247, 249, 252, 0.92);
@@ -553,17 +554,10 @@ body.artifact-panel-resizing {
     transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-/* Cover sides and bottom to hide scrolling text (U-shape, not above) */
-.input-row::after {
-    content: '';
-    position: absolute;
-    left: -50px;
-    right: -50px;
-    top: 0;
-    bottom: -50px;
-    background: var(--bg-primary, #0f0f12);
-    z-index: -1;
-}
+/* (The .input-row::after U-mask was removed — the composer footer's
+ * frosted backdrop (--composer-surface + backdrop-filter on
+ * .chat-shell__composer) now covers what the U-mask was hiding,
+ * without painting opaque rectangles inside the translucent zone.) */
 
 /* When textarea expands to multiple lines */
 .input-row.composer-expanded {
@@ -4746,6 +4740,21 @@ body.share-modal-open {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
     transition: scrollbar-color 200ms ease;
+    /* Soft fade above composer — last 64px of scroll content fades to
+     * transparent so messages don't end at a hard edge under the
+     * frosted composer backdrop. */
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        black 0,
+        black calc(100% - var(--composer-fade-height)),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        black 0,
+        black calc(100% - var(--composer-fade-height)),
+        transparent 100%
+    );
 }
 
 .chat-shell__messages:hover,
@@ -4871,7 +4880,14 @@ body.share-modal-open {
     width: calc(100% - var(--left-sidebar-width, 0px) - var(--active-right-sidebar-width, 0px));
     max-width: none;
     padding: var(--space-3) var(--composer-side-pad) calc(var(--space-3) + var(--composer-safe-area-bottom) + 16px);
-    background: transparent;
+    /* Frosted-glass backdrop — translucent surface + blur so messages
+     * blur softly through during scroll, instead of ending at a hard
+     * edge. Token --composer-surface and border-color in :root, light
+     * theme variant in [data-theme="light"] block. */
+    background: var(--composer-surface);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border-top: 1px solid var(--composer-border-color);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -4881,7 +4897,6 @@ body.share-modal-open {
     bottom: 0;
     z-index: 100;
     box-shadow: none;
-    border-top: none;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     /* FOOTGUN: pointer-events: none makes this container click-through so
        the transparent space above the input doesn't block the chat.
