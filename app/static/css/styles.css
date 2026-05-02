@@ -4904,9 +4904,21 @@ body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
     padding: var(--space-3) var(--composer-side-pad) calc(var(--space-3) + var(--composer-safe-area-bottom) + 16px);
     /* Opaque solid background matching the chat canvas — the composer
      * reads as an extension of the page, not a separate frosted bar.
-     * Messages scroll up behind it; mask-image fade on
-     * .chat-shell__messages handles the soft top-edge transition. */
+     * Messages scroll up behind it; mask-image below clips the
+     * composer's top 24px (composer padding-top + input-container
+     * margin-top) so scroll content stays visible until it reaches
+     * the pill's actual top edge, then gets covered. */
     background: var(--bg-primary);
+    -webkit-mask-image: linear-gradient(to bottom,
+        transparent 0,
+        transparent calc(var(--space-3) + var(--composer-margin-top)),
+        black calc(var(--space-3) + var(--composer-margin-top)),
+        black 100%);
+    mask-image: linear-gradient(to bottom,
+        transparent 0,
+        transparent calc(var(--space-3) + var(--composer-margin-top)),
+        black calc(var(--space-3) + var(--composer-margin-top)),
+        black 100%);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -4925,34 +4937,10 @@ body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
     pointer-events: none;
 }
 
-/* Soft fade strip above the composer top edge — makes scroll content
- * dissolve into the opaque composer instead of hitting a hard line.
- * Matches ChatGPT/Claude scroll-into-composer pattern. The mask on
- * .chat-shell__messages handles the lower 64px (covered area); this
- * handles the visible 64px immediately above the composer. */
-.chat-shell__composer::before {
-    content: '';
-    position: absolute;
-    /* Shift fade bottom 24px down (composer padding-top 12px +
-     * input-container margin-top 12px) so the fade end lands at the
-     * pill's top border instead of the composer's outer top edge.
-     * The 24px overlap into the composer is gradient-over-opaque-bg,
-     * visually invisible — only the area above the composer shows
-     * the fade. */
-    bottom: calc(100% - var(--space-3) - var(--composer-margin-top));
-    left: 0;
-    right: 0;
-    height: 64px;
-    /* Gradient end matches pill bg (--bg-elevated), not page bg
-     * (--bg-primary), so there's no lightness step at the pill's
-     * top border — content fades smoothly into the pill's surface
-     * color. The 24px inside the composer renders bg-elevated tint
-     * over composer bg-primary, but that's behind the pill so not
-     * directly visible; the perceived effect is a clean dissolve
-     * from scroll content into the lifted pill. */
-    background: linear-gradient(to bottom, transparent 0%, var(--bg-elevated) 100%);
-    pointer-events: none;
-}
+/* Fade gradient ::before removed — was creating a visible grey
+ * gradient strip above the pill. Composer is now fully opaque from
+ * its top edge down; mask-image below makes the top 24px transparent
+ * so scroll content stays visible until reaching the pill's top edge. */
 
 
 body.right-sidebar-open .chat-shell__composer {
