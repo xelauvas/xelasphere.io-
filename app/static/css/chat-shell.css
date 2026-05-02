@@ -261,13 +261,19 @@
  * ============================================================ */
 
 [data-theme="light"] .chat-shell__composer .input-row {
-    background: var(--bg-elevated) !important;
+    /* Light theme: pill uses --bg-tertiary (#f3efe7, warm beige
+     * ~7pt darker than the cream page bg) instead of --bg-elevated
+     * (#ffffff). White pill on cream reads as a popover floating
+     * above the page; warm beige reads as a soft card sitting on
+     * the page — matches Claude's light theme pattern + the
+     * sidebar's "blends with page" aesthetic. */
+    background: var(--bg-tertiary) !important;
     border-color: var(--border-primary, rgba(40, 30, 15, 0.08)) !important;
     border-top-color: transparent !important;
     box-shadow: none !important;
 }
 [data-theme="light"] .chat-shell__composer .input-row:focus-within {
-    background: var(--bg-elevated) !important;
+    background: var(--bg-tertiary) !important;
     border-color: var(--gold-line) !important;
     border-top-color: transparent !important;
     box-shadow: 0 0 0 1px var(--gold-soft) !important;
