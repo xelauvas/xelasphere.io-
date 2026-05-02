@@ -1,18 +1,19 @@
 :root {
-    --primary-bg: #3a3a3a00;
-    --secondary-bg: #26262600;
-    --border-color: rgba(255, 255, 255, 0.12);
-    --code-bg: rgba(0, 0, 0, 0.4);
-    --code-border: rgba(255, 255, 255, 0.08);
-    --blockquote-bg: rgba(255, 255, 255, 0.02);
-    --blockquote-border: rgba(255, 255, 255, 0.15);
-    --table-header-bg: rgba(255, 255, 255, 0.06);
-    --table-cell-bg: rgba(255, 255, 255, 0.02);
-    --table-row-hover: rgba(255, 255, 255, 0.04);
-    --table-border: rgba(255, 255, 255, 0.08);
+    /* Phase 2: aliased to foundation tokens from _tokens.css. */
+    --primary-bg: var(--ink-1);
+    --secondary-bg: var(--ink-2);
+    --border-color: var(--hairline-2);
+    --code-bg: var(--ink-deep);
+    --code-border: var(--hairline);
+    --blockquote-bg: transparent;
+    --blockquote-border: var(--hairline-2);
+    --table-header-bg: var(--ink-3);
+    --table-cell-bg: transparent;
+    --table-row-hover: var(--paper-faint);
+    --table-border: var(--hairline);
     --shadow-color: rgba(0, 0, 0, 0.2);
-    --gradient-start: rgba(30, 30, 32, 0.95);
-    --gradient-end: rgba(40, 40, 44, 0.95);
+    --gradient-start: var(--ink-2);
+    --gradient-end: var(--ink-3);
 
     /* Callout colors */
     --callout-warning-bg: rgba(251, 191, 36, 0.1);
@@ -258,7 +259,7 @@ h1 {
     font-size: var(--chat-font-size);
     line-height: var(--chat-line-height);
     letter-spacing: var(--chat-letter-spacing);
-    font-family: 'Inter', 'Söhne', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     display: flex;
     flex-direction: column;
     width: min(100%, var(--composer-max-width, 760px));
