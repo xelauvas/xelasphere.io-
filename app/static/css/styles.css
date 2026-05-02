@@ -66,7 +66,7 @@
     --space-7: 3rem;
     --content-max-width: 768px;
     --chat-stage-max-width: 1200px;
-    --composer-max-width: var(--content-max-width);
+    --composer-max-width: var(--chat-content-width);
     --composer-shell-max-width: 800px;
     --composer-gutter: var(--space-5);
     --composer-reserved-height: 150px;
@@ -507,7 +507,7 @@ body:not(.has-messages) .arrow-down {
 .input-container {
     position: relative;
     width: 100%;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin: var(--composer-margin-top) auto 0;
     padding: 0 var(--composer-side-pad);
     background: transparent;
@@ -839,7 +839,7 @@ body.artifact-panel-resizing {
 
 .attachment-preview-tray {
     display: none;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin: 0 auto 0.2rem;
     padding: 0.35rem 0.6rem;
     border-radius: 1rem;
@@ -891,7 +891,7 @@ body.temporary-chat-centered .input-container {
     );
     right: auto;
     width: min(
-        var(--composer-shell-max-width),
+        var(--chat-content-width),
         calc(100% - var(--left-sidebar-width, 0px) - var(--active-right-sidebar-width, 0px) - 2.5rem)
     );
     transform: translate(-50%, -50%);
@@ -4755,7 +4755,7 @@ body.share-modal-open {
 .chat-shell__header {
     flex: 0 0 auto;
     width: 100%;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin: 0 auto; /* Centrat ca și .conversation-panel */
     padding: var(--space-3) var(--space-5);
     display: flex;
@@ -4789,7 +4789,7 @@ body.share-modal-open {
 
 .chat-shell__messages > * {
     width: 100%;
-    max-width: var(--chat-shell-max-width);
+    max-width: var(--chat-content-width);
     margin-left: auto;
     margin-right: auto;
 }
@@ -4797,7 +4797,7 @@ body.share-modal-open {
 /* Inner wrapper - CENTRARE + MAX-WIDTH aici */
 .conversation-panel {
     width: 100%;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin: 0 auto;
     padding: var(--space-5);
     padding-top: var(--space-7); /* Extra clearance so first message isn't clipped at top */
@@ -4837,7 +4837,7 @@ body.share-modal-open {
 
 .chat-shell__extras > * {
     width: 100%;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin-left: auto;
     margin-right: auto;
 }
@@ -4846,7 +4846,7 @@ body.share-modal-open {
 #image-container,
 .message-warning {
     width: 100%;
-    max-width: var(--content-max-width);
+    max-width: var(--chat-content-width);
     margin-left: auto;
     margin-right: auto;
 }
@@ -4912,7 +4912,7 @@ body.right-sidebar-open .chat-shell__composer {
 
 .chat-shell__composer > * {
     width: 100%;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin-left: auto;
     margin-right: auto;
     pointer-events: auto;
