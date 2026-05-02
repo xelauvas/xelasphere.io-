@@ -80,24 +80,11 @@
     /* Z-INDEX SCALE: defined in design-tokens.css (single source of truth) */
 }
 
-/* ===== SCROLLBAR WIDTH DETECTION ===== */
-@supports (scrollbar-gutter: stable) {
-    :root {
-        --scrollbar-width: 0px;
-    }
-
-    html {
-        scrollbar-gutter: stable;
-    }
-}
-
-/* Fallback for browsers without scrollbar-gutter */
-@supports not (scrollbar-gutter: stable) {
-    :root {
-        /* Approximate scrollbar width - will be refined by JS if needed */
-        --scrollbar-width: 15px;
-    }
-}
+/* Body has overflow: hidden globally (styles.css:204) — only
+ * #chat-scroll-region scrolls. The html element never shows a
+ * scrollbar, so neither scrollbar-gutter reservation nor a
+ * non-zero --scrollbar-width is ever needed. The single consumer
+ * (--viewport-width below) uses the var() fallback of 0px. */
 
 /* ===== BASE MOBILE STYLES (0px+) ===== */
 html {
