@@ -4795,6 +4795,19 @@ body.share-modal-open {
     background: rgba(255, 255, 255, 0.32);
 }
 
+/* Touch devices have no hover — show the thumb by default so the
+ * 8px scrollbar gutter has a visible indicator instead of looking
+ * like unexplained empty space on the right. Desktop keeps the
+ * hover-only pattern (rules above). */
+body.is-touch .chat-shell__messages::-webkit-scrollbar-thumb,
+body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+}
+[data-theme="light"] body.is-touch .chat-shell__messages::-webkit-scrollbar-thumb,
+[data-theme="light"] body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
+    background: rgba(40, 30, 15, 0.20);
+}
+
 /* Light theme: deeper thumb on cream canvas */
 [data-theme="light"] .chat-shell__messages:hover,
 [data-theme="light"] #chat-scroll-region:hover {
