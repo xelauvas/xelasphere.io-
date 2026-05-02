@@ -131,12 +131,9 @@
  * inert).
  * ============================================================ */
 
-/* Composer footer is now a translucent frosted backdrop — see
- * styles.css :root --composer-surface and the .chat-shell__composer rule.
- * No override needed here; this polish layer intentionally does NOT
- * fight the structural rule. (Previously this block forced
- * `background: transparent !important` which would have killed the
- * new backdrop silently.) */
+/* Frosted backdrop now lives on .input-container (column-width), not
+ * .chat-shell__composer. The footer is a transparent layout container.
+ * See the .input-container rule in styles.css for the surface tokens. */
 
 /* Pill: transparent (inherits the page canvas) — defined by its border
  * only, not a contrasting fill. Focus flips border to gold + 1px halo. */
