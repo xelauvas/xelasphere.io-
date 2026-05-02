@@ -903,7 +903,10 @@ body.device-phone .chat-display {
     padding: 0 8px;
 }
 
-body.device-tablet #chat-scroll-region,
+/* Padding stays on .chat-display only — pulling it off
+ * #chat-scroll-region lets the scrollbar sit flush at the viewport
+ * edge (ChatGPT/Claude pattern). Inner messages still get 16px
+ * breathing room from the .chat-display padding inside. */
 body.device-tablet .chat-display {
     padding: 0 16px;
 }
@@ -2075,6 +2078,10 @@ body.is-ios .arrow-down {
     body.has-messages .chat-stage {
         padding: 1rem;
         padding-top: calc(var(--mobile-header-height) + env(safe-area-inset-top, 0px));
+        /* Zero horizontal padding so .chat-shell__messages reaches the
+         * viewport edge — scrollbar sits flush. Vertical 1rem stays. */
+        padding-left: 0;
+        padding-right: 0;
         min-height: calc(100vh - var(--mobile-header-height) - env(safe-area-inset-top, 0px));
         min-height: calc(100dvh - var(--mobile-header-height) - env(safe-area-inset-top, 0px));
         height: 100%;
