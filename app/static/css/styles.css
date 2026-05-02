@@ -200,7 +200,7 @@ body {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    overflow: hidden; /* DOAR #chat-scroll-region scrollează */
+    overflow: hidden; /* Only #chat-scroll-region scrolls */
 }
 
 .offline-status {
@@ -4688,11 +4688,11 @@ body.share-modal-open {
 .chat-stage {
     flex: 1 1 auto;
     width: 100%;
-    /* FĂRĂ max-width aici - lasă scroll container să fie full-width */
-    padding: 0; /* Padding mutat pe .conversation-panel */
+    /* No max-width here — scroll container stays full-width */
+    padding: 0; /* Padding moved to .conversation-panel */
     display: flex;
     flex-direction: column;
-    align-items: stretch; /* Full width pentru copii */
+    align-items: stretch; /* Full width for children */
     background: transparent;
     border: none;
     border-radius: 0;
@@ -4707,12 +4707,12 @@ body.share-modal-open {
 .chat-shell {
     flex: 1 1 auto;
     width: 100%;
-    /* FĂRĂ max-width aici - lasă scroll container să fie full-width */
+    /* No max-width here — scroll container stays full-width */
     display: flex;
     flex-direction: column;
-    gap: 0; /* Gap mutat pe .conversation-panel */
+    gap: 0; /* Gap moved to .conversation-panel */
     min-height: 0;
-    align-items: stretch; /* Full width pentru copii */
+    align-items: stretch; /* Full width for children */
     overflow: hidden;
 }
 
@@ -4720,7 +4720,7 @@ body.share-modal-open {
     flex: 0 0 auto;
     width: 100%;
     max-width: var(--chat-content-width);
-    margin: 0 auto; /* Centrat ca și .conversation-panel */
+    margin: 0 auto; /* Centered like .conversation-panel */
     padding: var(--space-3) var(--space-5);
     display: flex;
     flex-direction: column;
@@ -4796,7 +4796,7 @@ body.share-modal-open {
     margin: 0 auto;
     padding: var(--space-5);
     padding-top: var(--space-7); /* Extra clearance so first message isn't clipped at top */
-    padding-bottom: calc(var(--space-6) + var(--composer-reserved-height, 150px)); /* Spațiu pentru composer */
+    padding-bottom: calc(var(--space-6) + var(--composer-reserved-height, 150px)); /* Space for the composer */
     border-radius: 0;
     border: none;
     background: transparent;
