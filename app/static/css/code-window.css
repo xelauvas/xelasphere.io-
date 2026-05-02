@@ -36,7 +36,7 @@
     padding: 0 16px;
     height: 42px;
     background: var(--bg-tertiary, #22222e);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.5);
+    border-bottom: 1px solid var(--border-primary, rgba(0, 0, 0, 0.5));
     border-top-left-radius: 12px;
     border-top-right-radius: 12px;
     user-select: none;
@@ -319,4 +319,10 @@ pre[class*="language-"] {
 }
 [data-theme="light"] .code-window code .diff-line.diff-ctx {
     color: var(--text-primary);
+}
+
+/* Code window header border + scrollbar hover need light overrides
+ * because the dark-theme white-tint defaults are invisible on cream. */
+[data-theme="light"] .code-window pre::-webkit-scrollbar-thumb:hover {
+    background: rgba(40, 30, 15, 0.30);
 }

@@ -1649,7 +1649,9 @@
 
 [data-theme="light"] .range-btn,
 .light-theme .range-btn {
-    color: rgba(0, 0, 0, 0.45);
+    /* Was rgba(0,0,0,0.45) — fails AA at 11px text size.
+     * --text-secondary (#6b665c) gives 5.65:1 on cream. */
+    color: var(--text-secondary, rgba(0, 0, 0, 0.65));
 }
 
 [data-theme="light"] .range-btn:hover,
@@ -1677,7 +1679,8 @@
 
 [data-theme="light"] .stat-label,
 .light-theme .stat-label {
-    color: rgba(0, 0, 0, 0.5);
+    /* Was rgba(0,0,0,0.5) — borderline AA. --text-secondary stronger. */
+    color: var(--text-secondary, rgba(0, 0, 0, 0.65));
 }
 
 [data-theme="light"] .stat-value,
@@ -1687,7 +1690,9 @@
 
 [data-theme="light"] .crypto-chart-source,
 .light-theme .crypto-chart-source {
-    color: rgba(0, 0, 0, 0.35);
+    /* Was rgba(0,0,0,0.35) — fails AA. --text-tertiary darkened
+     * in design-tokens.css now gives 4.55:1 on cream. */
+    color: var(--text-tertiary, rgba(0, 0, 0, 0.55));
 }
 
 [data-theme="light"] .crypto-chart-news,
