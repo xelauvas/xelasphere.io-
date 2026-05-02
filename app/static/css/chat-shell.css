@@ -139,7 +139,7 @@
 /* Pill: transparent (inherits the page canvas) — defined by its border
  * only, not a contrasting fill. Focus flips border to gold + 1px halo. */
 .chat-shell__composer .input-row {
-    background: var(--bg-input) !important;
+    background: var(--bg-elevated) !important;
     border-color: var(--hairline-2) !important;
     box-shadow: var(--shadow-sm) !important;
     transition:
@@ -148,7 +148,7 @@
         box-shadow 160ms ease !important;
 }
 .chat-shell__composer .input-row:focus-within {
-    background: var(--bg-input) !important;
+    background: var(--bg-elevated) !important;
     border-color: var(--gold-line) !important;
     box-shadow: 0 0 0 1px var(--gold-soft), var(--shadow-md) !important;
 }
@@ -252,12 +252,12 @@
  * ============================================================ */
 
 [data-theme="light"] .chat-shell__composer .input-row {
-    background: var(--bg-input) !important;
+    background: var(--bg-elevated) !important;
     border-color: var(--border-primary, rgba(40, 30, 15, 0.08)) !important;
     box-shadow: var(--shadow-sm) !important;
 }
 [data-theme="light"] .chat-shell__composer .input-row:focus-within {
-    background: var(--bg-input) !important;
+    background: var(--bg-elevated) !important;
     border-color: var(--gold-line) !important;
     box-shadow: 0 0 0 1px var(--gold-soft), var(--shadow-md) !important;
 }
