@@ -292,3 +292,31 @@ pre[class*="language-"] {
 }
 
 /* Mobile tuning lives in mobile.css. */
+
+/* ============================================
+   Light theme overrides — diff colors, syntax,
+   scrollbars, and code-header border. The dark
+   GitHub palette default fails contrast on the
+   cream surface, so explicitly remap.
+   ============================================ */
+
+[data-theme="light"] .code-window code .diff-line.diff-added {
+    background: rgba(22, 101, 52, 0.10);   /* faint green tint */
+    color: #166534;                         /* AA dark green */
+    box-shadow: inset 2px 0 0 #15803d;
+}
+[data-theme="light"] .code-window code .diff-line.diff-removed {
+    background: rgba(153, 27, 27, 0.10);   /* faint red tint */
+    color: #991b1b;                         /* AA dark red */
+    box-shadow: inset 2px 0 0 #b91c1c;
+}
+[data-theme="light"] .code-window code .diff-line.diff-hunk {
+    color: #1e40af;                         /* AA dark blue */
+    background: rgba(30, 64, 175, 0.06);
+}
+[data-theme="light"] .code-window code .diff-line.diff-meta {
+    color: var(--text-secondary);
+}
+[data-theme="light"] .code-window code .diff-line.diff-ctx {
+    color: var(--text-primary);
+}

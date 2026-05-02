@@ -1020,6 +1020,15 @@ body.temporary-chat-centered .input-row {
     border-radius: 999px;
 }
 
+/* Light theme: white scrollbar thumb is invisible on white pill bg.
+ * Override to a warm-dark tint matching the rest of the light palette. */
+[data-theme="light"] .chat-input {
+    scrollbar-color: rgba(40, 30, 15, var(--composer-scrollbar-opacity)) transparent;
+}
+[data-theme="light"] .chat-input::-webkit-scrollbar-thumb {
+    background: rgba(40, 30, 15, var(--composer-scrollbar-opacity));
+}
+
 /* Mobile responsive styles moved to mobile.css */
 /* --- File Preview Container --- */
 .file-preview-container {

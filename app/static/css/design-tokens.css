@@ -308,15 +308,18 @@
   --bg-active: rgba(40, 30, 15, 0.08);
   --bg-disabled: #f0ece4;
 
-  /* --- Theme text — warm dark hierarchy --- */
+  /* --- Theme text — warm dark hierarchy ---
+   * Tertiary darkened from #9a9387 (2.89:1, fails AA) to #746e64 (4.55:1, AA).
+   * Link darkened from #c96442 (3.70:1, fails AA) to #b14e2f (4.59:1, AA);
+   * hover uses original coral tone for the lift on hover. */
   --text-primary: #1f1d1a;        /* warm near-black */
   --text-secondary: #6b665c;      /* warm grey */
-  --text-tertiary: #9a9387;       /* warm light grey */
+  --text-tertiary: #746e64;       /* warm dark grey — AA on cream */
   --text-disabled: #b8b1a4;
   --text-inverse: #faf9f5;
   --text-muted: #837e75;
-  --text-link: #c96442;           /* warm coral link (Claude orange) */
-  --text-link-hover: #b14e2f;
+  --text-link: #b14e2f;           /* warm coral, AA on cream */
+  --text-link-hover: #c96442;     /* lighter coral on hover */
 
   /* --- Theme borders — warm dark tints --- */
   --border-primary: rgba(40, 30, 15, 0.08);

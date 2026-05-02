@@ -996,6 +996,24 @@
     border-color: var(--border-primary, rgba(0, 0, 0, 0.12));
 }
 
+/* Light theme shimmer override — default uses #ffffff at the bright band
+ * which is invisible against the cream/elevated light surface. Use a
+ * warm-dark gradient peak instead so the shimmer is actually visible. */
+[data-theme="light"] .search-banner__label {
+    background: linear-gradient(
+        90deg,
+        rgba(40, 30, 15, 0.45) 0%,
+        rgba(40, 30, 15, 0.45) 35%,
+        var(--text-primary, #1f1d1a) 50%,
+        rgba(40, 30, 15, 0.45) 65%,
+        rgba(40, 30, 15, 0.45) 100%
+    );
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
 [data-theme="light"] .search-banner.search-banner--collapsed .search-banner__label {
     color: var(--text-secondary, #4a5068);
 }

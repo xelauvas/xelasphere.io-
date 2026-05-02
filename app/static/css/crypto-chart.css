@@ -1909,3 +1909,14 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
 }
+
+/* Light theme: sparkline change colors must be dark enough for AA on cream.
+ * Defaults #4ade80 / #f87171 are dark-theme bright values that fail contrast. */
+[data-theme="light"] .sparkline-change.positive {
+    color: #15803d;
+    background: rgba(22, 101, 52, 0.08);
+}
+[data-theme="light"] .sparkline-change.negative {
+    color: #b91c1c;
+    background: rgba(153, 27, 27, 0.08);
+}
