@@ -4818,13 +4818,14 @@ body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
     background: rgba(40, 30, 15, 0.20);
 }
 
-/* Inner wrapper — centering + max-width here. The .conversation-panel
- * is now the only width-cap inside the scroll region; the previous
- * .chat-shell__messages > * rule (with the 1200 outer cap) was redundant. */
+/* Conversation panel fills the scroll container edge-to-edge —
+ * no max-width, no auto-centering. Messages span the full width
+ * available inside #chat-scroll-region. (Was previously 737px
+ * centered with ~238px empty bands on each side.) */
 .conversation-panel {
     width: 100%;
-    max-width: var(--chat-content-width);
-    margin: 0 auto;
+    max-width: none;
+    margin: 0;
     padding: var(--space-5);
     padding-top: var(--space-7); /* Extra clearance so first message isn't clipped at top */
     padding-bottom: calc(var(--space-6) + var(--composer-reserved-height, 150px)); /* Space for the composer */
