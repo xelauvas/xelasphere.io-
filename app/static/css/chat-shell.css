@@ -146,13 +146,10 @@
      * Keeping bottom + sides for definition, dropping the top so the
      * fade strip dissolves cleanly into the pill with no edge. */
     border-top-color: transparent !important;
-    /* Shadow with offset_y >= 2x blur so the blur radius (which
-     * fades opacity in BOTH directions from the shadow shape edge)
-     * has fully decayed to zero by the time it reaches the pill's
-     * top edge. 0 2px 2px still left ~1-2px of soft visible blur
-     * above the pill — user reported "grey shadow border above input".
-     * 0 4px 4px gives clean elevation below + zero upward leak. */
-    box-shadow: 0 4px 4px rgba(0, 0, 0, 0.35) !important;
+    /* No box-shadow — every blur attempt left a faint grey bloom
+     * above the pill. Pill defined by bg-elevated lift + side/bottom
+     * borders only. */
+    box-shadow: none !important;
     transition:
         background 160ms ease,
         border-color 160ms ease,
@@ -162,7 +159,7 @@
     background: var(--bg-elevated) !important;
     border-color: var(--gold-line) !important;
     border-top-color: transparent !important;
-    box-shadow: 0 0 0 1px var(--gold-soft), var(--shadow-md) !important;
+    box-shadow: 0 0 0 1px var(--gold-soft) !important;
 }
 
 /* (The .input-row::after U-mask was removed in styles.css — the
@@ -267,13 +264,13 @@
     background: var(--bg-elevated) !important;
     border-color: var(--border-primary, rgba(40, 30, 15, 0.08)) !important;
     border-top-color: transparent !important;
-    box-shadow: 0 4px 4px rgba(40, 30, 15, 0.06) !important;
+    box-shadow: none !important;
 }
 [data-theme="light"] .chat-shell__composer .input-row:focus-within {
     background: var(--bg-elevated) !important;
     border-color: var(--gold-line) !important;
     border-top-color: transparent !important;
-    box-shadow: 0 0 0 1px var(--gold-soft), var(--shadow-md) !important;
+    box-shadow: 0 0 0 1px var(--gold-soft) !important;
 }
 
 [data-theme="light"] .chat-shell__composer .chat-input {
