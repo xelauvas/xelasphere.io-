@@ -4759,7 +4759,9 @@ body.share-modal-open {
     text-align: left;
 }
 
-/* #chat-scroll-region - SINGURUL container care scrollează */
+/* #chat-scroll-region — the ONLY container that scrolls.
+ * Hover-only scrollbar (matches Claude/ChatGPT pattern).
+ * Mobile keeps scrollbar fully hidden via mobile.css:1635-1664. */
 .chat-shell__messages,
 #chat-scroll-region {
     flex: 1 1 auto;
@@ -4767,18 +4769,52 @@ body.share-modal-open {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    overflow-y: auto; /* SCROLL AICI */
+    overflow-y: auto;
     overflow-x: hidden;
-    overflow-anchor: none; /* Prevent browser scroll anchoring - we manage scroll manually */
-    /* Hide scrollbar but keep functionality */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
+    overflow-anchor: none; /* We manage scroll manually */
+    /* Hover-only scrollbar (Firefox) */
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 200ms ease;
 }
 
-/* Hide scrollbar for WebKit browsers (Chrome, Safari, Edge) */
+.chat-shell__messages:hover,
+#chat-scroll-region:hover {
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+/* WebKit scrollbar — track always present at 8px so layout doesn't jump on hover */
 .chat-shell__messages::-webkit-scrollbar,
 #chat-scroll-region::-webkit-scrollbar {
-    display: none;
+    width: 8px;
+}
+.chat-shell__messages::-webkit-scrollbar-track,
+#chat-scroll-region::-webkit-scrollbar-track {
+    background: transparent;
+}
+.chat-shell__messages::-webkit-scrollbar-thumb,
+#chat-scroll-region::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+    transition: background 200ms ease;
+}
+.chat-shell__messages:hover::-webkit-scrollbar-thumb,
+#chat-scroll-region:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+}
+.chat-shell__messages::-webkit-scrollbar-thumb:hover,
+#chat-scroll-region::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.32);
+}
+
+/* Light theme: deeper thumb on cream canvas */
+[data-theme="light"] .chat-shell__messages:hover,
+[data-theme="light"] #chat-scroll-region:hover {
+    scrollbar-color: rgba(40, 30, 15, 0.20) transparent;
+}
+[data-theme="light"] .chat-shell__messages:hover::-webkit-scrollbar-thumb,
+[data-theme="light"] #chat-scroll-region:hover::-webkit-scrollbar-thumb {
+    background: rgba(40, 30, 15, 0.20);
 }
 
 /* Inner wrapper — centering + max-width here. The .conversation-panel
