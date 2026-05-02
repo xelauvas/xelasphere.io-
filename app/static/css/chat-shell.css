@@ -141,6 +141,11 @@
 .chat-shell__composer .input-row {
     background: var(--bg-elevated) !important;
     border-color: var(--hairline-2) !important;
+    /* Top border transparent — the visible line above the pill was
+     * the hairline-2 (12% white) drawing above the elevated surface.
+     * Keeping bottom + sides for definition, dropping the top so the
+     * fade strip dissolves cleanly into the pill with no edge. */
+    border-top-color: transparent !important;
     box-shadow: var(--shadow-sm) !important;
     transition:
         background 160ms ease,
@@ -150,6 +155,7 @@
 .chat-shell__composer .input-row:focus-within {
     background: var(--bg-elevated) !important;
     border-color: var(--gold-line) !important;
+    border-top-color: transparent !important;
     box-shadow: 0 0 0 1px var(--gold-soft), var(--shadow-md) !important;
 }
 
@@ -254,11 +260,13 @@
 [data-theme="light"] .chat-shell__composer .input-row {
     background: var(--bg-elevated) !important;
     border-color: var(--border-primary, rgba(40, 30, 15, 0.08)) !important;
+    border-top-color: transparent !important;
     box-shadow: var(--shadow-sm) !important;
 }
 [data-theme="light"] .chat-shell__composer .input-row:focus-within {
     background: var(--bg-elevated) !important;
     border-color: var(--gold-line) !important;
+    border-top-color: transparent !important;
     box-shadow: 0 0 0 1px var(--gold-soft), var(--shadow-md) !important;
 }
 
