@@ -4943,7 +4943,14 @@ body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
     left: 0;
     right: 0;
     height: 64px;
-    background: linear-gradient(to bottom, transparent 0%, var(--bg-primary) 100%);
+    /* Gradient end matches pill bg (--bg-elevated), not page bg
+     * (--bg-primary), so there's no lightness step at the pill's
+     * top border — content fades smoothly into the pill's surface
+     * color. The 24px inside the composer renders bg-elevated tint
+     * over composer bg-primary, but that's behind the pill so not
+     * directly visible; the perceived effect is a clean dissolve
+     * from scroll content into the lifted pill. */
+    background: linear-gradient(to bottom, transparent 0%, var(--bg-elevated) 100%);
     pointer-events: none;
 }
 
