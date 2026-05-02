@@ -49,7 +49,7 @@
     box-sizing: border-box;
     transform: translateX(calc(
         var(--composer-side-pad, 0.95rem) - 32px
-        + (var(--composer-shell-max-width, 768px) - var(--content-max-width, 768px)) / 2
+        + (var(--chat-content-width, 768px) - var(--chat-content-width, 768px)) / 2
     )) !important;
 }
 
