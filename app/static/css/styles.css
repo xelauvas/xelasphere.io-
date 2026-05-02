@@ -71,7 +71,7 @@
      * --composer-shell-max-width, --chat-shell-max-width, --chat-stage-max-width.
      * --chat-right-panel-width is the canonical fallback for the artifact panel
      * when JS hasn't yet set the live --artifact-panel-width. */
-    --chat-content-width: 768px;
+    --chat-content-width: clamp(720px, 55vw, 1100px);
     --chat-right-panel-width: 50vw;
     --composer-mobile-height: 190px;
     --composer-side-pad: 0.95rem;
