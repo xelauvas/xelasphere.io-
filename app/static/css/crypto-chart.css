@@ -248,12 +248,12 @@
 .crypto-chart-wrapper {
     margin-top: 0.75rem;
     margin-bottom: 1rem;
-    /* Chart uses --content-max-width (768px) instead of
+    /* Chart uses --chat-content-width (768px) instead of
        --composer-shell-max-width — they used to be the same value, but
        PR #44 widened the composer to 800px while chart should stay at
-       768. --content-max-width remains 768. */
-    width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
-    max-width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+       768. --chat-content-width remains 768. */
+    width: calc(var(--chat-content-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+    max-width: calc(var(--chat-content-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
     margin-left: auto !important;
     margin-right: auto !important;
     /* Compensate for two things:
@@ -262,10 +262,10 @@
           = 32px padding-left extra; input's chain has --composer-side-pad
           (~15.2px). Net: 32 - 15.2 = 16.8px shift right.
        2. Width difference: when input is wider than chart (e.g.,
-          --composer-shell-max-width 800 vs --content-max-width 768),
+          --composer-shell-max-width 800 vs --chat-content-width 768),
           chart needs to shift right by (input_w - chart_w)/2 to stay
           centered within the wider input. The shift is
-          (--composer-shell-max-width - --content-max-width) / 2. */
+          (--composer-shell-max-width - --chat-content-width) / 2. */
     transform: translateX(calc(
         var(--composer-side-pad, 0.95rem) - 32px
         + (var(--composer-shell-max-width, 768px) - var(--content-max-width, 768px)) / 2

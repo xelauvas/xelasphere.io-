@@ -42,8 +42,8 @@
        Card sits inside .ai-message → .message-content (32px parent-chain
        padding); the input chain has ~15.2px (--composer-side-pad). The
        transform offsets that asymmetry so left/right edges align exactly. */
-    width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
-    max-width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+    width: calc(var(--chat-content-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+    max-width: calc(var(--chat-content-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
     margin-left: auto !important;
     margin-right: auto !important;
     box-sizing: border-box;

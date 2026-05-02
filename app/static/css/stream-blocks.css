@@ -239,8 +239,8 @@
 
 /* Context rules override TWO intermediate width caps:
    .message-content and .text-message-container. Both are bound to
-   var(--composer-max-width) which defaults to 880px — without
-   overriding both, any context trying to exceed 880 is clipped by the
+   var(--chat-content-width) which defaults to 768px — without
+   overriding both, any context trying to exceed 768 is clipped by the
    outer wrapper. The renderer sets data-ctx on the outermost .message
    element AND the inner .text-message-container, so one rule can win
    over both.

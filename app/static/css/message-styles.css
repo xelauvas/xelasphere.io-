@@ -262,8 +262,8 @@ h1 {
     font-family: var(--font-sans);
     display: flex;
     flex-direction: column;
-    width: min(100%, var(--composer-max-width, 760px));
-    max-width: min(100%, var(--composer-max-width, 760px));
+    width: min(100%, var(--chat-content-width, 768px));
+    max-width: min(100%, var(--chat-content-width, 768px));
     margin: 0;
     -webkit-font-smoothing: var(--font-smoothing-webkit);
     -moz-osx-font-smoothing: var(--font-smoothing-moz);
@@ -291,8 +291,8 @@ h1 {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-2);
-    width: min(100%, var(--composer-max-width, 760px));
-    max-width: min(100%, var(--composer-max-width, 760px));
+    width: min(100%, var(--chat-content-width, 768px));
+    max-width: min(100%, var(--chat-content-width, 768px));
     position: relative;
     white-space: var(--wrap-normal);
     overflow-wrap: var(--wrap-overflow);
