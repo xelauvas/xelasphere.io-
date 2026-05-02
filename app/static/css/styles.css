@@ -4787,14 +4787,9 @@ body.share-modal-open {
     display: none;
 }
 
-.chat-shell__messages > * {
-    width: 100%;
-    max-width: var(--chat-content-width);
-    margin-left: auto;
-    margin-right: auto;
-}
-
-/* Inner wrapper - CENTRARE + MAX-WIDTH aici */
+/* Inner wrapper — centering + max-width here. The .conversation-panel
+ * is now the only width-cap inside the scroll region; the previous
+ * .chat-shell__messages > * rule (with the 1200 outer cap) was redundant. */
 .conversation-panel {
     width: 100%;
     max-width: var(--chat-content-width);
