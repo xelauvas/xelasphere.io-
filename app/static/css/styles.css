@@ -4933,7 +4933,13 @@ body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
 .chat-shell__composer::before {
     content: '';
     position: absolute;
-    bottom: 100%;
+    /* Shift fade bottom 24px down (composer padding-top 12px +
+     * input-container margin-top 12px) so the fade end lands at the
+     * pill's top border instead of the composer's outer top edge.
+     * The 24px overlap into the composer is gradient-over-opaque-bg,
+     * visually invisible — only the area above the composer shows
+     * the fade. */
+    bottom: calc(100% - var(--space-3) - var(--composer-margin-top));
     left: 0;
     right: 0;
     height: 64px;
