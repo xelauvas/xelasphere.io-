@@ -416,6 +416,26 @@ class ChatSession:
         ref.update(cleaned)
         return True
 
+    def bulk_delete_sessions(self, user_id: str, session_ids: List[str]) -> int:
+        """Delete multiple sessions in a single Firestore batch.
+
+        Returns count of sessions deleted. Sessions that do not exist
+        are silently skipped (the count reflects only existing ones).
+        """
+        if not session_ids:
+            return 0
+        batch = self.db.batch()
+        deleted = 0
+        for session_id in session_ids:
+            ref = self._get_session_ref(user_id, session_id)
+            snap = ref.get()
+            if snap.exists:
+                batch.delete(ref)
+                deleted += 1
+        if deleted > 0:
+            batch.commit()
+        return deleted
+
     def _get_session_ref(self, user_id: str, session_id: str) -> gc_firestore.DocumentReference:
         return self.db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
 

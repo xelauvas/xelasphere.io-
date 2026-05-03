@@ -508,6 +508,28 @@ def chat_patch_session(session_id):
     return ('', 204)
 
 
+@session_bp.route('/chat/bulk-delete', methods=['POST'])
+@limiter.limit("30 per minute")
+@csrf_required
+@error_handler
+@login_required
+def chat_bulk_delete():
+    """Delete multiple sessions in a single batched operation.
+
+    Body: {"session_ids": ["...", "..."]}
+    Returns: {"deleted": <count>}
+    """
+    user_id = session['user']['uid']
+    body = request.get_json(silent=True) or {}
+    session_ids = body.get('session_ids')
+    if not isinstance(session_ids, list) or not session_ids:
+        return jsonify({'error': 'session_ids required (non-empty list)'}), 400
+    if not all(isinstance(s, str) for s in session_ids):
+        return jsonify({'error': 'session_ids must be strings'}), 400
+    count = chat_session.bulk_delete_sessions(user_id, session_ids)
+    return jsonify({'deleted': count})
+
+
 @session_bp.route('/chat/session/<session_id>', methods=['GET'])
 @error_handler
 @login_required

@@ -75,3 +75,32 @@ def test_patch_session_rejects_unknown_fields(authenticated_client, mock_firesto
     args, _ = mock_update.call_args
     assert "user_id" not in args[2]
     assert args[2] == {"starred": True}
+
+
+def test_bulk_delete_removes_all_specified_sessions(authenticated_client, mock_firestore):
+    """POST /chat/bulk-delete with list of ids deletes them all."""
+    headers = {"X-CSRFToken": "test-token"}
+    with patch("app.limiter.validate_csrf", return_value=None), \
+         patch("app.chat_session.ChatSession.bulk_delete_sessions",
+               return_value=3) as mock_del:
+        resp = authenticated_client.post(
+            "/chat/bulk-delete",
+            json={"session_ids": ["s1", "s2", "s3"]},
+            headers=headers,
+        )
+    assert resp.status_code == 200, resp.data
+    body = resp.get_json()
+    assert body == {"deleted": 3}
+    mock_del.assert_called_once()
+
+
+def test_bulk_delete_rejects_empty_list(authenticated_client, mock_firestore):
+    """Empty session_ids → 400."""
+    headers = {"X-CSRFToken": "test-token"}
+    with patch("app.limiter.validate_csrf", return_value=None):
+        resp = authenticated_client.post(
+            "/chat/bulk-delete",
+            json={"session_ids": []},
+            headers=headers,
+        )
+    assert resp.status_code == 400
