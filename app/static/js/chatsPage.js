@@ -17,6 +17,8 @@
             model: '',
             hasArtifact: false,
             hasAttachment: false,
+            dateFrom: '',
+            dateTo: '',
         },
         sort: 'recent',
         selected: new Set(),
@@ -29,6 +31,8 @@
         empty: document.getElementById('chats-empty'),
         search: document.getElementById('chats-search'),
         filterModel: document.getElementById('chats-filter-model'),
+        filterFrom: document.getElementById('chats-filter-from'),
+        filterTo: document.getElementById('chats-filter-to'),
         filterChips: document.querySelectorAll('.chats-chip[data-filter]'),
         sort: document.getElementById('chats-sort'),
         bulkToolbar: document.getElementById('chats-bulk-toolbar'),
@@ -110,6 +114,8 @@
             if (state.filters.model && s.model !== state.filters.model) return false;
             if (state.filters.hasArtifact && !s.has_artifact) return false;
             if (state.filters.hasAttachment && !s.has_attachment) return false;
+            if (state.filters.dateFrom && (s.last_updated || '') < state.filters.dateFrom) return false;
+            if (state.filters.dateTo && (s.last_updated || '') > state.filters.dateTo + 'T23:59:59') return false;
             if (q && !(s.title || '').toLowerCase().includes(q)) return false;
             return true;
         });
@@ -152,7 +158,8 @@
             els.list.innerHTML = '';
             els.empty.hidden = false;
             const hasFilters = state.search || state.filters.starred || state.filters.model
-                || state.filters.hasArtifact || state.filters.hasAttachment;
+                || state.filters.hasArtifact || state.filters.hasAttachment
+                || state.filters.dateFrom || state.filters.dateTo;
             const msg = els.empty.querySelector('p');
             const btn = els.empty.querySelector('.chats-empty__clear');
             if (state.sessions.length === 0) {
@@ -573,6 +580,16 @@
             render();
         });
 
+        els.filterFrom.addEventListener('change', e => {
+            state.filters.dateFrom = e.target.value || '';
+            render();
+        });
+
+        els.filterTo.addEventListener('change', e => {
+            state.filters.dateTo = e.target.value || '';
+            render();
+        });
+
         els.sort.addEventListener('change', e => {
             state.sort = e.target.value || 'recent';
             render();
@@ -580,10 +597,13 @@
 
         els.emptyClear.addEventListener('click', () => {
             state.search = '';
-            state.filters = { starred: false, model: '', hasArtifact: false, hasAttachment: false };
+            state.filters = { starred: false, model: '', hasArtifact: false, hasAttachment: false,
+                              dateFrom: '', dateTo: '' };
             els.search.value = '';
             els.filterChips.forEach(c => c.setAttribute('aria-pressed', 'false'));
             els.filterModel.value = '';
+            els.filterFrom.value = '';
+            els.filterTo.value = '';
             render();
         });
 

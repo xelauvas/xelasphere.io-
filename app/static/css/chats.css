@@ -463,3 +463,22 @@
     margin: 0 0 16px;
     font-size: 15px;
 }
+
+/* ── Date range filter chips ─────────────────────────────────── */
+.chats-chip--date {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary, #9898b0);
+    cursor: text;
+}
+
+.chats-chip--date input {
+    background: transparent;
+    border: none;
+    color: var(--text-primary, #e8e8f0);
+    font: inherit;
+    outline: none;
+    padding: 0;
+    color-scheme: dark;
+}

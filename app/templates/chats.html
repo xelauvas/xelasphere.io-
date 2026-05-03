@@ -36,6 +36,12 @@
             <select class="chats-chip chats-chip--select" id="chats-filter-model" aria-label="Filter by model">
                 <option value="">All models</option>
             </select>
+            <label class="chats-chip chats-chip--date">
+                From <input type="date" id="chats-filter-from" aria-label="From date">
+            </label>
+            <label class="chats-chip chats-chip--date">
+                To <input type="date" id="chats-filter-to" aria-label="To date">
+            </label>
             <button class="chats-chip" data-filter="hasArtifact" aria-pressed="false">Has artifact</button>
             <button class="chats-chip" data-filter="hasAttachment" aria-pressed="false">Has attachment</button>
         </div>
