@@ -451,3 +451,15 @@
         font-size: 11px;
     }
 }
+
+/* ── Error state ──────────────────────────────────────────────── */
+.chats-page__error {
+    text-align: center;
+    padding: 48px 16px;
+    color: var(--text-secondary, #9898b0);
+}
+
+.chats-page__error p {
+    margin: 0 0 16px;
+    font-size: 15px;
+}

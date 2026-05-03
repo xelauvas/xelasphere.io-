@@ -37,6 +37,9 @@
         bulkDelete: document.getElementById('chats-bulk-delete'),
         bulkCancel: document.getElementById('chats-bulk-cancel'),
         emptyClear: document.getElementById('chats-empty-clear'),
+        error: document.getElementById('chats-error'),
+        errorMsg: document.getElementById('chats-error-msg'),
+        errorRetry: document.getElementById('chats-error-retry'),
     };
 
     /* ─── cache ───────────────────────────────────────────────── */
@@ -136,10 +139,33 @@
     /* ─── render ──────────────────────────────────────────────── */
 
     function render() {
+        if (state.error) {
+            els.list.innerHTML = '';
+            els.empty.hidden = true;
+            els.error.hidden = false;
+            els.errorMsg.textContent = state.error;
+            return;
+        }
+        els.error.hidden = true;
         const visible = getVisibleSessions();
         if (visible.length === 0) {
             els.list.innerHTML = '';
             els.empty.hidden = false;
+            const hasFilters = state.search || state.filters.starred || state.filters.model
+                || state.filters.hasArtifact || state.filters.hasAttachment;
+            const msg = els.empty.querySelector('p');
+            const btn = els.empty.querySelector('.chats-empty__clear');
+            if (state.sessions.length === 0) {
+                msg.textContent = 'No chats yet. Start a new chat to get going.';
+                btn.textContent = 'New chat';
+                btn.onclick = () => { window.location.href = '/'; };
+            } else if (hasFilters) {
+                msg.textContent = 'No chats match your filters.';
+                btn.textContent = 'Clear filters';
+                btn.onclick = null;  // existing emptyClear listener handles this
+            } else {
+                msg.textContent = 'No chats found.';
+            }
             return;
         }
         els.empty.hidden = true;
@@ -527,6 +553,11 @@
             els.filterChips.forEach(c => c.setAttribute('aria-pressed', 'false'));
             els.filterModel.value = '';
             render();
+        });
+
+        els.errorRetry.addEventListener('click', () => {
+            state.error = null;
+            fetchSessions();
         });
     }
 

@@ -61,6 +61,11 @@
         <p>No chats match your filters.</p>
         <button type="button" class="chats-empty__clear" id="chats-empty-clear">Clear filters</button>
     </div>
+
+    <div class="chats-page__error" id="chats-error" hidden>
+        <p id="chats-error-msg">Couldn't load your chats.</p>
+        <button type="button" class="chats-empty__clear" id="chats-error-retry">Retry</button>
+    </div>
 </main>
 
 <script src="{{ url_for('static', filename='js/chatsPage.js') }}?v=1"></script>
