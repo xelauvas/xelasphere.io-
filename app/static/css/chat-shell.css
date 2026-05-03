@@ -499,6 +499,18 @@
  * the send button. Re-point both to tokens so they follow the
  * theme and match the desktop polish. */
 @media (max-width: 768px) {
+    /* Mobile re-flow makes .input-container position:fixed (mobile.css), so
+     * the composer's natural height collapses to padding-only (~24px). The
+     * desktop mask-image (transparent 0→24px) then wipes the entire 24px
+     * box — and because mask-image creates a stacking context, the fixed
+     * input-container descendant renders through that transparent mask and
+     * disappears. Disable the mask on mobile; the input-container's own
+     * top-fade gradient (mobile.css:2998) already handles the soft edge. */
+    .chat-shell__composer {
+        -webkit-mask-image: none !important;
+        mask-image: none !important;
+    }
+
     .chat-shell__composer .input-row > .textarea-container {
         background: var(--ink-3) !important;
         border: 1px solid var(--hairline-2) !important;
