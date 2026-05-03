@@ -304,6 +304,7 @@
     function bindBulkActions() {
         els.bulkCancel.addEventListener('click', () => {
             state.selected.clear();
+            document.querySelector('.chats-page').classList.remove('in-select-mode');
             updateBulkToolbar();
             render();
         });
@@ -503,9 +504,40 @@
 
     /* ─── boot ────────────────────────────────────────────────── */
 
+    function bindLongPress() {
+        let pressTimer = null;
+        let pressTarget = null;
+        const LONG_PRESS_MS = 500;
+
+        els.list.addEventListener('touchstart', e => {
+            const row = e.target.closest('.chats-row');
+            if (!row) return;
+            pressTarget = row;
+            pressTimer = setTimeout(() => {
+                if (pressTarget === row) {
+                    document.querySelector('.chats-page').classList.add('in-select-mode');
+                    const id = row.dataset.sessionId;
+                    if (id) toggleSelect(id, true);
+                    row.querySelector('.chats-row__check').checked = true;
+                    if (navigator.vibrate) navigator.vibrate(20);
+                }
+            }, LONG_PRESS_MS);
+        }, { passive: true });
+
+        const cancel = () => {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+            pressTarget = null;
+        };
+        els.list.addEventListener('touchend', cancel, { passive: true });
+        els.list.addEventListener('touchmove', cancel, { passive: true });
+        els.list.addEventListener('touchcancel', cancel, { passive: true });
+    }
+
     function boot() {
         bindControls();
         bindBulkActions();
+        bindLongPress();
         const cached = loadCache();
         if (cached) {
             state.sessions = cached;
