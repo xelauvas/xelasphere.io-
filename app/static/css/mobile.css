@@ -200,20 +200,18 @@ body.is-touch input[type="radio"] {
     min-width: 24px;
 }
 
-/* === Reduced Motion - Respect user preference === */
-body.prefers-reduced-motion *,
-body.prefers-reduced-motion *::before,
-body.prefers-reduced-motion *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-}
-
-/* Exception: Keep thinking indicator pulsing even with reduced motion */
-body.prefers-reduced-motion .thinking-indicator .thinking-dots span,
-body.prefers-reduced-motion .streaming-cursor {
-    animation-duration: 1.5s !important;
-    animation-iteration-count: infinite !important;
+/* === Reduced Motion - Respect user preference ===
+   Wrapped in :where() to zero specificity. Without :where(), the
+   `body.X *` selector has specificity (0,1,1) which beats single-class
+   rules like .stream-cursor (0,1,0) — meaning intentional animations
+   would lose to this neutering rule. With :where(), this rule is
+   specificity 0 and any normal class-selector animation wins. */
+:where(body.prefers-reduced-motion *),
+:where(body.prefers-reduced-motion *::before),
+:where(body.prefers-reduced-motion *::after) {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
 }
 
 /* === Hybrid Devices (touch + mouse) === */
@@ -903,7 +901,10 @@ body.device-phone .chat-display {
     padding: 0 8px;
 }
 
-body.device-tablet #chat-scroll-region,
+/* Padding stays on .chat-display only — pulling it off
+ * #chat-scroll-region lets the scrollbar sit flush at the viewport
+ * edge (ChatGPT/Claude pattern). Inner messages still get 16px
+ * breathing room from the .chat-display padding inside. */
 body.device-tablet .chat-display {
     padding: 0 16px;
 }
@@ -2075,6 +2076,10 @@ body.is-ios .arrow-down {
     body.has-messages .chat-stage {
         padding: 1rem;
         padding-top: calc(var(--mobile-header-height) + env(safe-area-inset-top, 0px));
+        /* Zero horizontal padding so .chat-shell__messages reaches the
+         * viewport edge — scrollbar sits flush. Vertical 1rem stays. */
+        padding-left: 0;
+        padding-right: 0;
         min-height: calc(100vh - var(--mobile-header-height) - env(safe-area-inset-top, 0px));
         min-height: calc(100dvh - var(--mobile-header-height) - env(safe-area-inset-top, 0px));
         height: 100%;
@@ -5203,7 +5208,7 @@ body.device-tablet .mobile-overlay {
         font-size: 12px;
     }
 
-    .code-header {
+    .code-window .code-header {
         height: 36px;
         padding: 0 12px;
         top: 0;
@@ -5214,7 +5219,7 @@ body.device-tablet .mobile-overlay {
         backdrop-filter: blur(16px) saturate(150%);
     }
 
-    .code-header::before {
+    .code-window .code-header::before {
         width: 9px;
         height: 9px;
         left: 12px;
@@ -5223,7 +5228,7 @@ body.device-tablet .mobile-overlay {
             30px 0 0 #28c840;
     }
 
-    .language-indicator {
+    .code-window .language-indicator {
         margin-left: 52px;
         font-size: 10px;
         padding: 3px 7px;
@@ -5234,19 +5239,21 @@ body.device-tablet .mobile-overlay {
         flex-shrink: 1;
     }
 
-    .copy-button {
+    .code-window .copy-button {
         padding: 4px 4px;
         font-size: 11.5px;
     }
-    .copy-button svg { width: 12px; height: 12px; }
+    .code-window .copy-button svg { width: 12px; height: 12px; }
 
-    .code-window pre {
-        padding: 14px 16px;
+    .code-window pre,
+    .code-window pre[class*="language-"] {
+        padding: 14px 16px !important;
         border-bottom-left-radius: 10px;
         border-bottom-right-radius: 10px;
     }
 
-    .code-window code {
+    .code-window code,
+    .code-window code[class*="language-"] {
         font-size: 12px;
         line-height: 1.6;
     }
@@ -5260,7 +5267,7 @@ body.device-tablet .mobile-overlay {
     /* Very narrow phones — hide traffic lights to reclaim header real
        estate. The language pill and copy button are the priority. */
     @media (max-width: 380px) {
-        .code-header::before { display: none; }
-        .language-indicator { margin-left: 0; max-width: 55%; }
+        .code-window .code-header::before { display: none; }
+        .code-window .language-indicator { margin-left: 0; max-width: 55%; }
     }
 }

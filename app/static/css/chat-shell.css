@@ -1,0 +1,607 @@
+/* app/static/css/chat-shell.css
+ *
+ * Phase 3: Chat-shell visual polish overlay.
+ *
+ * Loaded AFTER all other shell stylesheets (sidebarContent.css,
+ * styles.css, etc.) so its rules win on specificity ties. Targets
+ * existing selectors — no HTML/JS changes — and uses Phase-1 tokens
+ * for color and spacing so it shares the unified palette.
+ *
+ * Scope: sidebar brand polish, sidebar action buttons accent, model
+ * picker refinement, message-bubble shape, composer roundedness +
+ * gold send button + focus ring.
+ *
+ * Out of scope (deferred to Phase 3b): avatar circle on AI messages,
+ * action-buttons-on-hover row.
+ *
+ * Spec: docs/superpowers/specs/2026-05-02-streaming-text-polish-design.md
+ */
+
+
+/* ============================================================
+ * SIDEBAR — brand mark, action buttons, account block
+ * ============================================================ */
+
+/* Brand mark: replace plain "Xelasphere" text with a gold-gradient
+ * letter mark. Uses ::before since we can't add new HTML in Phase 3. */
+.sidebar-logo-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+}
+.sidebar-logo-link::before {
+    content: 'X';
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, var(--gold-1) 0%, var(--gold-3) 100%);
+    color: var(--ink-deep);
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 13px;
+    box-shadow:
+        0 4px 12px rgba(212, 176, 117, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.sidebar-brand-text {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    letter-spacing: -0.012em;
+    color: var(--paper-1);
+    font-size: 14.5px;
+}
+
+/* New Chat action button: subtle gold accent on the icon */
+.sidebar-action-btn#action-new-chat .sidebar-action-icon {
+    color: var(--gold-2);
+}
+.sidebar-action-btn:hover {
+    background: var(--ink-3) !important;
+}
+
+/* Sidebar item hover refinement */
+.sidebar-content a:hover,
+.sidebar-content button:hover {
+    background: var(--ink-3) !important;
+}
+
+
+/* ============================================================
+ * HEADER — refined model picker chip
+ * ============================================================ */
+
+/* Pulsing gold dot indicator for "Auto" mode */
+.chat-shell__header .model-pick-dot,
+.chat-shell__header [class*="model"][class*="indicator"] {
+    width: 6px !important;
+    height: 6px !important;
+    border-radius: 50%;
+    background: var(--gold-2);
+    box-shadow: 0 0 8px var(--gold-2);
+}
+
+
+/* ============================================================
+ * USER MESSAGE — right-aligned, no bubble. Plain text in the gutter.
+ * ============================================================ */
+
+.user-message .text-message-container {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    text-align: right;
+    /* Keep the container's existing width/max-width from message-styles.css
+       so flex children (text + edit/copy buttons) have room to lay out
+       on one line. Only stripping the bubble visual treatment here. */
+}
+
+
+/* ============================================================
+ * AI MESSAGE BUBBLE — subtle background tint, no border
+ * (no avatar yet — Phase 3b adds that)
+ * ============================================================ */
+
+.ai-message .text-message-container {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+
+/* ============================================================
+ * COMPOSER — input pill + gold send button + focus ring
+ *
+ * Real markup:
+ *   <footer class="chat-shell__composer">
+ *     <div class="input-container">
+ *       <div class="input-row">         ← the pill (rounded 26px, dark bg)
+ *         <div class="actions-menu">…</div>     (left + button)
+ *         <div class="textarea-container">
+ *           <textarea class="chat-input">
+ *           <button class="send-button">       ← real send button
+ *
+ * Targets the actual selectors above (the original Phase-3 plan named
+ * .composer-inner / [class*=composer-wrap] / button[type=submit] /
+ * .send-btn — none of which exist in this markup, so those rules were
+ * inert).
+ * ============================================================ */
+
+/* Composer footer paints var(--bg-primary) opaque (styles.css
+ * .chat-shell__composer rule) — extension of the page canvas. The
+ * pill (.input-row) stays transparent, sitting on top with just
+ * its hairline border for definition. */
+
+/* Pill: transparent (inherits the page canvas) — defined by its border
+ * only, not a contrasting fill. Focus flips border to gold + 1px halo. */
+.chat-shell__composer .input-row {
+    background: var(--bg-elevated) !important;
+    border-color: var(--hairline-2) !important;
+    /* Top border transparent — the visible line above the pill was
+     * the hairline-2 (12% white) drawing above the elevated surface.
+     * Keeping bottom + sides for definition, dropping the top so the
+     * fade strip dissolves cleanly into the pill with no edge. */
+    border-top-color: transparent !important;
+    /* No box-shadow — every blur attempt left a faint grey bloom
+     * above the pill. Pill defined by bg-elevated lift + side/bottom
+     * borders only. */
+    box-shadow: none !important;
+    transition:
+        background 160ms ease,
+        border-color 160ms ease,
+        box-shadow 160ms ease !important;
+}
+.chat-shell__composer .input-row:focus-within {
+    background: var(--bg-elevated) !important;
+    border-color: var(--gold-line) !important;
+    border-top-color: transparent !important;
+    box-shadow: 0 0 0 1px var(--gold-soft) !important;
+}
+
+/* (The .input-row::after U-mask was removed in styles.css — the
+ * frosted composer backdrop replaces what the U-mask was hiding.
+ * No override needed.) */
+
+/* Textarea: transparent (pill carries the bg) */
+.chat-shell__composer .chat-input {
+    background: transparent !important;
+    color: var(--paper-1);
+    font-family: var(--font-sans);
+}
+
+/* Send button: gold with shadow + lift-on-hover.
+ *
+ * Size + position are duplicated from styles.css here on purpose:
+ * if chat-shell.css's gold paint applies before styles.css has
+ * loaded (parallel CSS download — chat-shell finishes first because
+ * it's tiny), the gold would paint on a default-sized HTML button
+ * and look like the bg is filled with gold for a moment. Pinning
+ * size + position here keeps the button to its intended 30×30 even
+ * during that window. */
+/* Send button: cream chip with dark arrow, soft elevation, gold tint on hover.
+ *
+ * Design intent: subtle CTA presence (only shows when input has text, so it's
+ * already contextual — no need to scream). Inverted contrast (cream-on-dark)
+ * catches the eye briefly, then gold on hover ties to the brand accent.
+ *
+ * display: none by default — script.js:2065 toggles inline style.display
+ * based on textarea content. Non-!important here so the inline style wins. */
+.chat-shell__composer .send-button {
+    position: absolute !important;
+    right: 8px !important;
+    bottom: 4px !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    box-sizing: border-box !important;
+    display: none;
+    background-color: var(--paper-2) !important;
+    border: 1px solid var(--paper-2) !important;
+    box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+    transition:
+        transform 120ms ease,
+        box-shadow 120ms ease,
+        background-color 120ms ease,
+        border-color 120ms ease !important;
+}
+.chat-shell__composer .send-button i.fas.fa-arrow-up {
+    color: var(--ink-deep) !important;
+}
+.chat-shell__composer .send-button:hover:not(:disabled) {
+    background-color: var(--gold-1) !important;
+    border-color: var(--gold-1) !important;
+    transform: translateY(-1px);
+    box-shadow:
+        0 4px 12px rgba(212, 176, 117, 0.30),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+}
+.chat-shell__composer .send-button:disabled {
+    opacity: 0.45;
+    box-shadow: none !important;
+    transform: none;
+}
+
+/* Light theme: invert — warm-dark chip with cream arrow, gold on hover */
+[data-theme="light"] .chat-shell__composer .send-button {
+    background-color: var(--text-primary, #1f1d1a) !important;
+    border-color: var(--text-primary, #1f1d1a) !important;
+    box-shadow:
+        0 2px 6px rgba(40, 30, 15, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+[data-theme="light"] .chat-shell__composer .send-button i.fas.fa-arrow-up {
+    color: var(--bg-input, #ffffff) !important;
+}
+[data-theme="light"] .chat-shell__composer .send-button:hover:not(:disabled) {
+    background-color: var(--gold-3, var(--gold-2)) !important;
+    border-color: var(--gold-3, var(--gold-2)) !important;
+    box-shadow:
+        0 4px 12px rgba(184, 152, 96, 0.30),
+        inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+}
+[data-theme="light"] .chat-shell__composer .send-button:hover:not(:disabled) i.fas.fa-arrow-up {
+    color: var(--ink-deep, #0e0d0a) !important;
+}
+
+
+/* ============================================================
+ * COMPOSER — light theme overrides
+ *
+ * Phase-1 ink/paper tokens don't flip per theme, so we re-point the
+ * pill bg + textarea text to the existing light-theme tokens defined
+ * in design-tokens.css. Gold accents (focus ring, send button) read
+ * fine on a light bg and stay as-is.
+ * ============================================================ */
+
+[data-theme="light"] .chat-shell__composer .input-row {
+    /* Light theme: pill uses --bg-tertiary (#f3efe7, warm beige
+     * ~7pt darker than the cream page bg) instead of --bg-elevated
+     * (#ffffff). White pill on cream reads as a popover floating
+     * above the page; warm beige reads as a soft card sitting on
+     * the page — matches Claude's light theme pattern + the
+     * sidebar's "blends with page" aesthetic. */
+    background: var(--bg-tertiary) !important;
+    border-color: var(--border-primary, rgba(40, 30, 15, 0.08)) !important;
+    border-top-color: transparent !important;
+    box-shadow: none !important;
+}
+[data-theme="light"] .chat-shell__composer .input-row:focus-within {
+    background: var(--bg-tertiary) !important;
+    border-color: var(--gold-line) !important;
+    border-top-color: transparent !important;
+    box-shadow: 0 0 0 1px var(--gold-soft) !important;
+}
+
+[data-theme="light"] .chat-shell__composer .chat-input {
+    color: var(--text-primary, #1f1d1a);
+}
+[data-theme="light"] .chat-shell__composer .chat-input::placeholder {
+    color: var(--text-tertiary, #9a9387);
+}
+
+/* Composer container stays transparent in light theme too. */
+[data-theme="light"] .chat-shell__composer {
+    background: transparent !important;
+}
+
+
+/* ============================================================
+ * COMPOSER UTILITY BUTTONS — actions-toggle (`+`) + microphone
+ *
+ * The legacy styling gives both a muted dark fill (--bg-hover) with
+ * grey icons. After polishing the voice + send buttons, those two
+ * read as legacy. Restyle to a matching ghost (transparent + hairline
+ * + paper-toned icon, gold on hover).
+ *
+ * The active/open states keep their existing transforms (e.g. the +
+ * rotates to ✕ via .actions-menu.open .actions-toggle svg).
+ * ============================================================ */
+
+.chat-shell__composer .actions-toggle,
+.chat-shell__composer .microphone-button {
+    background: transparent !important;
+    border: 1px solid var(--hairline-2) !important;
+    color: var(--paper-3) !important;
+    transition:
+        background-color 160ms ease,
+        border-color 160ms ease,
+        color 160ms ease,
+        transform 160ms ease !important;
+}
+.chat-shell__composer .actions-toggle:hover,
+.chat-shell__composer .actions-toggle:focus-visible,
+.chat-shell__composer .microphone-button:hover {
+    background: var(--gold-soft) !important;
+    border-color: var(--gold-line) !important;
+    color: var(--gold-2) !important;
+}
+.chat-shell__composer .actions-menu.open .actions-toggle {
+    background: var(--gold-soft) !important;
+    border-color: var(--gold-line) !important;
+    color: var(--gold-2) !important;
+}
+
+/* Light-theme: dark icon at rest, deeper gold on hover (better contrast) */
+[data-theme="light"] .chat-shell__composer .actions-toggle,
+[data-theme="light"] .chat-shell__composer .microphone-button {
+    border-color: var(--border-primary, rgba(40, 30, 15, 0.08)) !important;
+    color: var(--text-secondary, #6b665c) !important;
+}
+[data-theme="light"] .chat-shell__composer .actions-toggle:hover,
+[data-theme="light"] .chat-shell__composer .actions-toggle:focus-visible,
+[data-theme="light"] .chat-shell__composer .microphone-button:hover,
+[data-theme="light"] .chat-shell__composer .actions-menu.open .actions-toggle {
+    color: var(--gold-3, var(--gold-2)) !important;
+}
+
+
+/* ============================================================
+ * VOICE-MODE BUTTON — match warm-dark / gold palette
+ *
+ * The legacy styling makes this a stark white circle (bg = --text-primary)
+ * with dark bars — a bright blob that clashes with the warm-dark composer.
+ * Restyle the resting state to a ghost button (transparent bg + hairline
+ * border + paper-toned bars), with a soft gold wash on hover. The
+ * .recording state keeps its existing gradient — we only touch :not(.recording).
+ * ============================================================ */
+
+.chat-shell__composer .voice-mode-button:not(.recording) {
+    background-color: transparent !important;
+    border: 1px solid var(--hairline-2) !important;
+    box-shadow: none !important;
+    transition:
+        background-color 160ms ease,
+        border-color 160ms ease !important;
+}
+.chat-shell__composer .voice-mode-button:not(.recording) .voice-bar {
+    background-color: var(--paper-2) !important;
+    transition: background-color 160ms ease;
+}
+.chat-shell__composer .voice-mode-button:hover:not(.recording) {
+    background-color: var(--gold-soft) !important;
+    border-color: var(--gold-line) !important;
+}
+.chat-shell__composer .voice-mode-button:hover:not(.recording) .voice-bar {
+    background-color: var(--gold-2) !important;
+}
+
+/* Light-theme: bars need a dark fill to be legible on cream canvas */
+[data-theme="light"] .chat-shell__composer .voice-mode-button:not(.recording) {
+    border-color: var(--border-primary, rgba(40, 30, 15, 0.08)) !important;
+}
+[data-theme="light"] .chat-shell__composer .voice-mode-button:not(.recording) .voice-bar {
+    background-color: var(--text-primary, #1f1d1a) !important;
+}
+[data-theme="light"] .chat-shell__composer .voice-mode-button:hover:not(.recording) .voice-bar {
+    background-color: var(--gold-3, var(--gold-2)) !important;
+}
+
+
+/* ============================================================
+ * VOICE-MODE BUTTON — bars ripple on hover (EQ-meter feel)
+ *
+ * The four .voice-bar children have static heights (5/10/14/8px) set
+ * in styles.css. We don't touch the heights — we scaleY around them
+ * with transform-origin at the bottom, so they grow from the baseline
+ * like an audio level meter. Each bar gets a staggered delay so the
+ * wave reads as a ripple, not a pulse-in-unison.
+ * ============================================================ */
+
+@keyframes voice-bar-ripple {
+    0%, 100% { transform: scaleY(1); }
+    50%      { transform: scaleY(1.45); }
+}
+
+.voice-mode-button .voice-bar {
+    transform-origin: 50% 100%;
+    will-change: transform;
+}
+
+.voice-mode-button:hover:not(.recording) .voice-bar {
+    animation: voice-bar-ripple 900ms ease-in-out infinite;
+}
+.voice-mode-button:hover:not(.recording) .voice-bar:nth-child(1) { animation-delay:    0ms; }
+.voice-mode-button:hover:not(.recording) .voice-bar:nth-child(2) { animation-delay:  150ms; }
+.voice-mode-button:hover:not(.recording) .voice-bar:nth-child(3) { animation-delay:  300ms; }
+.voice-mode-button:hover:not(.recording) .voice-bar:nth-child(4) { animation-delay:  450ms; }
+
+
+/* ============================================================
+ * POLISH PASS — textarea, tactile feedback, mobile theming,
+ * disabled states, recording states, accessibility
+ * ============================================================ */
+
+/* ── Textarea: caret + selection + placeholder ─────────────── */
+.chat-shell__composer .chat-input {
+    caret-color: var(--gold-2) !important;
+}
+.chat-shell__composer .chat-input::selection {
+    background: var(--gold-soft);
+    color: var(--paper-1);
+}
+.chat-shell__composer .chat-input::placeholder {
+    color: var(--paper-3) !important;
+    opacity: 1 !important;
+}
+[data-theme="light"] .chat-shell__composer .chat-input::selection {
+    color: var(--ink-deep, #0e0d0a);
+}
+[data-theme="light"] .chat-shell__composer .chat-input::placeholder {
+    color: var(--text-tertiary, #9a9387) !important;
+}
+
+/* ── Tactile :active feedback on every input-area button ──── */
+.chat-shell__composer .actions-toggle:active,
+.chat-shell__composer .microphone-button:active,
+.chat-shell__composer .voice-mode-button:active:not(.recording),
+.chat-shell__composer .send-button:active:not(:disabled) {
+    transform: scale(0.94);
+    transition-duration: 80ms !important;
+}
+
+/* ── Mobile tap-highlight removal (consistent with iOS pattern) ── */
+.chat-shell__composer .actions-toggle,
+.chat-shell__composer .microphone-button,
+.chat-shell__composer .voice-mode-button,
+.chat-shell__composer .send-button {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+/* ── Consistent disabled state across all input buttons ───── */
+.chat-shell__composer .actions-toggle:disabled,
+.chat-shell__composer .microphone-button:disabled,
+.chat-shell__composer .voice-mode-button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* ── Recording-state polish: use brand palette, not dark/grey ── */
+.chat-shell__composer .voice-mode-button.recording {
+    background: var(--gold-soft) !important;
+    border: 1px solid var(--gold-line) !important;
+    box-shadow: 0 0 12px rgba(212, 176, 117, 0.30) !important;
+}
+.chat-shell__composer .voice-mode-button.recording .voice-check i {
+    color: var(--gold-2) !important;
+}
+.chat-shell__composer .microphone-button.recording {
+    color: var(--gold-1) !important;
+    background-color: var(--gold-soft) !important;
+    border-color: var(--gold-line) !important;
+}
+
+/* ── Stop-icon visibility when send-button is in show-stop state ── */
+.chat-shell__composer .send-button.show-stop {
+    background-color: var(--paper-1) !important;
+    border-color: var(--paper-1) !important;
+}
+.chat-shell__composer .send-button.show-stop i.fa-stop {
+    color: var(--ink-deep) !important;
+}
+
+/* ── Disable composer mask when input-container is fixed-positioned ────
+ * Same shape as the mobile bug fixed below: when .input-container is
+ * promoted to position:fixed (temp-chat centered greeting; first-message
+ * animation), it leaves .chat-shell__composer empty. The composer collapses
+ * to padding-only (~24-40px), and the desktop mask-image's transparent
+ * 0→24px slice covers the entire box — wiping the fixed-positioned input
+ * pill (a masked descendant) along with it. Affects desktop too, not just
+ * mobile. */
+body.temporary-chat-centered .chat-shell__composer,
+body.composer-animating-to-bottom .chat-shell__composer {
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+}
+
+/* ── Mobile pill + buttons: re-theme to brand palette ─────────
+ * Mobile.css uses hardcoded #353331 for the pill bg and #fff for
+ * the send button. Re-point both to tokens so they follow the
+ * theme and match the desktop polish. */
+@media (max-width: 768px) {
+    /* Mobile re-flow makes .input-container position:fixed (mobile.css), so
+     * the composer's natural height collapses to padding-only (~24px). The
+     * desktop mask-image (transparent 0→24px) then wipes the entire 24px
+     * box — and because mask-image creates a stacking context, the fixed
+     * input-container descendant renders through that transparent mask and
+     * disappears. Disable the mask on mobile; the input-container's own
+     * top-fade gradient (mobile.css:2998) already handles the soft edge. */
+    .chat-shell__composer {
+        -webkit-mask-image: none !important;
+        mask-image: none !important;
+    }
+
+    .chat-shell__composer .input-row > .textarea-container {
+        background: var(--ink-3) !important;
+        border: 1px solid var(--hairline-2) !important;
+        transition:
+            background 160ms ease,
+            border-color 160ms ease !important;
+    }
+    .chat-shell__composer .input-row > .textarea-container:focus-within {
+        background: var(--ink-3) !important;
+        border-color: var(--gold-line) !important;
+        box-shadow: 0 0 0 1px var(--gold-soft) !important;
+    }
+    .chat-shell__composer .textarea-container .send-button {
+        background: var(--paper-2) !important;
+        border-color: var(--paper-2) !important;
+        box-shadow:
+            0 2px 6px rgba(0, 0, 0, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+    }
+    .chat-shell__composer .textarea-container .send-button i {
+        color: var(--ink-deep) !important;
+    }
+    .chat-shell__composer .textarea-container .send-button:active {
+        background: var(--gold-1) !important;
+    }
+    /* Mobile light-theme variants */
+    [data-theme="light"] .chat-shell__composer .input-row > .textarea-container {
+        background: var(--bg-input, #ffffff) !important;
+        border-color: var(--border-primary, rgba(40, 30, 15, 0.08)) !important;
+    }
+    [data-theme="light"] .chat-shell__composer .input-row > .textarea-container:focus-within {
+        background: var(--bg-input, #ffffff) !important;
+    }
+    [data-theme="light"] .chat-shell__composer .textarea-container .send-button {
+        background: var(--text-primary, #1f1d1a) !important;
+        border-color: var(--text-primary, #1f1d1a) !important;
+    }
+    [data-theme="light"] .chat-shell__composer .textarea-container .send-button i {
+        color: var(--bg-input, #ffffff) !important;
+    }
+
+    /* ── Strong-contrast pill + buttons for mobile ────────────
+     * 25% white borders read as transparent on dark phone screens.
+     * Going hard: lift pill to --bg-elevated (21 units brighter than
+     * page), 40% white borders on pill + + + mic, give mic a real
+     * background so it reads as a button not a floating icon. */
+    .chat-shell__composer .input-row > .textarea-container {
+        background: var(--bg-elevated) !important;
+        border: 1px solid rgba(255, 255, 255, 0.40) !important;
+    }
+    .chat-shell__composer .input-row > .textarea-container:focus-within {
+        background: var(--bg-elevated) !important;
+        border-color: var(--gold-line) !important;
+    }
+    .chat-shell__composer .input-row .actions-toggle {
+        background: var(--bg-elevated) !important;
+        border: 1px solid rgba(255, 255, 255, 0.40) !important;
+        color: rgba(255, 255, 255, 0.92) !important;
+    }
+    .chat-shell__composer .textarea-container .microphone-button {
+        background: var(--bg-elevated) !important;
+        border: 1px solid rgba(255, 255, 255, 0.40) !important;
+        color: rgba(255, 255, 255, 0.85) !important;
+    }
+
+    /* Light-theme variants */
+    [data-theme="light"] .chat-shell__composer .input-row > .textarea-container {
+        background: var(--bg-tertiary, #f3efe7) !important;
+        border: 1px solid rgba(40, 30, 15, 0.30) !important;
+    }
+    [data-theme="light"] .chat-shell__composer .input-row .actions-toggle {
+        background: var(--bg-tertiary, #f3efe7) !important;
+        border: 1px solid rgba(40, 30, 15, 0.30) !important;
+        color: rgba(40, 30, 15, 0.85) !important;
+    }
+    [data-theme="light"] .chat-shell__composer .textarea-container .microphone-button {
+        background: var(--bg-tertiary, #f3efe7) !important;
+        border: 1px solid rgba(40, 30, 15, 0.30) !important;
+        color: rgba(40, 30, 15, 0.75) !important;
+    }
+}
+
+/* ── Accessibility: keyboard-only focus ring on the textarea ── */
+.chat-shell__composer .chat-input:focus-visible {
+    outline: none;
+}

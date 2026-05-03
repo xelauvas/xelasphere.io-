@@ -36,7 +36,7 @@
     padding: 0 16px;
     height: 42px;
     background: var(--bg-tertiary, #22222e);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.5);
+    border-bottom: 1px solid var(--border-primary, rgba(0, 0, 0, 0.5));
     border-top-left-radius: 12px;
     border-top-right-radius: 12px;
     user-select: none;
@@ -292,3 +292,37 @@ pre[class*="language-"] {
 }
 
 /* Mobile tuning lives in mobile.css. */
+
+/* ============================================
+   Light theme overrides — diff colors, syntax,
+   scrollbars, and code-header border. The dark
+   GitHub palette default fails contrast on the
+   cream surface, so explicitly remap.
+   ============================================ */
+
+[data-theme="light"] .code-window code .diff-line.diff-added {
+    background: rgba(22, 101, 52, 0.10);   /* faint green tint */
+    color: #166534;                         /* AA dark green */
+    box-shadow: inset 2px 0 0 #15803d;
+}
+[data-theme="light"] .code-window code .diff-line.diff-removed {
+    background: rgba(153, 27, 27, 0.10);   /* faint red tint */
+    color: #991b1b;                         /* AA dark red */
+    box-shadow: inset 2px 0 0 #b91c1c;
+}
+[data-theme="light"] .code-window code .diff-line.diff-hunk {
+    color: #1e40af;                         /* AA dark blue */
+    background: rgba(30, 64, 175, 0.06);
+}
+[data-theme="light"] .code-window code .diff-line.diff-meta {
+    color: var(--text-secondary);
+}
+[data-theme="light"] .code-window code .diff-line.diff-ctx {
+    color: var(--text-primary);
+}
+
+/* Code window header border + scrollbar hover need light overrides
+ * because the dark-theme white-tint defaults are invisible on cream. */
+[data-theme="light"] .code-window pre::-webkit-scrollbar-thumb:hover {
+    background: rgba(40, 30, 15, 0.30);
+}

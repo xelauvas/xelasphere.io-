@@ -335,6 +335,25 @@
 [data-style="creative"] .text-message hr::after {
     content: '· · ·';
     letter-spacing: 0.7em;
+    color: var(--paper-3);
+    font-size: 1rem;
+}
+[data-style="creative"] .text-message p {
+    text-indent: 1.4em;
+}
+[data-style="creative"] .text-message p:first-of-type,
+[data-style="creative"] .text-message h1 + p,
+[data-style="creative"] .text-message h2 + p,
+[data-style="creative"] .text-message hr + p {
+    text-indent: 0;
+}
+
+
+/* MODERN_BLOG and TECHNICAL: no per-style structural overrides needed.
+ * Their structural signatures (lists with bullets, "Bottom line:" callout,
+ * code-first answers, ### sub-headings) come from the model's markdown
+ * output. The unified visual system renders that markdown beautifully —
+ * no extra CSS required per style. */
     opacity: 0.45;
     font-size: 1rem;
 }

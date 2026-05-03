@@ -1,0 +1,82 @@
+/*
+ * app/static/css/_tokens.css
+ *
+ * Foundation design tokens for the streaming chat UI polish.
+ * Loaded first in index.html so every downstream stylesheet can consume
+ * these custom properties.
+ *
+ * Phase 1 of the streaming text polish project. Tokens are defined here
+ * but not yet consumed by other stylesheets — Phase 2 begins the migration.
+ *
+ * Spec: docs/superpowers/specs/2026-05-02-streaming-text-polish-design.md
+ */
+
+:root {
+    /* ===== Color tokens ===== */
+    /* Warm-dark palette with single signature gold accent. */
+
+    --ink-1: #14120e;       /* page background */
+    --ink-2: #1a1814;       /* surface */
+    --ink-3: #221f19;       /* surface-2 (hover, code interior) */
+    --ink-4: #2a2620;       /* raised surface (user bubble, sidebar selected) */
+    --ink-deep: #0e0d0a;    /* deepest — sidebar bg, code block interior. Darker than --ink-1; not part of the 1..4 ascending scale. */
+
+    --paper-1: #f5efe1;     /* strongest text (headings) */
+    --paper-2: #ebe4d0;     /* body text */
+    --paper-3: rgba(235, 228, 208, 0.62);   /* secondary text */
+    --paper-4: rgba(235, 228, 208, 0.42);   /* tertiary text */
+    --paper-5: rgba(235, 228, 208, 0.22);   /* quaternary */
+    --paper-faint: rgba(235, 228, 208, 0.08);  /* faintest hint */
+
+    --gold-1: #e8c07a;      /* bright accent (hover, highlight) */
+    --gold-2: #d4b075;      /* primary accent (links, copy button, list markers) */
+    --gold-3: #b89860;      /* deep accent (gradients, deep states) */
+    --gold-soft: rgba(212, 176, 117, 0.14);   /* accent fill */
+    --gold-line: rgba(212, 176, 117, 0.32);   /* accent border */
+
+    --hairline: rgba(255, 255, 255, 0.06);    /* default divider */
+    --hairline-2: rgba(255, 255, 255, 0.12);  /* stronger divider */
+
+    /* ===== Type tokens ===== */
+
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    --font-serif: 'Newsreader', Georgia, serif;
+
+    --text-xs: 12px;
+    --text-xs-lh: 1.5;
+
+    --text-sm: 13px;
+    --text-sm-lh: 1.55;
+
+    --text-base: 15.5px;        /* prose body — chat response paragraphs */
+    --text-base-lh: 1.72;
+
+    --text-md: 16px;            /* UI body — composer input, message bubbles */
+    --text-md-lh: 1.65;
+
+    --text-lg: 18px;
+    --text-lg-lh: 1.35;
+
+    --text-xl: 22px;
+    --text-xl-lh: 1.2;
+
+    /* ===== Spacing tokens (8px base scale) ===== */
+
+    --s-1: 4px;
+    --s-2: 8px;
+    --s-3: 12px;
+    --s-4: 16px;
+    --s-5: 22px;
+    --s-6: 28px;
+    --s-7: 36px;
+    --s-8: 48px;
+
+    /* ===== Motion tokens ===== */
+
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+    --dur-fast: 120ms;
+    --dur-base: 220ms;
+    --dur-slow: 320ms;
+}

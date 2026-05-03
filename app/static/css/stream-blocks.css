@@ -239,8 +239,8 @@
 
 /* Context rules override TWO intermediate width caps:
    .message-content and .text-message-container. Both are bound to
-   var(--composer-max-width) which defaults to 880px — without
-   overriding both, any context trying to exceed 880 is clipped by the
+   var(--chat-content-width) which defaults to 768px — without
+   overriding both, any context trying to exceed 768 is clipped by the
    outer wrapper. The renderer sets data-ctx on the outermost .message
    element AND the inner .text-message-container, so one rule can win
    over both.
@@ -268,33 +268,26 @@
     }
 }
 
-/* --- Conversational --- 580px */
-.message[data-ctx="conversational"] .message-content,
-.message[data-ctx="conversational"] .text-message-container,
-.text-message-container[data-ctx="conversational"] {
-    max-width: min(100%, 580px);
-}
+/* Per-context typography. Width is no longer per-context — every context
+ * uses the structural --chat-content-width from styles.css :root. The
+ * old per-context max-width overrides (580/640/760/920/680/720) were
+ * narrower than what wide-monitor users wanted; consolidating to the
+ * canonical width token gives one knob to tune utilization vs reading
+ * comfort. Line-height and spacing stay per-context — those are real
+ * typographic differences worth preserving. */
+
+/* --- Conversational --- */
 [data-ctx="conversational"] .text-message {
     font-size: 15px;
     line-height: 1.7;
 }
 
-/* --- Prose --- 640px */
-.message[data-ctx="prose"] .message-content,
-.message[data-ctx="prose"] .text-message-container,
-.text-message-container[data-ctx="prose"] {
-    max-width: min(100%, 640px);
-}
+/* --- Prose --- */
 [data-ctx="prose"] .text-message {
     line-height: 1.85;
 }
 
-/* --- Long-prose --- 640px (optimal 60–75ch line length) */
-.message[data-ctx="long-prose"] .message-content,
-.message[data-ctx="long-prose"] .text-message-container,
-.text-message-container[data-ctx="long-prose"] {
-    max-width: min(100%, 640px);
-}
+/* --- Long-prose --- */
 [data-ctx="long-prose"] .text-message {
     line-height: 1.9;
 }
@@ -302,19 +295,10 @@
     margin-top: 1.2em;
 }
 
-/* --- Technical --- 760px */
-.message[data-ctx="technical"] .message-content,
-.message[data-ctx="technical"] .text-message-container,
-.text-message-container[data-ctx="technical"] {
-    max-width: min(100%, 760px);
-}
+/* --- Technical --- */
+/* No per-context overrides; uses structural width + base typography. */
 
-/* --- Code-heavy --- 920px (widest, exceeds default composer cap) */
-.message[data-ctx="code-heavy"] .message-content,
-.message[data-ctx="code-heavy"] .text-message-container,
-.text-message-container[data-ctx="code-heavy"] {
-    max-width: min(100%, 920px);
-}
+/* --- Code-heavy --- */
 [data-ctx="code-heavy"] .text-message {
     line-height: 1.6;
 }
@@ -322,22 +306,12 @@
     margin-top: 0.6em;
 }
 
-/* --- List-heavy --- 680px */
-.message[data-ctx="list-heavy"] .message-content,
-.message[data-ctx="list-heavy"] .text-message-container,
-.text-message-container[data-ctx="list-heavy"] {
-    max-width: min(100%, 680px);
-}
+/* --- List-heavy --- */
 [data-ctx="list-heavy"] .stream-block + .stream-block {
     margin-top: 0.4em;
 }
 
-/* --- Structured --- 720px */
-.message[data-ctx="structured"] .message-content,
-.message[data-ctx="structured"] .text-message-container,
-.text-message-container[data-ctx="structured"] {
-    max-width: min(100%, 720px);
-}
+/* --- Structured --- */
 [data-ctx="structured"] .stream-block + .stream-block {
     margin-top: 1em;
 }

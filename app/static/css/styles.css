@@ -64,15 +64,18 @@
     --space-5: 1.5rem;
     --space-6: 2rem;
     --space-7: 3rem;
-    --content-max-width: 768px;
-    --chat-stage-max-width: 1200px;
-    --composer-max-width: var(--content-max-width);
-    --composer-shell-max-width: 800px;
     --composer-gutter: var(--space-5);
     --composer-reserved-height: 150px;
-    --chat-shell-max-width: var(--chat-stage-max-width);
+    /* New canonical width tokens (sub-project 1).
+     * --chat-content-width replaces the obsolete --content-max-width, --composer-max-width,
+     * --composer-shell-max-width, --chat-shell-max-width, --chat-stage-max-width.
+     * --chat-right-panel-width is the canonical fallback for the artifact panel
+     * when JS hasn't yet set the live --artifact-panel-width. */
+    --chat-content-width: clamp(720px, 50vw, 1100px);
+    --chat-right-panel-width: 50vw;
     --composer-mobile-height: 190px;
     --composer-side-pad: 0.95rem;
+    --composer-fade-height: 64px;
     --composer-font-size: 15px;
     --composer-line-height: 1.6;
     --composer-letter-spacing: 0.005em;
@@ -117,7 +120,7 @@
     --composer-input-pad-x: 0.75rem;
     --composer-margin-top: 0.75rem;
     --composer-safe-area-bottom: env(safe-area-inset-bottom, 0px);
-    --composer-surface: rgba(48, 48, 48, 0.92);
+    --composer-surface: rgba(20, 20, 22, 0.72);
     --composer-border-color: rgba(255, 255, 255, 0.1);
     --sidebar-bg: #0b0b10;
     --conversation-panel-bg: rgba(18, 18, 28, 0.92);
@@ -138,7 +141,7 @@
     --edit-textarea-focus-bg: rgba(0, 0, 0, 0.05);
     --edit-textarea-focus-border: rgba(91, 70, 214, 0.5);
     --composer-selection-bg: rgba(91, 70, 214, 0.2);
-    --composer-surface: rgba(255, 255, 255, 0.97);
+    --composer-surface: rgba(255, 255, 255, 0.78);
     --composer-border-color: rgba(0, 0, 0, 0.1);
     --sidebar-bg: #eef2f6;
     --conversation-panel-bg: rgba(247, 249, 252, 0.92);
@@ -198,37 +201,7 @@ body {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    overflow: hidden; /* DOAR #chat-scroll-region scrollează */
-}
-
-body,
-.chat-shell__messages {
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-primary, rgba(255, 255, 255, 0.35)) transparent;
-}
-
-body::-webkit-scrollbar,
-.chat-shell__messages::-webkit-scrollbar {
-    width: 12px;
-}
-
-body::-webkit-scrollbar-track,
-.chat-shell__messages::-webkit-scrollbar-track {
-    background: transparent;
-    border-radius: 999px;
-}
-
-body::-webkit-scrollbar-thumb,
-.chat-shell__messages::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.15));
-    border: 2px solid rgba(0, 0, 0, 0);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
-}
-
-body::-webkit-scrollbar-thumb:hover,
-.chat-shell__messages::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.25));
+    overflow: hidden; /* Only #chat-scroll-region scrolls */
 }
 
 .offline-status {
@@ -499,7 +472,7 @@ body:not(.has-messages) .arrow-down {
 .input-container {
     position: relative;
     width: 100%;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin: var(--composer-margin-top) auto 0;
     padding: 0 var(--composer-side-pad);
     background: transparent;
@@ -581,17 +554,10 @@ body.artifact-panel-resizing {
     transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-/* Cover sides and bottom to hide scrolling text (U-shape, not above) */
-.input-row::after {
-    content: '';
-    position: absolute;
-    left: -50px;
-    right: -50px;
-    top: 0;
-    bottom: -50px;
-    background: var(--bg-primary, #0f0f12);
-    z-index: -1;
-}
+/* (The .input-row::after U-mask was removed — the composer footer's
+ * frosted backdrop (--composer-surface + backdrop-filter on
+ * .chat-shell__composer) now covers what the U-mask was hiding,
+ * without painting opaque rectangles inside the translucent zone.) */
 
 /* When textarea expands to multiple lines */
 .input-row.composer-expanded {
@@ -831,7 +797,7 @@ body.artifact-panel-resizing {
 
 .attachment-preview-tray {
     display: none;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin: 0 auto 0.2rem;
     padding: 0.35rem 0.6rem;
     border-radius: 1rem;
@@ -883,7 +849,7 @@ body.temporary-chat-centered .input-container {
     );
     right: auto;
     width: min(
-        var(--composer-shell-max-width),
+        var(--chat-content-width),
         calc(100% - var(--left-sidebar-width, 0px) - var(--active-right-sidebar-width, 0px) - 2.5rem)
     );
     transform: translate(-50%, -50%);
@@ -1052,6 +1018,15 @@ body.temporary-chat-centered .input-row {
 .chat-input::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, var(--composer-scrollbar-opacity));
     border-radius: 999px;
+}
+
+/* Light theme: white scrollbar thumb is invisible on white pill bg.
+ * Override to a warm-dark tint matching the rest of the light palette. */
+[data-theme="light"] .chat-input {
+    scrollbar-color: rgba(40, 30, 15, var(--composer-scrollbar-opacity)) transparent;
+}
+[data-theme="light"] .chat-input::-webkit-scrollbar-thumb {
+    background: rgba(40, 30, 15, var(--composer-scrollbar-opacity));
 }
 
 /* Mobile responsive styles moved to mobile.css */
@@ -2752,6 +2727,14 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     opacity: 0 !important;
 }
 
+/* Suppress the conflicting CSS pseudo-element tooltip (styles.css:1731) on
+   action buttons that already have a JS-built child tooltip. Without this,
+   the empty `::after` renders as a small black box on hover (no data-tooltip
+   text → empty content, but background + padding still apply). */
+.action-btn:has(> .action-btn-tooltip)::after {
+    content: none !important;
+}
+
 .message-container {
     position: relative;
     width: 100%;
@@ -2832,13 +2815,13 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     padding: 0.2rem 0 0;
     margin-top: 0.05rem;
     border: none;
-    gap: 0.15rem;
+    gap: 0;
 }
 
 .action-buttons-row {
     display: inline-flex;
     align-items: center;
-    gap: 0.15rem;
+    gap: 0;
 }
 
 .action-btn {
@@ -4686,6 +4669,15 @@ body.share-modal-open {
     display: flex;
     flex-direction: column;
     width: 100%;
+    /* Override global .container horizontal padding AND max-width so the
+     * scroll container reaches the viewport edge — scrollbar sits flush,
+     * ChatGPT/Claude pattern. The narrow message column stays constrained
+     * by .conversation-panel's max-width inside the scroll region.
+     * Without max-width: none, .container's --container-2xl (1320px) cap
+     * leaves the right edge inset on viewports wider than ~1580. */
+    max-width: none;
+    padding-left: 0;
+    padding-right: 0;
     height: 100vh;
     max-height: 100vh;
     overflow: hidden;
@@ -4716,11 +4708,11 @@ body.share-modal-open {
 .chat-stage {
     flex: 1 1 auto;
     width: 100%;
-    /* FĂRĂ max-width aici - lasă scroll container să fie full-width */
-    padding: 0; /* Padding mutat pe .conversation-panel */
+    /* No max-width here — scroll container stays full-width */
+    padding: 0; /* Padding moved to .conversation-panel */
     display: flex;
     flex-direction: column;
-    align-items: stretch; /* Full width pentru copii */
+    align-items: stretch; /* Full width for children */
     background: transparent;
     border: none;
     border-radius: 0;
@@ -4735,20 +4727,20 @@ body.share-modal-open {
 .chat-shell {
     flex: 1 1 auto;
     width: 100%;
-    /* FĂRĂ max-width aici - lasă scroll container să fie full-width */
+    /* No max-width here — scroll container stays full-width */
     display: flex;
     flex-direction: column;
-    gap: 0; /* Gap mutat pe .conversation-panel */
+    gap: 0; /* Gap moved to .conversation-panel */
     min-height: 0;
-    align-items: stretch; /* Full width pentru copii */
+    align-items: stretch; /* Full width for children */
     overflow: hidden;
 }
 
 .chat-shell__header {
     flex: 0 0 auto;
     width: 100%;
-    max-width: var(--composer-shell-max-width);
-    margin: 0 auto; /* Centrat ca și .conversation-panel */
+    max-width: var(--chat-content-width);
+    margin: 0 auto; /* Centered like .conversation-panel */
     padding: var(--space-3) var(--space-5);
     display: flex;
     flex-direction: column;
@@ -4757,7 +4749,9 @@ body.share-modal-open {
     text-align: left;
 }
 
-/* #chat-scroll-region - SINGURUL container care scrollează */
+/* #chat-scroll-region — the ONLY container that scrolls.
+ * Hover-only scrollbar (matches Claude/ChatGPT pattern).
+ * Mobile keeps scrollbar fully hidden via mobile.css:1635-1664. */
 .chat-shell__messages,
 #chat-scroll-region {
     flex: 1 1 auto;
@@ -4765,35 +4759,92 @@ body.share-modal-open {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    overflow-y: auto; /* SCROLL AICI */
+    overflow-y: auto;
     overflow-x: hidden;
-    overflow-anchor: none; /* Prevent browser scroll anchoring - we manage scroll manually */
-    /* Hide scrollbar but keep functionality */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
+    overflow-anchor: none; /* We manage scroll manually */
+    /* Hover-only scrollbar (Firefox) */
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 200ms ease;
+    /* Soft fade above composer — last 64px of scroll content fades to
+     * transparent so messages don't end at a hard edge under the
+     * frosted composer backdrop. */
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        black 0,
+        black calc(100% - var(--composer-fade-height)),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        black 0,
+        black calc(100% - var(--composer-fade-height)),
+        transparent 100%
+    );
 }
 
-/* Hide scrollbar for WebKit browsers (Chrome, Safari, Edge) */
+.chat-shell__messages:hover,
+#chat-scroll-region:hover {
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+/* WebKit scrollbar — track always present at 8px so layout doesn't jump on hover */
 .chat-shell__messages::-webkit-scrollbar,
 #chat-scroll-region::-webkit-scrollbar {
-    display: none;
+    width: 8px;
+}
+.chat-shell__messages::-webkit-scrollbar-track,
+#chat-scroll-region::-webkit-scrollbar-track {
+    background: transparent;
+}
+.chat-shell__messages::-webkit-scrollbar-thumb,
+#chat-scroll-region::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+    transition: background 200ms ease;
+}
+.chat-shell__messages:hover::-webkit-scrollbar-thumb,
+#chat-scroll-region:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+}
+.chat-shell__messages::-webkit-scrollbar-thumb:hover,
+#chat-scroll-region::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.32);
 }
 
-.chat-shell__messages > * {
-    width: 100%;
-    max-width: var(--chat-shell-max-width);
-    margin-left: auto;
-    margin-right: auto;
+/* Touch devices have no hover — show the thumb by default so the
+ * 8px scrollbar gutter has a visible indicator instead of looking
+ * like unexplained empty space on the right. Desktop keeps the
+ * hover-only pattern (rules above). */
+body.is-touch .chat-shell__messages::-webkit-scrollbar-thumb,
+body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+}
+[data-theme="light"] body.is-touch .chat-shell__messages::-webkit-scrollbar-thumb,
+[data-theme="light"] body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
+    background: rgba(40, 30, 15, 0.20);
 }
 
-/* Inner wrapper - CENTRARE + MAX-WIDTH aici */
+/* Light theme: deeper thumb on cream canvas */
+[data-theme="light"] .chat-shell__messages:hover,
+[data-theme="light"] #chat-scroll-region:hover {
+    scrollbar-color: rgba(40, 30, 15, 0.20) transparent;
+}
+[data-theme="light"] .chat-shell__messages:hover::-webkit-scrollbar-thumb,
+[data-theme="light"] #chat-scroll-region:hover::-webkit-scrollbar-thumb {
+    background: rgba(40, 30, 15, 0.20);
+}
+
+/* Inner wrapper — centering + max-width here. The .conversation-panel
+ * is now the only width-cap inside the scroll region; the previous
+ * .chat-shell__messages > * rule (with the 1200 outer cap) was redundant. */
 .conversation-panel {
     width: 100%;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin: 0 auto;
     padding: var(--space-5);
     padding-top: var(--space-7); /* Extra clearance so first message isn't clipped at top */
-    padding-bottom: calc(var(--space-6) + var(--composer-reserved-height, 150px)); /* Spațiu pentru composer */
+    padding-bottom: calc(var(--space-6) + var(--composer-reserved-height, 150px) + 40px); /* Space for composer + room for action-button tooltips below the last message */
     border-radius: 0;
     border: none;
     background: transparent;
@@ -4829,7 +4880,7 @@ body.share-modal-open {
 
 .chat-shell__extras > * {
     width: 100%;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin-left: auto;
     margin-right: auto;
 }
@@ -4838,7 +4889,7 @@ body.share-modal-open {
 #image-container,
 .message-warning {
     width: 100%;
-    max-width: var(--content-max-width);
+    max-width: var(--chat-content-width);
     margin-left: auto;
     margin-right: auto;
 }
@@ -4868,7 +4919,23 @@ body.share-modal-open {
     width: calc(100% - var(--left-sidebar-width, 0px) - var(--active-right-sidebar-width, 0px));
     max-width: none;
     padding: var(--space-3) var(--composer-side-pad) calc(var(--space-3) + var(--composer-safe-area-bottom) + 16px);
-    background: transparent;
+    /* Opaque solid background matching the chat canvas — the composer
+     * reads as an extension of the page, not a separate frosted bar.
+     * Messages scroll up behind it; mask-image below clips the
+     * composer's top 24px (composer padding-top + input-container
+     * margin-top) so scroll content stays visible until it reaches
+     * the pill's actual top edge, then gets covered. */
+    background: var(--bg-primary);
+    -webkit-mask-image: linear-gradient(to bottom,
+        transparent 0,
+        transparent calc(var(--space-3) + var(--composer-margin-top)),
+        black calc(var(--space-3) + var(--composer-margin-top)),
+        black 100%);
+    mask-image: linear-gradient(to bottom,
+        transparent 0,
+        transparent calc(var(--space-3) + var(--composer-margin-top)),
+        black calc(var(--space-3) + var(--composer-margin-top)),
+        black 100%);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -4878,7 +4945,6 @@ body.share-modal-open {
     bottom: 0;
     z-index: 100;
     box-shadow: none;
-    border-top: none;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     /* FOOTGUN: pointer-events: none makes this container click-through so
        the transparent space above the input doesn't block the chat.
@@ -4887,6 +4953,11 @@ body.share-modal-open {
        See .chat-shell__composer > * rule below for the default reset. */
     pointer-events: none;
 }
+
+/* Fade gradient ::before removed — was creating a visible grey
+ * gradient strip above the pill. Composer is now fully opaque from
+ * its top edge down; mask-image below makes the top 24px transparent
+ * so scroll content stays visible until reaching the pill's top edge. */
 
 
 body.right-sidebar-open .chat-shell__composer {
@@ -4904,7 +4975,7 @@ body.right-sidebar-open .chat-shell__composer {
 
 .chat-shell__composer > * {
     width: 100%;
-    max-width: var(--composer-shell-max-width);
+    max-width: var(--chat-content-width);
     margin-left: auto;
     margin-right: auto;
     pointer-events: auto;

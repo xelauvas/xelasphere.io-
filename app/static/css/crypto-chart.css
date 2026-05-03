@@ -248,27 +248,22 @@
 .crypto-chart-wrapper {
     margin-top: 0.75rem;
     margin-bottom: 1rem;
-    /* Chart uses --content-max-width (768px) instead of
-       --composer-shell-max-width — they used to be the same value, but
-       PR #44 widened the composer to 800px while chart should stay at
-       768. --content-max-width remains 768. */
-    width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
-    max-width: calc(var(--content-max-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+    /* Chart uses --chat-content-width (768px), matching the composer pill
+       and message column. */
+    width: calc(var(--chat-content-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
+    max-width: calc(var(--chat-content-width, 768px) - 2 * var(--composer-side-pad, 0.95rem)) !important;
     margin-left: auto !important;
     margin-right: auto !important;
-    /* Compensate for two things:
-       1. Asymmetric padding in chart's parent chain vs input's chain:
-          chart's chain has 20px (.conversation-panel) + 12px (.ai-message)
-          = 32px padding-left extra; input's chain has --composer-side-pad
-          (~15.2px). Net: 32 - 15.2 = 16.8px shift right.
-       2. Width difference: when input is wider than chart (e.g.,
-          --composer-shell-max-width 800 vs --content-max-width 768),
-          chart needs to shift right by (input_w - chart_w)/2 to stay
-          centered within the wider input. The shift is
-          (--composer-shell-max-width - --content-max-width) / 2. */
+    /* Compensate for asymmetric parent-chain padding vs the input's chain:
+       chart's chain has 20px (.conversation-panel) + 12px (.ai-message)
+       = 32px padding-left extra; input's chain has --composer-side-pad
+       (~15.2px). Net: 32 - 15.2 = 16.8px shift right. The width-difference
+       term in the calc below evaluates to 0 (both tokens resolve to 768);
+       it's preserved as a defensive zero in case the chart and content
+       widths ever diverge again. */
     transform: translateX(calc(
         var(--composer-side-pad, 0.95rem) - 32px
-        + (var(--composer-shell-max-width, 768px) - var(--content-max-width, 768px)) / 2
+        + (var(--chat-content-width, 768px) - var(--chat-content-width, 768px)) / 2
     )) !important;
 }
 
@@ -1654,7 +1649,9 @@
 
 [data-theme="light"] .range-btn,
 .light-theme .range-btn {
-    color: rgba(0, 0, 0, 0.45);
+    /* Was rgba(0,0,0,0.45) — fails AA at 11px text size.
+     * --text-secondary (#6b665c) gives 5.65:1 on cream. */
+    color: var(--text-secondary, rgba(0, 0, 0, 0.65));
 }
 
 [data-theme="light"] .range-btn:hover,
@@ -1682,7 +1679,8 @@
 
 [data-theme="light"] .stat-label,
 .light-theme .stat-label {
-    color: rgba(0, 0, 0, 0.5);
+    /* Was rgba(0,0,0,0.5) — borderline AA. --text-secondary stronger. */
+    color: var(--text-secondary, rgba(0, 0, 0, 0.65));
 }
 
 [data-theme="light"] .stat-value,
@@ -1692,7 +1690,9 @@
 
 [data-theme="light"] .crypto-chart-source,
 .light-theme .crypto-chart-source {
-    color: rgba(0, 0, 0, 0.35);
+    /* Was rgba(0,0,0,0.35) — fails AA. --text-tertiary darkened
+     * in design-tokens.css now gives 4.55:1 on cream. */
+    color: var(--text-tertiary, rgba(0, 0, 0, 0.55));
 }
 
 [data-theme="light"] .crypto-chart-news,
@@ -1913,4 +1913,15 @@
 @keyframes livePulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
+}
+
+/* Light theme: sparkline change colors must be dark enough for AA on cream.
+ * Defaults #4ade80 / #f87171 are dark-theme bright values that fail contrast. */
+[data-theme="light"] .sparkline-change.positive {
+    color: #15803d;
+    background: rgba(22, 101, 52, 0.08);
+}
+[data-theme="light"] .sparkline-change.negative {
+    color: #b91c1c;
+    background: rgba(153, 27, 27, 0.08);
 }
