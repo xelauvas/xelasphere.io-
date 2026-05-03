@@ -824,6 +824,7 @@ function appendActionButtons(container, messageId, { skipSourcesRefresh = false 
 // Function to create tooltip
 function createTooltip(text) {
     const tooltip = document.createElement('div');
+    tooltip.className = 'action-btn-tooltip';
     tooltip.style.position = 'absolute';
     tooltip.style.top = '100%'; // Position below the button
     tooltip.style.left = '50%';
@@ -837,21 +838,7 @@ function createTooltip(text) {
     tooltip.style.opacity = '0';
     tooltip.style.transition = 'visibility 0s, opacity 0.3s ease-in-out';
     tooltip.style.fontSize = '14px'; // Adjusted font size
-    tooltip.style.marginTop = '8px'; // Space between button and tooltip
-
-    // Create the arrow
-    const arrow = document.createElement("div");
-    arrow.style.position = "absolute";
-    arrow.style.top = "-5px"; // Position the arrow just above the tooltip
-    arrow.style.left = "50%";
-    arrow.style.transform = "translateX(-50%)";
-    arrow.style.width = "0";
-    arrow.style.height = "0";
-    arrow.style.borderLeft = "5px solid transparent";
-    arrow.style.borderRight = "5px solid transparent";
-    arrow.style.borderBottom = "5px solid black";
-
-    tooltip.appendChild(arrow);
+    tooltip.style.marginTop = '4px'; // Small breathing room from button
 
     if (typeof text === 'string' && text.includes('\n')) {
         const [primary, secondary] = text.split('\n');

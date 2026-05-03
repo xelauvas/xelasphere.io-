@@ -2727,6 +2727,14 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     opacity: 0 !important;
 }
 
+/* Suppress the conflicting CSS pseudo-element tooltip (styles.css:1731) on
+   action buttons that already have a JS-built child tooltip. Without this,
+   the empty `::after` renders as a small black box on hover (no data-tooltip
+   text → empty content, but background + padding still apply). */
+.action-btn:has(> .action-btn-tooltip)::after {
+    content: none !important;
+}
+
 .message-container {
     position: relative;
     width: 100%;
@@ -2807,13 +2815,13 @@ body:not(.device-phone):not(.device-tablet):not(.is-mobile):not(.is-ios):not(.vi
     padding: 0.2rem 0 0;
     margin-top: 0.05rem;
     border: none;
-    gap: 0.15rem;
+    gap: 0;
 }
 
 .action-buttons-row {
     display: inline-flex;
     align-items: center;
-    gap: 0.15rem;
+    gap: 0;
 }
 
 .action-btn {
@@ -4836,7 +4844,7 @@ body.is-touch #chat-scroll-region::-webkit-scrollbar-thumb {
     margin: 0 auto;
     padding: var(--space-5);
     padding-top: var(--space-7); /* Extra clearance so first message isn't clipped at top */
-    padding-bottom: calc(var(--space-6) + var(--composer-reserved-height, 150px)); /* Space for the composer */
+    padding-bottom: calc(var(--space-6) + var(--composer-reserved-height, 150px) + 40px); /* Space for composer + room for action-button tooltips below the last message */
     border-radius: 0;
     border: none;
     background: transparent;

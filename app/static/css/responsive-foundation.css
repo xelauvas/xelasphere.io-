@@ -415,12 +415,12 @@ label:has(input[type="radio"]),
         max-width: 1600px;
     }
 
-    /* TV-optimized focus states */
-    button:focus,
-    a:focus,
-    [tabindex]:focus {
-        outline: 3px solid currentColor;
-        outline-offset: 4px;
+    /* TV-optimized focus states — keyboard-only, themed ring */
+    button:focus-visible,
+    a:focus-visible,
+    [tabindex]:focus-visible {
+        outline: 2px solid var(--accent-muted, rgba(124, 106, 239, 0.25));
+        outline-offset: 2px;
     }
 }
 
@@ -461,14 +461,19 @@ label:has(input[type="radio"]),
 /* ==========================================================================
    ACCESSIBILITY: REDUCED MOTION
    ========================================================================== */
+/* Reduced motion: minimize default decorative animations. NOT !important —
+   intentional UI affordances (streaming cursor, voice bars, notification dots,
+   etc.) declare their own animation rules and win on specificity. Components
+   that should genuinely respect reduced-motion declare their own per-element
+   override using the same media query. */
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
+        animation-duration: 0.01ms;
+        animation-iteration-count: 1;
+        transition-duration: 0.01ms;
+        scroll-behavior: auto;
     }
 }
 

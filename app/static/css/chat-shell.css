@@ -395,8 +395,8 @@
  * ============================================================ */
 
 @keyframes voice-bar-ripple {
-    0%, 100% { transform: scaleY(0.55); }
-    50%      { transform: scaleY(1.35); }
+    0%, 100% { transform: scaleY(1); }
+    50%      { transform: scaleY(1.45); }
 }
 
 .voice-mode-button .voice-bar {
@@ -411,12 +411,6 @@
 .voice-mode-button:hover:not(.recording) .voice-bar:nth-child(2) { animation-delay:  150ms; }
 .voice-mode-button:hover:not(.recording) .voice-bar:nth-child(3) { animation-delay:  300ms; }
 .voice-mode-button:hover:not(.recording) .voice-bar:nth-child(4) { animation-delay:  450ms; }
-
-@media (prefers-reduced-motion: reduce) {
-    .voice-mode-button:hover:not(.recording) .voice-bar {
-        animation: none;
-    }
-}
 
 
 /* ============================================================
@@ -564,6 +558,46 @@ body.composer-animating-to-bottom .chat-shell__composer {
     }
     [data-theme="light"] .chat-shell__composer .textarea-container .send-button i {
         color: var(--bg-input, #ffffff) !important;
+    }
+
+    /* ── Strong-contrast pill + buttons for mobile ────────────
+     * 25% white borders read as transparent on dark phone screens.
+     * Going hard: lift pill to --bg-elevated (21 units brighter than
+     * page), 40% white borders on pill + + + mic, give mic a real
+     * background so it reads as a button not a floating icon. */
+    .chat-shell__composer .input-row > .textarea-container {
+        background: var(--bg-elevated) !important;
+        border: 1px solid rgba(255, 255, 255, 0.40) !important;
+    }
+    .chat-shell__composer .input-row > .textarea-container:focus-within {
+        background: var(--bg-elevated) !important;
+        border-color: var(--gold-line) !important;
+    }
+    .chat-shell__composer .input-row .actions-toggle {
+        background: var(--bg-elevated) !important;
+        border: 1px solid rgba(255, 255, 255, 0.40) !important;
+        color: rgba(255, 255, 255, 0.92) !important;
+    }
+    .chat-shell__composer .textarea-container .microphone-button {
+        background: var(--bg-elevated) !important;
+        border: 1px solid rgba(255, 255, 255, 0.40) !important;
+        color: rgba(255, 255, 255, 0.85) !important;
+    }
+
+    /* Light-theme variants */
+    [data-theme="light"] .chat-shell__composer .input-row > .textarea-container {
+        background: var(--bg-tertiary, #f3efe7) !important;
+        border: 1px solid rgba(40, 30, 15, 0.30) !important;
+    }
+    [data-theme="light"] .chat-shell__composer .input-row .actions-toggle {
+        background: var(--bg-tertiary, #f3efe7) !important;
+        border: 1px solid rgba(40, 30, 15, 0.30) !important;
+        color: rgba(40, 30, 15, 0.85) !important;
+    }
+    [data-theme="light"] .chat-shell__composer .textarea-container .microphone-button {
+        background: var(--bg-tertiary, #f3efe7) !important;
+        border: 1px solid rgba(40, 30, 15, 0.30) !important;
+        color: rgba(40, 30, 15, 0.75) !important;
     }
 }
 
