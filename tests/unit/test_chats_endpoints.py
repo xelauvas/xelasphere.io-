@@ -39,3 +39,39 @@ def test_list_metadata_returns_flat_array(authenticated_client, mock_firestore):
     assert len(body["sessions"]) == 2
     assert body["sessions"][0]["session_id"] == "session_a"
     assert body["sessions"][0]["title"] == "Chat A"
+
+
+def test_patch_session_updates_starred(authenticated_client, mock_firestore):
+    """PATCH /chat/<session_id> with {starred: true} updates the field."""
+    headers = {"X-CSRFToken": "test-token"}
+    with patch("app.limiter.validate_csrf", return_value=None), \
+         patch("app.chat_session.ChatSession.update_session_metadata",
+               return_value=True) as mock_update:
+        resp = authenticated_client.patch(
+            "/chat/session_abc",
+            json={"starred": True},
+            headers=headers,
+        )
+    assert resp.status_code == 204, resp.data
+    mock_update.assert_called_once()
+    args, _ = mock_update.call_args
+    # call signature: (user_id, session_id, fields_dict)
+    assert args[1] == "session_abc"
+    assert args[2] == {"starred": True}
+
+
+def test_patch_session_rejects_unknown_fields(authenticated_client, mock_firestore):
+    """PATCH ignores unknown fields (whitelist enforced server-side)."""
+    headers = {"X-CSRFToken": "test-token"}
+    with patch("app.limiter.validate_csrf", return_value=None), \
+         patch("app.chat_session.ChatSession.update_session_metadata",
+               return_value=True) as mock_update:
+        resp = authenticated_client.patch(
+            "/chat/session_abc",
+            json={"starred": True, "user_id": "evil_overwrite"},
+            headers=headers,
+        )
+    assert resp.status_code == 204
+    args, _ = mock_update.call_args
+    assert "user_id" not in args[2]
+    assert args[2] == {"starred": True}

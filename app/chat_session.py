@@ -13,6 +13,9 @@ from google.cloud import firestore as gc_firestore
 
 logger = logging.getLogger(__name__)
 
+# Module-level whitelist of fields safe to PATCH from /chat/<id>
+ALLOWED_PATCH_FIELDS = {'starred', 'pinned', 'title', 'tags'}
+
 
 def _adjust_user_session_total(db, user_id: str, delta: int) -> None:
     """Increment or decrement a user's stored session count."""
@@ -394,6 +397,24 @@ class ChatSession:
             'is_pinned': pinned,
             'pinned_at': pinned_at_value.isoformat() if pinned_at_value else None
         }
+
+    def update_session_metadata(
+        self, user_id: str, session_id: str, fields: Dict[str, Any]
+    ) -> bool:
+        """Update whitelisted metadata fields on a session document.
+
+        Returns True on success (or if no-op), False if session not found.
+        Silently ignores fields outside the whitelist (defense in depth).
+        """
+        cleaned = {k: v for k, v in fields.items() if k in ALLOWED_PATCH_FIELDS}
+        if not cleaned:
+            return True  # no-op
+        ref = self._get_session_ref(user_id, session_id)
+        snap = ref.get()
+        if not snap.exists:
+            return False
+        ref.update(cleaned)
+        return True
 
     def _get_session_ref(self, user_id: str, session_id: str) -> gc_firestore.DocumentReference:
         return self.db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
