@@ -252,6 +252,74 @@ class ChatSession:
 
         return {'chat_history': chat_history, 'next_page_token': next_token}
 
+    def list_metadata(self, user_id: str) -> List[Dict[str, Any]]:
+        """Return flat metadata for ALL sessions of a user — no message bodies.
+
+        Used by the /chats page for client-side filter/sort/search.
+        Lazy backfills msg_count / has_artifact / has_attachment if missing.
+
+        Note: backfill issues a Firestore write per session that's missing
+        denormalized fields. For users with N legacy sessions, the first
+        load of /chats triggers up to N writes (one-time migration cost).
+        Subsequent loads have zero writes.
+        """
+        sessions_ref = (
+            self.db.collection('users').document(user_id)
+            .collection('chat_sessions')
+            .order_by('last_updated', direction=gc_firestore.Query.DESCENDING)
+        )
+        out: List[Dict[str, Any]] = []
+        for snap in sessions_ref.stream():
+            data = snap.to_dict() or {}
+            # Skip soft-deleted or invalid docs
+            if data.get('deleted'):
+                continue
+            if data.get('status') in ('temporary', 'archived'):
+                continue
+            if data.get('is_temporary'):
+                continue
+
+            # Backfill denormalized fields if missing
+            msg_count = data.get('msg_count')
+            has_artifact = data.get('has_artifact')
+            has_attachment = data.get('has_attachment')
+
+            needs_backfill = (
+                msg_count is None or has_artifact is None or has_attachment is None
+            )
+            if needs_backfill:
+                messages = data.get('messages', []) or []
+                msg_count = len(messages)
+                has_artifact = any(m.get('artifact') for m in messages)
+                has_attachment = any(m.get('attachments') for m in messages)
+                try:
+                    snap.reference.update({
+                        'msg_count': msg_count,
+                        'has_artifact': bool(has_artifact),
+                        'has_attachment': bool(has_attachment),
+                    })
+                except Exception:
+                    # Backfill is best-effort; missing fields stay missing on next read
+                    pass
+
+            last_updated = data.get('last_updated') or data.get('created_at') or ''
+            if isinstance(last_updated, datetime):
+                last_updated = last_updated.isoformat()
+
+            out.append({
+                'session_id': snap.id,
+                'title': data.get('title') or data.get('session_name') or 'New chat',
+                'last_updated': last_updated,
+                'model': data.get('model') or '',
+                'msg_count': int(msg_count or 0),
+                'starred': bool(data.get('starred', False)),
+                'pinned': bool(data.get('pinned', False)),
+                'tags': list(data.get('tags', []) or []),
+                'has_artifact': bool(has_artifact),
+                'has_attachment': bool(has_attachment),
+            })
+        return out
+
     def get_session(self, user_id: str, session_id: str) -> Optional[Dict[str, Any]]:
         doc_ref = self._get_session_ref(user_id, session_id)
         try:

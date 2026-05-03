@@ -469,6 +469,22 @@ def get_chat_history():
     })
 
 
+@session_bp.route('/chat/list-metadata', methods=['GET'])
+@limiter.limit("30 per minute")
+@error_handler
+@login_required
+def chat_list_metadata():
+    """Return flat metadata array of all sessions for the current user.
+
+    Used by the /chats page. No pagination, no message bodies.
+    """
+    user_id = session['user']['uid']
+    sessions = chat_session.list_metadata(user_id)
+    response = jsonify({'sessions': sessions})
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 @session_bp.route('/chat/session/<session_id>', methods=['GET'])
 @error_handler
 @login_required
