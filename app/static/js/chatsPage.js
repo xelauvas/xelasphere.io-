@@ -218,10 +218,11 @@
                 return;
             }
 
-            // Kebab — wired in Task 10
+            // Kebab
             if (e.target.closest('.chats-row__kebab')) {
                 e.preventDefault();
                 e.stopPropagation();
+                openKebabMenu(row, id);
                 return;
             }
 
@@ -347,6 +348,109 @@
         // Minimal toast — uses existing window.showToast if available, else console
         if (typeof window.showToast === 'function') return window.showToast(msg);
         console.warn('[chats]', msg);
+    }
+
+    /* ─── kebab menu (rename + single delete) ─────────────────── */
+
+    let openMenu = null;
+
+    function openKebabMenu(row, sessionId) {
+        closeKebabMenu();
+        const menu = document.createElement('div');
+        menu.className = 'chats-row__menu';
+        menu.innerHTML = `
+            <button type="button" class="chats-row__menu-item" data-action="rename">Rename</button>
+            <button type="button" class="chats-row__menu-item chats-row__menu-item--danger" data-action="delete">Delete</button>
+        `;
+        document.body.appendChild(menu);
+        const r = row.querySelector('.chats-row__kebab').getBoundingClientRect();
+        menu.style.top = (r.bottom + window.scrollY + 4) + 'px';
+        menu.style.left = (r.right + window.scrollX - menu.offsetWidth) + 'px';
+        menu.addEventListener('click', e => {
+            const btn = e.target.closest('.chats-row__menu-item');
+            if (!btn) return;
+            const action = btn.dataset.action;
+            closeKebabMenu();
+            if (action === 'rename') startRename(row, sessionId);
+            if (action === 'delete') deleteSingle(sessionId);
+        });
+        setTimeout(() => document.addEventListener('click', closeKebabMenu, { once: true }), 0);
+        openMenu = menu;
+    }
+
+    function closeKebabMenu() {
+        if (openMenu) { openMenu.remove(); openMenu = null; }
+    }
+
+    function startRename(row, sessionId) {
+        const titleEl = row.querySelector('.chats-row__title');
+        if (!titleEl) return;
+        const original = titleEl.textContent;
+        titleEl.classList.add('is-editing');
+        titleEl.contentEditable = 'true';
+        titleEl.focus();
+        // Select all text
+        const range = document.createRange();
+        range.selectNodeContents(titleEl);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+        const finish = async (commit) => {
+            titleEl.contentEditable = 'false';
+            titleEl.classList.remove('is-editing');
+            const next = (titleEl.textContent || '').trim();
+            if (!commit || !next || next === original) {
+                titleEl.textContent = original;
+                return;
+            }
+            const s = state.sessions.find(x => x.session_id === sessionId);
+            if (s) { s.title = next; saveCache(state.sessions); }
+            try {
+                const resp = await fetch('/chat/' + encodeURIComponent(sessionId), {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json',
+                               'X-CSRFToken': getCsrfToken() },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ title: next }),
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            } catch (_) {
+                if (s) { s.title = original; saveCache(state.sessions); render(); }
+                showToast('Rename failed.');
+            }
+        };
+
+        titleEl.addEventListener('blur', () => finish(true), { once: true });
+        titleEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); }
+            if (e.key === 'Escape') { e.preventDefault(); finish(false); titleEl.blur(); }
+        });
+    }
+
+    async function deleteSingle(sessionId) {
+        const s = state.sessions.find(x => x.session_id === sessionId);
+        if (!s) return;
+        const confirmed = window.confirm('Delete "' + s.title + '"? This cannot be undone.');
+        if (!confirmed) return;
+        state.sessions = state.sessions.filter(x => x.session_id !== sessionId);
+        saveCache(state.sessions);
+        render();
+        try {
+            const resp = await fetch('/chat/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json',
+                           'X-CSRFToken': getCsrfToken() },
+                credentials: 'same-origin',
+                body: JSON.stringify({ session_id: sessionId }),
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        } catch (_) {
+            state.sessions = state.sessions.concat([s]);
+            saveCache(state.sessions);
+            render();
+            showToast('Delete failed. Restored.');
+        }
     }
 
     /* ─── helpers ─────────────────────────────────────────────── */

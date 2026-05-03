@@ -343,3 +343,45 @@
     0%, 100% { opacity: 0.6; }
     50%      { opacity: 1; }
 }
+
+/* ── Kebab popover ────────────────────────────────────────────── */
+.chats-row__menu {
+    position: absolute;
+    background: var(--bg-elevated, #1a1a22);
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
+    border-radius: 8px;
+    padding: 4px 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    z-index: 100;
+    min-width: 140px;
+}
+
+.chats-row__menu-item {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 8px 14px;
+    text-align: left;
+    font-size: 13px;
+    color: var(--text-primary, #e8e8f0);
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.chats-row__menu-item:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.chats-row__menu-item--danger {
+    color: #f87171;
+}
+
+.chats-row__title.is-editing {
+    background: var(--bg-elevated, #1a1a22);
+    border: 1px solid var(--accent-muted, rgba(124, 106, 239, 0.4));
+    border-radius: 6px;
+    padding: 4px 8px;
+    outline: none;
+    cursor: text;
+}
