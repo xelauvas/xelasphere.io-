@@ -230,16 +230,55 @@
     /* ─── boot ────────────────────────────────────────────────── */
 
     function boot() {
+        bindControls();
         const cached = loadCache();
         if (cached) {
             state.sessions = cached;
             populateModelFilter();
             render();
-            // Background refresh
-            fetchSessions();
+            fetchSessions(); // background refresh
         } else {
             fetchSessions();
         }
+    }
+
+    function bindControls() {
+        let searchTimer = null;
+        els.search.addEventListener('input', e => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+                state.search = e.target.value || '';
+                render();
+            }, 80);
+        });
+
+        els.filterChips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                const key = chip.dataset.filter;
+                state.filters[key] = !state.filters[key];
+                chip.setAttribute('aria-pressed', String(state.filters[key]));
+                render();
+            });
+        });
+
+        els.filterModel.addEventListener('change', e => {
+            state.filters.model = e.target.value || '';
+            render();
+        });
+
+        els.sort.addEventListener('change', e => {
+            state.sort = e.target.value || 'recent';
+            render();
+        });
+
+        els.emptyClear.addEventListener('click', () => {
+            state.search = '';
+            state.filters = { starred: false, model: '', hasArtifact: false, hasAttachment: false };
+            els.search.value = '';
+            els.filterChips.forEach(c => c.setAttribute('aria-pressed', 'false'));
+            els.filterModel.value = '';
+            render();
+        });
     }
 
     /* ─── background refresh (30s while page is visible) ─────── */
