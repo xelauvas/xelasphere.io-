@@ -193,16 +193,86 @@
     }
 
     function attachRowListeners() {
-        // Wired in later tasks — for now, click the title navigates.
-        document.querySelectorAll('.chats-row').forEach(row => {
-            const titleEl = row.querySelector('.chats-row__title');
-            if (titleEl) {
-                titleEl.addEventListener('click', () => {
-                    const id = row.dataset.sessionId;
-                    if (id) window.location.href = '/c/' + encodeURIComponent(id);
-                });
+        // Single delegation listener on the list — survives re-renders
+        if (els.list.dataset.bound === '1') return;
+        els.list.dataset.bound = '1';
+
+        els.list.addEventListener('click', e => {
+            const row = e.target.closest('.chats-row');
+            if (!row) return;
+            const id = row.dataset.sessionId;
+            if (!id) return;
+
+            // Star button
+            if (e.target.closest('.chats-row__star')) {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleStar(id);
+                return;
+            }
+
+            // Checkbox
+            if (e.target.matches('.chats-row__check')) {
+                e.stopPropagation();
+                toggleSelect(id, e.target.checked);
+                return;
+            }
+
+            // Kebab — wired in Task 10
+            if (e.target.closest('.chats-row__kebab')) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            // Default: click row → open chat
+            if (e.target.closest('.chats-row__title') || e.target === row) {
+                window.location.href = '/c/' + encodeURIComponent(id);
             }
         });
+    }
+
+    async function toggleStar(sessionId) {
+        const s = state.sessions.find(x => x.session_id === sessionId);
+        if (!s) return;
+        const next = !s.starred;
+        s.starred = next;  // optimistic
+        saveCache(state.sessions);
+        render();
+        try {
+            const resp = await fetch('/chat/' + encodeURIComponent(sessionId), {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ starred: next }),
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        } catch (err) {
+            s.starred = !next;  // revert
+            saveCache(state.sessions);
+            render();
+            showToast('Couldn\'t update star. Try again.');
+        }
+    }
+
+    function toggleSelect(sessionId, isChecked) {
+        if (isChecked) state.selected.add(sessionId);
+        else state.selected.delete(sessionId);
+        // Bulk toolbar visibility wired in Task 9
+    }
+
+    function getCsrfToken() {
+        const m = document.querySelector('meta[name="csrf-token"]');
+        return m ? m.content : '';
+    }
+
+    function showToast(msg) {
+        // Minimal toast — uses existing window.showToast if available, else console
+        if (typeof window.showToast === 'function') return window.showToast(msg);
+        console.warn('[chats]', msg);
     }
 
     /* ─── helpers ─────────────────────────────────────────────── */
