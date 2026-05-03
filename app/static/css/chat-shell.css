@@ -494,6 +494,20 @@
     color: var(--ink-deep) !important;
 }
 
+/* ── Disable composer mask when input-container is fixed-positioned ────
+ * Same shape as the mobile bug fixed below: when .input-container is
+ * promoted to position:fixed (temp-chat centered greeting; first-message
+ * animation), it leaves .chat-shell__composer empty. The composer collapses
+ * to padding-only (~24-40px), and the desktop mask-image's transparent
+ * 0→24px slice covers the entire box — wiping the fixed-positioned input
+ * pill (a masked descendant) along with it. Affects desktop too, not just
+ * mobile. */
+body.temporary-chat-centered .chat-shell__composer,
+body.composer-animating-to-bottom .chat-shell__composer {
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+}
+
 /* ── Mobile pill + buttons: re-theme to brand palette ─────────
  * Mobile.css uses hardcoded #353331 for the pill bg and #fff for
  * the send button. Re-point both to tokens so they follow the
