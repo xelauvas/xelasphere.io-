@@ -261,7 +261,81 @@
     function toggleSelect(sessionId, isChecked) {
         if (isChecked) state.selected.add(sessionId);
         else state.selected.delete(sessionId);
-        // Bulk toolbar visibility wired in Task 9
+        updateBulkToolbar();
+    }
+
+    function updateBulkToolbar() {
+        const count = state.selected.size;
+        if (count === 0) {
+            els.bulkToolbar.hidden = true;
+        } else {
+            els.bulkToolbar.hidden = false;
+            els.bulkCount.textContent = count + (count === 1 ? ' selected' : ' selected');
+        }
+    }
+
+    function bindBulkActions() {
+        els.bulkCancel.addEventListener('click', () => {
+            state.selected.clear();
+            updateBulkToolbar();
+            render();
+        });
+
+        els.bulkStar.addEventListener('click', async () => {
+            const ids = Array.from(state.selected);
+            if (ids.length === 0) return;
+            // Optimistic: star them all
+            ids.forEach(id => {
+                const s = state.sessions.find(x => x.session_id === id);
+                if (s) s.starred = true;
+            });
+            saveCache(state.sessions);
+            render();
+            try {
+                await Promise.all(ids.map(id => fetch('/chat/' + encodeURIComponent(id), {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json',
+                               'X-CSRFToken': getCsrfToken() },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ starred: true }),
+                }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); })));
+            } catch (_) {
+                showToast('Some sessions could not be starred. Refreshing…');
+                fetchSessions();
+            }
+        });
+
+        els.bulkDelete.addEventListener('click', async () => {
+            const ids = Array.from(state.selected);
+            if (ids.length === 0) return;
+            const confirmed = window.confirm(
+                'Delete ' + ids.length + ' chat' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.'
+            );
+            if (!confirmed) return;
+            // Optimistic remove
+            const removed = state.sessions.filter(s => ids.includes(s.session_id));
+            state.sessions = state.sessions.filter(s => !ids.includes(s.session_id));
+            state.selected.clear();
+            updateBulkToolbar();
+            saveCache(state.sessions);
+            render();
+            try {
+                const resp = await fetch('/chat/bulk-delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json',
+                               'X-CSRFToken': getCsrfToken() },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ session_ids: ids }),
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            } catch (_) {
+                // Revert
+                state.sessions = state.sessions.concat(removed);
+                saveCache(state.sessions);
+                showToast('Bulk delete failed. Restored.');
+                render();
+            }
+        });
     }
 
     function getCsrfToken() {
@@ -301,6 +375,7 @@
 
     function boot() {
         bindControls();
+        bindBulkActions();
         const cached = loadCache();
         if (cached) {
             state.sessions = cached;
