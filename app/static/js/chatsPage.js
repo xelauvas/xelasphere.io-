@@ -158,8 +158,15 @@
         let filtered = state.sessions.filter(s => {
             if (state.filters.starred && !s.starred) return false;
             if (state.filters.model && s.model !== state.filters.model) return false;
-            if (state.filters.hasArtifact && !s.has_artifact) return false;
-            if (state.filters.hasAttachment && !s.has_attachment) return false;
+            // Content-type filters (hasArtifact, hasAttachment) combine as OR.
+            // They're alternative kinds of rich content — when both are toggled
+            // the user is asking for chats that have ANY rich content, not
+            // chats that happen to have BOTH (a much rarer case).
+            if (state.filters.hasArtifact || state.filters.hasAttachment) {
+                const passesArtifact = state.filters.hasArtifact && s.has_artifact;
+                const passesAttachment = state.filters.hasAttachment && s.has_attachment;
+                if (!passesArtifact && !passesAttachment) return false;
+            }
             if (state.filters.dateFrom && (s.last_updated || '') < state.filters.dateFrom) return false;
             if (state.filters.dateTo && (s.last_updated || '') > state.filters.dateTo + 'T23:59:59') return false;
             if (q && !(s.title || '').toLowerCase().includes(q)) return false;
