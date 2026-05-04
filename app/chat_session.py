@@ -329,11 +329,27 @@ class ChatSession:
             if isinstance(last_updated, datetime):
                 last_updated = last_updated.isoformat()
 
+            # Derive the session's model from its latest message that has one.
+            # Sessions don't store a top-level 'model' field — model metadata
+            # is per-message (model_id / model_label, set by chat_engine).
+            # Without this, the /chats Model filter dropdown is always empty.
+            session_model = data.get('model') or ''
+            if not session_model:
+                for m in reversed(messages):
+                    candidate = (
+                        m.get('model_label')
+                        or m.get('model_id')
+                        or m.get('model')
+                    )
+                    if candidate:
+                        session_model = candidate
+                        break
+
             out.append({
                 'session_id': snap.id,
                 'title': data.get('title') or data.get('session_name') or 'New chat',
                 'last_updated': last_updated,
-                'model': data.get('model') or '',
+                'model': session_model,
                 'msg_count': int(msg_count or 0),
                 'starred': bool(data.get('starred', False)),
                 'pinned': bool(data.get('pinned', False)),
