@@ -5289,28 +5289,29 @@ body.device-tablet .mobile-overlay {
 @media (max-width: 768px) {
     /* ── Container ─────────────────────────────────────────────── */
     .chats-page {
-        padding: 18px 0 0;  /* edge-to-edge — header + list have own padding */
+        padding: 22px 0 0;  /* edge-to-edge — header + list have own padding */
     }
     .chats-page__scroll {
         scrollbar-gutter: auto;
         /* clear the floating bottom bulk bar + safe-area inset */
-        padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
     }
 
     /* ── Header — bigger title, refined search ─────────────────── */
     .chats-page__header {
         gap: 14px;
         padding: 0 16px 14px;
-        margin-bottom: 4px;
+        margin-bottom: 0;
     }
     .chats-page__title {
         font-size: 28px;          /* iOS-style large title */
         font-weight: 700;
         letter-spacing: -0.025em;
+        line-height: 1.1;
     }
     .chats-page__search {
-        padding: 13px 16px;
-        border-radius: 14px;
+        padding: 12px 14px;
+        border-radius: 12px;
         gap: 10px;
     }
     .chats-page__search input {
@@ -5321,10 +5322,10 @@ body.device-tablet .mobile-overlay {
     .chats-page__toolbar {
         flex-direction: row;       /* override desktop column-on-mobile */
         align-items: center;
-        gap: 6px;
+        gap: 8px;
         flex-wrap: nowrap;
-        margin: 0 0 16px;
-        padding: 0 0 0 16px;       /* sort sits flush right; chips bleed left */
+        margin: 0 0 14px;
+        padding: 0 12px 0 16px;
         box-shadow: none;
     }
     .chats-page__filters {
@@ -5335,8 +5336,8 @@ body.device-tablet .mobile-overlay {
         flex-wrap: nowrap;
         scrollbar-width: none;
         -ms-overflow-style: none;
-        padding: 2px 6px 6px 0;
-        scroll-padding-left: 16px;
+        padding: 2px 4px 6px 0;
+        scroll-padding-left: 0;
         scroll-snap-type: x proximity;
     }
     .chats-page__filters::-webkit-scrollbar {
@@ -5348,10 +5349,33 @@ body.device-tablet .mobile-overlay {
     .chats-filter-divider {
         display: none;
     }
+
+    /* CRITICAL: chips must NOT shrink — that's what was making text
+       collapse onto the icons. They keep intrinsic width and the
+       row scrolls horizontally instead. */
+    .chats-toggle,
+    .chats-dropdown {
+        flex-shrink: 0;
+    }
     .chats-toggle,
     .chats-dropdown__btn {
         font-size: 13px;
-        padding: 7px 12px;
+        padding: 7px 13px 7px 11px;
+        gap: 7px;
+    }
+    .chats-toggle__icon,
+    .chats-dropdown__icon {
+        width: 14px;
+        height: 14px;
+    }
+    .chats-dropdown__btn {
+        max-width: none;
+    }
+    .chats-dropdown__label {
+        max-width: 110px;          /* truncate very long model names cleanly */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .chats-dropdown__menu {
         min-width: 220px;
@@ -5488,17 +5512,17 @@ body.device-tablet .mobile-overlay {
     .chats-page__bulk-toolbar {
         position: fixed;
         top: auto;
-        bottom: 14px;
-        left: 14px;
-        right: 14px;
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
         margin: 0;
-        border-radius: 18px;
-        padding: 8px 10px;
-        padding-bottom: max(8px, env(safe-area-inset-bottom));
+        border-radius: 16px;
+        padding: 6px 6px;
+        padding-bottom: max(6px, env(safe-area-inset-bottom));
         z-index: 50;
-        gap: 4px;
+        gap: 2px;
         /* Heavier glass + ambient shadow */
-        background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+        background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
         backdrop-filter: blur(28px) saturate(220%);
         -webkit-backdrop-filter: blur(28px) saturate(220%);
         border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
@@ -5521,21 +5545,53 @@ body.device-tablet .mobile-overlay {
             inset 0 1px 0 0 rgba(255, 255, 255, 0.7);
     }
 
-    /* Bulk count — compact */
+    /* Count — abbreviated on mobile via dual-span trick */
     .chats-bulk__count {
-        font-size: 12px;
-        padding-left: 4px;
-        gap: 6px;
-    }
-    .chats-bulk__btn {
-        padding: 8px 12px;
         font-size: 12.5px;
-        min-height: 38px;          /* touch target */
+        padding: 0 4px 0 10px;
+        gap: 6px;
+        margin-right: auto;
+        flex-shrink: 0;
+    }
+    .chats-bulk__count-full {
+        display: none;             /* hide verbose copy on mobile */
+    }
+    .chats-bulk__count-short {
+        display: inline;
+    }
+    .chats-bulk__count-sep {
+        opacity: 0.5;
+        margin: 0 1px;
+    }
+
+    /* Bulk buttons — uniform 36×36 pill, icon-centered on mobile */
+    .chats-bulk__btn {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        gap: 0;
+        font-size: 0;              /* hide label spacing — labels also hidden */
+        min-height: auto;
         border-radius: 999px;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .chats-bulk__btn span {
+        display: none;
+    }
+    .chats-bulk__btn-icon {
+        width: 17px;
+        height: 17px;
     }
     .chats-bulk__divider {
-        margin: 0 2px;
-        height: 20px;
+        height: 22px;
+        margin: 0 4px;
+        width: 1px;
+        background: linear-gradient(to bottom,
+            transparent,
+            color-mix(in srgb, var(--text-primary) 18%, transparent) 30%,
+            color-mix(in srgb, var(--text-primary) 18%, transparent) 70%,
+            transparent);
     }
 
     /* ── Kebab popover from row — fits screen, touch-friendly ─── */
@@ -5568,47 +5624,14 @@ body.device-tablet .mobile-overlay {
     }
 }
 
-/* ── Phones (≤480px) — bulk bar goes icon-only to fit ─────────────────── */
+/* ── Phones (≤480px) — slightly more compact ─────────────────────────── */
 @media (max-width: 480px) {
     .chats-page__title {
-        font-size: 24px;
+        font-size: 26px;
     }
     .chats-row__title {
         font-size: 14.5px;
     }
-
-    /* Hide bulk button labels — icons only. Labels live in aria-label
-       so screen readers still announce them. */
-    .chats-bulk__btn span {
-        display: none;
-    }
-    .chats-bulk__btn {
-        padding: 0;
-        width: 40px;
-        height: 40px;
-        justify-content: center;
-        gap: 0;
-        min-height: auto;
-    }
-    .chats-bulk__btn-icon {
-        width: 18px;
-        height: 18px;
-    }
-    .chats-bulk__count {
-        font-size: 11.5px;
-        margin-right: 6px;
-        white-space: nowrap;
-    }
-    .chats-bulk__divider {
-        height: 22px;
-        margin: 0 4px;
-    }
-    .chats-page__bulk-toolbar {
-        padding: 6px 8px;
-        padding-bottom: max(6px, env(safe-area-inset-bottom));
-        gap: 2px;
-    }
-
     /* Tighten row separator inset for narrower viewports */
     .chats-row::after {
         left: 60px;
@@ -5616,10 +5639,18 @@ body.device-tablet .mobile-overlay {
     }
 }
 
-/* ── Very narrow phones (≤360px) — count goes ultra-compact ────────── */
+/* ── Very narrow phones (≤360px) — bulk bar shrinks further ────────── */
 @media (max-width: 360px) {
+    .chats-page__bulk-toolbar {
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        padding: 5px;
+        padding-bottom: max(5px, env(safe-area-inset-bottom));
+    }
     .chats-bulk__count {
-        font-size: 11px;
+        font-size: 11.5px;
+        padding: 0 2px 0 8px;
         gap: 5px;
     }
     .chats-bulk__count-dot {
@@ -5627,8 +5658,8 @@ body.device-tablet .mobile-overlay {
         height: 5px;
     }
     .chats-bulk__btn {
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
     }
     .chats-bulk__btn-icon {
         width: 16px;
@@ -5636,5 +5667,6 @@ body.device-tablet .mobile-overlay {
     }
     .chats-bulk__divider {
         margin: 0 2px;
+        height: 18px;
     }
 }

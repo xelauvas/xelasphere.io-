@@ -583,6 +583,11 @@ body.light-theme .chats-page__bulk-toolbar {
     font-variant-numeric: tabular-nums;
 }
 
+/* Desktop default: show the verbose count, hide the short version.
+   Mobile rules in mobile.css flip this. */
+.chats-bulk__count-full { display: inline; }
+.chats-bulk__count-short { display: none; }
+
 .chats-bulk__count-dot {
     width: 6px;
     height: 6px;
