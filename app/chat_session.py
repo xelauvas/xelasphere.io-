@@ -284,13 +284,28 @@ class ChatSession:
 
             # Always recompute denormalized fields from the messages array.
             # The doc was downloaded in full anyway, so the cost is just
-            # iteration. Trusting the cached field led to stale state when
-            # later messages added artifacts/attachments after the first
-            # metadata read flipped the flag to False.
+            # iteration.
+            #
+            # Stored shape (see services/chat_engine.py save_chat_interaction):
+            #   - artifact metadata is FLATTENED onto the message as
+            #     artifact_id / artifact_title / artifact_type / etc.
+            #     There is no nested 'artifact' field, so the legacy
+            #     `m.get('artifact')` probe always returned None and every
+            #     chat got has_artifact=False.
+            #   - attachments live under 'attachments' (AI-side) AND
+            #     'user_attachments' (user-side). Either marks the chat.
             messages = data.get('messages', []) or []
             msg_count = len(messages)
-            has_artifact = any(m.get('artifact') for m in messages)
-            has_attachment = any(m.get('attachments') for m in messages)
+            has_artifact = any(
+                m.get('artifact_id')
+                or m.get('artifact_reference')
+                or m.get('artifact')
+                for m in messages
+            )
+            has_attachment = any(
+                m.get('attachments') or m.get('user_attachments')
+                for m in messages
+            )
 
             stored_msg_count = data.get('msg_count')
             stored_has_artifact = data.get('has_artifact')
