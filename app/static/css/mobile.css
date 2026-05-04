@@ -5280,43 +5280,52 @@ body.device-tablet .mobile-overlay {
    Source rules live in app/static/css/chats.css (desktop). All phone/tablet
    overrides for the chat browser go here so mobile.css remains the single
    source of truth for small-screen behavior.
+
+   Design language: Apple Mail-style flat list with hairline separators,
+   floating bottom action bar, single-row scrollable filter chips with an
+   icon-only sort button at the trailing edge.
    ========================================================================== */
 
 @media (max-width: 768px) {
-    /* — Container — */
+    /* ── Container ─────────────────────────────────────────────── */
     .chats-page {
-        padding: 24px 16px 0;
+        padding: 18px 0 0;  /* edge-to-edge — header + list have own padding */
     }
     .chats-page__scroll {
         scrollbar-gutter: auto;
         /* clear the floating bottom bulk bar + safe-area inset */
-        padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
     }
 
-    /* — Header — */
+    /* ── Header — bigger title, refined search ─────────────────── */
     .chats-page__header {
         gap: 14px;
-        padding-bottom: 14px;
+        padding: 0 16px 14px;
+        margin-bottom: 4px;
     }
     .chats-page__title {
-        font-size: 24px;
+        font-size: 28px;          /* iOS-style large title */
+        font-weight: 700;
+        letter-spacing: -0.025em;
     }
     .chats-page__search {
-        padding: 12px 14px;
-        border-radius: 12px;
+        padding: 13px 16px;
+        border-radius: 14px;
+        gap: 10px;
     }
     .chats-page__search input {
-        font-size: 16px;  /* ≥16px prevents iOS Safari focus-zoom */
+        font-size: 16px;          /* ≥16px prevents iOS Safari focus-zoom */
     }
 
-    /* — Filter toolbar — stack column, scroll filter chips horizontally — */
+    /* ── Filter toolbar — single row, sort icon-only at end ────── */
     .chats-page__toolbar {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
-        margin-bottom: 18px;
-        padding-top: 0;
-        box-shadow: none;  /* drop the desktop shadow shelf */
+        flex-direction: row;       /* override desktop column-on-mobile */
+        align-items: center;
+        gap: 6px;
+        flex-wrap: nowrap;
+        margin: 0 0 16px;
+        padding: 0 0 0 16px;       /* sort sits flush right; chips bleed left */
+        box-shadow: none;
     }
     .chats-page__filters {
         gap: 6px;
@@ -5326,14 +5335,18 @@ body.device-tablet .mobile-overlay {
         flex-wrap: nowrap;
         scrollbar-width: none;
         -ms-overflow-style: none;
-        margin: 0 -16px;
-        padding: 2px 16px 6px;
+        padding: 2px 6px 6px 0;
+        scroll-padding-left: 16px;
+        scroll-snap-type: x proximity;
     }
     .chats-page__filters::-webkit-scrollbar {
         display: none;
     }
+    .chats-page__filters > * {
+        scroll-snap-align: start;
+    }
     .chats-filter-divider {
-        display: none;  /* save horizontal space */
+        display: none;
     }
     .chats-toggle,
     .chats-dropdown__btn {
@@ -5341,168 +5354,287 @@ body.device-tablet .mobile-overlay {
         padding: 7px 12px;
     }
     .chats-dropdown__menu {
-        min-width: 200px;
+        min-width: 220px;
         max-width: calc(100vw - 32px);
-        max-height: 50vh;
+        max-height: 60vh;
         overflow-y: auto;
     }
-    /* Sort sits below filters, anchored to right edge */
+
+    /* Sort dropdown — square icon-only button, anchored at right edge */
     .chats-dropdown--sort {
-        align-self: flex-end;
+        flex-shrink: 0;
+        margin-right: 12px;
+    }
+    .chats-dropdown--sort .chats-dropdown__btn {
+        padding: 0;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        justify-content: center;
+        gap: 0;
+    }
+    .chats-dropdown--sort .chats-dropdown__sort-prefix,
+    .chats-dropdown--sort .chats-dropdown__label,
+    .chats-dropdown--sort .chats-dropdown__chevron {
+        display: none;
+    }
+    .chats-dropdown--sort .chats-dropdown__icon {
+        width: 18px;
+        height: 18px;
+        color: var(--text-secondary);
     }
     .chats-dropdown--sort .chats-dropdown__menu {
         right: 0;
         left: auto;
+        min-width: 220px;
     }
 
-    /* — Bulk action bar — floating pill at bottom of viewport — */
-    .chats-page__bulk-toolbar {
-        position: fixed;
-        top: auto;
-        bottom: 12px;
-        left: 12px;
-        right: 12px;
-        margin: 0;
-        border-radius: 16px;
-        padding: 10px 12px;
-        padding-bottom: max(10px, env(safe-area-inset-bottom));
-        z-index: 50;
-        gap: 4px;
-        /* Heavier shadow because it floats over content */
-        box-shadow:
-            0 -8px 32px -6px rgba(0, 0, 0, 0.45),
-            0 4px 16px -4px rgba(0, 0, 0, 0.25),
-            inset 0 1px 0 0 color-mix(in srgb, var(--text-primary) 8%, transparent);
-        animation: bulk-rise-mobile 0.24s cubic-bezier(0.2, 0, 0, 1);
+    /* ── List & rows — Apple Mail-style hairline separators ───── */
+    .chats-page__list {
+        padding: 0;
     }
-
-    @keyframes bulk-rise-mobile {
-        from { opacity: 0; transform: translateY(8px); }
-        to   { opacity: 1; transform: translateY(0); }
-    }
-
-    body.light-theme .chats-page__bulk-toolbar {
-        box-shadow:
-            0 -8px 32px -6px rgba(0, 0, 0, 0.18),
-            0 4px 16px -4px rgba(0, 0, 0, 0.08),
-            inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
-    }
-
-    /* Compact button labels on phones — count abbreviated */
-    .chats-bulk__count {
-        font-size: 12px;
-        padding-left: 2px;
-        gap: 6px;
-    }
-    .chats-bulk__btn {
-        padding: 7px 11px;
-        font-size: 12px;
-        min-height: 36px;  /* touch target */
-    }
-    .chats-bulk__divider {
-        margin: 0 2px;
-    }
-
-    /* — Rows — bigger touch targets, drop secondary metadata — */
     .chats-row {
-        padding: 14px 12px;
-        gap: 12px;
-        border-radius: 10px;
-        min-height: 52px;
+        padding: 14px 16px;
+        gap: 14px;
+        border-radius: 0;          /* edge-to-edge */
+        min-height: 60px;
+        position: relative;
+    }
+    .chats-row + .chats-row {
+        border-top: none;
+    }
+    /* Hairline separator inset from the left of the title (Apple pattern) */
+    .chats-row::after {
+        content: '';
+        position: absolute;
+        left: 64px;                /* skip past check + star */
+        right: 16px;
+        bottom: 0;
+        height: 0.5px;
+        background: var(--border-secondary);
+    }
+    .chats-row:last-child::after {
+        display: none;
+    }
+    .chats-row.is-selected {
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+    .chats-row.is-selected::before {
+        top: 0;
+        bottom: 0;
+        border-radius: 0;
     }
     .chats-row__check-wrap,
     .chats-row__actions {
-        opacity: 1;  /* always visible on touch — no hover */
+        opacity: 1;                /* always visible on touch */
     }
     .chats-row__model,
-    .chats-row__msgs {
-        display: none;
+    .chats-row__msgs,
+    .chats-row__indicators {
+        display: none;             /* drop secondary metadata to keep rows tidy */
     }
-    .chats-row__kebab {
-        width: 32px;
-        height: 32px;
+    .chats-row__title {
+        font-size: 15px;
+        font-weight: 500;
+    }
+    .chats-row__time {
+        font-size: 12px;
+        color: var(--text-tertiary);
+        min-width: auto;
     }
     .chats-row__star {
         padding: 6px;
     }
+    .chats-row__kebab {
+        width: 36px;
+        height: 36px;
+    }
     /* Disable hover-spring star on touch (sticky :hover after tap) */
-    .chats-row__star:hover {
+    .chats-row__star:hover,
+    .chats-row__kebab:hover,
+    .chats-row:hover {
         transform: none;
     }
-
-    /* — Group headers — */
-    .chats-group {
-        padding: 18px 12px 6px;
+    .chats-row__star:hover {
+        color: inherit;
+    }
+    .chats-row__star.is-starred {
+        color: #fbbf24;
+    }
+    body.light-theme .chats-row__star.is-starred {
+        color: #d97706;
     }
 
-    /* — Kebab popover from row — fits screen — */
+    /* ── Group headers — refined, no count pill on mobile ─────── */
+    .chats-group {
+        padding: 22px 16px 6px;
+        background: var(--bg-primary);
+    }
+    .chats-group__label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+    }
+    .chats-group__count {
+        display: none;             /* drop count chip — saves visual noise */
+    }
+    .chats-group:first-child {
+        padding-top: 8px;
+    }
+
+    /* ── Bulk action bar — floating glass pill at viewport bottom ─ */
+    .chats-page__bulk-toolbar {
+        position: fixed;
+        top: auto;
+        bottom: 14px;
+        left: 14px;
+        right: 14px;
+        margin: 0;
+        border-radius: 18px;
+        padding: 8px 10px;
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+        z-index: 50;
+        gap: 4px;
+        /* Heavier glass + ambient shadow */
+        background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+        backdrop-filter: blur(28px) saturate(220%);
+        -webkit-backdrop-filter: blur(28px) saturate(220%);
+        border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+        box-shadow:
+            0 -10px 36px -8px rgba(0, 0, 0, 0.5),
+            0 6px 18px -6px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 0 color-mix(in srgb, var(--text-primary) 10%, transparent);
+        animation: bulk-rise-mobile 0.28s cubic-bezier(0.2, 0, 0, 1);
+    }
+    @keyframes bulk-rise-mobile {
+        from { opacity: 0; transform: translateY(12px) scale(0.96); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    body.light-theme .chats-page__bulk-toolbar {
+        background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+        border-color: color-mix(in srgb, #000000 14%, transparent);
+        box-shadow:
+            0 -10px 36px -8px rgba(0, 0, 0, 0.2),
+            0 6px 18px -6px rgba(0, 0, 0, 0.1),
+            inset 0 1px 0 0 rgba(255, 255, 255, 0.7);
+    }
+
+    /* Bulk count — compact */
+    .chats-bulk__count {
+        font-size: 12px;
+        padding-left: 4px;
+        gap: 6px;
+    }
+    .chats-bulk__btn {
+        padding: 8px 12px;
+        font-size: 12.5px;
+        min-height: 38px;          /* touch target */
+        border-radius: 999px;
+    }
+    .chats-bulk__divider {
+        margin: 0 2px;
+        height: 20px;
+    }
+
+    /* ── Kebab popover from row — fits screen, touch-friendly ─── */
     .chats-row__menu {
-        min-width: 180px;
+        min-width: 200px;
         max-width: calc(100vw - 32px);
+        padding: 6px;
+        border-radius: 14px;
     }
     .chats-row__menu-item {
-        padding: 12px 14px;  /* bigger touch target */
+        padding: 12px 14px;
         font-size: 14px;
+        border-radius: 10px;
     }
 
-    /* — Empty / error states — */
+    /* ── Empty / error states — more breathing room ───────────── */
     .chats-page__empty,
     .chats-page__error {
-        padding: 60px 16px 30px;
+        padding: 64px 24px 40px;
     }
     .chats-page__empty p,
     .chats-page__error p {
+        font-size: 15px;
+        line-height: 1.5;
+    }
+    .chats-empty__clear {
+        padding: 11px 22px;
         font-size: 14px;
+        border-radius: 12px;
     }
 }
 
-/* ── Phones (≤480px) — bulk bar goes icon-only to fit ──────────────── */
+/* ── Phones (≤480px) — bulk bar goes icon-only to fit ─────────────────── */
 @media (max-width: 480px) {
     .chats-page__title {
-        font-size: 22px;
-    }
-
-    .chats-row__time {
-        min-width: 40px;
-        font-size: 11px;
+        font-size: 24px;
     }
     .chats-row__title {
-        font-size: 14px;
+        font-size: 14.5px;
     }
 
-    /* Bulk bar buttons collapse to icon-only — labels still announced
-       via aria-label on the buttons */
+    /* Hide bulk button labels — icons only. Labels live in aria-label
+       so screen readers still announce them. */
     .chats-bulk__btn span {
         display: none;
     }
     .chats-bulk__btn {
-        padding: 8px 10px;
+        padding: 0;
+        width: 40px;
+        height: 40px;
+        justify-content: center;
         gap: 0;
+        min-height: auto;
     }
     .chats-bulk__btn-icon {
-        width: 16px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
     }
     .chats-bulk__count {
-        font-size: 11px;
-        margin-right: 4px;
+        font-size: 11.5px;
+        margin-right: 6px;
+        white-space: nowrap;
     }
     .chats-bulk__divider {
-        height: 18px;
+        height: 22px;
+        margin: 0 4px;
+    }
+    .chats-page__bulk-toolbar {
+        padding: 6px 8px;
+        padding-bottom: max(6px, env(safe-area-inset-bottom));
+        gap: 2px;
+    }
+
+    /* Tighten row separator inset for narrower viewports */
+    .chats-row::after {
+        left: 60px;
+        right: 14px;
     }
 }
 
 /* ── Very narrow phones (≤360px) — count goes ultra-compact ────────── */
 @media (max-width: 360px) {
     .chats-bulk__count {
-        font-size: 10.5px;
-        gap: 4px;
+        font-size: 11px;
+        gap: 5px;
     }
     .chats-bulk__count-dot {
         width: 5px;
         height: 5px;
     }
     .chats-bulk__btn {
-        padding: 8px 9px;
+        width: 36px;
+        height: 36px;
+    }
+    .chats-bulk__btn-icon {
+        width: 16px;
+        height: 16px;
+    }
+    .chats-bulk__divider {
+        margin: 0 2px;
     }
 }
