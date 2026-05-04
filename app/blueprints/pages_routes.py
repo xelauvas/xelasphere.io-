@@ -102,12 +102,13 @@ def images_page():
 
 
 @pages_bp.route('/chats', methods=['GET'])
+@error_handler
 def chats_page():
-    """Render the chats browser page (full-feature chat list)."""
+    """Chats surface — reuses the home template with an auto-open flag."""
     user_id = session.get('user_id') or (session.get('user') or {}).get('uid')
     if not user_id:
         return redirect(url_for('auth_routes.login'))
-    return render_template('chats.html')
+    return _render_home(initial_surface='chats')
 
 
 def _load_api_key_state(user_id):
