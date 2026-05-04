@@ -651,40 +651,6 @@ body.light-theme .chats-page__bulk-toolbar {
     box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
-/* ── Ghost variant (Select all) — gold link, no border ─────────── */
-.chats-bulk__btn--ghost {
-    border-color: transparent;
-    color: #fbbf24;
-    background: transparent;
-    padding: 6px 12px 6px 10px;
-}
-
-.chats-bulk__btn--ghost:hover {
-    background: rgba(251, 191, 36, 0.14);
-    border-color: transparent;
-    color: #fbbf24;
-    box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.25);
-}
-
-.chats-bulk__btn--ghost:hover .chats-bulk__btn-icon {
-    filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.5));
-    transform: scale(1.12);
-}
-
-body.light-theme .chats-bulk__btn--ghost {
-    color: #d97706;
-}
-
-body.light-theme .chats-bulk__btn--ghost:hover {
-    background: rgba(217, 119, 6, 0.1);
-    color: #d97706;
-    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.3);
-}
-
-body.light-theme .chats-bulk__btn--ghost:hover .chats-bulk__btn-icon {
-    filter: drop-shadow(0 0 3px rgba(217, 119, 6, 0.45));
-}
-
 /* ── Star variant — gold accent on hover ───────────────────────── */
 .chats-bulk__btn--star:hover {
     color: #fbbf24;
