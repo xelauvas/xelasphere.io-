@@ -89,6 +89,7 @@ class ChatManager {
             searchResults: document.getElementById('history-search-results'),
             searchCloseTargets: document.querySelectorAll('[data-history-search-close]'),
             imagesButton: document.getElementById('action-images'),
+            chatsButton: document.getElementById('action-chats'),
             imagesPage: document.getElementById('images-page'),
             chatsPage: document.getElementById('chats-page'),
             imagesPageBack: document.getElementById('images-page-back'),
@@ -259,6 +260,7 @@ class ChatManager {
         }));
         this.elements.searchButton?.addEventListener('click', () => this.openHistorySearchModal());
         this.elements.imagesButton?.addEventListener('click', () => this.showImagesPage());
+        this.elements.chatsButton?.addEventListener('click', () => this.showChatsPage());
         this.elements.imagesPageBack?.addEventListener('click', () => this.hideImagesPage());
         this.elements.imagesPromptBar?.addEventListener('submit', (event) => {
             event.preventDefault();
