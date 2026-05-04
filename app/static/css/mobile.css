@@ -2630,24 +2630,24 @@ body.is-ios .arrow-down {
     /* === History Search Modal — Claude-style, mobile === */
     .history-search-modal {
         padding: 1rem 0.75rem;
-        align-items: flex-start;
+        align-items: center;
     }
 
     .history-search-dialog {
         width: 100%;
         max-width: none;
         max-height: calc(100vh - 2rem);
-        border-radius: 14px;
+        border-radius: 16px;
     }
 
     .history-search-results {
-        max-height: calc(100vh - 10rem);
-        min-height: 200px;
+        max-height: calc(100vh - 12rem);
+        min-height: 240px;
     }
 
     .history-search-input {
-        padding: 14px 14px;
-        gap: 10px;
+        padding: 16px 16px;
+        gap: 12px;
     }
 
     .history-search-input input {
@@ -2655,16 +2655,18 @@ body.is-ios .arrow-down {
     }
 
     .history-search-result {
-        padding: 10px 10px;
+        padding: 12px 14px;
+        margin: 0 6px;
+        width: calc(100% - 12px);
         min-height: 44px;
     }
 
     .history-result-name {
-        font-size: 14px;
+        font-size: 15px;
     }
 
     .history-result-time {
-        font-size: 11px;
+        font-size: 12px;
     }
 
     .history-result-snippet {
@@ -2745,8 +2747,8 @@ body.is-ios .arrow-down {
     }
 
     .history-search-dialog {
-        height: 80vh;
-        max-height: 80vh;
+        height: 85vh;
+        max-height: 85vh;
     }
 
     .button-group {
@@ -5269,5 +5271,238 @@ body.device-tablet .mobile-overlay {
     @media (max-width: 380px) {
         .code-window .code-header::before { display: none; }
         .code-window .language-indicator { margin-left: 0; max-width: 55%; }
+    }
+}
+
+/* ==========================================================================
+   /chats — Premium chat browser, mobile + tablet adaptations
+   ==========================================================================
+   Source rules live in app/static/css/chats.css (desktop). All phone/tablet
+   overrides for the chat browser go here so mobile.css remains the single
+   source of truth for small-screen behavior.
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    /* — Container — */
+    .chats-page {
+        padding: 24px 16px 0;
+    }
+    .chats-page__scroll {
+        scrollbar-gutter: auto;
+        /* clear the floating bottom bulk bar + safe-area inset */
+        padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* — Header — */
+    .chats-page__header {
+        gap: 14px;
+        padding-bottom: 14px;
+    }
+    .chats-page__title {
+        font-size: 24px;
+    }
+    .chats-page__search {
+        padding: 12px 14px;
+        border-radius: 12px;
+    }
+    .chats-page__search input {
+        font-size: 16px;  /* ≥16px prevents iOS Safari focus-zoom */
+    }
+
+    /* — Filter toolbar — stack column, scroll filter chips horizontally — */
+    .chats-page__toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        margin-bottom: 18px;
+        padding-top: 0;
+        box-shadow: none;  /* drop the desktop shadow shelf */
+    }
+    .chats-page__filters {
+        gap: 6px;
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        margin: 0 -16px;
+        padding: 2px 16px 6px;
+    }
+    .chats-page__filters::-webkit-scrollbar {
+        display: none;
+    }
+    .chats-filter-divider {
+        display: none;  /* save horizontal space */
+    }
+    .chats-toggle,
+    .chats-dropdown__btn {
+        font-size: 13px;
+        padding: 7px 12px;
+    }
+    .chats-dropdown__menu {
+        min-width: 200px;
+        max-width: calc(100vw - 32px);
+        max-height: 50vh;
+        overflow-y: auto;
+    }
+    /* Sort sits below filters, anchored to right edge */
+    .chats-dropdown--sort {
+        align-self: flex-end;
+    }
+    .chats-dropdown--sort .chats-dropdown__menu {
+        right: 0;
+        left: auto;
+    }
+
+    /* — Bulk action bar — floating pill at bottom of viewport — */
+    .chats-page__bulk-toolbar {
+        position: fixed;
+        top: auto;
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
+        margin: 0;
+        border-radius: 16px;
+        padding: 10px 12px;
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
+        z-index: 50;
+        gap: 4px;
+        /* Heavier shadow because it floats over content */
+        box-shadow:
+            0 -8px 32px -6px rgba(0, 0, 0, 0.45),
+            0 4px 16px -4px rgba(0, 0, 0, 0.25),
+            inset 0 1px 0 0 color-mix(in srgb, var(--text-primary) 8%, transparent);
+        animation: bulk-rise-mobile 0.24s cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    @keyframes bulk-rise-mobile {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    body.light-theme .chats-page__bulk-toolbar {
+        box-shadow:
+            0 -8px 32px -6px rgba(0, 0, 0, 0.18),
+            0 4px 16px -4px rgba(0, 0, 0, 0.08),
+            inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
+    }
+
+    /* Compact button labels on phones — count abbreviated */
+    .chats-bulk__count {
+        font-size: 12px;
+        padding-left: 2px;
+        gap: 6px;
+    }
+    .chats-bulk__btn {
+        padding: 7px 11px;
+        font-size: 12px;
+        min-height: 36px;  /* touch target */
+    }
+    .chats-bulk__divider {
+        margin: 0 2px;
+    }
+
+    /* — Rows — bigger touch targets, drop secondary metadata — */
+    .chats-row {
+        padding: 14px 12px;
+        gap: 12px;
+        border-radius: 10px;
+        min-height: 52px;
+    }
+    .chats-row__check-wrap,
+    .chats-row__actions {
+        opacity: 1;  /* always visible on touch — no hover */
+    }
+    .chats-row__model,
+    .chats-row__msgs {
+        display: none;
+    }
+    .chats-row__kebab {
+        width: 32px;
+        height: 32px;
+    }
+    .chats-row__star {
+        padding: 6px;
+    }
+    /* Disable hover-spring star on touch (sticky :hover after tap) */
+    .chats-row__star:hover {
+        transform: none;
+    }
+
+    /* — Group headers — */
+    .chats-group {
+        padding: 18px 12px 6px;
+    }
+
+    /* — Kebab popover from row — fits screen — */
+    .chats-row__menu {
+        min-width: 180px;
+        max-width: calc(100vw - 32px);
+    }
+    .chats-row__menu-item {
+        padding: 12px 14px;  /* bigger touch target */
+        font-size: 14px;
+    }
+
+    /* — Empty / error states — */
+    .chats-page__empty,
+    .chats-page__error {
+        padding: 60px 16px 30px;
+    }
+    .chats-page__empty p,
+    .chats-page__error p {
+        font-size: 14px;
+    }
+}
+
+/* ── Phones (≤480px) — bulk bar goes icon-only to fit ──────────────── */
+@media (max-width: 480px) {
+    .chats-page__title {
+        font-size: 22px;
+    }
+
+    .chats-row__time {
+        min-width: 40px;
+        font-size: 11px;
+    }
+    .chats-row__title {
+        font-size: 14px;
+    }
+
+    /* Bulk bar buttons collapse to icon-only — labels still announced
+       via aria-label on the buttons */
+    .chats-bulk__btn span {
+        display: none;
+    }
+    .chats-bulk__btn {
+        padding: 8px 10px;
+        gap: 0;
+    }
+    .chats-bulk__btn-icon {
+        width: 16px;
+        height: 16px;
+    }
+    .chats-bulk__count {
+        font-size: 11px;
+        margin-right: 4px;
+    }
+    .chats-bulk__divider {
+        height: 18px;
+    }
+}
+
+/* ── Very narrow phones (≤360px) — count goes ultra-compact ────────── */
+@media (max-width: 360px) {
+    .chats-bulk__count {
+        font-size: 10.5px;
+        gap: 4px;
+    }
+    .chats-bulk__count-dot {
+        width: 5px;
+        height: 5px;
+    }
+    .chats-bulk__btn {
+        padding: 8px 9px;
     }
 }

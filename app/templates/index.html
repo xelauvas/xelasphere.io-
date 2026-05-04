@@ -171,7 +171,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
 
     <!-- Chats page (loaded for /chats surface) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/chats.css') }}?v=15">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chats.css') }}?v=16">
 
     <!-- Artifact Panel -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/design-tokens.css') }}?v=2">
@@ -193,7 +193,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/email-edit-toolbar.css') }}">
 
     <!-- Mobile Responsive -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=60">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=61">
 
     <!-- Context Menu (long-press actions) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/context-menu.css') }}">
@@ -860,7 +860,7 @@
                                 <span class="chats-bulk__count-dot" aria-hidden="true"></span>
                                 <span class="chats-bulk__count-text">0 selected</span>
                             </span>
-                            <button type="button" class="chats-bulk__btn" id="chats-bulk-select-all">
+                            <button type="button" class="chats-bulk__btn" id="chats-bulk-select-all" aria-label="Select all">
                                 <svg class="chats-bulk__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <path d="M9 11l3 3L22 4"/>
                                     <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
@@ -868,13 +868,13 @@
                                 <span>Select all</span>
                             </button>
                             <span class="chats-bulk__divider" aria-hidden="true"></span>
-                            <button type="button" class="chats-bulk__btn chats-bulk__btn--star" id="chats-bulk-star">
+                            <button type="button" class="chats-bulk__btn chats-bulk__btn--star" id="chats-bulk-star" aria-label="Star selected">
                                 <svg class="chats-bulk__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polygon points="12 2.5 15 8.6 21.7 9.6 16.85 14.3 18 20.95 12 17.85 6 20.95 7.15 14.3 2.3 9.6 9 8.6"/>
                                 </svg>
                                 <span>Star</span>
                             </button>
-                            <button type="button" class="chats-bulk__btn chats-bulk__btn--danger" id="chats-bulk-delete">
+                            <button type="button" class="chats-bulk__btn chats-bulk__btn--danger" id="chats-bulk-delete" aria-label="Delete selected">
                                 <svg class="chats-bulk__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polyline points="3 6 5 6 21 6"/>
                                     <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
@@ -883,7 +883,7 @@
                                 </svg>
                                 <span>Delete</span>
                             </button>
-                            <button type="button" class="chats-bulk__btn" id="chats-bulk-cancel">
+                            <button type="button" class="chats-bulk__btn" id="chats-bulk-cancel" aria-label="Clear selection and filters">
                                 <svg class="chats-bulk__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <line x1="18" y1="6" x2="6" y2="18"/>
                                     <line x1="6" y1="6" x2="18" y2="18"/>
