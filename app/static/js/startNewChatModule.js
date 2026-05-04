@@ -170,9 +170,14 @@ class ChatManager {
         if (typeof window === 'undefined' || !window.history?.replaceState) {
             return;
         }
+        const currentPath = window.location.pathname;
+        // Don't rewrite the URL away from a surface page (/chats, /images)
+        // when there's no active session — the user is intentionally on it.
+        if (!sessionId && (currentPath === '/chats' || currentPath === '/images')) {
+            return;
+        }
         const suffix = `${window.location.search || ''}${window.location.hash || ''}`;
         const newPath = sessionId ? `/c/${sessionId}` : '/';
-        const currentPath = window.location.pathname;
         if (currentPath === newPath) {
             return;
         }

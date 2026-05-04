@@ -440,7 +440,10 @@
         const visibleCount = visibleIds.length;
         const allVisibleSelected = visibleCount > 0 && visibleIds.every(id => state.selected.has(id));
         const countText = els.bulkCount.querySelector('.chats-bulk__count-text') || els.bulkCount;
-        countText.textContent = `${count} of ${visibleCount} selected`;
+        // Two formats — CSS picks one based on viewport (full on desktop, short on mobile).
+        countText.innerHTML =
+            `<span class="chats-bulk__count-full">${count} of ${visibleCount} selected</span>`
+          + `<span class="chats-bulk__count-short" aria-hidden="true">${count}<span class="chats-bulk__count-sep">/</span>${visibleCount}</span>`;
         els.bulkSelectAll.textContent = allVisibleSelected ? 'Deselect all' : 'Select all';
     }
 
