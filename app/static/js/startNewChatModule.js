@@ -1833,6 +1833,8 @@ async loadChatHistory(pageToken = null, limit = 10) {
         this.elements.chatsPage.setAttribute('aria-hidden', 'false');
         if (typeof document !== 'undefined' && document.body) {
             document.body.classList.add('chats-page-open');
+            // Sync the data-attr — CSS uses it for the no-flash initial paint.
+            document.body.dataset.initialSurface = 'chats';
         }
         if (updateHistory && typeof window !== 'undefined' && window.location.pathname !== '/chats') {
             try { window.history.pushState({ surface: 'chats' }, '', '/chats'); } catch (_) {}
@@ -1851,6 +1853,9 @@ async loadChatHistory(pageToken = null, limit = 10) {
         this.elements.chatsPage.setAttribute('aria-hidden', 'true');
         if (typeof document !== 'undefined' && document.body) {
             document.body.classList.remove('chats-page-open');
+            // Clear the no-flash data-attr; otherwise its CSS rules keep
+            // the chat-shell hidden after we leave /chats.
+            document.body.dataset.initialSurface = 'chat';
         }
         if (updateHistory && typeof window !== 'undefined' && window.location.pathname === '/chats') {
             try { window.history.pushState({ surface: 'chat' }, '', '/'); } catch (_) {}
