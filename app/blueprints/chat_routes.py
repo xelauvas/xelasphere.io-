@@ -215,6 +215,12 @@ def start_new_chat():
     }), 201
 
 
+# Canonical session id shape — chat_session.create_session emits f"session_{uuid4()}".
+# Anything else either is a temporary session (handled below) or is junk a client
+# should not be allowed to materialize as a Firestore doc under this user.
+_SESSION_ID_RE = re.compile(r'^session_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+
+
 @chat_bp.route('/chat/save/<session_id>', methods=['POST'])
 @csrf_required
 @error_handler
@@ -232,6 +238,13 @@ def save_chat_session(session_id: str):
     # but a future regression there shouldn't leak temp data into Firestore.
     if isinstance(session_id, str) and session_id.startswith('temp_'):
         return jsonify({'message': 'Temporary session — not persisted'}), 200
+
+    # Reject anything that isn't a real session_<uuid> id. Without this guard,
+    # POSTing /chat/save/<arbitrary-string> would create an orphaned doc under
+    # the caller's user_id (Firestore subcollections are user-scoped, so it's
+    # not cross-tenant — but it's still data clutter the API shouldn't expose).
+    if not _SESSION_ID_RE.match(session_id or ''):
+        return jsonify({'error': 'Invalid session_id'}), 400
 
     user_id = session['user']['uid']
     messages = data.get('messages')

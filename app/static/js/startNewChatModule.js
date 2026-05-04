@@ -1841,9 +1841,10 @@ async loadChatHistory(pageToken = null, limit = 10) {
         if (updateHistory && typeof window !== 'undefined' && window.location.pathname !== '/chats') {
             try { window.history.pushState({ surface: 'chats' }, '', '/chats'); } catch (_) {}
         }
-        // Trigger a refresh of the chats list if the module is loaded
-        if (typeof window !== 'undefined' && window.__chatsPage?.fetchSessions) {
-            window.__chatsPage.fetchSessions();
+        // Trigger a refresh of the chats list and arm the 30s polling.
+        if (typeof window !== 'undefined' && window.__chatsPage) {
+            window.__chatsPage.start?.();
+            window.__chatsPage.fetchSessions?.();
         }
     }
 
@@ -1858,6 +1859,11 @@ async loadChatHistory(pageToken = null, limit = 10) {
             // Clear the no-flash data-attr; otherwise its CSS rules keep
             // the chat-shell hidden after we leave /chats.
             document.body.dataset.initialSurface = 'chat';
+        }
+        // Disarm the 30s background poll so it stops burning Firestore reads
+        // (and visibilitychange-fetches) while the user is on a different surface.
+        if (typeof window !== 'undefined' && window.__chatsPage?.stop) {
+            window.__chatsPage.stop();
         }
         if (updateHistory && typeof window !== 'undefined' && window.location.pathname === '/chats') {
             try { window.history.pushState({ surface: 'chat' }, '', '/'); } catch (_) {}

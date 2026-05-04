@@ -255,21 +255,22 @@ class ChatSession:
 
         return {'chat_history': chat_history, 'next_page_token': next_token}
 
+    LIST_METADATA_MAX = 500
+
     def list_metadata(self, user_id: str) -> List[Dict[str, Any]]:
-        """Return flat metadata for ALL sessions of a user — no message bodies.
+        """Return flat metadata for sessions of a user — no message bodies.
 
         Used by the /chats page for client-side filter/sort/search.
-        Lazy backfills msg_count / has_artifact / has_attachment if missing.
-
-        Note: backfill issues a Firestore write per session that's missing
-        denormalized fields. For users with N legacy sessions, the first
-        load of /chats triggers up to N writes (one-time migration cost).
-        Subsequent loads have zero writes.
+        Hard-capped at LIST_METADATA_MAX most-recently-updated sessions to
+        keep response size and Firestore read cost bounded — without the
+        cap a power user with hundreds of long sessions would pull
+        hundreds of MB of message+embedding data on every page load.
         """
         sessions_ref = (
             self.db.collection('users').document(user_id)
             .collection('chat_sessions')
             .order_by('last_updated', direction=gc_firestore.Query.DESCENDING)
+            .limit(self.LIST_METADATA_MAX)
         )
         out: List[Dict[str, Any]] = []
         for snap in sessions_ref.stream():

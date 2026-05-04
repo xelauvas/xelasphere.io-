@@ -214,6 +214,12 @@
     /* ─── render ──────────────────────────────────────────────── */
 
     function render() {
+        // BAIL OUT if the user is mid-rename — re-rendering would replace
+        // the live contenteditable node and silently commit whatever they've
+        // typed so far via the blur listener firing on a detached element.
+        if (els.list && els.list.querySelector('.chats-row__title.is-editing')) {
+            return;
+        }
         if (state.error) {
             els.list.innerHTML = '';
             els.empty.hidden = true;
@@ -462,11 +468,25 @@
         const visibleIds = getVisibleSessions().map(s => s.session_id);
         const visibleCount = visibleIds.length;
         const allVisibleSelected = visibleCount > 0 && visibleIds.every(id => state.selected.has(id));
+        // DOM construction (no innerHTML) — values are integers today, but
+        // building this with text nodes makes it impossible to stop being safe
+        // if a future caller injects a label string into the count.
         const countText = els.bulkCount.querySelector('.chats-bulk__count-text') || els.bulkCount;
-        // Two formats — CSS picks one based on viewport (full on desktop, short on mobile).
-        countText.innerHTML =
-            `<span class="chats-bulk__count-full">${count} of ${visibleCount} selected</span>`
-          + `<span class="chats-bulk__count-short" aria-hidden="true">${count}<span class="chats-bulk__count-sep">/</span>${visibleCount}</span>`;
+        countText.replaceChildren();
+        const full = document.createElement('span');
+        full.className = 'chats-bulk__count-full';
+        full.textContent = `${count} of ${visibleCount} selected`;
+        const short = document.createElement('span');
+        short.className = 'chats-bulk__count-short';
+        short.setAttribute('aria-hidden', 'true');
+        short.textContent = String(count);
+        const sep = document.createElement('span');
+        sep.className = 'chats-bulk__count-sep';
+        sep.textContent = '/';
+        short.appendChild(sep);
+        short.appendChild(document.createTextNode(String(visibleCount)));
+        countText.appendChild(full);
+        countText.appendChild(short);
         els.bulkSelectAll.textContent = allVisibleSelected ? 'Deselect all' : 'Select all';
     }
 
@@ -523,8 +543,12 @@
                 'Delete ' + ids.length + ' chat' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.'
             );
             if (!confirmed) return;
-            // Optimistic remove
+            // Optimistic remove. Snapshot BOTH the rows and the selection
+            // so a failure leaves the user looking at the same UI they
+            // started from — rows back, checkboxes still ticked, bulk bar
+            // still showing the count.
             const removed = state.sessions.filter(s => ids.includes(s.session_id));
+            const snapshotSelected = new Set(state.selected);
             state.sessions = state.sessions.filter(s => !ids.includes(s.session_id));
             state.selected.clear();
             updateBulkToolbar();
@@ -540,9 +564,11 @@
                 });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
             } catch (_) {
-                // Revert
+                // Revert: rows AND selection.
                 state.sessions = state.sessions.concat(removed);
+                state.selected = snapshotSelected;
                 saveCache(state.sessions);
+                updateBulkToolbar();
                 showToast('Bulk delete failed. Restored.');
                 render();
             }
@@ -606,7 +632,12 @@
         sel.removeAllRanges();
         sel.addRange(range);
 
+        // Idempotent — Escape calls finish(false) AND triggers blur which
+        // would otherwise fire finish(true) and commit anyway.
+        let done = false;
         const finish = async (commit) => {
+            if (done) return;
+            done = true;
             titleEl.contentEditable = 'false';
             titleEl.classList.remove('is-editing');
             const next = (titleEl.textContent || '').trim();
@@ -1006,14 +1037,29 @@
 
     /* ─── background refresh (30s while page is visible) ─────── */
     let refreshTimer = null;
+    let isActive = false;  // gates the visibility listener too
+
     function startBackgroundRefresh() {
+        if (isActive) return;
+        isActive = true;
         clearInterval(refreshTimer);
         refreshTimer = setInterval(() => {
             if (document.visibilityState === 'visible') fetchSessions();
         }, 30_000);
     }
+
+    function stopBackgroundRefresh() {
+        isActive = false;
+        clearInterval(refreshTimer);
+        refreshTimer = null;
+    }
+
+    // The visibility listener stays bound for the page lifetime, but it
+    // only acts when the chats surface is currently active — otherwise
+    // we'd be hitting /chat/list-metadata every tab focus from any other
+    // surface in the app.
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') fetchSessions();
+        if (isActive && document.visibilityState === 'visible') fetchSessions();
     });
 
     if (document.readyState === 'loading') {
@@ -1023,6 +1069,10 @@
         startBackgroundRefresh();
     }
 
-    // Expose for later tasks
-    window.__chatsPage = { state, render, fetchSessions, invalidateCache };
+    // Expose for SPA show/hide hooks in startNewChatModule.
+    window.__chatsPage = {
+        state, render, fetchSessions, invalidateCache,
+        start: startBackgroundRefresh,
+        stop: stopBackgroundRefresh,
+    };
 })();

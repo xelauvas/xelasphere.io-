@@ -486,6 +486,44 @@ def chat_list_metadata():
     return response
 
 
+PATCH_TITLE_MAX = 500
+PATCH_TAGS_MAX_COUNT = 20
+PATCH_TAG_MAX_LEN = 100
+
+
+def _validate_patch_value(field, value):
+    """Per-field type + bound checks. Returns (ok, normalized_value, error)."""
+    if field in ('starred', 'pinned'):
+        if not isinstance(value, bool):
+            return False, None, f'{field} must be boolean'
+        return True, value, None
+    if field == 'title':
+        if not isinstance(value, str):
+            return False, None, 'title must be a string'
+        normalized = value.strip()
+        if len(normalized) > PATCH_TITLE_MAX:
+            return False, None, f'title exceeds {PATCH_TITLE_MAX} chars'
+        return True, normalized, None
+    if field == 'tags':
+        if not isinstance(value, list):
+            return False, None, 'tags must be a list'
+        if len(value) > PATCH_TAGS_MAX_COUNT:
+            return False, None, f'tags exceeds {PATCH_TAGS_MAX_COUNT} items'
+        normalized = []
+        for tag in value:
+            if not isinstance(tag, str):
+                return False, None, 'tags must be strings'
+            t = tag.strip()
+            if not t:
+                continue
+            if len(t) > PATCH_TAG_MAX_LEN:
+                return False, None, f'tag exceeds {PATCH_TAG_MAX_LEN} chars'
+            normalized.append(t)
+        return True, normalized, None
+    # Unknown field — already filtered by whitelist, but defend in depth.
+    return False, None, f'unknown field {field}'
+
+
 @session_bp.route('/chat/<session_id>', methods=['PATCH'])
 @limiter.limit("60 per minute")
 @csrf_required
@@ -495,17 +533,32 @@ def chat_patch_session(session_id):
     """Update starred / pinned / title / tags on a session.
 
     Body: any subset of {starred, pinned, title, tags}.
-    Other fields are silently ignored (whitelist enforced at both layers).
+    Type + length validated per field; rejected with 400 on bad shape.
     """
     user_id = session['user']['uid']
     body = request.get_json(silent=True) or {}
     if not isinstance(body, dict):
         return jsonify({'error': 'Invalid body'}), 400
-    cleaned = {k: v for k, v in body.items() if k in ALLOWED_PATCH_FIELDS}
+
+    cleaned = {}
+    for field in ALLOWED_PATCH_FIELDS:
+        if field not in body:
+            continue
+        ok_val, normalized, err = _validate_patch_value(field, body[field])
+        if not ok_val:
+            return jsonify({'error': err}), 400
+        cleaned[field] = normalized
+
+    if not cleaned:
+        return ('', 204)  # nothing to update — no-op
+
     ok = chat_session.update_session_metadata(user_id, session_id, cleaned)
     if not ok:
         return jsonify({'error': 'Session not found'}), 404
     return ('', 204)
+
+
+BULK_DELETE_MAX = 200
 
 
 @session_bp.route('/chat/bulk-delete', methods=['POST'])
@@ -514,7 +567,9 @@ def chat_patch_session(session_id):
 @error_handler
 @login_required
 def chat_bulk_delete():
-    """Delete multiple sessions in a single batched operation.
+    """Delete multiple sessions, doing the same cleanup the single-delete
+    path does (Firestore doc + subcollections + RAG chunks + on-disk files
+    + cache invalidation + total_sessions counter).
 
     Body: {"session_ids": ["...", "..."]}
     Returns: {"deleted": <count>}
@@ -526,8 +581,67 @@ def chat_bulk_delete():
         return jsonify({'error': 'session_ids required (non-empty list)'}), 400
     if not all(isinstance(s, str) for s in session_ids):
         return jsonify({'error': 'session_ids must be strings'}), 400
-    count = chat_session.bulk_delete_sessions(user_id, session_ids)
-    return jsonify({'deleted': count})
+    if len(session_ids) > BULK_DELETE_MAX:
+        return jsonify({
+            'error': f'Too many sessions; max {BULK_DELETE_MAX} per request'
+        }), 400
+
+    deleted = 0
+    failed = []
+    current_session_id = session.get('current_session_id')
+
+    for sid in session_ids:
+        try:
+            session_ref = db.collection('users').document(user_id) \
+                .collection('chat_sessions').document(sid)
+            session_doc = session_ref.get()
+            if not session_doc.exists:
+                continue
+            session_data = session_doc.to_dict() or {}
+            status = session_data.get('status', 'active')
+            messages = session_data.get('messages', [])
+
+            # Doc first — flips user-visible state immediately.
+            session_ref.delete()
+            deleted += 1
+
+            _clear_session_caches(user_id, sid)
+            if status != 'temporary':
+                _adjust_user_session_total(user_id, -1)
+            if current_session_id == sid:
+                session.pop('current_session_id', None)
+                current_session_id = None
+
+            # Best-effort cleanup — never block the response.
+            try:
+                delete_local_attachments(messages)
+            except Exception as att_err:
+                logger.warning(
+                    "Bulk delete: attachment cleanup failed for %s (user %s): %s",
+                    sid, user_id, att_err,
+                )
+            try:
+                _delete_session_subcollections(session_ref)
+            except Exception as sub_err:
+                logger.warning(
+                    "Bulk delete: subcollection purge failed for %s (user %s): %s",
+                    sid, user_id, sub_err,
+                )
+            try:
+                _delete_session_files_and_chunks(user_id, sid)
+            except Exception as rag_err:
+                logger.warning(
+                    "Bulk delete: RAG purge failed for %s (user %s): %s",
+                    sid, user_id, rag_err,
+                )
+        except Exception as e:
+            logger.error(
+                "Bulk delete: failed to delete session %s for user %s: %s",
+                sid, user_id, e,
+            )
+            failed.append(sid)
+
+    return jsonify({'deleted': deleted, 'failed': failed})
 
 
 @session_bp.route('/chat/session/<session_id>', methods=['GET'])
@@ -790,19 +904,30 @@ def delete_all_chat_sessions():
         return jsonify({'error': 'Failed to delete all chat sessions.'}), 500
 
 
+RENAME_NAME_MAX = 500
+
+
 @session_bp.route('/chat/rename', methods=['POST'])
+@limiter.limit("60 per minute")
 @csrf_required
 @error_handler
 @login_required
 def rename_chat_session():
     """Rename a chat session."""
     user_id = session['user']['uid']
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     session_id = data.get('session_id')
     new_name = data.get('name')
 
-    if not session_id or not new_name or not new_name.strip():
-        return jsonify({'error': 'Session ID and new name are required.'}), 400
+    if not isinstance(session_id, str) or not session_id:
+        return jsonify({'error': 'Session ID is required.'}), 400
+    if not isinstance(new_name, str):
+        return jsonify({'error': 'Name must be a string.'}), 400
+    new_name = new_name.strip()
+    if not new_name:
+        return jsonify({'error': 'Name is required.'}), 400
+    if len(new_name) > RENAME_NAME_MAX:
+        return jsonify({'error': f'Name exceeds {RENAME_NAME_MAX} chars.'}), 400
 
     try:
         session_ref = db.collection('users').document(user_id).collection('chat_sessions').document(session_id)
@@ -811,16 +936,14 @@ def rename_chat_session():
             logger.warning(f"Chat session {session_id} not found for user {user_id}")
             return jsonify({'error': 'Chat session not found.'}), 404
 
-        session_ref.update({'session_name': new_name.strip()})
-        logger.info(f"Chat session {session_id} renamed to '{new_name.strip()}' for user {user_id}")
+        session_ref.update({'session_name': new_name})
+        logger.info(f"Chat session {session_id} renamed to '{new_name}' for user {user_id}")
 
-        updated_doc = session_ref.get()
-        updated_name = updated_doc.to_dict().get('session_name')
-
+        # No second read — we just wrote new_name, echo it directly.
         return jsonify({
             'message': 'Chat session renamed successfully.',
             'session_id': session_id,
-            'updated_name': updated_name
+            'updated_name': new_name
         }), 200
 
     except Exception as e:
