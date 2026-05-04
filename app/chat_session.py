@@ -329,12 +329,28 @@ class ChatSession:
             if isinstance(last_updated, datetime):
                 last_updated = last_updated.isoformat()
 
-            # Derive the session's model from its latest message that has one.
-            # Sessions don't store a top-level 'model' field — model metadata
-            # is per-message (model_id / model_label, set by chat_engine).
-            # Without this, the /chats Model filter dropdown is always empty.
+            # Derive model info from messages — sessions don't store this
+            # at the top level. We surface BOTH:
+            #   - 'model':  the latest model used (shown as the row badge)
+            #   - 'models': every unique model that's appeared in the chat,
+            #               so the filter dropdown can offer every one and
+            #               the filter match catches sessions where the
+            #               user switched models mid-conversation.
+            seen_models = set()
+            models_used = []
+            for m in messages:
+                candidate = (
+                    m.get('model_label')
+                    or m.get('model_id')
+                    or m.get('model')
+                )
+                if candidate and candidate not in seen_models:
+                    seen_models.add(candidate)
+                    models_used.append(candidate)
+
             session_model = data.get('model') or ''
-            if not session_model:
+            if not session_model and models_used:
+                # most recent — walk in reverse for the latest occurrence
                 for m in reversed(messages):
                     candidate = (
                         m.get('model_label')
@@ -350,6 +366,7 @@ class ChatSession:
                 'title': data.get('title') or data.get('session_name') or 'New chat',
                 'last_updated': last_updated,
                 'model': session_model,
+                'models': models_used,
                 'msg_count': int(msg_count or 0),
                 'starred': bool(data.get('starred', False)),
                 'pinned': bool(data.get('pinned', False)),

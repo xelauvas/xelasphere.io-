@@ -97,9 +97,17 @@
     /* ─── Model list (populated from sessions) ─────────────────── */
     let availableModels = [];
     function populateModelFilter() {
-        availableModels = Array.from(new Set(
-            state.sessions.map(s => s.model).filter(Boolean)
-        )).sort();
+        // Use the per-session 'models' array (every model the chat has
+        // ever used) so the dropdown surfaces every option, not just the
+        // latest model of each chat.
+        const all = new Set();
+        state.sessions.forEach(s => {
+            const list = Array.isArray(s.models) && s.models.length
+                ? s.models
+                : (s.model ? [s.model] : []);
+            list.forEach(m => { if (m) all.add(m); });
+        });
+        availableModels = Array.from(all).sort();
         // If currently-selected model isn't in the list anymore, clear it
         if (state.filters.model && !availableModels.includes(state.filters.model)) {
             state.filters.model = '';
@@ -157,7 +165,15 @@
         const q = state.search.trim().toLowerCase();
         let filtered = state.sessions.filter(s => {
             if (state.filters.starred && !s.starred) return false;
-            if (state.filters.model && s.model !== state.filters.model) return false;
+            if (state.filters.model) {
+                // Match against the full models list when present (chat may
+                // have been used with several models); fall back to the
+                // single 'model' field for older payloads.
+                const list = Array.isArray(s.models) && s.models.length
+                    ? s.models
+                    : (s.model ? [s.model] : []);
+                if (!list.includes(state.filters.model)) return false;
+            }
             // Content-type filters (hasArtifact, hasAttachment) combine as OR.
             // They're alternative kinds of rich content — when both are toggled
             // the user is asking for chats that have ANY rich content, not
