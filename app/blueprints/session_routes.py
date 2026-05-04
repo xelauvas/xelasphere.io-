@@ -19,6 +19,7 @@ from google.cloud import firestore as gc_firestore
 
 from app.config import db
 from app.limiter import limiter, csrf_required
+from app.chat_session import ALLOWED_PATCH_FIELDS
 from app.blueprints.shared import (
     login_required, guest_allowed, error_handler, make_etag_response,
     is_guest, chat_session
@@ -467,6 +468,66 @@ def get_chat_history():
         'categorized_history': categorized_history,
         'next_page_token': history.get('next_page_token')
     })
+
+
+@session_bp.route('/chat/list-metadata', methods=['GET'])
+@limiter.limit("30 per minute")
+@error_handler
+@login_required
+def chat_list_metadata():
+    """Return flat metadata array of all sessions for the current user.
+
+    Used by the /chats page. No pagination, no message bodies.
+    """
+    user_id = session['user']['uid']
+    sessions = chat_session.list_metadata(user_id)
+    response = jsonify({'sessions': sessions})
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@session_bp.route('/chat/<session_id>', methods=['PATCH'])
+@limiter.limit("60 per minute")
+@csrf_required
+@error_handler
+@login_required
+def chat_patch_session(session_id):
+    """Update starred / pinned / title / tags on a session.
+
+    Body: any subset of {starred, pinned, title, tags}.
+    Other fields are silently ignored (whitelist enforced at both layers).
+    """
+    user_id = session['user']['uid']
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({'error': 'Invalid body'}), 400
+    cleaned = {k: v for k, v in body.items() if k in ALLOWED_PATCH_FIELDS}
+    ok = chat_session.update_session_metadata(user_id, session_id, cleaned)
+    if not ok:
+        return jsonify({'error': 'Session not found'}), 404
+    return ('', 204)
+
+
+@session_bp.route('/chat/bulk-delete', methods=['POST'])
+@limiter.limit("30 per minute")
+@csrf_required
+@error_handler
+@login_required
+def chat_bulk_delete():
+    """Delete multiple sessions in a single batched operation.
+
+    Body: {"session_ids": ["...", "..."]}
+    Returns: {"deleted": <count>}
+    """
+    user_id = session['user']['uid']
+    body = request.get_json(silent=True) or {}
+    session_ids = body.get('session_ids')
+    if not isinstance(session_ids, list) or not session_ids:
+        return jsonify({'error': 'session_ids required (non-empty list)'}), 400
+    if not all(isinstance(s, str) for s in session_ids):
+        return jsonify({'error': 'session_ids must be strings'}), 400
+    count = chat_session.bulk_delete_sessions(user_id, session_ids)
+    return jsonify({'deleted': count})
 
 
 @session_bp.route('/chat/session/<session_id>', methods=['GET'])

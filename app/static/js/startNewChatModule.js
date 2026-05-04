@@ -28,6 +28,7 @@ class ChatManager {
         this.searchActive = false;
         this.autoRenameTimers = {};
         this.imagesPageActive = false;
+        this.chatsPageActive = false;
         this.imagesPageMode = 'home'; // 'home' | 'loading' | 'result' | 'error'
         this.imagesLastPrompt = '';
         this.imagesSubmitting = false;
@@ -89,6 +90,7 @@ class ChatManager {
             searchCloseTargets: document.querySelectorAll('[data-history-search-close]'),
             imagesButton: document.getElementById('action-images'),
             imagesPage: document.getElementById('images-page'),
+            chatsPage: document.getElementById('chats-page'),
             imagesPageBack: document.getElementById('images-page-back'),
             imagesPageBody: document.getElementById('images-page-body'),
             imagesPromptBar: document.getElementById('images-prompt-bar'),
@@ -138,19 +140,29 @@ class ChatManager {
     }
 
     applyInitialSurface() {
+        const path = typeof window !== 'undefined' ? window.location.pathname : '';
         const surface = document.body?.dataset?.initialSurface
-            || (typeof window !== 'undefined' && window.location.pathname === '/images' ? 'images' : 'chat');
+            || (path === '/images' ? 'images' : path === '/chats' ? 'chats' : 'chat');
         if (surface === 'images') {
             this.showImagesPage({ updateHistory: false });
+        } else if (surface === 'chats') {
+            this.showChatsPage({ updateHistory: false });
         }
     }
 
     syncSurfaceFromLocation() {
-        const onImages = typeof window !== 'undefined' && window.location.pathname === '/images';
+        const path = typeof window !== 'undefined' ? window.location.pathname : '';
+        const onImages = path === '/images';
+        const onChats = path === '/chats';
         if (onImages && !this.imagesPageActive) {
             this.showImagesPage({ updateHistory: false });
         } else if (!onImages && this.imagesPageActive) {
             this.hideImagesPage({ updateHistory: false });
+        }
+        if (onChats && !this.chatsPageActive) {
+            this.showChatsPage({ updateHistory: false });
+        } else if (!onChats && this.chatsPageActive) {
+            this.hideChatsPage({ updateHistory: false });
         }
     }
 
@@ -229,6 +241,7 @@ class ChatManager {
         });
         this.elements.quickNewChat?.addEventListener('click', () => {
             if (this.imagesPageActive) this.hideImagesPage();
+            if (this.chatsPageActive) this.hideChatsPage();
             this.createNewChat();
         });
         this.elements.tempChatButton?.addEventListener('click', () => this.createNewChat(null, {
@@ -1325,6 +1338,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
         // If we're not forcing and the session is already active, simply return.
         if (!forceReload && this.activeSessionId === sessionId) return;
         if (this.imagesPageActive) this.hideImagesPage();
+        if (this.chatsPageActive) this.hideChatsPage();
 
         // Check if target session has an active background request
         const bgManager = window.BackgroundRequestManager;
@@ -1803,6 +1817,39 @@ async loadChatHistory(pageToken = null, limit = 10) {
             try { window.history.pushState({ surface: 'chat' }, '', '/'); } catch (_) {}
         }
         this.hideImagePreview();
+    }
+
+    showChatsPage({ updateHistory = true } = {}) {
+        if (!this.elements.chatsPage) return;
+        if (this.imagesPageActive) this.hideImagesPage({ updateHistory: false });
+        this.chatsPageActive = true;
+        this.elements.chatsPage.hidden = false;
+        this.elements.chatsPage.classList.add('is-visible');
+        this.elements.chatsPage.setAttribute('aria-hidden', 'false');
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.classList.add('chats-page-open');
+        }
+        if (updateHistory && typeof window !== 'undefined' && window.location.pathname !== '/chats') {
+            try { window.history.pushState({ surface: 'chats' }, '', '/chats'); } catch (_) {}
+        }
+        // Trigger a refresh of the chats list if the module is loaded
+        if (typeof window !== 'undefined' && window.__chatsPage?.fetchSessions) {
+            window.__chatsPage.fetchSessions();
+        }
+    }
+
+    hideChatsPage({ updateHistory = true } = {}) {
+        if (!this.elements.chatsPage) return;
+        this.chatsPageActive = false;
+        this.elements.chatsPage.hidden = true;
+        this.elements.chatsPage.classList.remove('is-visible');
+        this.elements.chatsPage.setAttribute('aria-hidden', 'true');
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.classList.remove('chats-page-open');
+        }
+        if (updateHistory && typeof window !== 'undefined' && window.location.pathname === '/chats') {
+            try { window.history.pushState({ surface: 'chat' }, '', '/'); } catch (_) {}
+        }
     }
 
     setImagesPageMode(mode) {

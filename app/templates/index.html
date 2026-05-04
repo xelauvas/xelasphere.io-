@@ -170,6 +170,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
 
+    <!-- Chats page (loaded for /chats surface) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chats.css') }}?v=14">
+
     <!-- Artifact Panel -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/design-tokens.css') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/artifact-panel.css') }}?v=11">
@@ -441,7 +444,7 @@
                     </button>
                     <!-- Secondary nav rows (per spec). Wired ones go to existing handlers;
                          placeholders show a "Coming soon" toast. -->
-                    <button class="sidebar-action-btn" id="action-chats" aria-label="Chats" data-tooltip="Chats">
+                    <button class="sidebar-action-btn" id="action-chats" aria-label="Chats" data-tooltip="Chats" onclick="window.location.href='/chats'">
                         <span class="sidebar-action-icon" aria-hidden="true">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <!-- Lucide MessagesSquare — two overlapping bubbles -->
@@ -839,6 +842,146 @@
                     </div>
                     </section>
 
+                    <section class="chats-page" id="chats-page" aria-hidden="true" hidden>
+                        <header class="chats-page__header">
+                            <h1 class="chats-page__title">Chats</h1>
+                            <div class="chats-page__search">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <path d="M21 21l-4.35-4.35"></path>
+                                </svg>
+                                <input type="search" id="chats-search" placeholder="Search your chats" aria-label="Search chats">
+                            </div>
+                        </header>
+
+                        <div class="chats-page__bulk-toolbar" id="chats-bulk-toolbar" hidden>
+                            <span class="chats-bulk__count" id="chats-bulk-count">
+                                <span class="chats-bulk__count-dot" aria-hidden="true"></span>
+                                <span class="chats-bulk__count-text">0 selected</span>
+                            </span>
+                            <button type="button" class="chats-bulk__btn chats-bulk__btn--ghost" id="chats-bulk-select-all">
+                                <svg class="chats-bulk__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M9 11l3 3L22 4"/>
+                                    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                                </svg>
+                                <span>Select all</span>
+                            </button>
+                            <span class="chats-bulk__divider" aria-hidden="true"></span>
+                            <button type="button" class="chats-bulk__btn chats-bulk__btn--star" id="chats-bulk-star">
+                                <svg class="chats-bulk__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <polygon points="12 2.5 15 8.6 21.7 9.6 16.85 14.3 18 20.95 12 17.85 6 20.95 7.15 14.3 2.3 9.6 9 8.6"/>
+                                </svg>
+                                <span>Star</span>
+                            </button>
+                            <button type="button" class="chats-bulk__btn chats-bulk__btn--danger" id="chats-bulk-delete">
+                                <svg class="chats-bulk__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                                    <path d="M10 11v6M14 11v6"/>
+                                    <path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/>
+                                </svg>
+                                <span>Delete</span>
+                            </button>
+                            <button type="button" class="chats-bulk__btn" id="chats-bulk-cancel">
+                                <svg class="chats-bulk__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <line x1="18" y1="6" x2="6" y2="18"/>
+                                    <line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                                <span>Clear</span>
+                            </button>
+                        </div>
+
+                        <div class="chats-page__toolbar" id="chats-toolbar">
+                            <div class="chats-page__filters" id="chats-filters">
+                                <!-- Quick toggle pills (icon + label) -->
+                                <button type="button" class="chats-toggle" data-filter="starred" aria-pressed="false" aria-label="Starred">
+                                    <svg class="chats-toggle__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <polygon points="12 2.5 15 8.6 21.7 9.6 16.85 14.3 18 20.95 12 17.85 6 20.95 7.15 14.3 2.3 9.6 9 8.6"/>
+                                    </svg>
+                                    <span class="chats-toggle__text">Starred</span>
+                                </button>
+                                <button type="button" class="chats-toggle" data-filter="hasArtifact" aria-pressed="false" aria-label="Has artifact">
+                                    <svg class="chats-toggle__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <polyline points="16 18 22 12 16 6"/>
+                                        <polyline points="8 6 2 12 8 18"/>
+                                    </svg>
+                                    <span class="chats-toggle__text">Artifact</span>
+                                </button>
+                                <button type="button" class="chats-toggle" data-filter="hasAttachment" aria-pressed="false" aria-label="Has attachment">
+                                    <svg class="chats-toggle__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+                                    </svg>
+                                    <span class="chats-toggle__text">Attachment</span>
+                                </button>
+
+                                <!-- Divider -->
+                                <span class="chats-filter-divider" aria-hidden="true"></span>
+
+                                <!-- Model dropdown -->
+                                <div class="chats-dropdown" data-dropdown="model">
+                                    <button type="button" class="chats-dropdown__btn" aria-haspopup="listbox" aria-expanded="false">
+                                        <svg class="chats-dropdown__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                                            <path d="M2 17l10 5 10-5"/>
+                                            <path d="M2 12l10 5 10-5"/>
+                                        </svg>
+                                        <span class="chats-dropdown__label">All models</span>
+                                        <svg class="chats-dropdown__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <polyline points="6 9 12 15 18 9"/>
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <!-- Date range dropdown -->
+                                <div class="chats-dropdown" data-dropdown="date">
+                                    <button type="button" class="chats-dropdown__btn" aria-haspopup="listbox" aria-expanded="false">
+                                        <svg class="chats-dropdown__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                            <line x1="16" y1="2" x2="16" y2="6"/>
+                                            <line x1="8" y1="2" x2="8" y2="6"/>
+                                            <line x1="3" y1="10" x2="21" y2="10"/>
+                                        </svg>
+                                        <span class="chats-dropdown__label">Anytime</span>
+                                        <svg class="chats-dropdown__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <polyline points="6 9 12 15 18 9"/>
+                                        </svg>
+                                    </button>
+                                </div>
+
+                            </div>
+
+                            <!-- Sort dropdown -->
+                            <div class="chats-dropdown chats-dropdown--sort" data-dropdown="sort">
+                                <button type="button" class="chats-dropdown__btn" aria-haspopup="listbox" aria-expanded="false">
+                                    <svg class="chats-dropdown__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M7 4v16M7 4l-3 4M7 4l3 4"/>
+                                        <path d="M17 20V4M17 20l-3-4M17 20l3-4"/>
+                                    </svg>
+                                    <span class="chats-dropdown__sort-prefix">Sort:</span>
+                                    <span class="chats-dropdown__label">Most recent</span>
+                                    <svg class="chats-dropdown__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <polyline points="6 9 12 15 18 9"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="chats-page__scroll" id="chats-scroll">
+                            <ul class="chats-page__list" id="chats-list" role="list"></ul>
+
+                            <div class="chats-page__empty" id="chats-empty" hidden>
+                                <p>No chats match your filters.</p>
+                                <button type="button" class="chats-empty__clear" id="chats-empty-clear">Clear filters</button>
+                            </div>
+
+                            <div class="chats-page__error" id="chats-error" hidden>
+                                <p id="chats-error-msg">Couldn't load your chats.</p>
+                                <button type="button" class="chats-empty__clear" id="chats-error-retry">Retry</button>
+                            </div>
+                        </div>
+                    </section>
+
                     <footer class="chat-shell__composer" role="form" aria-label="Message Input">
                         <div class="input-container">
                             {% if not is_guest %}
@@ -1185,6 +1328,7 @@
     </script>
     <script src="{{ url_for('static', filename='js/toast.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=20"></script>
+    <script src="{{ url_for('static', filename='js/chatsPage.js') }}?v=8"></script>
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=7"></script>

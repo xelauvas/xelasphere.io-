@@ -13,6 +13,9 @@ from google.cloud import firestore as gc_firestore
 
 logger = logging.getLogger(__name__)
 
+# Module-level whitelist of fields safe to PATCH from /chat/<id>
+ALLOWED_PATCH_FIELDS = {'starred', 'pinned', 'title', 'tags'}
+
 
 def _adjust_user_session_total(db, user_id: str, delta: int) -> None:
     """Increment or decrement a user's stored session count."""
@@ -252,6 +255,74 @@ class ChatSession:
 
         return {'chat_history': chat_history, 'next_page_token': next_token}
 
+    def list_metadata(self, user_id: str) -> List[Dict[str, Any]]:
+        """Return flat metadata for ALL sessions of a user — no message bodies.
+
+        Used by the /chats page for client-side filter/sort/search.
+        Lazy backfills msg_count / has_artifact / has_attachment if missing.
+
+        Note: backfill issues a Firestore write per session that's missing
+        denormalized fields. For users with N legacy sessions, the first
+        load of /chats triggers up to N writes (one-time migration cost).
+        Subsequent loads have zero writes.
+        """
+        sessions_ref = (
+            self.db.collection('users').document(user_id)
+            .collection('chat_sessions')
+            .order_by('last_updated', direction=gc_firestore.Query.DESCENDING)
+        )
+        out: List[Dict[str, Any]] = []
+        for snap in sessions_ref.stream():
+            data = snap.to_dict() or {}
+            # Skip soft-deleted or invalid docs
+            if data.get('deleted'):
+                continue
+            if data.get('status') in ('temporary', 'archived'):
+                continue
+            if data.get('is_temporary'):
+                continue
+
+            # Backfill denormalized fields if missing
+            msg_count = data.get('msg_count')
+            has_artifact = data.get('has_artifact')
+            has_attachment = data.get('has_attachment')
+
+            needs_backfill = (
+                msg_count is None or has_artifact is None or has_attachment is None
+            )
+            if needs_backfill:
+                messages = data.get('messages', []) or []
+                msg_count = len(messages)
+                has_artifact = any(m.get('artifact') for m in messages)
+                has_attachment = any(m.get('attachments') for m in messages)
+                try:
+                    snap.reference.update({
+                        'msg_count': msg_count,
+                        'has_artifact': bool(has_artifact),
+                        'has_attachment': bool(has_attachment),
+                    })
+                except Exception:
+                    # Backfill is best-effort; missing fields stay missing on next read
+                    pass
+
+            last_updated = data.get('last_updated') or data.get('created_at') or ''
+            if isinstance(last_updated, datetime):
+                last_updated = last_updated.isoformat()
+
+            out.append({
+                'session_id': snap.id,
+                'title': data.get('title') or data.get('session_name') or 'New chat',
+                'last_updated': last_updated,
+                'model': data.get('model') or '',
+                'msg_count': int(msg_count or 0),
+                'starred': bool(data.get('starred', False)),
+                'pinned': bool(data.get('pinned', False)),
+                'tags': list(data.get('tags', []) or []),
+                'has_artifact': bool(has_artifact),
+                'has_attachment': bool(has_attachment),
+            })
+        return out
+
     def get_session(self, user_id: str, session_id: str) -> Optional[Dict[str, Any]]:
         doc_ref = self._get_session_ref(user_id, session_id)
         try:
@@ -326,6 +397,44 @@ class ChatSession:
             'is_pinned': pinned,
             'pinned_at': pinned_at_value.isoformat() if pinned_at_value else None
         }
+
+    def update_session_metadata(
+        self, user_id: str, session_id: str, fields: Dict[str, Any]
+    ) -> bool:
+        """Update whitelisted metadata fields on a session document.
+
+        Returns True on success (or if no-op), False if session not found.
+        Silently ignores fields outside the whitelist (defense in depth).
+        """
+        cleaned = {k: v for k, v in fields.items() if k in ALLOWED_PATCH_FIELDS}
+        if not cleaned:
+            return True  # no-op
+        ref = self._get_session_ref(user_id, session_id)
+        snap = ref.get()
+        if not snap.exists:
+            return False
+        ref.update(cleaned)
+        return True
+
+    def bulk_delete_sessions(self, user_id: str, session_ids: List[str]) -> int:
+        """Delete multiple sessions in a single Firestore batch.
+
+        Returns count of sessions deleted. Sessions that do not exist
+        are silently skipped (the count reflects only existing ones).
+        """
+        if not session_ids:
+            return 0
+        batch = self.db.batch()
+        deleted = 0
+        for session_id in session_ids:
+            ref = self._get_session_ref(user_id, session_id)
+            snap = ref.get()
+            if snap.exists:
+                batch.delete(ref)
+                deleted += 1
+        if deleted > 0:
+            batch.commit()
+        return deleted
 
     def _get_session_ref(self, user_id: str, session_id: str) -> gc_firestore.DocumentReference:
         return self.db.collection('users').document(user_id).collection('chat_sessions').document(session_id)

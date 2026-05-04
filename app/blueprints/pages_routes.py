@@ -14,7 +14,7 @@ import traceback
 import uuid
 from datetime import datetime
 
-from flask import Blueprint, current_app, jsonify, render_template, request, send_from_directory, session
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 from app.config import db
 from app.limiter import csrf_required
@@ -99,6 +99,16 @@ def index():
 def images_page():
     """Images surface — reuses the home template with an auto-open flag."""
     return _render_home(initial_surface='images')
+
+
+@pages_bp.route('/chats', methods=['GET'])
+@error_handler
+def chats_page():
+    """Chats surface — reuses the home template with an auto-open flag."""
+    user_id = session.get('user_id') or (session.get('user') or {}).get('uid')
+    if not user_id:
+        return redirect(url_for('auth_routes.login'))
+    return _render_home(initial_surface='chats')
 
 
 def _load_api_key_state(user_id):
