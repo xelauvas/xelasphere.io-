@@ -282,19 +282,23 @@ class ChatSession:
             if data.get('is_temporary'):
                 continue
 
-            # Backfill denormalized fields if missing
-            msg_count = data.get('msg_count')
-            has_artifact = data.get('has_artifact')
-            has_attachment = data.get('has_attachment')
+            # Always recompute denormalized fields from the messages array.
+            # The doc was downloaded in full anyway, so the cost is just
+            # iteration. Trusting the cached field led to stale state when
+            # later messages added artifacts/attachments after the first
+            # metadata read flipped the flag to False.
+            messages = data.get('messages', []) or []
+            msg_count = len(messages)
+            has_artifact = any(m.get('artifact') for m in messages)
+            has_attachment = any(m.get('attachments') for m in messages)
 
-            needs_backfill = (
-                msg_count is None or has_artifact is None or has_attachment is None
-            )
-            if needs_backfill:
-                messages = data.get('messages', []) or []
-                msg_count = len(messages)
-                has_artifact = any(m.get('artifact') for m in messages)
-                has_attachment = any(m.get('attachments') for m in messages)
+            stored_msg_count = data.get('msg_count')
+            stored_has_artifact = data.get('has_artifact')
+            stored_has_attachment = data.get('has_attachment')
+
+            if (stored_msg_count != msg_count
+                    or stored_has_artifact != has_artifact
+                    or stored_has_attachment != has_attachment):
                 try:
                     snap.reference.update({
                         'msg_count': msg_count,
@@ -302,7 +306,8 @@ class ChatSession:
                         'has_attachment': bool(has_attachment),
                     })
                 except Exception:
-                    # Backfill is best-effort; missing fields stay missing on next read
+                    # Backfill is best-effort; computed values still serve
+                    # this read even if the write fails.
                     pass
 
             last_updated = data.get('last_updated') or data.get('created_at') or ''
