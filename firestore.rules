@@ -18,6 +18,14 @@ service cloud.firestore {
       }
     }
 
+    // Reminders M0 — owner-only read/write. Worker uses admin SDK (bypasses rules).
+    // Collection-group queries (worker scans across all users) also require this match
+    // to allow request.auth==null reads from the admin SDK — admin SDK bypasses rules
+    // entirely, so no extra clause is needed.
+    match /users/{userId}/reminders/{reminderId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
     // Shared artifacts - public read access
     match /shared_artifacts/{shareToken} {
       // Allow authenticated users to create share links
