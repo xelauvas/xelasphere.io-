@@ -2073,9 +2073,10 @@ def chat_stream():
                     # Generate response ID before done payload so frontend can use same ID
                     response_msg_id = f"msg_{uuid.uuid4().hex}"
 
-                    # Reminders M0 — detect intent + persist reminder (fire-and-forget;
-                    # never breaks the stream). The inline sentinel tag emission will be
-                    # added in Milestone 3 (Task 3.1).
+                    # Reminders M0 — detect intent + persist (fire-and-forget; never
+                    # breaks the stream). Reminder card data flows to the frontend via
+                    # the done payload below.
+                    reminder_done_data = None
                     _reminder_user = session.get('user', {}) if 'user' in session else {}
                     reminder_id, _reminder_needs_clar = maybe_create_reminder_from_prompt(
                         user_prompt=user_prompt_raw,
@@ -2086,7 +2087,18 @@ def chat_stream():
                         source_message_id=response_msg_id,
                     )
                     if reminder_id:
-                        logger.info(f"[reminders] persisted {reminder_id} (sentinel tag emission in Task 3.1)")
+                        # Fetch the just-persisted reminder doc so we can serialize it
+                        # into the done payload. Cheap (in-process Firestore read).
+                        try:
+                            _rem_snap = (
+                                db.collection('users').document(_reminder_user.get('uid'))
+                                .collection('reminders').document(reminder_id).get()
+                            )
+                            if _rem_snap.exists:
+                                reminder_done_data = _rem_snap.to_dict()
+                        except Exception as exc:
+                            logger.warning(f"[reminders] failed to load just-created doc {reminder_id}: {exc}")
+                        logger.info(f"[reminders] persisted {reminder_id}; attached to done payload")
                     elif _reminder_needs_clar:
                         logger.info("[reminders] clarification needed — relying on model's natural response for M0")
 
@@ -2168,6 +2180,7 @@ def chat_stream():
                         'response_id': response_msg_id,
                         'is_email': is_email,
                         'email': email_data,
+                        'reminder': reminder_done_data,
                         'crypto_chart': crypto_chart,
                         'session_name': stream_session_name,
                         'model_meta': _model_meta
@@ -3974,6 +3987,7 @@ def chat():
             offline_active = cached_unsynced > 0
 
         # Reminders M0 — non-stream path. Detect intent + persist; never raises.
+        reminder_done_data = None
         _reminder_user = session.get('user', {}) if 'user' in session else {}
         _reminder_id, _reminder_needs_clar = maybe_create_reminder_from_prompt(
             user_prompt=user_prompt,
@@ -3982,8 +3996,17 @@ def chat():
             user_timezone=request.form.get('timezone') or request.headers.get('X-Timezone'),
             source_chat_id=session_id,
         )
-        if _reminder_id:
-            logger.info(f"[reminders] persisted {_reminder_id} (non-stream path; tag in Task 3.1)")
+        if _reminder_id and _reminder_user.get('uid'):
+            try:
+                _rem_snap = (
+                    db.collection('users').document(_reminder_user['uid'])
+                    .collection('reminders').document(_reminder_id).get()
+                )
+                if _rem_snap.exists:
+                    reminder_done_data = _rem_snap.to_dict()
+            except Exception as exc:
+                logger.warning(f"[reminders] failed to load just-created doc {_reminder_id}: {exc}")
+            logger.info(f"[reminders] persisted {_reminder_id} (non-stream path)")
 
         # Check if response looks like an email
         email_data = None
@@ -4036,6 +4059,8 @@ def chat():
             # Email composition data
             'is_email': is_email,
             'email': email_data,
+            # Reminder data (if a reminder was AI-created this turn)
+            'reminder': reminder_done_data,
             # Crypto chart data
             'crypto_chart': crypto_chart
         }

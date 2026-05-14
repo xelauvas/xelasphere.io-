@@ -153,6 +153,9 @@
     <!-- Email Composer -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/email-composer.css') }}?v=6">
 
+    <!-- Reminders M0 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/reminders.css') }}">
+
     <!-- Toast Notifications -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/toast.css') }}?v=17">
 
@@ -186,6 +189,9 @@
 
     <!-- Email Composer JS -->
     <script defer src="{{ url_for('static', filename='js/emailComposer.js') }}"></script>
+
+    <!-- Reminders M0 JS -->
+    <script defer src="{{ url_for('static', filename='js/remindersModule.js') }}"></script>
 
     <!-- Text Selection Quote JS -->
     <script defer src="{{ url_for('static', filename='js/textSelectionQuote.js') }}"></script>
@@ -1270,5 +1276,6 @@
 
 {% include "_settings_modal.html" %}
 {% include "_settings_memory_modal.html" %}
+{% include "_reminders_modal.html" %}
 </body>
 </html>
