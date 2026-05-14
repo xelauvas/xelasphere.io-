@@ -75,9 +75,21 @@ Within ~2 minutes the worker should run and log:
 ### 5. Smoke test as admin
 
 Get your session + CSRF token from the live site (devtools → Application → Cookies),
-then schedule a reminder 2 minutes in the future:
+then schedule a reminder 2 minutes in the future.
+
+**Important — fireAtLocal format:** use a **naive** ISO datetime with **no timezone
+suffix** (no `Z`, no `+00:00`). The string is interpreted in the `timezone` field
+you supply alongside it. If you accidentally include a tz suffix, the server uses
+the suffix and silently ignores the `timezone` field, producing a wrong fire time.
+
+For Europe/London (`date -d` produces local time, which is what we want):
 
 ```bash
+# Build a naive local ISO string for 'now + 2 minutes' in your *local* tz
+LOCAL_FIRE=$(date -d '+2 minutes' +%Y-%m-%dT%H:%M:%S)
+# Verify it has NO 'Z' or '+HH:MM' at the end:
+echo "$LOCAL_FIRE"
+
 curl -X POST https://xelasphere.io/reminders \
   -H "Content-Type: application/json" \
   -H "Cookie: session=<your-cookie>" \
@@ -86,7 +98,7 @@ curl -X POST https://xelasphere.io/reminders \
 {
   "name": "M0 smoke test",
   "instructions": "If this arrives in my inbox, the full server loop works.",
-  "fireAtLocal": "$(date -u -d '+2 minutes' +%Y-%m-%dT%H:%M:%S)",
+  "fireAtLocal": "$LOCAL_FIRE",
   "timezone": "Europe/London"
 }
 JSON

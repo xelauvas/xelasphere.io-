@@ -9,6 +9,7 @@ Routes:
 """
 import logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, jsonify, request, session
 from google.cloud import firestore as gc_firestore
@@ -150,18 +151,30 @@ def patch_reminder(reminder_id: str):
         update["instructions"] = (instr or "").strip()
 
     if "fireAtLocal" in payload or "timezone" in payload:
-        new_local = payload.get("fireAtLocal") or current.get("fireAtLocal")
         new_tz = payload.get("timezone") or current.get("timezone")
-        if not new_local or not new_tz:
-            return jsonify({"error": "fireAtLocal + timezone needed to reschedule"}), 400
-        # If only timezone changed, recompute from existing fireAt in old tz
-        if "fireAtLocal" not in payload and "timezone" in payload:
-            # Convert stored UTC fireAt → local in new tz (best-effort)
-            new_local = (
-                datetime.fromisoformat(current["fireAt"])
-                .astimezone(timezone.utc)
-                .isoformat()
-            )
+        if not new_tz:
+            return jsonify({"error": "timezone needed to reschedule"}), 400
+
+        if "fireAtLocal" in payload:
+            # Explicit reschedule: take fireAtLocal at face value
+            new_local = payload["fireAtLocal"]
+        else:
+            # Timezone-only PATCH: keep the local wall-clock the same, but
+            # interpret it in the new timezone. Recover the wall-clock
+            # string by converting stored UTC → old local tz → strip tzinfo.
+            old_tz_str = current.get("timezone")
+            if not old_tz_str:
+                return jsonify({"error": "cannot reinterpret tz without prior timezone"}), 400
+            try:
+                old_tz = ZoneInfo(old_tz_str)
+                stored_utc = datetime.fromisoformat(current["fireAt"])
+                if stored_utc.tzinfo is None:
+                    stored_utc = stored_utc.replace(tzinfo=timezone.utc)
+                wall = stored_utc.astimezone(old_tz)
+                new_local = wall.strftime("%Y-%m-%dT%H:%M:%S")
+            except (ValueError, KeyError, TypeError) as exc:
+                return jsonify({"error": f"could not recover wall-clock time: {exc}"}), 400
+
         try:
             fire_at_utc = compute_fire_at_utc(new_local, new_tz)
         except (ValueError, KeyError, TypeError) as exc:

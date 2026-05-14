@@ -18,10 +18,17 @@ service cloud.firestore {
       }
     }
 
-    // Reminders M0 — owner-only read/write. Worker uses admin SDK (bypasses rules).
-    // Collection-group queries (worker scans across all users) also require this match
-    // to allow request.auth==null reads from the admin SDK — admin SDK bypasses rules
-    // entirely, so no extra clause is needed.
+    // Reminders M0 — owner-only read/write.
+    //
+    // Two access paths to consider:
+    //   1. Client SDK (xelasphere.io frontend) — uses request.auth.uid.
+    //      A client-side collection-group query is evaluated per-doc
+    //      against this rule; a non-owner request denies the whole query.
+    //   2. Admin SDK (the reminders worker on the server) — bypasses
+    //      rules entirely. The worker can read/write any reminder.
+    //
+    // No extra clause needed: the worker's bypass and the rule's
+    // owner check protect different paths and are independent.
     match /users/{userId}/reminders/{reminderId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }

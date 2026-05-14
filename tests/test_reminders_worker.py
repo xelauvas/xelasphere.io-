@@ -186,11 +186,13 @@ class TestProcessReminder:
 
 
 class TestStuckLockSweep:
+    @patch("tools.reminders_worker._try_revert_stuck_lock")
     @patch("tools.reminders_worker.get_db")
-    def test_sweep_reverts_old_sending_to_scheduled(self, mock_get_db):
+    def test_sweep_calls_transactional_revert_for_each_stuck(self, mock_get_db, mock_revert):
         from tools.reminders_worker import sweep_stuck_locks
         db = MagicMock()
         mock_get_db.return_value = db
+        mock_revert.return_value = True  # claim won
 
         stuck = _make_doc("rem_stuck", {
             "status": "sending",
@@ -200,9 +202,24 @@ class TestStuckLockSweep:
 
         count = sweep_stuck_locks(stale_after_seconds=300)
         assert count == 1
-        args, _ = stuck.reference.update.call_args
-        assert args[0]["status"] == "scheduled"
-        assert args[0]["lockedAt"] is None
+        # Verify the transactional helper was called with the doc's ref
+        mock_revert.assert_called_once()
+        args, _ = mock_revert.call_args
+        assert args[0] == stuck.reference
+
+    @patch("tools.reminders_worker._try_revert_stuck_lock")
+    @patch("tools.reminders_worker.get_db")
+    def test_sweep_skips_when_revert_loses_race(self, mock_get_db, mock_revert):
+        from tools.reminders_worker import sweep_stuck_locks
+        db = MagicMock()
+        mock_get_db.return_value = db
+        mock_revert.return_value = False  # lost the race to another sweep
+
+        stuck = _make_doc("rem_x", {"status": "sending", "lockedAt": "2020-01-01T00:00:00+00:00"})
+        db.collection_group.return_value.where.return_value.where.return_value.limit.return_value.stream.return_value = [stuck]
+
+        count = sweep_stuck_locks(stale_after_seconds=300)
+        assert count == 0  # didn't win, don't count
 
     @patch("tools.reminders_worker.get_db")
     def test_sweep_returns_zero_when_no_stuck_docs(self, mock_get_db):
@@ -211,6 +228,43 @@ class TestStuckLockSweep:
         mock_get_db.return_value = db
         db.collection_group.return_value.where.return_value.where.return_value.limit.return_value.stream.return_value = []
         assert sweep_stuck_locks() == 0
+
+
+class TestTryRevertStuckLock:
+    def test_reverts_when_stale_sending(self):
+        from tools.reminders_worker import _try_revert_stuck_lock
+        doc_ref = MagicMock()
+        snap = MagicMock(exists=True)
+        snap.to_dict.return_value = {
+            "status": "sending",
+            "lockedAt": "2020-01-01T00:00:00+00:00",  # ancient
+        }
+        ok = _try_revert_stuck_lock(doc_ref, "2099-01-01T00:00:00+00:00", _fake_snap=snap)
+        assert ok is True
+        args, _ = doc_ref.update.call_args
+        assert args[0]["status"] == "scheduled"
+        assert args[0]["lockedAt"] is None
+
+    def test_skips_when_status_already_changed(self):
+        from tools.reminders_worker import _try_revert_stuck_lock
+        doc_ref = MagicMock()
+        snap = MagicMock(exists=True)
+        snap.to_dict.return_value = {"status": "delivered", "lockedAt": None}
+        ok = _try_revert_stuck_lock(doc_ref, "2099-01-01T00:00:00+00:00", _fake_snap=snap)
+        assert ok is False
+        doc_ref.update.assert_not_called()
+
+    def test_skips_when_lockedAt_not_stale(self):
+        from tools.reminders_worker import _try_revert_stuck_lock
+        doc_ref = MagicMock()
+        snap = MagicMock(exists=True)
+        snap.to_dict.return_value = {
+            "status": "sending",
+            "lockedAt": "2099-01-01T00:00:00+00:00",  # newer than cutoff
+        }
+        ok = _try_revert_stuck_lock(doc_ref, "2020-01-01T00:00:00+00:00", _fake_snap=snap)
+        assert ok is False
+        doc_ref.update.assert_not_called()
 
 
 class TestMainSkipsWhenDisabled:

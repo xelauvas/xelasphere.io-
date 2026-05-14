@@ -81,9 +81,69 @@ def fetch_due_reminders(limit: int = 100):
     return list(docs)
 
 
+def _try_revert_stuck_lock(doc_ref, cutoff_iso: str, *, _fake_snap=None) -> bool:
+    """Transactionally re-check + revert a single stuck-lock doc.
+
+    Returns True iff this call won the revert race (status was still
+    'sending' AND lockedAt was still <= cutoff_iso at the moment of
+    the transactional read).
+
+    `_fake_snap` is a testing seam — when supplied, the function does
+    the same gate checks against the fake snap but writes via the
+    plain doc_ref.update (no transaction). Production callers do not
+    pass _fake_snap.
+    """
+    if _fake_snap is not None:
+        if not _fake_snap.exists:
+            return False
+        data = _fake_snap.to_dict() or {}
+        if data.get("status") != "sending":
+            return False
+        locked_at = data.get("lockedAt")
+        if not locked_at or locked_at > cutoff_iso:
+            return False
+        doc_ref.update({
+            "status": "scheduled",
+            "lockedAt": None,
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        })
+        return True
+
+    from google.cloud import firestore as gc_firestore
+    db = get_db()
+    transaction = db.transaction()
+
+    @gc_firestore.transactional
+    def _txn(txn, ref, cutoff):
+        snap = ref.get(transaction=txn)
+        if not snap.exists:
+            return False
+        data = snap.to_dict() or {}
+        if data.get("status") != "sending":
+            return False
+        locked_at = data.get("lockedAt")
+        if not locked_at or locked_at > cutoff:
+            return False
+        txn.update(ref, {
+            "status": "scheduled",
+            "lockedAt": None,
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        })
+        return True
+
+    return _txn(transaction, doc_ref, cutoff_iso)
+
+
 def sweep_stuck_locks(stale_after_seconds: int = STUCK_LOCK_STALE_AFTER_SECONDS) -> int:
     """Revert reminders stuck in status='sending' with lockedAt older than
-    threshold back to 'scheduled'. Returns count of swept docs."""
+    threshold back to 'scheduled'. Returns count of swept docs.
+
+    Each revert is transactional — it re-reads the doc inside a Firestore
+    transaction and only writes if status is still 'sending' and lockedAt
+    is still stale. This prevents two concurrent sweep runs (possible after
+    Persistent=true timer catch-up) from both re-arming the same doc, which
+    would cause a double-send on the next normal tick.
+    """
     db = get_db()
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=stale_after_seconds)).isoformat()
     docs = (
@@ -93,18 +153,15 @@ def sweep_stuck_locks(stale_after_seconds: int = STUCK_LOCK_STALE_AFTER_SECONDS)
         .limit(100)
         .stream()
     )
+
     count = 0
     for snap in docs:
-        snap.reference.update({
-            "status": "scheduled",
-            "lockedAt": None,
-            "updatedAt": datetime.now(timezone.utc).isoformat(),
-        })
-        logger.warning(
-            "lock_expired",
-            extra={"extra_fields": {"reminderId": snap.id}},
-        )
-        count += 1
+        if _try_revert_stuck_lock(snap.reference, cutoff):
+            logger.warning(
+                "lock_expired",
+                extra={"extra_fields": {"reminderId": snap.id}},
+            )
+            count += 1
     return count
 
 
@@ -286,6 +343,7 @@ def main(argv=None) -> int:
         if not user_email:
             doc_ref.update({
                 "status": "failed",
+                "attemptCount": data.get("attemptCount", 0) + 1,
                 "lastError": "user has no email on file",
                 "lockedAt": None,
                 "updatedAt": datetime.now(timezone.utc).isoformat(),
