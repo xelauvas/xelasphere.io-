@@ -141,6 +141,12 @@ class Config:
     SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
     RATELIMIT_STORAGE_URI = os.getenv('RATELIMIT_STORAGE_URI', 'memory://')
 
+    # Reminders M0 — email-only reminder feature (chat utterance → SendGrid)
+    REMINDERS_ENABLED = os.getenv('REMINDERS_ENABLED', 'false').lower() == 'true'
+    SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
+    SENDGRID_FROM_EMAIL = os.getenv('SENDGRID_FROM_EMAIL', 'noreply@xelasphere.io')
+    SENDGRID_FROM_NAME = os.getenv('SENDGRID_FROM_NAME', 'XelaSphere Reminders')
+
 # Security checks for production environment
 if os.getenv('FLASK_ENV') == 'production':
     if not Config.SESSION_COOKIE_SECURE:
