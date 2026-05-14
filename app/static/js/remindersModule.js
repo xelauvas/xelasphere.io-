@@ -373,6 +373,11 @@
         if (deleteBtn) deleteBtn.addEventListener('click', () => deleteFromForm(form));
       }
     }
+
+    // Fire the unseen-failures toast check ~1.5s after load so it doesn't
+    // race the initial chat-page paint. Quietly no-ops for guests (the
+    // server returns 403 from @login_required, fetch fails, swallowed).
+    setTimeout(() => { try { checkUnseenFailures(); } catch {} }, 1500);
   });
 
   // Settings modal dispatches a custom event when the user switches tabs

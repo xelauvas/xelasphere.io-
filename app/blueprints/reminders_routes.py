@@ -220,3 +220,42 @@ def delete_reminder(reminder_id: str):
     doc_ref.delete()
     logger.info(f"[reminders] deleted {reminder_id} for {user_id}")
     return jsonify({"ok": True})
+
+
+# ==================== Unseen-failures helpers (M5) ====================
+@reminders_bp.route("/reminders/unseen-failures", methods=["GET"])
+@error_handler
+@login_required
+def unseen_failures():
+    """Count reminders in status=failed updated since the user's last visit.
+
+    Frontend polls this on page load and shows a one-shot toast.
+    """
+    user_id = session["user"]["uid"]
+    user_doc = db.collection("users").document(user_id).get()
+    last_seen = None
+    if user_doc.exists:
+        last_seen = (user_doc.to_dict() or {}).get("reminders_last_seen_at")
+
+    q = (
+        db.collection("users").document(user_id)
+        .collection("reminders").where("status", "==", "failed")
+    )
+    if last_seen:
+        q = q.where("updatedAt", ">", last_seen)
+    count = sum(1 for _ in q.limit(50).stream())
+    return jsonify({"count": count})
+
+
+@reminders_bp.route("/reminders/mark-seen", methods=["POST"])
+@error_handler
+@login_required
+@csrf_required
+def mark_seen():
+    """Stamp users/{uid}.reminders_last_seen_at = now. Frontend calls this
+    right after showing the unseen-failures toast."""
+    user_id = session["user"]["uid"]
+    db.collection("users").document(user_id).set(
+        {"reminders_last_seen_at": _now_iso()}, merge=True,
+    )
+    return jsonify({"ok": True})
