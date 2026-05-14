@@ -2243,6 +2243,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         if (_styleDisplayPrompt !== null) {
             formData.append('display_prompt', _styleDisplayPrompt);
         }
+        // Browser timezone — reminders M0 hook reads this to interpret
+        // relative times in chat ("remind me at 9am" → 9am LOCAL, not UTC).
+        try {
+            const _tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (_tz) formData.append('timezone', _tz);
+        } catch (_e) { /* ignore — server falls back to UTC */ }
 
         // Request mode: single source of truth for UI intent overrides.
         //   'auto'     → model picks ACTION: itself (default)
