@@ -72,6 +72,42 @@ class TestSendTransactional:
                 send_transactional_email(to_email="u@e.com", subject="s", body_text="b")
         assert exc.value.retryable is True
 
+    @patch("app.services.email_sender.SendGridAPIClient")
+    def test_sdk_httperror_4xx_is_non_retryable(self, mock_client_cls):
+        """Regression test: SendGrid SDK raises HTTPError instead of returning
+        a Response on non-2xx. Caught in M0 prod deploy — a 403 was being
+        routed through the generic-Exception branch and marked retryable."""
+        from python_http_client.exceptions import HTTPError as SGHTTPError
+        mock_client = MagicMock()
+        # Simulate the 4-arg HTTPError constructor: (status, reason, body, headers)
+        mock_client.send.side_effect = SGHTTPError(403, "Forbidden", b"unverified", {})
+        mock_client_cls.return_value = mock_client
+
+        with patch("app.services.email_sender.Config") as cfg:
+            cfg.SENDGRID_API_KEY = "SG.t"
+            cfg.SENDGRID_FROM_EMAIL = "n@e.io"
+            cfg.SENDGRID_FROM_NAME = "T"
+            with pytest.raises(EmailSendError) as exc:
+                send_transactional_email(to_email="u@e.com", subject="s", body_text="b")
+        assert exc.value.status_code == 403
+        assert exc.value.retryable is False
+
+    @patch("app.services.email_sender.SendGridAPIClient")
+    def test_sdk_httperror_5xx_is_retryable(self, mock_client_cls):
+        from python_http_client.exceptions import HTTPError as SGHTTPError
+        mock_client = MagicMock()
+        mock_client.send.side_effect = SGHTTPError(503, "Service Unavailable", b"down", {})
+        mock_client_cls.return_value = mock_client
+
+        with patch("app.services.email_sender.Config") as cfg:
+            cfg.SENDGRID_API_KEY = "SG.t"
+            cfg.SENDGRID_FROM_EMAIL = "n@e.io"
+            cfg.SENDGRID_FROM_NAME = "T"
+            with pytest.raises(EmailSendError) as exc:
+                send_transactional_email(to_email="u@e.com", subject="s", body_text="b")
+        assert exc.value.status_code == 503
+        assert exc.value.retryable is True
+
     def test_missing_api_key_raises_non_retryable(self):
         with patch("app.services.email_sender.Config") as cfg:
             cfg.SENDGRID_API_KEY = ""

@@ -9,6 +9,7 @@ from typing import Optional
 
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
+from python_http_client.exceptions import HTTPError as _SGHTTPError
 
 from app.config import Config
 
@@ -61,10 +62,24 @@ def send_transactional_email(
         response = client.send(message)
     except EmailSendError:
         raise
+    except _SGHTTPError as exc:
+        # SendGrid SDK raises HTTPError for any non-2xx instead of returning
+        # a Response object — classify by status code, not exception class.
+        # Caught live in M0 prod deploy: a 403 (unverified domain) was being
+        # routed through the generic-Exception branch and marked retryable.
+        status = getattr(exc, "status_code", 0)
+        body = getattr(exc, "body", b"")
+        retryable = 500 <= status < 600
+        raise EmailSendError(
+            f"SendGrid HTTP {status}: {body!r}",
+            retryable=retryable,
+            status_code=status,
+        ) from exc
     except Exception as exc:
         # Network errors, DNS failures, timeouts — always retryable
         raise EmailSendError(f"SendGrid request failed: {exc}", retryable=True) from exc
 
+    # Defensive: future SDK versions may return a Response object instead of raising
     status = getattr(response, "status_code", 0)
     if 200 <= status < 300:
         return EmailSendResult(status_code=status)
