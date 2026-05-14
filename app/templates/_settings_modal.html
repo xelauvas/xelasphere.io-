@@ -445,7 +445,25 @@
 
                 <section class="settings-pane" data-pane="schedules">
                     <h2 class="settings-pane-title">Schedules</h2>
-                    <p class="settings-pane-empty">Coming Soon.</p>
+
+                    <div class="schedules-pane__actions">
+                        <button type="button" class="btn btn--primary" data-schedules-new>+ New reminder</button>
+                    </div>
+
+                    <h3 class="schedules-pane__section-title">
+                        Upcoming <span data-schedules-upcoming-count>(0)</span>
+                    </h3>
+                    <ul class="schedules-pane__list" data-schedules-upcoming>
+                        <li class="schedules-pane__empty">No upcoming reminders.</li>
+                    </ul>
+
+                    <h3 class="schedules-pane__section-title schedules-pane__section-title--collapsible">
+                        Past <span data-schedules-past-count>(0)</span>
+                        <button type="button" class="schedules-pane__toggle" data-schedules-toggle-past>show</button>
+                    </h3>
+                    <ul class="schedules-pane__list" data-schedules-past hidden>
+                        <li class="schedules-pane__empty">No past reminders.</li>
+                    </ul>
                 </section>
 
                 <section class="settings-pane" data-pane="data">

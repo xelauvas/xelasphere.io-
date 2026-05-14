@@ -119,6 +119,12 @@
             this._panes.forEach(pane => {
                 pane.classList.toggle('is-active', pane.dataset.pane === tabId);
             });
+
+            // Notify listeners (e.g. RemindersModule refreshes the Schedules
+            // tab data when this fires for tabId='schedules').
+            document.dispatchEvent(new CustomEvent('settings-tab-shown', {
+                detail: { tab: tabId },
+            }));
         }
 
         isOpen() {
