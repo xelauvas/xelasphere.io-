@@ -2074,11 +2074,10 @@ def chat_stream():
                     response_msg_id = f"msg_{uuid.uuid4().hex}"
 
                     # Reminders M0 — detect intent + persist (fire-and-forget; never
-                    # breaks the stream). Reminder card data flows to the frontend via
-                    # the done payload below.
-                    reminder_done_data = None
+                    # breaks the stream). The created reminder dict comes back from
+                    # the hook directly so we skip a Firestore re-read.
                     _reminder_user = session.get('user', {}) if 'user' in session else {}
-                    reminder_id, _reminder_needs_clar = maybe_create_reminder_from_prompt(
+                    reminder_id, reminder_done_data, _reminder_needs_clar = maybe_create_reminder_from_prompt(
                         user_prompt=user_prompt_raw,
                         user_id=_reminder_user.get('uid'),
                         user_email=_reminder_user.get('email'),
@@ -2087,17 +2086,6 @@ def chat_stream():
                         source_message_id=response_msg_id,
                     )
                     if reminder_id:
-                        # Fetch the just-persisted reminder doc so we can serialize it
-                        # into the done payload. Cheap (in-process Firestore read).
-                        try:
-                            _rem_snap = (
-                                db.collection('users').document(_reminder_user.get('uid'))
-                                .collection('reminders').document(reminder_id).get()
-                            )
-                            if _rem_snap.exists:
-                                reminder_done_data = _rem_snap.to_dict()
-                        except Exception as exc:
-                            logger.warning(f"[reminders] failed to load just-created doc {reminder_id}: {exc}")
                         logger.info(f"[reminders] persisted {reminder_id}; attached to done payload")
                     elif _reminder_needs_clar:
                         logger.info("[reminders] clarification needed — relying on model's natural response for M0")
@@ -3987,25 +3975,16 @@ def chat():
             offline_active = cached_unsynced > 0
 
         # Reminders M0 — non-stream path. Detect intent + persist; never raises.
-        reminder_done_data = None
+        # The hook returns the reminder dict directly so we skip a re-read.
         _reminder_user = session.get('user', {}) if 'user' in session else {}
-        _reminder_id, _reminder_needs_clar = maybe_create_reminder_from_prompt(
+        _reminder_id, reminder_done_data, _reminder_needs_clar = maybe_create_reminder_from_prompt(
             user_prompt=user_prompt,
             user_id=_reminder_user.get('uid'),
             user_email=_reminder_user.get('email'),
             user_timezone=request.form.get('timezone') or request.headers.get('X-Timezone'),
             source_chat_id=session_id,
         )
-        if _reminder_id and _reminder_user.get('uid'):
-            try:
-                _rem_snap = (
-                    db.collection('users').document(_reminder_user['uid'])
-                    .collection('reminders').document(_reminder_id).get()
-                )
-                if _rem_snap.exists:
-                    reminder_done_data = _rem_snap.to_dict()
-            except Exception as exc:
-                logger.warning(f"[reminders] failed to load just-created doc {_reminder_id}: {exc}")
+        if _reminder_id:
             logger.info(f"[reminders] persisted {_reminder_id} (non-stream path)")
 
         # Check if response looks like an email

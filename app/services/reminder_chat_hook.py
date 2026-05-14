@@ -25,25 +25,24 @@ def maybe_create_reminder_from_prompt(
     user_timezone: Optional[str],
     source_chat_id: Optional[str] = None,
     source_message_id: Optional[str] = None,
-) -> Tuple[Optional[str], bool]:
+) -> Tuple[Optional[str], Optional[dict], bool]:
     """Detect reminder intent, extract structured fields, persist if complete.
 
-    Returns: (reminder_id_or_None, needs_clarification_flag)
-      - (rem_id, False): reminder created successfully, caller should
-                         emit a <reminder id=rem_id /> sentinel tag
-      - (None,   True):  intent detected but missing time — caller
-                         should augment system prompt to ask the user
-      - (None,   False): not a reminder request, OR feature disabled,
-                         OR extraction failed entirely
+    Returns: (reminder_id_or_None, reminder_dict_or_None, needs_clarification)
+      - (rem_id, reminder_dict, False): reminder created — caller has
+                         everything needed to serialize into a done payload.
+      - (None,  None, True):  intent detected but missing time.
+      - (None,  None, False): not a reminder request OR feature disabled
+                              OR extraction failed.
 
     Never raises.
     """
     try:
         from app.config import Config
         if not Config.REMINDERS_ENABLED:
-            return None, False
+            return None, None, False
         if not user_id or not user_email or not user_prompt:
-            return None, False
+            return None, None, False
 
         from app.services.reminder_intent import (
             is_reminder_request, extract_reminder, needs_clarification,
@@ -54,7 +53,7 @@ def maybe_create_reminder_from_prompt(
         from app.config import db
 
         if not is_reminder_request(user_prompt):
-            return None, False
+            return None, None, False
 
         extracted = extract_reminder(
             prompt=user_prompt,
@@ -62,16 +61,16 @@ def maybe_create_reminder_from_prompt(
             user_timezone=user_timezone or "UTC",
         )
         if needs_clarification(user_prompt, extracted):
-            return None, True
+            return None, None, True
         if not (extracted.get("name") and extracted.get("fireAtLocal") and extracted.get("timezone")):
-            return None, False
+            return None, None, False
 
         try:
             fire_at_utc = compute_fire_at_utc(extracted["fireAtLocal"], extracted["timezone"])
         except (ValueError, KeyError, TypeError):
-            return None, False
+            return None, None, False
         if fire_at_utc <= datetime.now(timezone.utc):
-            return None, False
+            return None, None, False
 
         doc_ref = (
             db.collection("users").document(user_id)
@@ -102,11 +101,11 @@ def maybe_create_reminder_from_prompt(
             f"[reminders/hook] AI-created {doc_ref.id} for user {user_id} "
             f"from chat {source_chat_id}, fire_at={reminder['fireAt']}"
         )
-        return doc_ref.id, False
+        return doc_ref.id, reminder, False
 
     except Exception as exc:
         logger.warning(f"[reminders/hook] non-fatal error: {exc}")
-        return None, False
+        return None, None, False
 
 
 # ==================== System-prompt nudge text ====================

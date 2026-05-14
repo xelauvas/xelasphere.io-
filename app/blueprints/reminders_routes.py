@@ -230,6 +230,10 @@ def unseen_failures():
     """Count reminders in status=failed updated since the user's last visit.
 
     Frontend polls this on page load and shows a one-shot toast.
+
+    First-ever load (no reminders_last_seen_at on the user doc): stamps
+    now and returns count=0. Without this, a user's first visit would
+    toast every historical failure they've ever had.
     """
     user_id = session["user"]["uid"]
     user_doc = db.collection("users").document(user_id).get()
@@ -237,13 +241,20 @@ def unseen_failures():
     if user_doc.exists:
         last_seen = (user_doc.to_dict() or {}).get("reminders_last_seen_at")
 
-    q = (
-        db.collection("users").document(user_id)
-        .collection("reminders").where("status", "==", "failed")
+    if not last_seen:
+        db.collection("users").document(user_id).set(
+            {"reminders_last_seen_at": _now_iso()}, merge=True,
+        )
+        return jsonify({"count": 0})
+
+    count = sum(
+        1 for _ in db.collection("users").document(user_id)
+        .collection("reminders")
+        .where("status", "==", "failed")
+        .where("updatedAt", ">", last_seen)
+        .limit(50)
+        .stream()
     )
-    if last_seen:
-        q = q.where("updatedAt", ">", last_seen)
-    count = sum(1 for _ in q.limit(50).stream())
     return jsonify({"count": count})
 
 

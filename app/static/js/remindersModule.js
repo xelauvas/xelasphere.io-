@@ -125,15 +125,21 @@
     return data.reminder;
   }
 
+  function applyReminderToCards(reminder) {
+    /** Patch DOM cards in-place from an already-fetched reminder object. */
+    if (!reminder || !reminder.id) return;
+    document.querySelectorAll(`.reminder-card[data-reminder-id="${reminder.id}"]`).forEach(btn => {
+      btn.className = `reminder-card reminder-card--${reminder.status || 'scheduled'}`;
+      btn.dataset.reminderJson = JSON.stringify(reminder);
+      btn.innerHTML = renderCardInner(reminder);
+    });
+  }
+
   async function rehydrateCardsForReminder(reminderId) {
     let fresh;
     try { fresh = await fetchReminder(reminderId); }
     catch { return; }
-    document.querySelectorAll(`.reminder-card[data-reminder-id="${reminderId}"]`).forEach(btn => {
-      btn.className = `reminder-card reminder-card--${fresh.status || 'scheduled'}`;
-      btn.dataset.reminderJson = JSON.stringify(fresh);
-      btn.innerHTML = renderCardInner(fresh);
-    });
+    applyReminderToCards(fresh);
   }
 
   // ---------- modal ----------
@@ -218,8 +224,10 @@
       }
       closeModal();
       const data = await resp.json();
-      const newId = data.id || (data.reminder && data.reminder.id) || id;
-      if (newId) await rehydrateCardsForReminder(newId);
+      // Server returns the full updated reminder in the response body — skip
+      // the redundant GET roundtrip and patch cards in-place.
+      if (data.reminder) applyReminderToCards(data.reminder);
+      else if (data.id) await rehydrateCardsForReminder(data.id);
       if (window.RemindersModule.refreshSchedulesTab) window.RemindersModule.refreshSchedulesTab();
     } catch (e) {
       alert(`Network error: ${e.message}`);
@@ -238,7 +246,9 @@
     });
     if (resp.ok) {
       closeModal();
-      await rehydrateCardsForReminder(id);
+      const data = await resp.json().catch(() => ({}));
+      if (data.reminder) applyReminderToCards(data.reminder);
+      else await rehydrateCardsForReminder(id);
       if (window.RemindersModule.refreshSchedulesTab) window.RemindersModule.refreshSchedulesTab();
     }
   }
