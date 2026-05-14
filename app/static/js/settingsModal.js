@@ -119,6 +119,12 @@
             this._panes.forEach(pane => {
                 pane.classList.toggle('is-active', pane.dataset.pane === tabId);
             });
+
+            // Notify listeners (e.g. RemindersModule refreshes the Schedules
+            // tab data when this fires for tabId='schedules').
+            document.dispatchEvent(new CustomEvent('settings-tab-shown', {
+                detail: { tab: tabId },
+            }));
         }
 
         isOpen() {
@@ -600,12 +606,31 @@
        Delete all chats — exposed as window-global
        ==================================================================== */
 
-    window.deleteAllChats = async function deleteAllChats() {
-        const ok = window.confirm('Delete all chats? This cannot be undone.');
-        if (!ok) return;
+    function openDeleteAllChatsModal() {
+        const m = document.getElementById('delete-all-chats-confirm-modal');
+        if (!m) return;
+        m.classList.add('open');
+        m.setAttribute('aria-hidden', 'false');
+        document.getElementById('cancel-delete-all-chats')?.focus();
+    }
+
+    function closeDeleteAllChatsModal() {
+        const m = document.getElementById('delete-all-chats-confirm-modal');
+        if (!m) return;
+        m.classList.remove('open');
+        m.setAttribute('aria-hidden', 'true');
+    }
+
+    async function performDeleteAllChats() {
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content
                   || document.querySelector('input[name="csrf_token"]')?.value
                   || '';
+        const confirmBtn = document.getElementById('confirm-delete-all-chats');
+        const tileBtn = document.querySelector('[data-action="delete-all-chats"]');
+        const originalConfirmLabel = confirmBtn ? confirmBtn.textContent : 'Delete all';
+        const originalTileLabel = tileBtn ? tileBtn.textContent : 'Delete all';
+        if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Deleting...'; }
+        if (tileBtn) { tileBtn.disabled = true; tileBtn.textContent = 'Deleting...'; }
         try {
             const resp = await fetch('/chat/delete-all', {
                 method: 'POST',
@@ -620,14 +645,21 @@
             if (window.Toast) {
                 window.Toast.success(payload.message || 'All chats deleted');
             }
+            closeDeleteAllChatsModal();
             window.setTimeout(() => window.location.reload(), 800);
         } catch (e) {
             console.error('[SettingsModal] deleteAllChats failed:', e);
             if (window.Toast) {
                 window.Toast.error('Failed to delete chats: ' + e.message);
             }
+            if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = originalConfirmLabel; }
+            if (tileBtn) { tileBtn.disabled = false; tileBtn.textContent = originalTileLabel; }
         }
-    };
+    }
+
+    // Preserved global entry point — opens the themed confirm modal
+    // (replaces the old window.confirm() native dialog).
+    window.deleteAllChats = openDeleteAllChatsModal;
 
     /* ====================================================================
        Wire all pane interactions on DOMContentLoaded
@@ -664,9 +696,25 @@
             btn.addEventListener('click', () => playVoicePreview(btn));
         });
 
-        // Delete all chats
+        // Delete all chats — opens the themed confirm modal
         document.querySelectorAll('[data-action="delete-all-chats"]').forEach(btn => {
             btn.addEventListener('click', () => window.deleteAllChats());
+        });
+
+        // Themed confirm modal wiring (Cancel / Close / backdrop / Confirm / Escape)
+        const deleteAllChatsModal = document.getElementById('delete-all-chats-confirm-modal');
+        document.getElementById('cancel-delete-all-chats')?.addEventListener('click', closeDeleteAllChatsModal);
+        document.getElementById('close-delete-all-chats-modal')?.addEventListener('click', closeDeleteAllChatsModal);
+        document.getElementById('confirm-delete-all-chats')?.addEventListener('click', performDeleteAllChats);
+        if (deleteAllChatsModal) {
+            deleteAllChatsModal.addEventListener('click', (e) => {
+                if (e.target === deleteAllChatsModal) closeDeleteAllChatsModal();
+            });
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && deleteAllChatsModal?.classList.contains('open')) {
+                closeDeleteAllChatsModal();
+            }
         });
 
         // Logout

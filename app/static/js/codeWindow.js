@@ -2419,6 +2419,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let streamChatSummary = '';
                 let streamIsEmail = false;
                 let streamEmailData = null;
+                let streamReminderData = null;
                 let streamCryptoChart = null;
                 let streamMemoryUpdated = false;
                 let streamDreamNotification = null;
@@ -2927,6 +2928,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             streamArtifact = chunk.artifact || null;
                             streamIsEmail = chunk.is_email || false;
                             streamEmailData = chunk.email || null;
+                            streamReminderData = chunk.reminder || null;
                             streamCryptoChart = chunk.crypto_chart || null;
                             streamMemoryUpdated = chunk.memory_updated || false;
                             streamDreamNotification = chunk.dream_notification || null;
@@ -3338,6 +3340,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         }
                         console.log('Email composer card created for streamed response');
                     }
+                }
+
+                // Handle reminder card for streamed responses
+                if (streamReminderData && streamReminderData.id && messageContainer && window.RemindersModule) {
+                    const messageContent = messageContainer.querySelector('.message-content') || messageContainer;
+                    window.RemindersModule.renderCardForMessage(messageContent, streamReminderData);
                 }
 
                 // Handle crypto/stock chart for streamed responses
@@ -3985,6 +3993,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 }
                 console.log('Email composer card created');
             }
+        }
+
+        // Handle reminder card — AI created a reminder this turn
+        if (data.reminder && data.reminder.id && messageContainer && window.RemindersModule) {
+            const messageContent = messageContainer.querySelector('.message-content') || messageContainer;
+            window.RemindersModule.renderCardForMessage(messageContent, data.reminder);
         }
 
         // Handle crypto/stock chart - if user asked for price/chart

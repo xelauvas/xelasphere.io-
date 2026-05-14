@@ -1,0 +1,48 @@
+{# Reminders M0 — edit modal (and "+ New reminder" flow). Included once from index.html. #}
+<div id="reminders-modal" class="reminders-modal" hidden role="dialog"
+     aria-modal="true" aria-labelledby="reminders-modal-title">
+  <div class="reminders-modal__backdrop" data-close></div>
+  <div class="reminders-modal__panel">
+    <header class="reminders-modal__header">
+      <h2 id="reminders-modal-title">Edit reminder</h2>
+      <button type="button" class="reminders-modal__close" data-close aria-label="Close">✕</button>
+    </header>
+
+    <form class="reminders-modal__form" data-reminders-form>
+      <input type="hidden" name="id" value="">
+
+      <label class="reminders-modal__field">
+        <span class="reminders-modal__label">Name</span>
+        <input type="text" name="name" maxlength="200" required>
+      </label>
+
+      <label class="reminders-modal__field">
+        <span class="reminders-modal__label">Instructions <small>(sent as email body)</small></span>
+        <textarea name="instructions" rows="3" maxlength="1000"></textarea>
+      </label>
+
+      <fieldset class="reminders-modal__field reminders-modal__when">
+        <legend class="reminders-modal__label">When</legend>
+        <input type="date" name="date" required>
+        <input type="time" name="time" required>
+        <span class="reminders-modal__tz" data-tz>—</span>
+      </fieldset>
+
+      <label class="reminders-modal__field reminders-modal__field--disabled" title="Recurrence coming soon">
+        <span class="reminders-modal__label">Doesn't repeat</span>
+        <select disabled><option>Doesn't repeat</option></select>
+      </label>
+
+      <footer class="reminders-modal__footer">
+        <div class="reminders-modal__left-actions">
+          <button type="button" class="btn btn--ghost" data-action="pause">Pause</button>
+          <button type="button" class="btn btn--danger" data-action="delete">Delete</button>
+        </div>
+        <div class="reminders-modal__right-actions">
+          <button type="button" class="btn btn--ghost" data-close>Cancel</button>
+          <button type="submit" class="btn btn--primary">Save</button>
+        </div>
+      </footer>
+    </form>
+  </div>
+</div>

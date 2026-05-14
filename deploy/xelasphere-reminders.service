@@ -1,0 +1,33 @@
+# /etc/systemd/system/xelasphere-reminders.service
+#
+# Reminders worker — one-shot Python CLI invoked by
+# xelasphere-reminders.timer every minute. Queries Firestore for
+# due reminders, sends via SendGrid, updates status. Exits.
+#
+# See deploy/xelasphere.service for the matching long-running
+# Gunicorn unit pattern.
+
+[Unit]
+Description=XelaSphere Reminders Worker (one-shot, runs via timer)
+After=network.target
+
+[Service]
+Type=oneshot
+User=xelasphere
+Group=xelasphere
+WorkingDirectory=/opt/xelasphere
+Environment=PATH=/opt/xelasphere/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=/etc/xelasphere/xelasphere.env
+EnvironmentFile=-/etc/xelasphere/mempalace.env
+ExecStart=/opt/xelasphere/venv/bin/python -m tools.reminders_worker
+StandardOutput=journal
+StandardError=journal
+
+# Hard cap: a single run should complete in seconds. If it stalls,
+# kill it so the next timer tick can proceed cleanly.
+TimeoutStartSec=120
+
+# No restart — the timer is the retry mechanism.
+
+[Install]
+WantedBy=multi-user.target

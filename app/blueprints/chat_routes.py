@@ -92,6 +92,9 @@ from app.search_client import (
 )
 from app.services.search_orchestrator import search_orchestrator
 from app.blueprints.email_routes import is_email_request, looks_like_email, parse_email_from_response
+from app.services.reminder_chat_hook import (
+    maybe_create_reminder_from_prompt, CLARIFICATION_SYSTEM_HINT,
+)
 from app.model_catalog import MODEL_LABELS, MODEL_PROVIDERS, DEFAULT_MODEL, AUTO_MODEL, resolve_model_id, get_selectable_models
 from app.smart_router import smart_route, is_refusal_response, get_uncensored_model, check_prompt_injection
 from app.orchestrator import (
@@ -2097,6 +2100,23 @@ def chat_stream():
                     # Generate response ID before done payload so frontend can use same ID
                     response_msg_id = f"msg_{uuid.uuid4().hex}"
 
+                    # Reminders M0 — detect intent + persist (fire-and-forget; never
+                    # breaks the stream). The created reminder dict comes back from
+                    # the hook directly so we skip a Firestore re-read.
+                    _reminder_user = session.get('user', {}) if 'user' in session else {}
+                    reminder_id, reminder_done_data, _reminder_needs_clar = maybe_create_reminder_from_prompt(
+                        user_prompt=user_prompt_raw,
+                        user_id=_reminder_user.get('uid'),
+                        user_email=_reminder_user.get('email'),
+                        user_timezone=request.form.get('timezone') or request.headers.get('X-Timezone'),
+                        source_chat_id=session_id,
+                        source_message_id=response_msg_id,
+                    )
+                    if reminder_id:
+                        logger.info(f"[reminders] persisted {reminder_id}; attached to done payload")
+                    elif _reminder_needs_clar:
+                        logger.info("[reminders] clarification needed — relying on model's natural response for M0")
+
                     # Check if response looks like an email
                     is_email = looks_like_email(full_content, user_asked_for_email=is_email_request(user_prompt_raw))
                     email_data = None
@@ -2175,6 +2195,7 @@ def chat_stream():
                         'response_id': response_msg_id,
                         'is_email': is_email,
                         'email': email_data,
+                        'reminder': reminder_done_data,
                         'crypto_chart': crypto_chart,
                         'session_name': stream_session_name,
                         'model_meta': _model_meta
@@ -4001,6 +4022,19 @@ def chat():
                 offline_reason = 'unknown'
             offline_active = cached_unsynced > 0
 
+        # Reminders M0 — non-stream path. Detect intent + persist; never raises.
+        # The hook returns the reminder dict directly so we skip a re-read.
+        _reminder_user = session.get('user', {}) if 'user' in session else {}
+        _reminder_id, reminder_done_data, _reminder_needs_clar = maybe_create_reminder_from_prompt(
+            user_prompt=user_prompt,
+            user_id=_reminder_user.get('uid'),
+            user_email=_reminder_user.get('email'),
+            user_timezone=request.form.get('timezone') or request.headers.get('X-Timezone'),
+            source_chat_id=session_id,
+        )
+        if _reminder_id:
+            logger.info(f"[reminders] persisted {_reminder_id} (non-stream path)")
+
         # Check if response looks like an email
         email_data = None
         is_email = looks_like_email(response_text, user_asked_for_email=is_email_request(user_prompt))
@@ -4052,6 +4086,8 @@ def chat():
             # Email composition data
             'is_email': is_email,
             'email': email_data,
+            # Reminder data (if a reminder was AI-created this turn)
+            'reminder': reminder_done_data,
             # Crypto chart data
             'crypto_chart': crypto_chart,
             'style': chosen_style.value if chosen_style else None,

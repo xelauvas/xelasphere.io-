@@ -445,7 +445,25 @@
 
                 <section class="settings-pane" data-pane="schedules">
                     <h2 class="settings-pane-title">Schedules</h2>
-                    <p class="settings-pane-empty">Coming Soon.</p>
+
+                    <div class="schedules-pane__actions">
+                        <button type="button" class="btn btn--primary" data-schedules-new>+ New reminder</button>
+                    </div>
+
+                    <h3 class="schedules-pane__section-title">
+                        Upcoming <span data-schedules-upcoming-count>(0)</span>
+                    </h3>
+                    <ul class="schedules-pane__list" data-schedules-upcoming>
+                        <li class="schedules-pane__empty">No upcoming reminders.</li>
+                    </ul>
+
+                    <h3 class="schedules-pane__section-title schedules-pane__section-title--collapsible">
+                        Past <span data-schedules-past-count>(0)</span>
+                        <button type="button" class="schedules-pane__toggle" data-schedules-toggle-past>show</button>
+                    </h3>
+                    <ul class="schedules-pane__list" data-schedules-past hidden>
+                        <li class="schedules-pane__empty">No past reminders.</li>
+                    </ul>
                 </section>
 
                 <section class="settings-pane" data-pane="data">
@@ -475,6 +493,26 @@
                 </section>
                 {% endif %}
             </main>
+        </div>
+    </div>
+</div>
+
+<!-- Delete all chats confirmation modal (themed) -->
+<div class="modal-backdrop" id="delete-all-chats-confirm-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="delete-all-chats-modal-title">
+    <div class="modal-card">
+        <button type="button" class="modal-close-btn" id="close-delete-all-chats-modal" aria-label="Close">
+            <i class="fas fa-xmark"></i>
+        </button>
+        <div class="modal-icon caution">
+            <i class="fas fa-triangle-exclamation"></i>
+        </div>
+        <div>
+            <h3 id="delete-all-chats-modal-title">Delete all chats?</h3>
+            <p>This permanently removes every conversation. This cannot be undone.</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="cancel-delete-all-chats">Cancel</button>
+            <button type="button" class="btn btn-danger" id="confirm-delete-all-chats">Delete all</button>
         </div>
     </div>
 </div>
