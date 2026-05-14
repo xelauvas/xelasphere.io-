@@ -1,39 +1,122 @@
-/* Reminders M0 — inline card + edit modal + Schedules tab.
-   Uses existing project tokens where they exist; falls back to literal values. */
+/* Reminders M0 — inline card + kebab dropdown + edit modal + Schedules tab.
+   Aesthetic: ChatGPT-style dark task chip. Tone-stepping for elevation
+   (#000 → #1A1A1A → #2A2A2A), no borders, one semantic accent (red on
+   destructive icon only). Hardcoded dark values — the card is always-dark
+   regardless of page theme, matching how ChatGPT renders these cards. */
 
+/* ============================================================
+   Inline card (the "task chip")
+   ============================================================ */
 .reminder-card {
   display: inline-flex;
   align-items: center;
-  gap: 0.55em;
-  padding: 0.55em 0.85em;
-  margin: 0.5em 0;
-  border: 1px solid var(--color-border, #d0d7de);
-  border-radius: 10px;
-  background: var(--color-card-bg, #fff);
-  color: var(--color-text, #1f2328);
-  font: inherit;
+  gap: 12px;
+  padding: 14px 16px;
+  margin: 8px 0;
+  border: 0;
+  border-radius: 12px;
+  background: #1A1A1A;
+  color: #ECECEC;
+  font: 14px/1.3 -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text",
+        "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   text-align: left;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease;
+  transition: background 120ms ease, opacity 120ms ease;
+  min-width: 240px;
   max-width: 100%;
+  position: relative;
 }
-.reminder-card:hover {
-  background: var(--color-card-bg-hover, #f6f8fa);
-  border-color: var(--color-border-strong, #afb8c1);
+.reminder-card:hover { background: #222222; }
+
+.reminder-card__icon {
+  flex: 0 0 auto;
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #ECECEC;
 }
-.reminder-card__icon { font-size: 1.05em; flex: 0 0 auto; }
-.reminder-card__body { display: flex; flex-direction: column; min-width: 0; }
-.reminder-card__name { font-weight: 500; }
-.reminder-card__when { color: var(--color-text-muted, #656d76); font-size: 0.85em; }
+.reminder-card__icon svg { width: 18px; height: 18px; stroke-width: 1.75; }
 
-.reminder-card--paused      { opacity: 0.65; }
-.reminder-card--sending     { opacity: 0.75; }
-.reminder-card--delivered   { opacity: 0.7; cursor: default; }
-.reminder-card--delivered:hover { background: var(--color-card-bg, #fff); }
-.reminder-card--failed      { border-color: var(--color-danger, #cf222e); background: rgba(207,34,46,0.05); }
-.reminder-card--cancelled   { text-decoration: line-through; opacity: 0.55; }
+.reminder-card__body {
+  display: flex; flex-direction: column;
+  min-width: 0; flex: 1 1 auto;
+  gap: 2px;
+}
+.reminder-card__name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ECECEC;
+  letter-spacing: -0.01em;
+}
+.reminder-card__when {
+  font-size: 13px;
+  font-weight: 400;
+  color: #9A9A9A;
+}
 
-/* Modal */
+/* Kebab (3-dot) button */
+.reminder-card__kebab {
+  flex: 0 0 auto;
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: 6px;
+  color: #9A9A9A;
+  cursor: pointer;
+  margin-left: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.reminder-card__kebab:hover { background: #2A2A2A; color: #ECECEC; }
+.reminder-card__kebab svg { width: 18px; height: 18px; stroke-width: 1.75; }
+
+/* State variants — restrained tone shifts, no background red bleed */
+.reminder-card--paused .reminder-card__name,
+.reminder-card--paused .reminder-card__when    { opacity: 0.55; }
+.reminder-card--sending                        { opacity: 0.75; }
+.reminder-card--delivered                      { opacity: 0.6; cursor: default; }
+.reminder-card--delivered:hover                { background: #1A1A1A; }
+.reminder-card--failed .reminder-card__when    { color: #EF4444; }
+.reminder-card--cancelled .reminder-card__name { text-decoration: line-through; opacity: 0.5; }
+
+/* ============================================================
+   Kebab dropdown menu
+   ============================================================ */
+.reminder-dropdown {
+  position: absolute;
+  z-index: 100;
+  min-width: 200px;
+  background: #2A2A2A;
+  color: #ECECEC;
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font: 14px/1.3 -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text",
+        "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.reminder-dropdown[hidden] { display: none; }
+
+.reminder-dropdown__item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent; border: 0; border-radius: 8px;
+  color: #ECECEC;
+  font: inherit; text-align: left;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.reminder-dropdown__item:hover { background: #3A3A3A; }
+.reminder-dropdown__item svg { width: 16px; height: 16px; stroke-width: 1.75; flex: 0 0 auto; }
+.reminder-dropdown__item--danger svg { color: #EF4444; }
+/* The "Delete" label itself stays white — only the icon carries the red. */
+
+.reminder-dropdown__divider {
+  height: 1px;
+  margin: 4px 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================================
+   Full edit modal (preserved from M0 — opens from "Edit details")
+   ============================================================ */
 .reminders-modal {
   position: fixed; inset: 0; z-index: 9000;
   display: flex; align-items: center; justify-content: center;
@@ -41,117 +124,133 @@
 .reminders-modal[hidden] { display: none; }
 .reminders-modal__backdrop {
   position: absolute; inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.6);
 }
 .reminders-modal__panel {
   position: relative;
-  background: var(--color-card-bg, #fff);
-  color: var(--color-text, #1f2328);
+  background: #1A1A1A;
+  color: #ECECEC;
   border-radius: 14px;
-  padding: 1.25em 1.5em;
+  padding: 20px 24px;
   width: min(560px, 95vw);
   max-height: 90vh; overflow-y: auto;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 .reminders-modal__header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 0.75em;
+  margin-bottom: 12px;
 }
-.reminders-modal__header h2 { margin: 0; font-size: 1.15rem; }
+.reminders-modal__header h2 { margin: 0; font-size: 16px; font-weight: 600; }
 .reminders-modal__close {
-  background: transparent; border: 0; font-size: 1.1rem; cursor: pointer;
-  color: var(--color-text-muted, #656d76);
+  background: transparent; border: 0; font-size: 16px; cursor: pointer;
+  color: #9A9A9A; padding: 4px;
 }
-.reminders-modal__field { display: block; margin: 0.85em 0; }
+.reminders-modal__close:hover { color: #ECECEC; }
+.reminders-modal__field { display: block; margin: 14px 0; }
 .reminders-modal__label {
-  display: block; font-weight: 500; margin-bottom: 0.3em;
+  display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px;
+  color: #ECECEC;
 }
 .reminders-modal__field input[type="text"],
 .reminders-modal__field textarea,
 .reminders-modal__field input[type="date"],
 .reminders-modal__field input[type="time"] {
-  width: 100%; padding: 0.55em 0.7em;
-  border: 1px solid var(--color-border, #d0d7de); border-radius: 7px;
+  width: 100%; padding: 10px 12px;
+  border: 1px solid #333333; border-radius: 8px;
   font: inherit; box-sizing: border-box;
-  background: var(--color-input-bg, #fff); color: var(--color-text, #1f2328);
+  background: #0E0E0E; color: #ECECEC;
+}
+.reminders-modal__field input:focus,
+.reminders-modal__field textarea:focus {
+  outline: none; border-color: #555555;
 }
 .reminders-modal__when {
-  border: 0; padding: 0; margin: 0.85em 0;
-  display: flex; gap: 0.5em; flex-wrap: wrap; align-items: center;
+  border: 0; padding: 0; margin: 14px 0;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
 }
 .reminders-modal__when input { flex: 0 0 auto; width: auto; }
-.reminders-modal__tz { color: var(--color-text-muted, #656d76); font-size: 0.9em; }
+.reminders-modal__tz { color: #9A9A9A; font-size: 13px; }
 .reminders-modal__field--disabled select {
-  width: 100%; padding: 0.55em 0.7em;
-  border: 1px solid var(--color-border, #d0d7de); border-radius: 7px;
-  background: var(--color-disabled-bg, #f6f8fa);
-  color: var(--color-text-muted, #656d76);
+  width: 100%; padding: 10px 12px;
+  border: 1px solid #333333; border-radius: 8px;
+  background: #0E0E0E; color: #7E7E7E;
 }
 .reminders-modal__footer {
   display: flex; justify-content: space-between; align-items: center;
-  margin-top: 1.1em; flex-wrap: wrap; gap: 0.5em;
+  margin-top: 18px; flex-wrap: wrap; gap: 8px;
 }
 .reminders-modal__left-actions,
-.reminders-modal__right-actions { display: flex; gap: 0.5em; }
+.reminders-modal__right-actions { display: flex; gap: 8px; }
 .reminders-modal .btn {
-  padding: 0.5em 1em; border-radius: 7px; border: 1px solid transparent;
-  cursor: pointer; font: inherit;
+  padding: 8px 16px; border-radius: 8px; border: 1px solid transparent;
+  cursor: pointer; font: inherit; font-size: 14px;
 }
 .reminders-modal .btn--primary {
-  background: var(--color-primary, #0969da); color: #fff;
+  background: #ECECEC; color: #1A1A1A; font-weight: 600;
 }
+.reminders-modal .btn--primary:hover { background: #ffffff; }
 .reminders-modal .btn--ghost {
-  background: transparent; color: var(--color-text, #1f2328);
-  border-color: var(--color-border, #d0d7de);
+  background: transparent; color: #ECECEC;
+  border-color: #333333;
 }
+.reminders-modal .btn--ghost:hover { background: #2A2A2A; }
 .reminders-modal .btn--danger {
-  background: transparent; color: var(--color-danger, #cf222e);
-  border-color: var(--color-danger, #cf222e);
+  background: transparent; color: #EF4444;
+  border-color: #553333;
 }
+.reminders-modal .btn--danger:hover { background: rgba(239, 68, 68, 0.1); }
 
-/* Schedules tab */
-.schedules-pane__actions { margin-bottom: 1em; }
+/* ============================================================
+   Schedules tab — sits on the page's theme, not always-dark
+   ============================================================ */
+.schedules-pane__actions { margin-bottom: 16px; }
 .schedules-pane__section-title {
-  margin-top: 1.25em; margin-bottom: 0.5em;
-  font-size: 1rem; font-weight: 600;
-  color: var(--color-text-muted, #656d76);
-  display: flex; align-items: center; gap: 0.5em;
+  margin-top: 20px; margin-bottom: 8px;
+  font-size: 14px; font-weight: 600;
+  color: var(--color-text-muted, #9A9A9A);
+  display: flex; align-items: center; gap: 8px;
+  text-transform: uppercase; letter-spacing: 0.04em;
 }
 .schedules-pane__toggle {
   margin-left: auto; background: transparent; border: 0;
   color: var(--color-link, #0969da); cursor: pointer; font: inherit;
+  font-size: 13px;
 }
 .schedules-pane__list {
   list-style: none; padding: 0; margin: 0;
-  border-top: 1px solid var(--color-border, #d0d7de);
 }
 .schedules-pane__list[hidden] { display: none; }
 .schedules-pane__empty {
-  padding: 0.85em; color: var(--color-text-muted, #656d76);
+  padding: 12px 14px; color: var(--color-text-muted, #9A9A9A);
   font-style: italic;
 }
 .schedules-row {
-  display: flex; gap: 0.65em; align-items: flex-start;
-  padding: 0.75em;
-  border-bottom: 1px solid var(--color-border, #d0d7de);
+  display: flex; gap: 12px; align-items: center;
+  padding: 12px 14px;
+  border-radius: 8px;
   cursor: pointer;
+  transition: background 120ms ease;
 }
-.schedules-row:hover { background: var(--color-card-bg-hover, #f6f8fa); }
-.schedules-row__body { display: flex; flex-direction: column; min-width: 0; }
-.schedules-row__name { font-weight: 500; }
-.schedules-row__when { color: var(--color-text-muted, #656d76); font-size: 0.85em; }
-.schedules-row--paused   { opacity: 0.65; }
-.schedules-row--delivered{ opacity: 0.7; }
-.schedules-row--failed   { border-left: 3px solid var(--color-danger, #cf222e); }
-.schedules-row--cancelled{ text-decoration: line-through; opacity: 0.55; }
+.schedules-row:hover { background: var(--color-card-bg-hover, rgba(255,255,255,0.04)); }
+.schedules-row__body { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.schedules-row__name { font-weight: 600; font-size: 14px; }
+.schedules-row__when { color: var(--color-text-muted, #9A9A9A); font-size: 13px; }
+.schedules-row--paused   { opacity: 0.55; }
+.schedules-row--delivered{ opacity: 0.6; }
+.schedules-row--failed .schedules-row__when { color: #EF4444; }
+.schedules-row--cancelled .schedules-row__name { text-decoration: line-through; opacity: 0.5; }
 
-/* Toast fallback (when window.Toast isn't available) */
+/* ============================================================
+   Toast fallback
+   ============================================================ */
 .reminders-toast {
   position: fixed; bottom: 24px; right: 24px; z-index: 9001;
-  padding: 0.85em 1.15em;
-  background: var(--color-warning-bg, #fff8c5);
-  color: var(--color-warning-text, #57534e);
-  border: 1px solid var(--color-warning-border, #d4a72c);
-  border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-  max-width: 360px; font: inherit;
+  padding: 12px 16px;
+  background: #2A2A2A;
+  color: #ECECEC;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  max-width: 360px;
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text",
+        "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
