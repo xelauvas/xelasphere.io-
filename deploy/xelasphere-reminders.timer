@@ -1,0 +1,18 @@
+# /etc/systemd/system/xelasphere-reminders.timer
+#
+# Fires xelasphere-reminders.service every minute.
+
+[Unit]
+Description=XelaSphere Reminders Worker timer (every minute)
+Requires=xelasphere-reminders.service
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Unit=xelasphere-reminders.service
+# Persistent=true catches up missed runs after a server restart —
+# fine for our use case (late delivery is better than dropped).
+Persistent=true
+
+[Install]
+WantedBy=timers.target
