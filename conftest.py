@@ -18,6 +18,8 @@ os.environ['GROQ_API_KEY'] = 'test-groq-key'
 os.environ['OPENROUTER_API_KEY'] = 'test-openrouter-key'
 os.environ['BRAVE_SEARCH_API_KEY'] = 'test-brave-key'
 os.environ['SESSION_TYPE'] = 'filesystem'
+os.environ['REMINDERS_ENABLED'] = 'true'
+os.environ['SENDGRID_API_KEY'] = 'SG.test-key'
 
 # Mock os.path.exists to return True for Firebase creds path
 _original_exists = os.path.exists

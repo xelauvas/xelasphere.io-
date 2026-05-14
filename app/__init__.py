@@ -187,7 +187,8 @@ def create_app():
     # Import modular blueprints
     from .blueprints import (
         weather_bp, email_bp, account_bp, memory_bp, session_bp,
-        pages_bp, artifacts_bp, media_bp, upload_bp, chat_bp
+        pages_bp, artifacts_bp, media_bp, upload_bp, chat_bp,
+        reminders_bp,
     )
 
     # Register all blueprints
@@ -201,6 +202,7 @@ def create_app():
     app.register_blueprint(media_bp)
     app.register_blueprint(upload_bp)
     app.register_blueprint(chat_bp)
+    app.register_blueprint(reminders_bp)
     app.register_blueprint(auth_routes)
     app.register_blueprint(crypto_bp)
     from app.blueprints.status_routes import status_bp
