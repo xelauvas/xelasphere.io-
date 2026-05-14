@@ -3886,6 +3886,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
             render_mode: messageData.render_mode || 'inline',
             reasoning: messageData.reasoning || null,
             email: messageData.email || null,
+            reminder: messageData.reminder || null,
             crypto_chart: messageData.crypto_chart || null,
             // Model attribution — persists to Firestore
             model_id: modelId,
