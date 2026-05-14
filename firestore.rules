@@ -49,6 +49,6 @@ service cloud.firestore {
   }
 
   function validArtifactType(data) {
-    return !(\"type\" in data) || data.type == 'code';
+    return !('type' in data) || data.type == 'code';
   }
 }
