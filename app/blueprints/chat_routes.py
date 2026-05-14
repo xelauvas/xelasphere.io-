@@ -92,6 +92,9 @@ from app.search_client import (
 )
 from app.services.search_orchestrator import search_orchestrator
 from app.blueprints.email_routes import is_email_request, looks_like_email, parse_email_from_response
+from app.services.reminder_chat_hook import (
+    maybe_create_reminder_from_prompt, CLARIFICATION_SYSTEM_HINT,
+)
 from app.model_catalog import MODEL_LABELS, MODEL_PROVIDERS, DEFAULT_MODEL, AUTO_MODEL, resolve_model_id, get_selectable_models
 from app.smart_router import smart_route, is_refusal_response, get_uncensored_model, check_prompt_injection
 from app.orchestrator import (
@@ -2070,6 +2073,23 @@ def chat_stream():
                     # Generate response ID before done payload so frontend can use same ID
                     response_msg_id = f"msg_{uuid.uuid4().hex}"
 
+                    # Reminders M0 — detect intent + persist reminder (fire-and-forget;
+                    # never breaks the stream). The inline sentinel tag emission will be
+                    # added in Milestone 3 (Task 3.1).
+                    _reminder_user = session.get('user', {}) if 'user' in session else {}
+                    reminder_id, _reminder_needs_clar = maybe_create_reminder_from_prompt(
+                        user_prompt=user_prompt_raw,
+                        user_id=_reminder_user.get('uid'),
+                        user_email=_reminder_user.get('email'),
+                        user_timezone=request.form.get('timezone') or request.headers.get('X-Timezone'),
+                        source_chat_id=session_id,
+                        source_message_id=response_msg_id,
+                    )
+                    if reminder_id:
+                        logger.info(f"[reminders] persisted {reminder_id} (sentinel tag emission in Task 3.1)")
+                    elif _reminder_needs_clar:
+                        logger.info("[reminders] clarification needed — relying on model's natural response for M0")
+
                     # Check if response looks like an email
                     is_email = looks_like_email(full_content, user_asked_for_email=is_email_request(user_prompt_raw))
                     email_data = None
@@ -3952,6 +3972,18 @@ def chat():
             if not offline_reason:
                 offline_reason = 'unknown'
             offline_active = cached_unsynced > 0
+
+        # Reminders M0 — non-stream path. Detect intent + persist; never raises.
+        _reminder_user = session.get('user', {}) if 'user' in session else {}
+        _reminder_id, _reminder_needs_clar = maybe_create_reminder_from_prompt(
+            user_prompt=user_prompt,
+            user_id=_reminder_user.get('uid'),
+            user_email=_reminder_user.get('email'),
+            user_timezone=request.form.get('timezone') or request.headers.get('X-Timezone'),
+            source_chat_id=session_id,
+        )
+        if _reminder_id:
+            logger.info(f"[reminders] persisted {_reminder_id} (non-stream path; tag in Task 3.1)")
 
         # Check if response looks like an email
         email_data = None
