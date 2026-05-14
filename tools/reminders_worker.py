@@ -213,7 +213,7 @@ def process_reminder(doc_ref, reminder: dict, *, user_email: str) -> None:
     try:
         result = send_transactional_email(
             to_email=user_email,
-            subject=f"Reminder: {name}",
+            subject=f"[Task Update] Reminder: {name}",
             body_text=body_text,
         )
     except EmailSendError as exc:
