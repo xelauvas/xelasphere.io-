@@ -282,7 +282,7 @@
         <header class="mobile-header-bar" id="mobile-header-bar">
             <!-- Left: Burger menu + Model selector -->
             <div class="mobile-header-left">
-                <button class="mobile-header-burger" id="mobile-header-burger" aria-label="Open menu">
+                <button class="mobile-header-burger" id="mobile-header-burger" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
                     <span></span>
                     <span></span>
                 </button>
@@ -648,7 +648,7 @@
 
         <!-- Content Wrapper -->
         <div class="content-wrapper right-closed left-closed">
-            <div class="toggle-button" aria-label="Toggle sidebar">
+            <div class="toggle-button" aria-hidden="true">
                 <span class="hamburger-line"></span>
             </div>
             <main class="container chat-area" role="main" aria-label="Chat Interface">
@@ -1206,10 +1206,10 @@
         </button>
 
         <!-- Right Sidebar -->
-        <div id="right-sidebar" class="right-sidebar closed">
+        <div id="right-sidebar" class="right-sidebar closed" inert>
             <div class="right-sidebar-header">
                 <h2>More</h2>
-                <button class="close-sidebar-btn" aria-label="Close Sidebar">
+                <button class="close-sidebar-btn" aria-label="Close sidebar">
                     <i class="fas fa-times"></i>
                 </button>
             </div>

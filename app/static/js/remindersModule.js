@@ -497,6 +497,9 @@
   // ---------- unseen-failures toast (M5) ----------
 
   async function checkUnseenFailures() {
+    // Endpoint is @login_required — guests would log a 403 in the console even
+    // though we swallow the fetch error. Skip entirely for guests.
+    if (document.body.dataset.guestMode === 'true') return;
     try {
       const resp = await fetch('/reminders/unseen-failures', { credentials: 'same-origin' });
       if (!resp.ok) return;

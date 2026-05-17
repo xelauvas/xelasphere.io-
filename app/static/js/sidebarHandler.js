@@ -162,6 +162,7 @@ class SidebarManager {
 
       if (rightSidebar && !rightSidebar.classList.contains('open')) {
         rightSidebar.classList.add('closed');
+        rightSidebar.setAttribute('inert', '');
       }
 
       this.syncSidebarWithViewport();
@@ -260,6 +261,12 @@ class SidebarManager {
       rightSidebar.classList.toggle('closed', targetClosed);
       const isClosed = targetClosed;
       const willOpen = !isClosed;
+
+      // Closed panel is translated off-screen but still in the DOM. Without
+      // `inert`, its close button stays focusable and screen readers announce
+      // a "Close Sidebar" button for a panel that isn't there. `inert` removes
+      // descendants from focus + a11y tree without breaking the slide animation.
+      rightSidebar.toggleAttribute('inert', isClosed);
 
       if (contentWrapper) {
         contentWrapper.style.marginRight = isClosed ? '0' : `${this.SIDEBAR_WIDTH}px`;
@@ -372,7 +379,7 @@ class SidebarManager {
     openMobileSidebar() {
       if (!this.shouldUseMobileLayout()) return;
 
-      const { leftSidebar, mobileOverlay } = this.elements;
+      const { leftSidebar, mobileOverlay, mobileHeaderBurger } = this.elements;
 
       document.body.classList.add('mobile-sidebar-open');
 
@@ -384,17 +391,27 @@ class SidebarManager {
         leftSidebar.classList.remove('closed');
       }
 
+      if (mobileHeaderBurger) {
+        mobileHeaderBurger.setAttribute('aria-expanded', 'true');
+        mobileHeaderBurger.setAttribute('aria-label', 'Close menu');
+      }
+
       // Dispatch event for other components
       document.dispatchEvent(new CustomEvent('mobile-sidebar-opened'));
     }
 
     closeMobileSidebar() {
-      const { leftSidebar, mobileOverlay } = this.elements;
+      const { leftSidebar, mobileOverlay, mobileHeaderBurger } = this.elements;
 
       document.body.classList.remove('mobile-sidebar-open');
 
       if (mobileOverlay) {
         mobileOverlay.classList.remove('active');
+      }
+
+      if (mobileHeaderBurger) {
+        mobileHeaderBurger.setAttribute('aria-expanded', 'false');
+        mobileHeaderBurger.setAttribute('aria-label', 'Open menu');
       }
 
       // Dispatch event for other components

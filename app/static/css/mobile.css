@@ -2114,6 +2114,19 @@ body.is-ios .arrow-down {
     }
 }
 
+/* Narrow-desktop band (sidebar still a persistent rail, terminal-theme is active):
+   the fixed greeting + options above use left:0/right:0/width:100%, which spills
+   under the sidebar and overflows the viewport. Offset left by the sidebar width
+   and let right:0 + width:auto define the box so it stays inside the chat area. */
+@media (min-width: 769px) and (max-width: 1024px) {
+    body:not(.has-messages) .greeting-container,
+    body:not(.has-messages) .options {
+        left: var(--left-sidebar-width, 0px);
+        width: auto;
+        max-width: none;
+    }
+}
+
 @media (max-width: 480px) {
     body:not(.has-messages) .chat-stage {
         padding: 0.75rem;
