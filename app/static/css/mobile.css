@@ -355,11 +355,19 @@ body.is-ios .mobile-header-bar {
 }
 
 .mobile-header-burger:focus,
-.mobile-header-burger:focus-visible,
 .mobile-header-burger:hover {
     background: transparent !important;
     border: none !important;
     outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Keyboard-only focus: brand accent ring (cosmetic :focus + click stay ringless). */
+.mobile-header-burger:focus-visible {
+    background: transparent !important;
+    border: none !important;
+    outline: 2px solid var(--accent, var(--text-primary, #1f1d1a)) !important;
+    outline-offset: 2px !important;
     box-shadow: none !important;
 }
 
@@ -381,11 +389,18 @@ body.is-ios .mobile-header-bar {
 }
 
 .sidebar-toggle-button:focus,
-.sidebar-toggle-button:focus-visible,
 .sidebar-toggle-button:hover {
     background: transparent !important;
     border: none !important;
     outline: none !important;
+    box-shadow: none !important;
+}
+
+.sidebar-toggle-button:focus-visible {
+    background: transparent !important;
+    border: none !important;
+    outline: 2px solid var(--accent, var(--text-primary, #1f1d1a)) !important;
+    outline-offset: 2px !important;
     box-shadow: none !important;
 }
 
@@ -1280,6 +1295,9 @@ body.is-ios .arrow-down {
         border: 1px solid rgba(255, 255, 255, 0.1);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
+        /* Desktop has opacity:0 by default (hover-revealed). On mobile the
+           same element IS the hamburger and must be persistently visible. */
+        opacity: 1;
     }
 
     /* Hide toggle when sidebar is open */
@@ -1982,12 +2000,24 @@ body.is-ios .arrow-down {
         font-weight: 600;
     }
 
+    /* Light-theme fallback for the narrow-desktop band where neither
+       .viewport-mobile nor .device-phone fires — without this the chevron
+       is white-on-cream and invisible at 820-1024px. */
+    [data-theme="light"] .options button .button-text::before {
+        color: rgba(26, 29, 46, 0.38);
+    }
+
     /* Blinking cursor on last suggestion */
     .options button:nth-last-child(2) .button-text::after {
         content: '▎';
         margin-left: 2px;
         color: rgba(255, 255, 255, 0.4);
         animation: terminal-blink 1s step-end infinite;
+    }
+
+    /* Light-theme fallback for the blinking cursor (same reason as above) */
+    [data-theme="light"] .options button:nth-last-child(2) .button-text::after {
+        color: rgba(26, 29, 46, 0.45);
     }
 
     @keyframes terminal-blink {
@@ -2002,6 +2032,10 @@ body.is-ios .arrow-down {
         color: rgba(255, 255, 255, 0.35);
         font-weight: 400;
         animation: mobile-sparkle-idle 3s ease-in-out infinite;
+    }
+
+    [data-theme="light"] .options button.more-button .button-text::before {
+        color: rgba(26, 29, 46, 0.45);
     }
 
     /* Loading: shimmer + spinning sparkle */

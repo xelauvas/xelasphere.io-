@@ -521,7 +521,7 @@
     /* Prevent double-tap zoom on iOS without disabling pinch zoom */
     touch-action: manipulation;
     transition: all 0.15s ease;
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
 .range-btn:hover {

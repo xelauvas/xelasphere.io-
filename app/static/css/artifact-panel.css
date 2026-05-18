@@ -2477,8 +2477,8 @@ button.artifact-chat-pill,
 }
 
 .artifact-panel__title {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-secondary, #9898b0);
   white-space: nowrap;
   overflow: hidden;
@@ -2674,19 +2674,19 @@ button.artifact-chat-pill,
 
 /* Footer icon buttons */
 .artifact-panel__footer-btn {
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-secondary, #9898b0);
   cursor: pointer;
   transition: all 120ms ease;
   padding: 0;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .artifact-panel__footer-btn:hover {
