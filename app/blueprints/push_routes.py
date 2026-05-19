@@ -116,3 +116,27 @@ def dismiss_prompt():
         {"pushPromptDismissedAt": _now_iso()}, merge=True,
     )
     return jsonify({"ok": True}), 200
+
+
+@push_bp.route("/push/dismiss-status", methods=["GET"])
+@error_handler
+@login_required
+def dismiss_status():
+    """Returns whether the user has dismissed the push prompt recently
+    (within the last 30 days). Used by the frontend banner gate."""
+    from datetime import timedelta
+    uid = session["user"]["uid"]
+    snap = db.collection("users").document(uid).get()
+    if not snap.exists:
+        return jsonify({"dismissedRecently": False}), 200
+    dismissed = (snap.to_dict() or {}).get("pushPromptDismissedAt")
+    if not dismissed:
+        return jsonify({"dismissedRecently": False}), 200
+    try:
+        dt = datetime.fromisoformat(dismissed.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        recently = (datetime.now(timezone.utc) - dt) < timedelta(days=30)
+    except Exception:
+        recently = False
+    return jsonify({"dismissedRecently": recently}), 200

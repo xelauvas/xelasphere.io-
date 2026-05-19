@@ -143,3 +143,37 @@ class TestDismissPrompt:
         assert resp.status_code == 200
         update_call = doc_ref.set.call_args
         assert "pushPromptDismissedAt" in update_call.args[0]
+
+
+class TestDismissStatus:
+    @patch("app.blueprints.push_routes.db")
+    def test_dismiss_status_returns_false_when_unset(self, mock_db, client, auth_session):
+        snap = MagicMock()
+        snap.exists = True
+        snap.to_dict.return_value = {}
+        mock_db.collection.return_value.document.return_value.get.return_value = snap
+        resp = client.get("/push/dismiss-status")
+        assert resp.status_code == 200
+        assert resp.get_json() == {"dismissedRecently": False}
+
+    @patch("app.blueprints.push_routes.db")
+    def test_dismiss_status_returns_true_when_recent(self, mock_db, client, auth_session):
+        from datetime import datetime, timezone, timedelta
+        recent = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+        snap = MagicMock()
+        snap.exists = True
+        snap.to_dict.return_value = {"pushPromptDismissedAt": recent}
+        mock_db.collection.return_value.document.return_value.get.return_value = snap
+        resp = client.get("/push/dismiss-status")
+        assert resp.get_json() == {"dismissedRecently": True}
+
+    @patch("app.blueprints.push_routes.db")
+    def test_dismiss_status_returns_false_when_stale(self, mock_db, client, auth_session):
+        from datetime import datetime, timezone, timedelta
+        stale = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+        snap = MagicMock()
+        snap.exists = True
+        snap.to_dict.return_value = {"pushPromptDismissedAt": stale}
+        mock_db.collection.return_value.document.return_value.get.return_value = snap
+        resp = client.get("/push/dismiss-status")
+        assert resp.get_json() == {"dismissedRecently": False}
