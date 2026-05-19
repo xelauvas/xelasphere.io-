@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added — Reminders M1.2 (snooze)
+
+Snooze shipped to xelasphere.com (behind `REMINDERS_SNOOZE_ENABLED=true`).
+
+- Three durations: **Snooze 10 min**, **Snooze 1 hour**, **Snooze until tomorrow** (= now + 24h).
+- Two surfaces sharing one backend: signed-link buttons in delivered email + Snooze items in the inline-card kebab dropdown.
+- Email tokens signed with `itsdangerous.URLSafeTimedSerializer` (24h max-age, salt `reminder-snooze`).
+- Worker honors `snoozedUntil`: claims the doc, sees future timestamp, releases the lock and skips. Logs `reminder_snooze_skip` per skipped tick.
+- Eligible states: `scheduled`, `sending`, and `delivered`+recurring. Paused/failed/cancelled/delivered-one-off hide the option and return 409 if attempted.
+- Confirmation page (`app/templates/_snoozed_confirmation.html`) handles all 6 outcomes: ok / expired / invalid / wrong_state / not_found / flag_off.
+- Card subtitle replaces fire time with `snoozedUntil` and appends `(Snoozed)` until the snooze elapses.
+- Default `REMINDERS_SNOOZE_ENABLED=false` hides the kebab items, omits the email link block, returns 503 from both routes.
+
 ### Added — Reminders M1.1 (recurrence)
 
 Recurring reminders shipped on xelasphere.com (behind `REMINDERS_RECURRENCE_ENABLED=true`).
