@@ -274,6 +274,29 @@ def process_reminder(doc_ref, reminder: dict, *, user_email: str) -> None:
     attempt = reminder.get("attemptCount", 0)
     now_iso = datetime.now(timezone.utc).isoformat()
 
+    # M1.2: honor snoozedUntil — release the claim and skip if not yet due.
+    snoozed_until = reminder.get("snoozedUntil")
+    if snoozed_until:
+        try:
+            snoozed_dt = datetime.fromisoformat(snoozed_until.replace("Z", "+00:00"))
+            if snoozed_dt.tzinfo is None:
+                snoozed_dt = snoozed_dt.replace(tzinfo=timezone.utc)
+        except (ValueError, AttributeError):
+            snoozed_dt = None
+        if snoozed_dt and snoozed_dt > datetime.now(timezone.utc):
+            doc_ref.update({
+                "status": "scheduled",
+                "lockedAt": None,
+                "updatedAt": now_iso,
+            })
+            logger.info(
+                "reminder_snooze_skip",
+                extra={"extra_fields": {
+                    "name": name, "until": snoozed_until, "rid": reminder.get("id"),
+                }},
+            )
+            return
+
     try:
         result = send_transactional_email(
             to_email=user_email,

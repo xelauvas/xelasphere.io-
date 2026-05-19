@@ -319,6 +319,82 @@ def test_process_reminder_advances_recurring_after_delivery(monkeypatch):
     assert final["lockedAt"] is None
 
 
+def test_process_reminder_skips_when_snoozed_in_future(monkeypatch):
+    """A claimed reminder with snoozedUntil in the future releases the
+    lock and skips. SendGrid is never called."""
+    from tools import reminders_worker
+    from datetime import datetime, timezone, timedelta
+
+    # Track whether SendGrid was called
+    sg_called = []
+    from app.services import email_sender
+    monkeypatch.setattr(
+        email_sender, "send_transactional_email",
+        lambda **kw: sg_called.append(kw) or type("R", (), {"status_code": 202})(),
+    )
+
+    updates = []
+    class _FakeDocRef:
+        def update(self, data): updates.append(data)
+    doc_ref = _FakeDocRef()
+
+    future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    reminder = {
+        "id": "rid_x", "name": "snoozed", "userId": "u1",
+        "fireAt": "2026-05-19T08:00:00+00:00",
+        "snoozedUntil": future,
+        "recurrence": None, "attemptCount": 0, "deliveryCount": 0,
+        "sourceChatId": None, "timezone": "UTC",
+    }
+
+    reminders_worker.process_reminder(doc_ref, reminder, user_email="a@b.com")
+
+    # Assert: SendGrid was NOT called
+    assert sg_called == [], "Expected snoozed reminder to skip send"
+    # Assert: doc was updated to release the claim
+    assert len(updates) >= 1
+    release_update = updates[-1]
+    assert release_update.get("status") == "scheduled"
+    assert release_update.get("lockedAt") is None
+
+
+def test_process_reminder_proceeds_when_snoozed_in_past(monkeypatch):
+    """A reminder with snoozedUntil in the past (already elapsed) delivers
+    normally — snooze is a one-time override."""
+    from tools import reminders_worker
+    from datetime import datetime, timezone, timedelta
+
+    sg_called = []
+    from app.services import email_sender
+    class _OkResult:
+        status_code = 202
+    monkeypatch.setattr(
+        email_sender, "send_transactional_email",
+        lambda **kw: sg_called.append(kw) or _OkResult(),
+    )
+
+    updates = []
+    class _FakeDocRef:
+        def update(self, data): updates.append(data)
+    doc_ref = _FakeDocRef()
+
+    past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    reminder = {
+        "id": "rid_x", "name": "snooze-elapsed", "userId": "u1",
+        "fireAt": "2026-05-19T08:00:00+00:00",
+        "snoozedUntil": past,
+        "recurrence": None, "attemptCount": 0, "deliveryCount": 0,
+        "sourceChatId": None, "timezone": "UTC",
+    }
+
+    reminders_worker.process_reminder(doc_ref, reminder, user_email="a@b.com")
+
+    assert len(sg_called) == 1, "Expected delivery to proceed when snooze elapsed"
+    # And the doc transitioned to delivered (terminal one-off)
+    final = updates[-1]
+    assert final.get("status") == "delivered"
+
+
 class TestMainSkipsWhenDisabled:
     @patch("tools.reminders_worker.get_db")
     def test_main_exits_zero_when_disabled(self, mock_get_db):
