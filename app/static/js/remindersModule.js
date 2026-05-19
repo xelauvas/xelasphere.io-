@@ -65,6 +65,23 @@
     return label + ' · ' + tzShort;
   }
 
+  function _updateRecurrenceLabels(selectEl, reminder) {
+    if (!reminder || !reminder.fireAt) return;
+    const dt = new Date(reminder.fireAt);
+    if (isNaN(dt.getTime())) return;
+    const tz = reminder.timezone || getBrowserTz();
+    const weekday = dt.toLocaleDateString(undefined, { weekday: 'long', timeZone: tz });
+    const day = dt.toLocaleDateString(undefined, { day: 'numeric', timeZone: tz });
+    const monthDay = dt.toLocaleDateString(undefined, {
+      month: 'long', day: 'numeric', timeZone: tz,
+    });
+    selectEl.querySelectorAll('option[data-dynamic-label]').forEach(opt => {
+      if (opt.value === 'WEEKLY') opt.textContent = `Weekly on ${weekday}`;
+      if (opt.value === 'MONTHLY') opt.textContent = `Monthly on the ${day}`;
+      if (opt.value === 'YEARLY')  opt.textContent = `Yearly on ${monthDay}`;
+    });
+  }
+
   function splitFireAtLocal(reminder) {
     // Convert UTC fireAt + tz → date input (YYYY-MM-DD) + time input (HH:MM)
     const dt = new Date(reminder.fireAt);
@@ -356,6 +373,14 @@
     modal.querySelector('[data-tz]').textContent = tz;
     form.dataset.timezone = tz;
 
+    // M1.1: populate recurrence dropdown
+    const recurrenceSel = form.querySelector('[data-reminders-recurrence]');
+    if (recurrenceSel) {
+      recurrenceSel.value = reminder.recurrence || '';
+      // Update dynamic labels based on the fireAt date
+      _updateRecurrenceLabels(recurrenceSel, reminder);
+    }
+
     // Pause/Resume button label + target
     const pauseBtn = modal.querySelector('[data-action="pause"]');
     if (reminder.id) {
@@ -387,11 +412,14 @@
     const tz = form.dataset.timezone || getBrowserTz();
     const fireAtLocal = `${form.elements['date'].value}T${form.elements['time'].value}:00`;
 
+    // M1.1: include recurrence (empty string → null)
+    const recVal = form.elements['recurrence']?.value || null;
     const body = {
       name: form.elements['name'].value.trim(),
       instructions: form.elements['instructions'].value.trim(),
       fireAtLocal,
       timezone: tz,
+      recurrence: recVal,
     };
     try {
       const url = id ? `/reminders/${encodeURIComponent(id)}` : `/reminders`;
