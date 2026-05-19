@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added — Reminders M1.3 (web push)
+
+Browser push notifications for reminders (behind `PUSH_ENABLED=true` + VAPID keypair installed). **M1 complete** — recurrence + snooze + push all shipped.
+
+- After the worker sends the email, it also fans out an encrypted push notification to every browser the user has subscribed.
+- Two snooze action buttons ("10m", "1h") in each notification; tapping fires the M1.2 `/reminders/<id>/snooze` GET route with the same token system email links use.
+- Browser support: Chrome / Firefox / Edge / Safari (macOS 13+) on desktop; Chrome / Firefox on Android. iOS Safari deferred (needs PWA install).
+- Per-device subscription model at `users/{uid}/pushSubscriptions/{subId}`. 410 Gone deletes the sub automatically. 413 Payload Too Large retries once with a shorter body.
+- Inline permission banner shown once after the user's first reminder. Dismissible; re-shows after 30 days if still no subscription. `pushPromptDismissedAt` field added to user doc.
+- Settings → Notifications has a single ON/OFF toggle. OFF deletes all subscribed devices.
+- Service worker at `/static/js/sw.js` handles `push` (renders native notification) and `notificationclick` (snooze action → backend, body → chat deeplink).
+- VAPID keypair generated once per server install per `docs/ops/push-vapid-setup.md`. Manual rotation procedure documented.
+- Default `PUSH_ENABLED=false` hides the banner, returns 503 from all push routes, and makes the worker fan-out a no-op. Email still delivers.
+
 ### Added — Reminders M1.2 (snooze)
 
 Snooze shipped to xelasphere.com (behind `REMINDERS_SNOOZE_ENABLED=true`).
