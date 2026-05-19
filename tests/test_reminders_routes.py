@@ -235,6 +235,64 @@ class TestPatchReminder:
         assert resp.status_code == 404
 
 
+class TestRecurrenceField:
+    """recurrence field is accepted on POST + PATCH and validated against
+    the preset enum. Unknown presets return 400."""
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_create_accepts_recurrence_daily(self, mock_db, auth_session):
+        fake_doc_ref = MagicMock()
+        fake_doc_ref.id = "rem_rec1"
+        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = fake_doc_ref
+
+        payload = {
+            "name": "Standup",
+            "instructions": "10-minute team sync",
+            "fireAtLocal": "2030-01-01T09:00:00",
+            "timezone": "Europe/London",
+            "recurrence": "DAILY",
+        }
+        resp = auth_session.post("/reminders", json=payload, headers=CSRF_HEADERS)
+        assert resp.status_code == 201, resp.get_json()
+        assert resp.get_json().get("reminder", {}).get("recurrence") == "DAILY"
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_create_rejects_unknown_recurrence(self, mock_db, auth_session):
+        payload = {
+            "name": "Standup",
+            "fireAtLocal": "2030-01-01T09:00:00",
+            "timezone": "Europe/London",
+            "recurrence": "FORTNIGHTLY",
+        }
+        resp = auth_session.post("/reminders", json=payload, headers=CSRF_HEADERS)
+        assert resp.status_code == 400
+        assert "recurrence" in resp.get_json().get("error", "").lower()
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_patch_updates_recurrence(self, mock_db, auth_session):
+        snap = MagicMock(exists=True)
+        snap.to_dict.return_value = {"id": "rem_x", "status": "scheduled", "name": "Standup", "timezone": "Europe/London"}
+        doc_ref = mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value
+        doc_ref.get.return_value = snap
+
+        resp = auth_session.patch("/reminders/rem_x", json={"recurrence": "WEEKLY"}, headers=CSRF_HEADERS)
+        assert resp.status_code == 200, resp.get_json()
+        args, _ = doc_ref.update.call_args
+        assert args[0]["recurrence"] == "WEEKLY"
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_patch_can_clear_recurrence_with_null(self, mock_db, auth_session):
+        snap = MagicMock(exists=True)
+        snap.to_dict.return_value = {"id": "rem_x", "status": "scheduled", "name": "Standup", "timezone": "Europe/London", "recurrence": "DAILY"}
+        doc_ref = mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value
+        doc_ref.get.return_value = snap
+
+        resp = auth_session.patch("/reminders/rem_x", json={"recurrence": None}, headers=CSRF_HEADERS)
+        assert resp.status_code == 200, resp.get_json()
+        args, _ = doc_ref.update.call_args
+        assert args[0]["recurrence"] is None
+
+
 class TestDeleteReminder:
     @patch("app.blueprints.reminders_routes.db")
     def test_delete_removes_doc(self, mock_db, auth_session):
