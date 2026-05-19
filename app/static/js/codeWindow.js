@@ -2243,6 +2243,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         if (_styleDisplayPrompt !== null) {
             formData.append('display_prompt', _styleDisplayPrompt);
         }
+        // Browser timezone — reminders M0 hook reads this to interpret
+        // relative times in chat ("remind me at 9am" → 9am LOCAL, not UTC).
+        try {
+            const _tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (_tz) formData.append('timezone', _tz);
+        } catch (_e) { /* ignore — server falls back to UTC */ }
 
         // Request mode: single source of truth for UI intent overrides.
         //   'auto'     → model picks ACTION: itself (default)
@@ -3434,6 +3440,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         render_mode: streamRenderMode || 'inline',
                         reasoning: streamedReasoning || null,
                         email: streamEmailData || null,
+                        reminder: streamReminderData || null,
                         artifact_reference: streamArtifactRef,
                         crypto_chart: streamCryptoChart || null,
                         model_meta: streamModelMeta || null,
@@ -3887,6 +3894,7 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     render_mode: data.render_mode || 'inline',
                     reasoning: data.reasoning || null,
                     email: data.email || null,
+                    reminder: data.reminder || null,
                     crypto_chart: data.crypto_chart || null,
                     auto_selected: !!data.auto_selected,
                     model_id: data.model_id || null,

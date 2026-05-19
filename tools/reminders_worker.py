@@ -18,6 +18,7 @@ transactional claim ensures only one sends.
 from __future__ import annotations
 
 import argparse
+import html as _html
 import json as _json
 import logging
 import sys
@@ -43,6 +44,30 @@ def get_db():
 
 
 # ==================== Email-body builder ====================
+def _build_chat_url(reminder: dict) -> Optional[str]:
+    """Return the deeplink to the chat that created this reminder, or None
+    when the reminder has no sourceChatId."""
+    chat_id = reminder.get("sourceChatId")
+    if not chat_id:
+        return None
+    from app.config import Config
+    return f"{Config.APP_BASE_URL}/c/{chat_id}"
+
+
+def _late_delivery_seconds(reminder: dict) -> Optional[float]:
+    """Returns seconds-late if past threshold, else None."""
+    try:
+        fire_at = datetime.fromisoformat(reminder.get("fireAt", ""))
+        if fire_at.tzinfo is None:
+            fire_at = fire_at.replace(tzinfo=timezone.utc)
+        delay = (datetime.now(timezone.utc) - fire_at).total_seconds()
+        if delay > LATE_DELAY_THRESHOLD_SECONDS:
+            return delay
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 def _build_email_body(reminder: dict) -> str:
     """Construct the plain-text email body. Adds a late-delivery banner
     when fireAt is more than LATE_DELAY_THRESHOLD_SECONDS in the past."""
@@ -51,16 +76,54 @@ def _build_email_body(reminder: dict) -> str:
     body = instructions if instructions else name
     fire_at_iso = reminder.get("fireAt", "")
     banner = ""
-    try:
-        fire_at = datetime.fromisoformat(fire_at_iso)
-        if fire_at.tzinfo is None:
-            fire_at = fire_at.replace(tzinfo=timezone.utc)
-        delay = (datetime.now(timezone.utc) - fire_at).total_seconds()
-        if delay > LATE_DELAY_THRESHOLD_SECONDS:
-            banner = f"\n(This reminder was scheduled for {fire_at_iso} but delivery was delayed.)\n"
-    except (ValueError, TypeError):
-        pass
-    return f"{body}{banner}\n\n— XelaSphere Reminders\nScheduled for: {fire_at_iso}\n"
+    if _late_delivery_seconds(reminder) is not None:
+        banner = f"\n(This reminder was scheduled for {fire_at_iso} but delivery was delayed.)\n"
+    chat_url = _build_chat_url(reminder)
+    link_line = f"\nOpen chat: {chat_url}" if chat_url else ""
+    return f"{body}{banner}\n\n— XelaSphere Reminders\nScheduled for: {fire_at_iso}{link_line}\n"
+
+
+def _build_email_html(reminder: dict) -> str:
+    """HTML version of the reminder email. Inline styles only — many email
+    clients strip <style> tags. Escapes user content to prevent injection."""
+    name_safe = _html.escape(reminder.get("name") or "")
+    instructions = (reminder.get("instructions") or "").strip()
+    body_safe = _html.escape(instructions if instructions else (reminder.get("name") or ""))
+    fire_at_iso_safe = _html.escape(reminder.get("fireAt", ""))
+    banner_html = ""
+    if _late_delivery_seconds(reminder) is not None:
+        banner_html = (
+            '<p style="margin:0 0 16px 0;padding:10px 14px;background:#FFF3CD;'
+            'border-left:4px solid #856404;color:#856404;font-size:13px;'
+            'border-radius:4px;">'
+            f'This reminder was scheduled for {fire_at_iso_safe} but delivery was delayed.'
+            '</p>'
+        )
+    chat_url = _build_chat_url(reminder)
+    button_html = ""
+    if chat_url:
+        button_html = (
+            f'<p style="margin:24px 0 0 0;"><a href="{_html.escape(chat_url)}" '
+            'style="display:inline-block;padding:10px 20px;background:#10A37F;'
+            'color:#fff;text-decoration:none;border-radius:8px;font-weight:600;'
+            'font-size:14px;">Open chat</a></p>'
+        )
+    return (
+        '<!DOCTYPE html><html><body style="margin:0;padding:24px;'
+        "background:#F7F7F8;font-family:-apple-system,BlinkMacSystemFont,"
+        "'Segoe UI',Helvetica,Arial,sans-serif;color:#1a1a1a;\">"
+        '<div style="max-width:560px;margin:0 auto;background:#fff;'
+        'border-radius:12px;padding:32px;box-shadow:0 1px 2px rgba(0,0,0,0.04);">'
+        '<p style="margin:0 0 4px 0;font-size:12px;font-weight:600;'
+        'text-transform:uppercase;letter-spacing:0.08em;color:#10A37F;">Reminder</p>'
+        f'<h1 style="margin:0 0 16px 0;font-size:20px;font-weight:600;line-height:1.3;">{name_safe}</h1>'
+        f'{banner_html}'
+        f'<p style="margin:0;font-size:15px;line-height:1.55;color:#3a3a3a;white-space:pre-wrap;">{body_safe}</p>'
+        f'{button_html}'
+        '<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0 16px 0;">'
+        f'<p style="margin:0;font-size:12px;color:#888;">— XelaSphere Reminders &middot; Scheduled for {fire_at_iso_safe}</p>'
+        '</div></body></html>'
+    )
 
 
 # ==================== Firestore queries ====================
@@ -207,14 +270,16 @@ def process_reminder(doc_ref, reminder: dict, *, user_email: str) -> None:
 
     name = reminder.get("name", "Reminder")
     body_text = _build_email_body(reminder)
+    body_html = _build_email_html(reminder)
     attempt = reminder.get("attemptCount", 0)
     now_iso = datetime.now(timezone.utc).isoformat()
 
     try:
         result = send_transactional_email(
             to_email=user_email,
-            subject=f"Reminder: {name}",
+            subject=f"[Task Update] Reminder: {name}",
             body_text=body_text,
+            body_html=body_html,
         )
     except EmailSendError as exc:
         new_attempt = attempt + 1

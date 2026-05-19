@@ -73,6 +73,9 @@
     /* ─── fetch ───────────────────────────────────────────────── */
 
     async function fetchSessions() {
+        // Endpoint is auth-only — guests would just rack up 30s 403 console
+        // noise. Bail before issuing the request.
+        if (document.body.dataset.guestMode === 'true') return;
         state.loading = true;
         renderSkeleton();
         try {

@@ -298,6 +298,12 @@ const UnreadNotificationManager = (() => {
         if (isInitialized) return;
         isInitialized = true;
 
+        // Guest sessions can't read unread counts (endpoint returns 403).
+        // Skip entirely to avoid every-30s console spam.
+        if (document.body.dataset.guestMode === 'true') {
+            return;
+        }
+
         // Restore cached unread count immediately (prevents flash)
         try {
             const cached = localStorage.getItem('xela_unread_count');

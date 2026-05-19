@@ -85,35 +85,209 @@
     }
   }
 
+  // ---------- icons (Lucide-style line SVGs, 1.75px stroke) ----------
+
+  const ICON_CLOCK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+  const ICON_KEBAB = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
+  const ICON_PENCIL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+  const ICON_PAUSE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+  const ICON_PLAY = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+  const ICON_TRASH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>`;
+  const ICON_RETRY = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>`;
+  const ICON_CHECK_CIRCLE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></svg>`;
+  const ICON_ALERT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+
+  function iconForStatus(status) {
+    switch (status) {
+      case 'delivered': return ICON_CHECK_CIRCLE;
+      case 'failed':    return ICON_ALERT;
+      case 'paused':    return ICON_PAUSE;
+      default:          return ICON_CLOCK;
+    }
+  }
+
   // ---------- card rendering ----------
 
   function renderCardInner(reminder) {
-    const state = reminder.status || 'scheduled';
-    const label = STATE_LABEL[state] || state;
-    return `<span class="reminder-card__icon" aria-hidden="true">🔔</span>
+    const status = reminder.status || 'scheduled';
+    return `<span class="reminder-card__icon">${iconForStatus(status)}</span>
             <span class="reminder-card__body">
               <span class="reminder-card__name">${escapeHtml(reminder.name)}</span>
-              <span class="reminder-card__when">${escapeHtml(formatWhen(reminder))} · ${label}</span>
-            </span>`;
+              <span class="reminder-card__when">${escapeHtml(formatWhen(reminder))}</span>
+            </span>
+            <button type="button" class="reminder-card__kebab" data-reminder-kebab aria-label="Reminder options">${ICON_KEBAB}</button>`;
   }
 
   function buildCardElement(reminder) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `reminder-card reminder-card--${reminder.status || 'scheduled'}`;
-    btn.dataset.reminderId = reminder.id;
-    btn.dataset.reminderJson = JSON.stringify(reminder);
-    btn.innerHTML = renderCardInner(reminder);
-    btn.addEventListener('click', () => openModal(JSON.parse(btn.dataset.reminderJson)));
-    return btn;
+    const wrap = document.createElement('div');
+    wrap.className = `reminder-card reminder-card--${reminder.status || 'scheduled'}`;
+    wrap.dataset.reminderId = reminder.id;
+    wrap.dataset.reminderJson = JSON.stringify(reminder);
+    wrap.innerHTML = renderCardInner(reminder);
+
+    // Card body click → open edit modal. Kebab click → dropdown (with
+    // stopPropagation so the card click handler doesn't also fire).
+    wrap.addEventListener('click', (e) => {
+      const fresh = JSON.parse(wrap.dataset.reminderJson || '{}');
+      openModal(fresh);
+    });
+    wrap.querySelector('[data-reminder-kebab]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const fresh = JSON.parse(wrap.dataset.reminderJson || '{}');
+      toggleDropdown(wrap, fresh);
+    });
+    return wrap;
   }
 
   function renderCardForMessage(messageEl, reminder) {
     if (!messageEl || !reminder || !reminder.id) return;
-    // Don't double-render if message already has a card for this reminder
     if (messageEl.querySelector(`.reminder-card[data-reminder-id="${reminder.id}"]`)) return;
     const card = buildCardElement(reminder);
     messageEl.appendChild(card);
+    // Saved snapshots in chat history can be stale (worker may have
+    // delivered/failed since save). Refresh from API for non-terminal states.
+    const status = reminder.status || 'scheduled';
+    if (!['delivered', 'failed', 'cancelled'].includes(status)) {
+      rehydrateCardsForReminder(reminder.id);
+    }
+  }
+
+  // ---------- kebab dropdown ----------
+
+  let _openDropdown = null;  // singleton — only one open at a time
+
+  function closeDropdown() {
+    if (_openDropdown && _openDropdown.parentNode) {
+      _openDropdown.parentNode.removeChild(_openDropdown);
+    }
+    _openDropdown = null;
+  }
+
+  function toggleDropdown(cardEl, reminder) {
+    if (_openDropdown && _openDropdown.dataset.forReminder === reminder.id) {
+      closeDropdown();
+      return;
+    }
+    closeDropdown();
+    openDropdown(cardEl, reminder);
+  }
+
+  function openDropdown(cardEl, reminder) {
+    const status = reminder.status || 'scheduled';
+    const items = [];
+
+    items.push({
+      icon: ICON_PENCIL,
+      label: 'Edit details',
+      onClick: () => { closeDropdown(); openModal(reminder); },
+    });
+
+    if (status === 'scheduled' || status === 'sending') {
+      items.push({
+        icon: ICON_PAUSE, label: 'Pause',
+        onClick: () => { closeDropdown(); patchStatus(reminder.id, 'paused'); },
+      });
+    } else if (status === 'paused') {
+      items.push({
+        icon: ICON_PLAY, label: 'Resume',
+        onClick: () => { closeDropdown(); patchStatus(reminder.id, 'scheduled'); },
+      });
+    }
+
+    if (status === 'failed') {
+      items.push({
+        icon: ICON_RETRY, label: 'Retry',
+        onClick: () => { closeDropdown(); retryReminder(reminder.id); },
+      });
+    }
+
+    items.push({ divider: true });
+
+    items.push({
+      icon: ICON_TRASH, label: 'Delete',
+      danger: true,
+      onClick: () => { closeDropdown(); deleteReminder(reminder.id); },
+    });
+
+    const dd = document.createElement('div');
+    dd.className = 'reminder-dropdown';
+    dd.dataset.forReminder = reminder.id;
+    items.forEach(item => {
+      if (item.divider) {
+        const div = document.createElement('div');
+        div.className = 'reminder-dropdown__divider';
+        dd.appendChild(div);
+        return;
+      }
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'reminder-dropdown__item' + (item.danger ? ' reminder-dropdown__item--danger' : '');
+      btn.innerHTML = `${item.icon}<span>${escapeHtml(item.label)}</span>`;
+      btn.addEventListener('click', (e) => { e.stopPropagation(); item.onClick(); });
+      dd.appendChild(btn);
+    });
+
+    // Position the dropdown below the kebab, opening down-left (right-aligned)
+    document.body.appendChild(dd);
+    const kebabRect = cardEl.querySelector('[data-reminder-kebab]').getBoundingClientRect();
+    const ddRect = dd.getBoundingClientRect();
+    dd.style.top = (window.scrollY + kebabRect.bottom + 6) + 'px';
+    dd.style.left = (window.scrollX + kebabRect.right - ddRect.width) + 'px';
+
+    _openDropdown = dd;
+  }
+
+  // Close dropdown on outside click or Escape
+  document.addEventListener('click', (e) => {
+    if (!_openDropdown) return;
+    if (_openDropdown.contains(e.target)) return;
+    if (e.target.closest('.reminder-card')) return;  // kebab/card handlers already manage this
+    closeDropdown();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _openDropdown) closeDropdown();
+  });
+
+  // ---------- quick-action helpers ----------
+
+  async function patchStatus(reminderId, newStatus) {
+    const resp = await fetch(`/reminders/${encodeURIComponent(reminderId)}`, {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    if (!resp.ok) return;
+    const data = await resp.json().catch(() => ({}));
+    if (data.reminder) applyReminderToCards(data.reminder);
+    else await rehydrateCardsForReminder(reminderId);
+    if (window.RemindersModule.refreshSchedulesTab) window.RemindersModule.refreshSchedulesTab();
+  }
+
+  async function retryReminder(reminderId) {
+    const resp = await fetch(`/reminders/${encodeURIComponent(reminderId)}`, {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({ _retry: true }),
+    });
+    if (!resp.ok) return;
+    const data = await resp.json().catch(() => ({}));
+    if (data.reminder) applyReminderToCards(data.reminder);
+    else await rehydrateCardsForReminder(reminderId);
+  }
+
+  async function deleteReminder(reminderId) {
+    if (!confirm('Delete this reminder?')) return;
+    const resp = await fetch(`/reminders/${encodeURIComponent(reminderId)}`, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+      headers: { 'X-CSRFToken': getCsrf() },
+    });
+    if (resp.ok) {
+      document.querySelectorAll(`.reminder-card[data-reminder-id="${reminderId}"]`).forEach(el => el.remove());
+      if (window.RemindersModule.refreshSchedulesTab) window.RemindersModule.refreshSchedulesTab();
+    }
   }
 
   // ---------- fetch + re-hydrate ----------
@@ -126,12 +300,23 @@
   }
 
   function applyReminderToCards(reminder) {
-    /** Patch DOM cards in-place from an already-fetched reminder object. */
+    /** Patch DOM cards in-place from an already-fetched reminder object.
+     *  innerHTML replacement blows away the kebab button's click handler,
+     *  so we re-attach it after re-rendering. The wrap's click handler
+     *  survives because it's bound to the wrap, not its children. */
     if (!reminder || !reminder.id) return;
     document.querySelectorAll(`.reminder-card[data-reminder-id="${reminder.id}"]`).forEach(btn => {
       btn.className = `reminder-card reminder-card--${reminder.status || 'scheduled'}`;
       btn.dataset.reminderJson = JSON.stringify(reminder);
       btn.innerHTML = renderCardInner(reminder);
+      const kebab = btn.querySelector('[data-reminder-kebab]');
+      if (kebab) {
+        kebab.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const fresh = JSON.parse(btn.dataset.reminderJson || '{}');
+          toggleDropdown(btn, fresh);
+        });
+      }
     });
   }
 
@@ -275,14 +460,19 @@
     const li = document.createElement('li');
     li.className = `schedules-row schedules-row--${reminder.status || 'scheduled'}`;
     li.dataset.reminderId = reminder.id;
-    const icon = (reminder.status === 'delivered') ? '✓' : '🔔';
+    const status = reminder.status || 'scheduled';
     li.innerHTML = `
-      <span class="schedules-row__icon" aria-hidden="true">${icon}</span>
+      <span class="schedules-row__icon" aria-hidden="true">${iconForStatus(status)}</span>
       <span class="schedules-row__body">
         <span class="schedules-row__name">${escapeHtml(reminder.name)}</span>
         <span class="schedules-row__when">${escapeHtml(formatWhen(reminder))} · ${STATE_LABEL[reminder.status] || reminder.status}</span>
-      </span>`;
+      </span>
+      <button type="button" class="schedules-row__kebab" data-reminder-kebab aria-label="Reminder options">${ICON_KEBAB}</button>`;
     li.addEventListener('click', () => openModal(reminder));
+    li.querySelector('[data-reminder-kebab]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleDropdown(li, reminder);
+    });
     return li;
   }
 
@@ -339,6 +529,9 @@
   // ---------- unseen-failures toast (M5) ----------
 
   async function checkUnseenFailures() {
+    // Endpoint is @login_required — guests would log a 403 in the console even
+    // though we swallow the fetch error. Skip entirely for guests.
+    if (document.body.dataset.guestMode === 'true') return;
     try {
       const resp = await fetch('/reminders/unseen-failures', { credentials: 'same-origin' });
       if (!resp.ok) return;

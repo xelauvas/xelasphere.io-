@@ -132,7 +132,7 @@ body.sidebar-collapsed .sidebar-brand-text {
     font-size: 0.875rem; /* 14px */
     color: var(--primary-blue);
     font-weight: 500;
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     margin: 0;
     flex-grow: 1;
     text-align: left;

@@ -48,12 +48,35 @@ Schema:
   "timezone": "IANA timezone string (use the provided default if unsure)"
 }
 
-Rules:
-- If the user says 'morning' assume 09:00 local.
-- If the user says 'afternoon' assume 14:00 local.
-- If the user says 'evening' assume 18:00 local.
-- If the user says 'tomorrow' compute relative to the provided current time.
-- If no time at all is mentioned, set fireAtLocal to null. Do NOT guess a time.
+CRITICAL — "when to fire" vs "what the reminder is about":
+The user often gives TWO times in one message — one for WHEN to remind them,
+and one as part of the SUBJECT of the reminder. Always extract the
+"when to fire" time, NOT the subject's time.
+
+Examples:
+  "remind me in 5 minutes about my 3pm meeting"
+    → fireAtLocal = now + 5 minutes (NOT 3pm)
+    → instructions mentions the 3pm meeting
+
+  "remind me at 8am tomorrow to call the dentist at 11am"
+    → fireAtLocal = tomorrow 08:00 (NOT 11am)
+    → instructions mentions calling the dentist at 11am
+
+  "remind me about tomorrow's 2pm meeting in one minute"
+    → fireAtLocal = now + 1 minute (NOT tomorrow 2pm)
+    → instructions mentions the tomorrow 2pm meeting
+
+The "when to fire" cue is usually a phrase like:
+  "in X minutes/hours/days"
+  "at HH:MM" near the verb "remind"
+  "tomorrow at HH:MM" near the verb "remind"
+  "on <weekday>"
+When in doubt, pick the SOONER time if "in N minutes/hours" is present.
+
+Other rules:
+- "morning" = 09:00 local, "afternoon" = 14:00 local, "evening" = 18:00 local.
+- "tomorrow" is relative to the provided current time.
+- If no fire-time is mentioned, set fireAtLocal to null. Do NOT guess.
 - Never set fireAtLocal in the past.
 """
 

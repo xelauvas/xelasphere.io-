@@ -251,7 +251,7 @@ h1 {
     color: var(--primary-text-color);
     text-align: center;
     font-size: 1.125rem; /* 18px */
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
 /* Bubble container */

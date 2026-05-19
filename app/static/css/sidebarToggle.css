@@ -6,7 +6,7 @@
     --line-color: var(--text-secondary, rgb(110, 110, 110));
     --line-color-hover: var(--text-primary, rgb(110, 110, 110));
     --transition-timing: cubic-bezier(0.68, -0.55, 0.27, 1.55);
-    
+
     position: fixed;
     top: 50%;
     left: calc(var(--sidebar-width, 260px) + 0.5rem);
@@ -20,11 +20,26 @@
     justify-content: center;
     z-index: var(--z-sticky, 1100);
     cursor: pointer;
-    transition: left 0.3s var(--transition-timing);
+    /* Hover-only reveal: this is a hint, not a permanent control. The real
+       toggle lives in the sidebar header (#sidebar-toggle-button) and the
+       hamburger (#mobile-header-burger). Default invisible; appears when the
+       chat content area is hovered so it doesn't draw as a stray | / ) glyph
+       at the chat-area edge. Mobile overrides below set opacity:1 since the
+       button there is repurposed as the hamburger. */
+    opacity: 0;
+    transition:
+        left 0.3s var(--transition-timing),
+        opacity 0.15s ease;
     /* Add GPU acceleration */
     will-change: transform;
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
+}
+
+.content-wrapper:hover .toggle-button,
+.toggle-button:hover,
+.toggle-button:focus-visible {
+    opacity: 1;
 }
 
 .toggle-button::before,

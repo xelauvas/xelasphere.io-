@@ -3886,6 +3886,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
             render_mode: messageData.render_mode || 'inline',
             reasoning: messageData.reasoning || null,
             email: messageData.email || null,
+            reminder: messageData.reminder || null,
             crypto_chart: messageData.crypto_chart || null,
             // Model attribution — persists to Firestore
             model_id: modelId,
@@ -4419,7 +4420,8 @@ async loadChatHistory(pageToken = null, limit = 10) {
                     sources,
                     messageKey,
                     style: replayStyle,
-                    email: message.email || null
+                    email: message.email || null,
+                    reminder: message.reminder || null
                 });
                 if (typeof window !== 'undefined' && typeof window.updateSourcesButton === 'function') {
                     window.updateSourcesButton(sources);
@@ -4461,6 +4463,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
                 messageKey,
                 style: replayStyle,
                 email: message.email || null,
+                reminder: message.reminder || null,
                 modelMeta: {
                     auto_selected: !!message.auto_selected,
                     model_id: message.model_id || null,
@@ -4615,7 +4618,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
      * @param {boolean} [options.isCode=false] - Whether the content contains code.
      * @param {boolean} [options.isHistory=false] - Whether the message is historical.
      */
-    renderMessage({ id, sender, content, isCode = false, timestamp, isHistory = false, attachments = [], suppressText = false, forceButtons = false, originalPrompt = null, sources = null, messageKey = null, email = null, modelMeta = null, style = null }) {
+    renderMessage({ id, sender, content, isCode = false, timestamp, isHistory = false, attachments = [], suppressText = false, forceButtons = false, originalPrompt = null, sources = null, messageKey = null, email = null, reminder = null, modelMeta = null, style = null }) {
         const chatDisplay = this.elements.chatDisplay;
 
         let messageDiv = document.getElementById(id);
@@ -4731,6 +4734,12 @@ async loadChatHistory(pageToken = null, limit = 10) {
                     appendActionButtons(messageContent, id);
                 }
             }
+        }
+        // Reminder card (history replay): if the saved message carried a
+        // reminder object, append the chip below the message body. Same hook
+        // as live stream — RemindersModule.renderCardForMessage is idempotent.
+        if (reminder && reminder.id && sender === 'ai' && window.RemindersModule) {
+            window.RemindersModule.renderCardForMessage(messageContent, reminder);
         }
         // Render attachments - CSS order property ensures they appear after text
         // AI-generated images render full-size (matching initial display), not as file cards

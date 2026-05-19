@@ -192,7 +192,7 @@ body, html {
     min-height: 100%;
     background-color: var(--bg-primary, #0f0f12);
     margin: 0;
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
 body {
@@ -6290,4 +6290,26 @@ body.sidebar-collapsed .sidebar-empty-state {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* ============================================
+   Global :focus-visible — every focusable element
+   gets a visible ring by default. Component-specific
+   :focus-visible rules above still win on cascade.
+   Fix for: 23 places using `outline: none` without a
+   replacement, leaving keyboard nav invisible.
+   ============================================ */
+:focus-visible {
+    outline: 2px solid var(--accent, var(--text-primary, #1f1d1a));
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+/* Inputs/textareas/contenteditable: tight ring (no offset, follows border-radius) */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable]:focus-visible {
+    outline-offset: 0;
+    border-radius: inherit;
 }
