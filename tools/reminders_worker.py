@@ -384,6 +384,20 @@ def process_reminder(doc_ref, reminder: dict, *, user_email: str) -> None:
             )
         return
 
+    # M1.3: fan out push notifications to all subscribed browsers.
+    # Per-sub errors are isolated inside the dispatcher; this call cannot
+    # fail the worker even if push_dispatcher itself blows up.
+    try:
+        from app.services.push_dispatcher import send_push_for_reminder
+        send_push_for_reminder(reminder, reminder.get("userId"))
+    except Exception as exc:
+        logger.warning(
+            "push_dispatch_exception",
+            extra={"extra_fields": {
+                "name": name, "rid": reminder.get("id"), "error": str(exc)[:200],
+            }},
+        )
+
     # Recurring reminders advance fireAt and stay scheduled. Non-recurring
     # ones (or any recurring when the kill switch is off) terminate as before.
     from app.config import Config
