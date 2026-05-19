@@ -218,6 +218,14 @@
     <!-- Email Composer JS -->
     <script defer src="{{ url_for('static', filename='js/emailComposer.js') }}"></script>
 
+    <!-- Reminders config (injected before module) -->
+    <script>
+      window.RemindersModule = window.RemindersModule || {};
+      window.RemindersModule.config = {
+        snoozeEnabled: {{ 'true' if config.REMINDERS_SNOOZE_ENABLED else 'false' }}
+      };
+    </script>
+
     <!-- Reminders M0 JS -->
     <script defer src="{{ url_for('static', filename='js/remindersModule.js') }}"></script>
 
