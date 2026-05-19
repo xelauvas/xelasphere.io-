@@ -1,0 +1,65 @@
+{# Snooze-link confirmation page. Rendered by GET /reminders/<id>/snooze.
+   Self-contained: inline CSS, no JS, no external assets.
+   Caller passes: status (ok|expired|invalid|wrong_state|not_found|flag_off),
+                  until_local (string, only for status=ok),
+                  chat_url (string, optional). #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>XelaSphere Reminders</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0;padding:24px;background:#F7F7F8;
+             font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+             color:#1a1a1a;">
+  <div style="max-width:480px;margin:48px auto;background:#fff;
+              border-radius:12px;padding:32px;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+    <p style="margin:0 0 4px 0;font-size:12px;font-weight:600;
+              text-transform:uppercase;letter-spacing:0.08em;color:#10A37F;">
+      XelaSphere Reminders
+    </p>
+
+    {% if status == "ok" %}
+      <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">&#10003; Snoozed</h1>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#3a3a3a;">
+        We'll remind you at {{ until_local }}.
+      </p>
+    {% elif status == "expired" %}
+      <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Link expired</h1>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#3a3a3a;">
+        This snooze link has expired. Open the reminder in chat to reschedule.
+      </p>
+    {% elif status == "invalid" %}
+      <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Invalid link</h1>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#3a3a3a;">
+        This link looks invalid. Open the reminder in chat to reschedule.
+      </p>
+    {% elif status == "wrong_state" %}
+      <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Can't snooze</h1>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#3a3a3a;">
+        This reminder can't be snoozed in its current state. Open chat to manage it.
+      </p>
+    {% elif status == "not_found" %}
+      <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Reminder not found</h1>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#3a3a3a;">
+        We couldn't find this reminder. It may have been deleted.
+      </p>
+    {% elif status == "flag_off" %}
+      <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Snooze unavailable</h1>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#3a3a3a;">
+        Snooze isn't available right now. Open chat to reschedule.
+      </p>
+    {% endif %}
+
+    {% if chat_url %}
+      <p style="margin:24px 0 0 0;">
+        <a href="{{ chat_url }}"
+           style="display:inline-block;padding:10px 20px;background:#10A37F;
+                  color:#fff;text-decoration:none;border-radius:8px;
+                  font-weight:600;font-size:14px;">Open chat</a>
+      </p>
+    {% endif %}
+  </div>
+</body>
+</html>

@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, render_template, request, session
 from google.cloud import firestore as gc_firestore
 
 from app.config import db, Config
@@ -22,6 +22,9 @@ from app.services.reminder_model import (
     STATUS_SCHEDULED, STATUS_FAILED,
 )
 from app.services.recurrence import RECURRENCE_PRESETS
+from app.services.signed_links import (
+    verify_snooze_token, SnoozeTokenExpired, SnoozeTokenInvalid,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +174,79 @@ def create_reminder():
 
     logger.info(f"[reminders] created {doc_ref.id} for {user_id} fire_at={reminder['fireAt']}")
     return jsonify({"id": doc_ref.id, "reminder": reminder}), 201
+
+
+@reminders_bp.route("/reminders/<reminder_id>/snooze", methods=["GET"])
+def snooze_reminder_get(reminder_id: str):
+    """Email signed-token snooze. Renders an HTML confirmation page.
+
+    No session/CSRF — auth via the signed token in the query string."""
+    if not Config.REMINDERS_SNOOZE_ENABLED:
+        return render_template("_snoozed_confirmation.html",
+                               status="flag_off", chat_url=None), 503
+
+    token = request.args.get("token", "")
+    dur = request.args.get("dur", "")
+
+    try:
+        token_payload = verify_snooze_token(token)
+    except SnoozeTokenExpired:
+        logger.info("reminder_snooze_rejected",
+            extra={"extra_fields": {"rid": reminder_id, "reason": "token_expired"}})
+        return render_template("_snoozed_confirmation.html",
+                               status="expired", chat_url=None), 410
+    except SnoozeTokenInvalid:
+        logger.info("reminder_snooze_rejected",
+            extra={"extra_fields": {"rid": reminder_id, "reason": "token_invalid"}})
+        return render_template("_snoozed_confirmation.html",
+                               status="invalid", chat_url=None), 400
+
+    # URL id must match token rid (defense in depth)
+    if token_payload.get("rid") != reminder_id:
+        return render_template("_snoozed_confirmation.html",
+                               status="invalid", chat_url=None), 400
+
+    uid = token_payload["uid"]
+    status_code, payload = _apply_snooze(reminder_id, dur, uid)
+
+    # Look up chat_url for the Open chat button (best-effort, after _apply_snooze
+    # since we need the doc anyway).
+    chat_url = None
+    try:
+        snap = (db.collection("users").document(uid)
+                  .collection("reminders").document(reminder_id).get())
+        if snap.exists:
+            chat_id = (snap.to_dict() or {}).get("sourceChatId")
+            tz_name = (snap.to_dict() or {}).get("timezone", "UTC")
+            if chat_id:
+                chat_url = f"{Config.APP_BASE_URL}/c/{chat_id}"
+        else:
+            tz_name = "UTC"
+    except Exception:
+        tz_name = "UTC"
+
+    if status_code == 200:
+        snoozed_until_iso = payload.get("snoozedUntil", "")
+        try:
+            dt = datetime.fromisoformat(snoozed_until_iso.replace("Z", "+00:00"))
+            local = dt.astimezone(ZoneInfo(tz_name))
+            tz_short = tz_name.split("/")[-1].replace("_", " ")
+            until_local = local.strftime("%H:%M") + " " + tz_short
+        except Exception:
+            until_local = snoozed_until_iso
+        return render_template("_snoozed_confirmation.html",
+                               status="ok", until_local=until_local, chat_url=chat_url), 200
+
+    template_status = {
+        400: "invalid",
+        403: "invalid",  # don't leak ownership info via different message
+        404: "not_found",
+        409: "wrong_state",
+    }.get(status_code, "invalid")
+    logger.info("reminder_snooze_rejected",
+        extra={"extra_fields": {"rid": reminder_id, "reason": f"http_{status_code}"}})
+    return render_template("_snoozed_confirmation.html",
+                           status=template_status, chat_url=chat_url), status_code
 
 
 @reminders_bp.route("/reminders/<reminder_id>/snooze", methods=["POST"])

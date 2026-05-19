@@ -496,3 +496,80 @@ class TestSnoozePostRoute:
             headers={"X-CSRFToken": "test"},
         )
         assert resp.status_code == 503
+
+
+class TestSnoozeGetRoute:
+    """GET /reminders/<id>/snooze?token=... — signed-token auth from emails."""
+
+    def _mint_token(self, rid, uid):
+        from app.services.signed_links import make_snooze_token
+        return make_snooze_token(rid, uid)
+
+    @patch("app.blueprints.reminders_routes.Config")
+    @patch("app.blueprints.reminders_routes.db")
+    def test_get_happy_path_renders_ok_page(self, mock_db, mock_config, client):
+        mock_config.REMINDERS_SNOOZE_ENABLED = True
+        mock_config.APP_BASE_URL = "https://xelasphere.com"
+        # Note: also need real SECRET_KEY for token signing — fetch from real Config
+        from app.config import Config as RealConfig
+        mock_config.SECRET_KEY = RealConfig.SECRET_KEY
+
+        fake_doc_ref = MagicMock()
+        fake_snap = MagicMock()
+        fake_snap.exists = True
+        fake_snap.to_dict.return_value = {
+            "id": "rid_x", "userId": "uid_y",
+            "status": "scheduled", "name": "t", "recurrence": None,
+            "timezone": "Europe/London", "sourceChatId": "session_abc",
+        }
+        fake_doc_ref.get.return_value = fake_snap
+        mock_db.collection.return_value.document.return_value \
+               .collection.return_value.document.return_value = fake_doc_ref
+
+        token = self._mint_token("rid_x", "uid_y")
+        resp = client.get(f"/reminders/rid_x/snooze?dur=10m&token={token}")
+        assert resp.status_code == 200, resp.data
+        assert b"Snoozed" in resp.data
+        assert b"session_abc" in resp.data  # chat_url link present
+
+    @patch("app.blueprints.reminders_routes.Config")
+    @patch("app.blueprints.reminders_routes.verify_snooze_token")
+    def test_get_expired_token_returns_410(self, mock_verify, mock_config, client):
+        mock_config.REMINDERS_SNOOZE_ENABLED = True
+        from app.services.signed_links import SnoozeTokenExpired
+        mock_verify.side_effect = SnoozeTokenExpired("token too old")
+
+        resp = client.get("/reminders/rid_x/snooze?dur=10m&token=any-token")
+        assert resp.status_code == 410
+        assert b"expired" in resp.data.lower()
+
+    @patch("app.blueprints.reminders_routes.Config")
+    def test_get_garbage_token_returns_400(self, mock_config, client):
+        mock_config.REMINDERS_SNOOZE_ENABLED = True
+        resp = client.get("/reminders/rid_x/snooze?dur=10m&token=not-a-token")
+        assert resp.status_code == 400
+        assert b"invalid" in resp.data.lower()
+
+    @patch("app.blueprints.reminders_routes.Config")
+    @patch("app.blueprints.reminders_routes.db")
+    def test_get_wrong_uid_returns_404(self, mock_db, mock_config, client):
+        # Note: 404 (not 403) because we look up by user_id from token;
+        # if doc doesn't exist under that uid, it's "not found".
+        mock_config.REMINDERS_SNOOZE_ENABLED = True
+        from app.config import Config as RealConfig
+        mock_config.SECRET_KEY = RealConfig.SECRET_KEY
+
+        fake_snap = MagicMock()
+        fake_snap.exists = False  # doc not found under uid_ATTACKER
+        mock_db.collection.return_value.document.return_value \
+               .collection.return_value.document.return_value.get.return_value = fake_snap
+
+        token = self._mint_token("rid_x", "uid_ATTACKER")
+        resp = client.get(f"/reminders/rid_x/snooze?dur=10m&token={token}")
+        assert resp.status_code == 404
+
+    @patch("app.blueprints.reminders_routes.Config")
+    def test_get_flag_off_returns_503(self, mock_config, client):
+        mock_config.REMINDERS_SNOOZE_ENABLED = False
+        resp = client.get("/reminders/rid_x/snooze?dur=10m&token=anything")
+        assert resp.status_code == 503
