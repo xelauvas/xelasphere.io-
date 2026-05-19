@@ -405,3 +405,60 @@ class TestMainSkipsWhenDisabled:
         assert rc == 0
         # Never even called Firestore
         mock_get_db.assert_not_called()
+
+
+def test_email_html_includes_snooze_block_when_enabled(monkeypatch):
+    from tools.reminders_worker import _build_email_html
+    from app.config import Config
+    monkeypatch.setattr(Config, "REMINDERS_SNOOZE_ENABLED", True)
+    # Make sure SECRET_KEY exists for token signing
+    if not getattr(Config, "SECRET_KEY", None):
+        monkeypatch.setattr(Config, "SECRET_KEY", "test-secret-for-tokens")
+
+    reminder = {
+        "id": "rid_x", "name": "test", "instructions": "body",
+        "fireAt": "2026-05-19T08:00:00+00:00",
+        "timezone": "UTC", "userId": "u1",
+        "sourceChatId": "session_abc",
+    }
+    html = _build_email_html(reminder)
+    assert "Snooze 10 min" in html
+    assert "Snooze 1 hour" in html
+    assert "Snooze until tomorrow" in html
+    # Each link points to /reminders/rid_x/snooze with dur + token
+    assert "/reminders/rid_x/snooze?dur=10m&token=" in html
+    assert "/reminders/rid_x/snooze?dur=1h&token=" in html
+    assert "/reminders/rid_x/snooze?dur=tomorrow&token=" in html
+
+
+def test_email_html_omits_snooze_block_when_disabled(monkeypatch):
+    from tools.reminders_worker import _build_email_html
+    from app.config import Config
+    monkeypatch.setattr(Config, "REMINDERS_SNOOZE_ENABLED", False)
+
+    reminder = {
+        "id": "rid_x", "name": "test", "instructions": "body",
+        "fireAt": "2026-05-19T08:00:00+00:00",
+        "timezone": "UTC", "userId": "u1",
+        "sourceChatId": "session_abc",
+    }
+    html = _build_email_html(reminder)
+    assert "Snooze" not in html
+
+
+def test_email_text_includes_snooze_urls_when_enabled(monkeypatch):
+    from tools.reminders_worker import _build_email_body
+    from app.config import Config
+    monkeypatch.setattr(Config, "REMINDERS_SNOOZE_ENABLED", True)
+    if not getattr(Config, "SECRET_KEY", None):
+        monkeypatch.setattr(Config, "SECRET_KEY", "test-secret-for-tokens")
+
+    reminder = {
+        "id": "rid_x", "name": "test", "instructions": "body",
+        "fireAt": "2026-05-19T08:00:00+00:00",
+        "timezone": "UTC", "userId": "u1",
+        "sourceChatId": None,
+    }
+    text = _build_email_body(reminder)
+    assert "Snooze 10 min" in text
+    assert "/reminders/rid_x/snooze?dur=10m&token=" in text
