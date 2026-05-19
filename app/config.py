@@ -144,6 +144,7 @@ class Config:
     # Reminders M0 — email-only reminder feature (chat utterance → SendGrid)
     REMINDERS_ENABLED = os.getenv('REMINDERS_ENABLED', 'false').lower() == 'true'
     REMINDERS_RECURRENCE_ENABLED = os.getenv('REMINDERS_RECURRENCE_ENABLED', 'false').lower() == 'true'
+    REMINDERS_SNOOZE_ENABLED = os.getenv('REMINDERS_SNOOZE_ENABLED', 'false').lower() == 'true'
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
     SENDGRID_FROM_EMAIL = os.getenv('SENDGRID_FROM_EMAIL', 'noreply@xelasphere.io')
     SENDGRID_FROM_NAME = os.getenv('SENDGRID_FROM_NAME', 'XelaSphere Reminders')
