@@ -62,7 +62,19 @@
       label = dt.toLocaleString();
     }
     const tzShort = tz.includes('/') ? tz.split('/').pop().replace('_', ' ') : tz;
-    return label + ' · ' + tzShort;
+    const recLabel = _recurrenceLabel(reminder.recurrence);
+    return label + ' · ' + tzShort + (recLabel ? ' · ' + recLabel : '');
+  }
+
+  function _recurrenceLabel(rec) {
+    switch (rec) {
+      case 'DAILY':    return 'Daily';
+      case 'WEEKDAYS': return 'Weekdays';
+      case 'WEEKLY':   return 'Weekly';
+      case 'MONTHLY':  return 'Monthly';
+      case 'YEARLY':   return 'Yearly';
+      default:         return '';
+    }
   }
 
   function _updateRecurrenceLabels(selectEl, reminder) {
