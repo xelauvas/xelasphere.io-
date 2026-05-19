@@ -89,13 +89,26 @@ class ChatManager {
             searchResults: document.getElementById('history-search-results'),
             searchCloseTargets: document.querySelectorAll('[data-history-search-close]'),
             imagesButton: document.getElementById('action-images'),
+            chatsButton: document.getElementById('action-chats'),
             imagesPage: document.getElementById('images-page'),
             chatsPage: document.getElementById('chats-page'),
             imagesPageBack: document.getElementById('images-page-back'),
             imagesPageBody: document.getElementById('images-page-body'),
+            imagesPageCreate: document.getElementById('images-page-create'),
+            imagesPageComposer: document.getElementById('images-page-composer'),
             imagesPromptBar: document.getElementById('images-prompt-bar'),
             imagesPromptInput: document.getElementById('images-prompt-input'),
+            imagesPromptCancel: document.getElementById('images-prompt-cancel'),
             imagesPromptSubmit: document.getElementById('images-prompt-submit'),
+            imagesGalleryEmptyCta: document.getElementById('images-gallery-empty-cta'),
+            imagesViewer: document.getElementById('images-viewer'),
+            imagesViewerImg: document.getElementById('images-viewer-img'),
+            imagesViewerCaption: document.getElementById('images-viewer-caption'),
+            imagesViewerClose: document.getElementById('images-viewer-close'),
+            imagesViewerPrev: document.getElementById('images-viewer-prev'),
+            imagesViewerNext: document.getElementById('images-viewer-next'),
+            imagesViewerDownload: document.getElementById('images-viewer-download'),
+            imagesViewerRegenerate: document.getElementById('images-viewer-regenerate'),
             imagesStylesTrack: document.getElementById('images-styles-track'),
             imagesDiscoverGrid: document.getElementById('images-discover-grid'),
             imagesStylesSection: document.getElementById('images-styles-section'),
@@ -259,6 +272,7 @@ class ChatManager {
         }));
         this.elements.searchButton?.addEventListener('click', () => this.openHistorySearchModal());
         this.elements.imagesButton?.addEventListener('click', () => this.showImagesPage());
+        this.elements.chatsButton?.addEventListener('click', () => this.showChatsPage());
         this.elements.imagesPageBack?.addEventListener('click', () => this.hideImagesPage());
         this.elements.imagesPromptBar?.addEventListener('submit', (event) => {
             event.preventDefault();
@@ -285,6 +299,22 @@ class ChatManager {
         this.elements.imagesResultDownload?.addEventListener('click', () => this.downloadImagesResult());
         this.elements.imagesResultRegenerate?.addEventListener('click', () => this.regenerateImagesResult());
         this.elements.imagesResultEdit?.addEventListener('click', () => this.editImagesPrompt());
+        // Library: Create button + empty CTA toggle the composer
+        this.elements.imagesPageCreate?.addEventListener('click', () => this.openImagesComposer());
+        this.elements.imagesGalleryEmptyCta?.addEventListener('click', () => this.openImagesComposer());
+        this.elements.imagesPromptCancel?.addEventListener('click', () => this.closeImagesComposer());
+        // Library: fullscreen viewer controls
+        this.elements.imagesViewerClose?.addEventListener('click', () => this.closeImagesViewer());
+        this.elements.imagesViewerPrev?.addEventListener('click', () => this.navigateImagesViewer(-1));
+        this.elements.imagesViewerNext?.addEventListener('click', () => this.navigateImagesViewer(1));
+        this.elements.imagesViewer?.addEventListener('click', (event) => {
+            // backdrop click closes (but not clicks on the image, nav, actions)
+            if (event.target === this.elements.imagesViewer) {
+                this.closeImagesViewer();
+            }
+        });
+        this.elements.imagesViewerDownload?.addEventListener('click', () => this.downloadImagesViewer());
+        this.elements.imagesViewerRegenerate?.addEventListener('click', () => this.regenerateFromViewer());
         this.elements.imagesErrorRetry?.addEventListener('click', () => {
             this.setImagesPageMode('home');
             if (this.imagesLastPrompt && this.elements.imagesPromptInput) {
@@ -355,6 +385,24 @@ class ChatManager {
                     if (typeof abortMessage === 'function') {
                         abortMessage();
                     }
+                    return;
+                }
+            }
+            // Library viewer: arrows + Escape
+            if (this.isImagesViewerOpen()) {
+                if (event.key === 'ArrowLeft') {
+                    event.preventDefault();
+                    this.navigateImagesViewer(-1);
+                    return;
+                }
+                if (event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    this.navigateImagesViewer(1);
+                    return;
+                }
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    this.closeImagesViewer();
                     return;
                 }
             }
@@ -545,7 +593,7 @@ class ChatManager {
 
         // Clear existing tabs
         tabList.innerHTML = '';
-    
+
         const hasSessions = Object.values(categorizedSessions).some(list => list.length > 0);
 
         if (!hasSessions) {
@@ -557,29 +605,61 @@ class ChatManager {
             return;
         }
 
-        // Create collapsible "Your chats" header
-        const yourChatsHeader = document.createElement('li');
-        yourChatsHeader.className = 'your-chats-header';
-        yourChatsHeader.innerHTML = `<span class="your-chats-text">Your chats</span><svg class="your-chats-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
-        yourChatsHeader.addEventListener('click', () => {
-            const isCollapsed = tabList.classList.toggle('chats-collapsed');
-            yourChatsHeader.classList.toggle('collapsed', isCollapsed);
+        // Claude-style mobile recents: cap visible chats to 30, then a
+        // single "All chats" button at the bottom that opens the full
+        // /chats page. No infinite-scroll, no progressive loading —
+        // the sidebar shows enough to scan, the dedicated page handles
+        // the deep history with search + filters.
+        const RECENTS_CAP = 30;
+        let appended = 0;
+        let totalAvailable = 0;
+        Object.keys(categorizedSessions).forEach(category => {
+            totalAvailable += categorizedSessions[category].length;
         });
-        tabList.appendChild(yourChatsHeader);
 
-        // Append all sessions without date category headers
         Object.keys(categorizedSessions).forEach(category => {
             const sessions = categorizedSessions[category];
-            if (sessions.length > 0) {
-                sessions.forEach((session, index) => {
-                    const tabElement = this.createTabElement(session, index);
-                    tabList.appendChild(tabElement);
-                });
-            }
+            sessions.forEach((session, index) => {
+                if (appended >= RECENTS_CAP) return;
+                const tabElement = this.createTabElement(session, index);
+                tabList.appendChild(tabElement);
+                appended++;
+            });
         });
-    
-        // Add infinite scroll logic
-        this.addInfiniteScroll();
+
+        // "All chats" footer link — show when either (a) we have more
+        // sessions locally than the cap renders, or (b) the server
+        // reported a next_page_token (so more chats exist beyond what
+        // we've fetched). Without (b), we'd silently hide the link
+        // even though the user has hundreds of chats on the server.
+        const hasServerMore = Boolean(this.nextPageToken);
+        const hasLocalMore = totalAvailable > RECENTS_CAP;
+        if (hasServerMore || hasLocalMore) {
+            const allChats = document.createElement('li');
+            allChats.className = 'sidebar-all-chats-link';
+            const remaining = hasLocalMore ? totalAvailable - RECENTS_CAP : null;
+            const counterHTML = remaining !== null
+                ? `<span class="sidebar-all-chats-count">+${remaining}</span>`
+                : '';
+            allChats.innerHTML = `
+                <a href="/chats" class="sidebar-all-chats-btn" data-sidebar-all-chats data-tooltip="All chats">
+                    <span class="sidebar-all-chats-icon" aria-hidden="true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <circle cx="5" cy="12" r="1.6"/>
+                            <circle cx="12" cy="12" r="1.6"/>
+                            <circle cx="19" cy="12" r="1.6"/>
+                        </svg>
+                    </span>
+                    <span class="sidebar-all-chats-label">All chats</span>
+                    ${counterHTML}
+                </a>
+            `;
+            tabList.appendChild(allChats);
+        }
+
+        // NOTE: deliberately not calling addInfiniteScroll() — the cap
+        // above replaces the progressive-loading model. The "All chats"
+        // link is the canonical path to the rest of the history.
     }
     
     addInfiniteScroll() {
@@ -1106,7 +1186,7 @@ class ChatManager {
  * @param {string|null} pageToken - The token for the next page.
  * @param {number} limit - Number of sessions to load per request.
  */
-async loadChatHistory(pageToken = null, limit = 10) {
+async loadChatHistory(pageToken = null, limit = 30) {
     // Skip for guest mode (no chat history)
     if (document.body.dataset.guestMode === 'true') return;
 
@@ -1833,13 +1913,16 @@ async loadChatHistory(pageToken = null, limit = 10) {
         this.elements.chatsPage.setAttribute('aria-hidden', 'false');
         if (typeof document !== 'undefined' && document.body) {
             document.body.classList.add('chats-page-open');
+            // Sync the data-attr — CSS uses it for the no-flash initial paint.
+            document.body.dataset.initialSurface = 'chats';
         }
         if (updateHistory && typeof window !== 'undefined' && window.location.pathname !== '/chats') {
             try { window.history.pushState({ surface: 'chats' }, '', '/chats'); } catch (_) {}
         }
-        // Trigger a refresh of the chats list if the module is loaded
-        if (typeof window !== 'undefined' && window.__chatsPage?.fetchSessions) {
-            window.__chatsPage.fetchSessions();
+        // Trigger a refresh of the chats list and arm the 30s polling.
+        if (typeof window !== 'undefined' && window.__chatsPage) {
+            window.__chatsPage.start?.();
+            window.__chatsPage.fetchSessions?.();
         }
     }
 
@@ -1851,6 +1934,14 @@ async loadChatHistory(pageToken = null, limit = 10) {
         this.elements.chatsPage.setAttribute('aria-hidden', 'true');
         if (typeof document !== 'undefined' && document.body) {
             document.body.classList.remove('chats-page-open');
+            // Clear the no-flash data-attr; otherwise its CSS rules keep
+            // the chat-shell hidden after we leave /chats.
+            document.body.dataset.initialSurface = 'chat';
+        }
+        // Disarm the 30s background poll so it stops burning Firestore reads
+        // (and visibilitychange-fetches) while the user is on a different surface.
+        if (typeof window !== 'undefined' && window.__chatsPage?.stop) {
+            window.__chatsPage.stop();
         }
         if (updateHistory && typeof window !== 'undefined' && window.location.pathname === '/chats') {
             try { window.history.pushState({ surface: 'chat' }, '', '/'); } catch (_) {}
@@ -1863,13 +1954,18 @@ async loadChatHistory(pageToken = null, limit = 10) {
         const isLoading = mode === 'loading';
         const isResult = mode === 'result';
         const isError = mode === 'error';
-        if (this.elements.imagesStylesSection) this.elements.imagesStylesSection.hidden = !isHome;
-        if (this.elements.imagesDiscoverSection) this.elements.imagesDiscoverSection.hidden = !isHome;
+        // Library redesign: Try-a-Style + Discover stay hidden permanently.
+        if (this.elements.imagesStylesSection) this.elements.imagesStylesSection.hidden = true;
+        if (this.elements.imagesDiscoverSection) this.elements.imagesDiscoverSection.hidden = true;
         if (this.elements.imagesGallerySection) this.elements.imagesGallerySection.hidden = !isHome;
         if (this.elements.imagesPageLoading) this.elements.imagesPageLoading.hidden = !isLoading;
         if (this.elements.imagesPageResult) this.elements.imagesPageResult.hidden = !isResult;
         if (this.elements.imagesResultError) this.elements.imagesResultError.hidden = !isError;
         if (this.elements.imagesPromptSubmit) this.elements.imagesPromptSubmit.disabled = isLoading;
+        // Auto-close the composer when we leave home (loading/result/error all take over the canvas).
+        if (!isHome && this.elements.imagesPageComposer) {
+            this.elements.imagesPageComposer.hidden = true;
+        }
     }
 
     renderImagesStyles() {
@@ -2499,6 +2595,11 @@ async loadChatHistory(pageToken = null, limit = 10) {
     }
 
     showImagePreview(imageId) {
+        // Library redesign: prefer fullscreen viewer when present, else fall back to legacy modal.
+        if (this.elements.imagesViewer) {
+            this.openImagesViewer(imageId);
+            return;
+        }
         const previewModal = this.elements.imagePreviewModal;
         const previewImg = this.elements.imagePreviewImg;
         const previewPrompt = this.elements.imagePreviewPrompt;
@@ -2514,7 +2615,7 @@ async loadChatHistory(pageToken = null, limit = 10) {
         previewImg.src = image.url;
         previewImg.alt = 'Generated image preview';
         previewPrompt.textContent = '';
-        previewPrompt.style.display = 'none'; // Hide the prompt element
+        previewPrompt.style.display = 'none';
         previewMeta.textContent = `${image.model || 'Image model'} • ${this.formatImageTimestamp(image.createdAt)}`;
         previewLink.href = image.url;
 
@@ -2526,6 +2627,11 @@ async loadChatHistory(pageToken = null, limit = 10) {
     }
 
     hideImagePreview() {
+        // Closes whichever viewer is open
+        if (this.elements.imagesViewer && this.isImagesViewerOpen()) {
+            this.closeImagesViewer();
+            return;
+        }
         this.activePreviewImageId = null;
         const previewModal = this.elements.imagePreviewModal;
         if (!previewModal) return;
@@ -2537,7 +2643,125 @@ async loadChatHistory(pageToken = null, limit = 10) {
     }
 
     isPreviewModalOpen() {
+        if (this.elements.imagesViewer && this.isImagesViewerOpen()) {
+            return true;
+        }
         return !!this.elements.imagePreviewModal?.classList.contains('open');
+    }
+
+    // ============================================================
+    // Library: fullscreen viewer + composer toggle
+    // ============================================================
+
+    openImagesComposer() {
+        const composer = this.elements.imagesPageComposer;
+        const input = this.elements.imagesPromptInput;
+        if (!composer) return;
+        composer.hidden = false;
+        if (input) {
+            try { input.focus({ preventScroll: false }); } catch (_) { input.focus(); }
+        }
+    }
+
+    closeImagesComposer() {
+        const composer = this.elements.imagesPageComposer;
+        const input = this.elements.imagesPromptInput;
+        if (!composer) return;
+        composer.hidden = true;
+        if (input) input.value = '';
+    }
+
+    openImagesViewer(imageId) {
+        const viewer = this.elements.imagesViewer;
+        const image = this.findImageById(imageId);
+        if (!viewer || !image) return;
+        this.activePreviewImageId = imageId;
+        this.renderImagesViewer(image);
+        viewer.hidden = false;
+        // Force reflow so the transition runs
+        // eslint-disable-next-line no-unused-expressions
+        viewer.offsetHeight;
+        viewer.classList.add('is-open');
+        viewer.setAttribute('aria-hidden', 'false');
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.classList.add('images-viewer-open');
+        }
+    }
+
+    renderImagesViewer(image) {
+        const img = this.elements.imagesViewerImg;
+        const caption = this.elements.imagesViewerCaption;
+        if (img) {
+            img.src = image.url;
+            img.alt = image.prompt || 'Generated image';
+        }
+        if (caption) {
+            caption.textContent = image.prompt || '';
+        }
+        const items = this.generatedImages || [];
+        const idx = items.findIndex(it => it.id === image.id);
+        if (this.elements.imagesViewerPrev) {
+            this.elements.imagesViewerPrev.disabled = idx <= 0;
+        }
+        if (this.elements.imagesViewerNext) {
+            this.elements.imagesViewerNext.disabled = idx < 0 || idx >= items.length - 1;
+        }
+    }
+
+    closeImagesViewer() {
+        const viewer = this.elements.imagesViewer;
+        if (!viewer) return;
+        viewer.classList.remove('is-open');
+        viewer.setAttribute('aria-hidden', 'true');
+        this.activePreviewImageId = null;
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.classList.remove('images-viewer-open');
+        }
+        // Defer hide until the transition completes (~220ms)
+        window.setTimeout(() => {
+            if (!viewer.classList.contains('is-open')) {
+                viewer.hidden = true;
+            }
+        }, 240);
+    }
+
+    isImagesViewerOpen() {
+        return !!this.elements.imagesViewer?.classList.contains('is-open');
+    }
+
+    navigateImagesViewer(direction) {
+        const items = this.generatedImages || [];
+        if (!items.length) return;
+        const idx = items.findIndex(it => it.id === this.activePreviewImageId);
+        if (idx < 0) return;
+        const nextIdx = idx + direction;
+        if (nextIdx < 0 || nextIdx >= items.length) return;
+        const nextImage = items[nextIdx];
+        this.activePreviewImageId = nextImage.id;
+        this.renderImagesViewer(nextImage);
+    }
+
+    downloadImagesViewer() {
+        const image = this.findImageById(this.activePreviewImageId);
+        if (!image?.url) return;
+        const a = document.createElement('a');
+        a.href = image.url;
+        a.download = `xelasphere-${image.id || Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    regenerateFromViewer() {
+        const image = this.findImageById(this.activePreviewImageId);
+        if (!image) return;
+        this.closeImagesViewer();
+        this.openImagesComposer();
+        const input = this.elements.imagesPromptInput;
+        if (input) {
+            input.value = image.prompt || '';
+            try { input.focus(); } catch (_) {}
+        }
     }
 
     getSessionPreview(session) {

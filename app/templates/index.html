@@ -401,7 +401,7 @@
             <!-- Action buttons live OUTSIDE .sidebar-content as part of the header block -->
             <div class="sidebar-quick-actions">
                 <div class="sidebar-quick-actions-inner">
-                    <button class="sidebar-action-btn has-shortcut" id="action-new-chat" aria-label="New Chat" data-shortcut-win="Ctrl+Shift+O" data-shortcut-mac="⌘+Shift+O">
+                    <button class="sidebar-action-btn has-shortcut" id="action-new-chat" aria-label="New Chat" data-tooltip="New Chat" data-shortcut-win="Ctrl+Shift+O" data-shortcut-mac="⌘+Shift+O">
                         <span class="sidebar-action-icon" aria-hidden="true">
                             <svg xmlns="http://www.w3.org/2000/svg"
                                  width="18" height="18"
@@ -419,7 +419,7 @@
                         <span class="sidebar-action-text">New Chat</span>
                         <span class="shortcut-hint"></span>
                     </button>
-                    <button class="sidebar-action-btn has-shortcut" id="action-search-chat" aria-label="Search Chat" data-shortcut-win="Ctrl+K" data-shortcut-mac="⌘+K">
+                    <button class="sidebar-action-btn has-shortcut" id="action-search-chat" aria-label="Search Chat" data-tooltip="Search Chats" data-shortcut-win="Ctrl+K" data-shortcut-mac="⌘+K">
                         <span class="sidebar-action-icon" aria-hidden="true">
                             <svg xmlns="http://www.w3.org/2000/svg"
                                  width="18" height="18"
@@ -437,7 +437,7 @@
                         <span class="sidebar-action-text">Search Chats</span>
                         <span class="shortcut-hint"></span>
                     </button>
-                    <button class="sidebar-action-btn has-shortcut" id="action-images" aria-label="Images" data-shortcut-win="Ctrl+Shift+I" data-shortcut-mac="⌘+Shift+I">
+                    <button class="sidebar-action-btn has-shortcut" id="action-images" aria-label="Images" data-tooltip="Images" data-shortcut-win="Ctrl+Shift+I" data-shortcut-mac="⌘+Shift+I">
                         <span class="sidebar-action-icon" aria-hidden="true">
                             <svg xmlns="http://www.w3.org/2000/svg"
                                  width="18" height="18"
@@ -468,6 +468,20 @@
                         </span>
                         <span class="sidebar-action-text">Chats</span>
                     </button>
+                </div>
+            </div>
+            {% endif %}
+            <div class="sidebar-content">
+                {% if is_guest %}
+                <!-- Guest Sidebar Content - Clean minimal style -->
+                <div class="guest-sidebar-content">
+                    <div class="guest-sidebar-empty">
+                        <p>Sign up or log in to save your chat history</p>
+                    </div>
+                </div>
+                {% else %}
+                <!-- Secondary nav rows — part of the scroll area so they move with the chat list. -->
+                <div class="sidebar-secondary-nav">
                     <button class="sidebar-action-btn is-placeholder" id="action-projects" aria-label="Projects" data-tooltip="Projects · Coming soon">
                         <span class="sidebar-action-icon" aria-hidden="true">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -521,17 +535,6 @@
                         <span class="sidebar-action-text">More</span>
                     </button>
                 </div>
-            </div>
-            {% endif %}
-            <div class="sidebar-content">
-                {% if is_guest %}
-                <!-- Guest Sidebar Content - Clean minimal style -->
-                <div class="guest-sidebar-content">
-                    <div class="guest-sidebar-empty">
-                        <p>Sign up or log in to save your chat history</p>
-                    </div>
-                </div>
-                {% else %}
                 <!-- Starred — stub. Hidden until the starring backend lands; the
                      section renders with empty state so the layout matches the spec. -->
                 <div class="sidebar-section sidebar-section-starred" id="sidebar-starred-section" hidden>
@@ -1283,7 +1286,6 @@
          window.getPreferredVoice is defined when they read it at init. -->
     <script src="{{ url_for('static', filename='js/settingsModal.js') }}?v=12"></script>
     <script src="{{ url_for('static', filename='js/speechSynthesisModule.js') }}?v=15"></script>
-    <script src="{{ url_for('static', filename='js/speechSynthesisModule.js') }}?v=10"></script>
     <script src="{{ url_for('static', filename='js/dictationModule.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/voiceModeModule.js') }}?v=40"></script>
     <script src="{{ url_for('static', filename='js/filePreview.js') }}"></script>
