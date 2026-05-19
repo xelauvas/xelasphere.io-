@@ -317,13 +317,11 @@ def process_reminder(doc_ref, reminder: dict, *, user_email: str) -> None:
     # Recurring reminders advance fireAt and stay scheduled. Non-recurring
     # ones (or any recurring when the kill switch is off) terminate as before.
     from app.config import Config
+    from app.services.recurrence import next_fire_at, RECURRENCE_PRESETS
     recurrence_on = Config.REMINDERS_RECURRENCE_ENABLED
-    is_recurring = reminder.get("recurrence") in {
-        "DAILY", "WEEKDAYS", "WEEKLY", "MONTHLY", "YEARLY",
-    }
+    is_recurring = reminder.get("recurrence") in RECURRENCE_PRESETS
 
     if recurrence_on and is_recurring:
-        from app.services.recurrence import next_fire_at
         next_dt = next_fire_at(reminder)
         if next_dt is not None:
             doc_ref.update({
