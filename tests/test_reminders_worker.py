@@ -267,6 +267,58 @@ class TestTryRevertStuckLock:
         doc_ref.update.assert_not_called()
 
 
+def test_process_reminder_advances_recurring_after_delivery(monkeypatch):
+    """Recurring reminder transitions to scheduled with advanced fireAt
+    instead of terminal delivered. Gated on REMINDERS_RECURRENCE_ENABLED."""
+    from tools import reminders_worker
+    from app.config import Config
+
+    # Force flag on regardless of env
+    monkeypatch.setattr(Config, "REMINDERS_RECURRENCE_ENABLED", True)
+
+    # Mock SendGrid success
+    from app.services import email_sender
+    class _OkResult:
+        status_code = 202
+    monkeypatch.setattr(
+        email_sender, "send_transactional_email",
+        lambda **kw: _OkResult(),
+    )
+
+    # Capture updates to the doc
+    updates = []
+    class _FakeDocRef:
+        def update(self, data): updates.append(data)
+    doc_ref = _FakeDocRef()
+
+    reminder = {
+        "id": "rid_abc",
+        "name": "Daily standup",
+        "fireAt": "2026-05-19T08:00:00+00:00",
+        "timezone": "Europe/London",
+        "recurrence": "DAILY",
+        "attemptCount": 0,
+        "deliveryCount": 0,
+        "userId": "u1",
+        "sourceChatId": "session_x",
+    }
+
+    reminders_worker.process_reminder(doc_ref, reminder, user_email="a@b.com")
+
+    # The last update should be the success/advance, not a failure
+    assert len(updates) >= 1
+    final = updates[-1]
+    assert final["status"] == "scheduled", (
+        f"Expected status=scheduled after recurring delivery; got {final}"
+    )
+    assert "fireAt" in final, f"Recurring deliveries must advance fireAt; got {final}"
+    assert final["fireAt"] == "2026-05-20T08:00:00+00:00"
+    assert final["deliveryCount"] == 1
+    assert final["lastFiredAt"] is not None
+    assert final["snoozedUntil"] is None
+    assert final["lockedAt"] is None
+
+
 class TestMainSkipsWhenDisabled:
     @patch("tools.reminders_worker.get_db")
     def test_main_exits_zero_when_disabled(self, mock_get_db):
