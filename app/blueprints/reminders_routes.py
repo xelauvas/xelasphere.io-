@@ -8,7 +8,7 @@ Routes:
 - DELETE /reminders/<id>          — delete
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, jsonify, request, session
@@ -36,6 +36,68 @@ _PATCH_ALLOWED_STATUSES = {"scheduled", "paused", "cancelled"}
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ==================== Snooze helper (M1.2) ====================
+_SNOOZE_DURATIONS = {
+    "10m":      timedelta(minutes=10),
+    "1h":       timedelta(hours=1),
+    "tomorrow": timedelta(hours=24),
+}
+_SNOOZE_ELIGIBLE_STATES = {"scheduled", "sending"}
+
+
+def _apply_snooze(reminder_id: str, dur: str, user_id: str) -> tuple[int, dict]:
+    """Validate + apply a snooze. Returns (http_status, response_payload).
+
+    Used by both POST (session auth) and GET (signed-token auth). The
+    only difference between the two is how the caller extracted user_id.
+    Eligibility: scheduled, sending, OR delivered+recurring.
+
+    Owner-check simplification: we look up the doc under
+    users/<user_id>/reminders/<reminder_id>, so a wrong-owner attempt
+    just produces 404 (doc not found under that uid) rather than 403.
+    This is acceptable for M1.2 and also avoids leaking doc existence
+    across accounts."""
+    if dur not in _SNOOZE_DURATIONS:
+        return 400, {"error": f"dur must be one of {sorted(_SNOOZE_DURATIONS)}"}
+
+    doc_ref = (
+        db.collection("users").document(user_id)
+          .collection("reminders").document(reminder_id)
+    )
+    snap = doc_ref.get()
+    if not snap.exists:
+        return 404, {"error": "reminder not found"}
+
+    reminder = snap.to_dict() or {}
+
+    status = reminder.get("status")
+    recurrence = reminder.get("recurrence")
+    eligible = (
+        status in _SNOOZE_ELIGIBLE_STATES
+        or (status == "delivered" and recurrence is not None)
+    )
+    if not eligible:
+        return 409, {"error": f"cannot snooze a reminder in state {status!r}"}
+
+    now = datetime.now(timezone.utc)
+    snoozed_until = now + _SNOOZE_DURATIONS[dur]
+    doc_ref.update({
+        "snoozedUntil": snoozed_until.isoformat(),
+        "updatedAt":    now.isoformat(),
+    })
+    logger.info(
+        "reminder_snoozed",
+        extra={"extra_fields": {
+            "rid": reminder_id, "duration": dur,
+            "until": snoozed_until.isoformat(), "uid": user_id,
+        }},
+    )
+
+    fresh = snap.to_dict() or {}
+    fresh["snoozedUntil"] = snoozed_until.isoformat()
+    return 200, {"reminder": fresh, "snoozedUntil": snoozed_until.isoformat()}
 
 
 # ==================== Routes ====================

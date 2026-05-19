@@ -2,6 +2,7 @@
 as tests/conftest.py's mempalace_shadow fixture)."""
 import sys
 import pytest
+from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock
 
 from app import create_app
@@ -311,3 +312,130 @@ class TestDeleteReminder:
 
         resp = auth_session.delete("/reminders/missing", headers=CSRF_HEADERS)
         assert resp.status_code == 404
+
+
+class TestApplySnooze:
+    """The shared _apply_snooze helper that both POST and GET routes use."""
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_apply_10m_sets_snoozed_until(self, mock_db):
+        fake_doc_ref = MagicMock()
+        fake_snap = MagicMock()
+        fake_snap.exists = True
+        fake_snap.to_dict.return_value = {
+            "id": "rid_abc", "userId": "uid_xyz", "status": "scheduled",
+            "name": "test", "recurrence": None,
+        }
+        fake_doc_ref.get.return_value = fake_snap
+        mock_db.collection.return_value.document.return_value \
+               .collection.return_value.document.return_value = fake_doc_ref
+
+        from app.blueprints.reminders_routes import _apply_snooze
+        status, payload = _apply_snooze("rid_abc", "10m", "uid_xyz")
+        assert status == 200
+        update_call = fake_doc_ref.update.call_args[0][0]
+        snoozed_until = datetime.fromisoformat(update_call["snoozedUntil"])
+        expected = datetime.now(timezone.utc) + timedelta(minutes=10)
+        assert abs((snoozed_until - expected).total_seconds()) < 5
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_apply_tomorrow_sets_24h_later(self, mock_db):
+        fake_doc_ref = MagicMock()
+        fake_snap = MagicMock()
+        fake_snap.exists = True
+        fake_snap.to_dict.return_value = {
+            "id": "rid_abc", "userId": "uid_xyz", "status": "scheduled",
+            "name": "test", "recurrence": None,
+        }
+        fake_doc_ref.get.return_value = fake_snap
+        mock_db.collection.return_value.document.return_value \
+               .collection.return_value.document.return_value = fake_doc_ref
+
+        from app.blueprints.reminders_routes import _apply_snooze
+        status, _ = _apply_snooze("rid_abc", "tomorrow", "uid_xyz")
+        assert status == 200
+        snoozed_until = datetime.fromisoformat(
+            fake_doc_ref.update.call_args[0][0]["snoozedUntil"]
+        )
+        expected = datetime.now(timezone.utc) + timedelta(hours=24)
+        assert abs((snoozed_until - expected).total_seconds()) < 5
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_apply_invalid_duration_returns_400(self, mock_db):
+        from app.blueprints.reminders_routes import _apply_snooze
+        status, payload = _apply_snooze("rid_abc", "banana", "uid_xyz")
+        assert status == 400
+        assert "dur" in payload.get("error", "").lower()
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_apply_on_paused_returns_409(self, mock_db):
+        fake_snap = MagicMock()
+        fake_snap.exists = True
+        fake_snap.to_dict.return_value = {
+            "id": "rid_abc", "userId": "uid_xyz", "status": "paused",
+            "name": "test", "recurrence": None,
+        }
+        mock_db.collection.return_value.document.return_value \
+               .collection.return_value.document.return_value.get.return_value = fake_snap
+
+        from app.blueprints.reminders_routes import _apply_snooze
+        status, payload = _apply_snooze("rid_abc", "10m", "uid_xyz")
+        assert status == 409
+        assert "snooze" in payload.get("error", "").lower()
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_apply_on_delivered_recurring_allowed(self, mock_db):
+        fake_doc_ref = MagicMock()
+        fake_snap = MagicMock()
+        fake_snap.exists = True
+        fake_snap.to_dict.return_value = {
+            "id": "rid_abc", "userId": "uid_xyz", "status": "delivered",
+            "name": "test", "recurrence": "DAILY",
+        }
+        fake_doc_ref.get.return_value = fake_snap
+        mock_db.collection.return_value.document.return_value \
+               .collection.return_value.document.return_value = fake_doc_ref
+
+        from app.blueprints.reminders_routes import _apply_snooze
+        status, _ = _apply_snooze("rid_abc", "10m", "uid_xyz")
+        assert status == 200
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_apply_on_delivered_one_off_returns_409(self, mock_db):
+        fake_snap = MagicMock()
+        fake_snap.exists = True
+        fake_snap.to_dict.return_value = {
+            "id": "rid_abc", "userId": "uid_xyz", "status": "delivered",
+            "name": "test", "recurrence": None,
+        }
+        mock_db.collection.return_value.document.return_value \
+               .collection.return_value.document.return_value.get.return_value = fake_snap
+
+        from app.blueprints.reminders_routes import _apply_snooze
+        status, _ = _apply_snooze("rid_abc", "10m", "uid_xyz")
+        assert status == 409
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_apply_wrong_owner_returns_404(self, mock_db):
+        # Simplification: we look up under users/<user_id>/reminders/<id>,
+        # so a wrong-owner attempt reads as 404 (doc not found under uid_OTHER).
+        # This also avoids leaking doc existence across accounts.
+        fake_snap = MagicMock()
+        fake_snap.exists = False
+        mock_db.collection.return_value.document.return_value \
+               .collection.return_value.document.return_value.get.return_value = fake_snap
+
+        from app.blueprints.reminders_routes import _apply_snooze
+        status, _ = _apply_snooze("rid_abc", "10m", "uid_OTHER")
+        assert status == 404
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_apply_missing_doc_returns_404(self, mock_db):
+        fake_snap = MagicMock()
+        fake_snap.exists = False
+        mock_db.collection.return_value.document.return_value \
+               .collection.return_value.document.return_value.get.return_value = fake_snap
+
+        from app.blueprints.reminders_routes import _apply_snooze
+        status, _ = _apply_snooze("rid_abc", "10m", "uid_xyz")
+        assert status == 404
