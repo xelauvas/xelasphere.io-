@@ -88,7 +88,7 @@
   // ---------- icons (Lucide-style line SVGs, 1.75px stroke) ----------
 
   const ICON_CLOCK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
-  const ICON_KEBAB = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>`;
+  const ICON_KEBAB = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
   const ICON_PENCIL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
   const ICON_PAUSE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
   const ICON_PLAY = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
@@ -125,13 +125,11 @@
     wrap.dataset.reminderJson = JSON.stringify(reminder);
     wrap.innerHTML = renderCardInner(reminder);
 
-    // Whole-card click → open dropdown (also where chip click goes — matches ChatGPT)
-    // The kebab gets its own handler that stops propagation so we don't double-fire.
+    // Card body click → open edit modal. Kebab click → dropdown (with
+    // stopPropagation so the card click handler doesn't also fire).
     wrap.addEventListener('click', (e) => {
       const fresh = JSON.parse(wrap.dataset.reminderJson || '{}');
-      // For delivered reminders, click is a no-op (per spec — delivered = view only)
-      if (fresh.status === 'delivered') return;
-      toggleDropdown(wrap, fresh);
+      openModal(fresh);
     });
     wrap.querySelector('[data-reminder-kebab]').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -146,6 +144,12 @@
     if (messageEl.querySelector(`.reminder-card[data-reminder-id="${reminder.id}"]`)) return;
     const card = buildCardElement(reminder);
     messageEl.appendChild(card);
+    // Saved snapshots in chat history can be stale (worker may have
+    // delivered/failed since save). Refresh from API for non-terminal states.
+    const status = reminder.status || 'scheduled';
+    if (!['delivered', 'failed', 'cancelled'].includes(status)) {
+      rehydrateCardsForReminder(reminder.id);
+    }
   }
 
   // ---------- kebab dropdown ----------
@@ -296,12 +300,23 @@
   }
 
   function applyReminderToCards(reminder) {
-    /** Patch DOM cards in-place from an already-fetched reminder object. */
+    /** Patch DOM cards in-place from an already-fetched reminder object.
+     *  innerHTML replacement blows away the kebab button's click handler,
+     *  so we re-attach it after re-rendering. The wrap's click handler
+     *  survives because it's bound to the wrap, not its children. */
     if (!reminder || !reminder.id) return;
     document.querySelectorAll(`.reminder-card[data-reminder-id="${reminder.id}"]`).forEach(btn => {
       btn.className = `reminder-card reminder-card--${reminder.status || 'scheduled'}`;
       btn.dataset.reminderJson = JSON.stringify(reminder);
       btn.innerHTML = renderCardInner(reminder);
+      const kebab = btn.querySelector('[data-reminder-kebab]');
+      if (kebab) {
+        kebab.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const fresh = JSON.parse(btn.dataset.reminderJson || '{}');
+          toggleDropdown(btn, fresh);
+        });
+      }
     });
   }
 
@@ -445,14 +460,19 @@
     const li = document.createElement('li');
     li.className = `schedules-row schedules-row--${reminder.status || 'scheduled'}`;
     li.dataset.reminderId = reminder.id;
-    const icon = (reminder.status === 'delivered') ? '✓' : '🔔';
+    const status = reminder.status || 'scheduled';
     li.innerHTML = `
-      <span class="schedules-row__icon" aria-hidden="true">${icon}</span>
+      <span class="schedules-row__icon" aria-hidden="true">${iconForStatus(status)}</span>
       <span class="schedules-row__body">
         <span class="schedules-row__name">${escapeHtml(reminder.name)}</span>
         <span class="schedules-row__when">${escapeHtml(formatWhen(reminder))} · ${STATE_LABEL[reminder.status] || reminder.status}</span>
-      </span>`;
+      </span>
+      <button type="button" class="schedules-row__kebab" data-reminder-kebab aria-label="Reminder options">${ICON_KEBAB}</button>`;
     li.addEventListener('click', () => openModal(reminder));
+    li.querySelector('[data-reminder-kebab]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleDropdown(li, reminder);
+    });
     return li;
   }
 

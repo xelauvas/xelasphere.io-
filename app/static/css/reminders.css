@@ -34,7 +34,7 @@
   display: inline-flex; align-items: center; justify-content: center;
   color: #ECECEC;
 }
-.reminder-card__icon svg { width: 18px; height: 18px; stroke-width: 1.75; }
+.reminder-card__icon svg { width: 18px; height: 18px; stroke-width: 1.75; flex: 0 0 auto; }
 
 .reminder-card__body {
   display: flex; flex-direction: column;
@@ -59,7 +59,7 @@
   width: 28px; height: 28px;
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent; border: 0; border-radius: 6px;
-  color: #9A9A9A;
+  color: #C0C0C0;
   cursor: pointer;
   margin-left: 4px;
   transition: background 120ms ease, color 120ms ease;
@@ -71,7 +71,7 @@
   background: #2A2A2A;
   color: #ECECEC;
 }
-.reminder-card__kebab svg { width: 18px; height: 18px; stroke-width: 1.75; }
+.reminder-card__kebab svg { width: 18px; height: 18px; stroke-width: 1.75; flex: 0 0 auto; }
 
 /* State variants — restrained tone shifts, no background red bleed.
    Delivered/failed get a state-coloured icon; text dims separately so the
@@ -79,11 +79,9 @@
 .reminder-card--paused .reminder-card__name,
 .reminder-card--paused .reminder-card__when    { opacity: 0.55; }
 .reminder-card--sending                        { opacity: 0.75; }
-.reminder-card--delivered                      { cursor: default; }
 .reminder-card--delivered .reminder-card__name,
 .reminder-card--delivered .reminder-card__when { opacity: 0.6; }
 .reminder-card--delivered .reminder-card__icon { color: #10B981; }
-.reminder-card--delivered:hover                { background: #1A1A1A; }
 .reminder-card--failed .reminder-card__icon    { color: #EF4444; }
 .reminder-card--failed .reminder-card__when    { color: #EF4444; }
 .reminder-card--cancelled .reminder-card__name { text-decoration: line-through; opacity: 0.5; }
@@ -249,13 +247,36 @@
   transition: background 120ms ease;
 }
 .schedules-row:hover { background: var(--color-card-bg-hover, rgba(255,255,255,0.04)); }
-.schedules-row__body { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.schedules-row__body { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; gap: 2px; }
 .schedules-row__name { font-weight: 600; font-size: 14px; }
 .schedules-row__when { color: var(--color-text-muted, #9A9A9A); font-size: 13px; }
-.schedules-row--paused   { opacity: 0.55; }
-.schedules-row--delivered{ opacity: 0.6; }
-.schedules-row--failed .schedules-row__when { color: #EF4444; }
+.schedules-row__icon { flex: 0 0 auto; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: #ECECEC; }
+.schedules-row__icon svg { width: 18px; height: 18px; stroke-width: 1.75; flex: 0 0 auto; }
+.schedules-row--paused .schedules-row__name,
+.schedules-row--paused .schedules-row__when    { opacity: 0.55; }
+.schedules-row--delivered .schedules-row__name,
+.schedules-row--delivered .schedules-row__when { opacity: 0.6; }
+.schedules-row--delivered .schedules-row__icon { color: #10B981; }
+.schedules-row--failed .schedules-row__icon    { color: #EF4444; }
+.schedules-row--failed .schedules-row__when    { color: #EF4444; }
 .schedules-row--cancelled .schedules-row__name { text-decoration: line-through; opacity: 0.5; }
+.schedules-row__kebab {
+  flex: 0 0 auto;
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: 6px;
+  color: #9A9A9A;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.schedules-row__kebab:hover { background: #2A2A2A; color: #ECECEC; }
+.schedules-row__kebab:focus-visible {
+  outline: 2px solid rgba(236, 236, 236, 0.7);
+  outline-offset: 2px;
+  background: #2A2A2A;
+  color: #ECECEC;
+}
+.schedules-row__kebab svg { width: 18px; height: 18px; flex: 0 0 auto; }
 
 /* ============================================================
    Toast fallback
