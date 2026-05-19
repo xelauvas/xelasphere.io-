@@ -65,3 +65,136 @@ class TestTruncate:
     def test_truncate_handles_none(self):
         from app.services.push_dispatcher import _truncate
         assert _truncate(None, 10) == ""
+
+
+from unittest.mock import MagicMock, patch
+
+
+class TestSendPushForReminder:
+    """send_push_for_reminder iterates the user's pushSubscriptions and
+    calls pywebpush.webpush for each. Tests cover the success path, 410
+    cleanup, 413 retry, and no-op when flag off / VAPID missing."""
+
+    def _reminder(self):
+        return {
+            "id": "rid_x", "name": "Standup", "instructions": "team sync",
+            "sourceChatId": "session_abc",
+        }
+
+    def _sub_doc(self, subId="sub_1", endpoint="https://fcm.../send/abc"):
+        snap = MagicMock()
+        snap.id = subId
+        snap.exists = True
+        snap.to_dict.return_value = {
+            "endpoint": endpoint,
+            "keys": {"p256dh": "p", "auth": "a"},
+        }
+        snap.reference = MagicMock()
+        return snap
+
+    @patch("app.services.push_dispatcher.db")
+    @patch("app.services.push_dispatcher.pywebpush")
+    @patch("app.services.push_dispatcher.Config")
+    def test_no_op_when_flag_off(self, mock_config, mock_pywebpush, mock_db):
+        mock_config.PUSH_ENABLED = False
+        from app.services.push_dispatcher import send_push_for_reminder
+        send_push_for_reminder(self._reminder(), user_id="u1")
+        mock_pywebpush.webpush.assert_not_called()
+
+    @patch("app.services.push_dispatcher.db")
+    @patch("app.services.push_dispatcher.pywebpush")
+    @patch("app.services.push_dispatcher.Config")
+    def test_no_op_when_vapid_missing(self, mock_config, mock_pywebpush, mock_db):
+        mock_config.PUSH_ENABLED = True
+        mock_config.VAPID_PRIVATE_KEY = ""  # missing
+        from app.services.push_dispatcher import send_push_for_reminder
+        send_push_for_reminder(self._reminder(), user_id="u1")
+        mock_pywebpush.webpush.assert_not_called()
+
+    @patch("app.services.push_dispatcher.db")
+    @patch("app.services.push_dispatcher.pywebpush")
+    @patch("app.services.push_dispatcher.make_snooze_token")
+    @patch("app.services.push_dispatcher.Config")
+    def test_happy_path_sends_to_each_sub(self, mock_config, mock_token, mock_pywebpush, mock_db):
+        mock_config.PUSH_ENABLED = True
+        mock_config.VAPID_PRIVATE_KEY = "PEM"
+        mock_config.VAPID_CLAIMS_SUB = "mailto:test@x.io"
+        mock_token.return_value = "tok_xyz"
+
+        sub1 = self._sub_doc(subId="sub_1")
+        sub2 = self._sub_doc(subId="sub_2", endpoint="https://updates.../sub2")
+        mock_db.collection.return_value.document.return_value \
+            .collection.return_value.stream.return_value = [sub1, sub2]
+
+        from app.services.push_dispatcher import send_push_for_reminder
+        send_push_for_reminder(self._reminder(), user_id="u1")
+
+        assert mock_pywebpush.webpush.call_count == 2
+        # Each sub's reference.update is called with lastSeenAt
+        assert sub1.reference.update.called
+        assert sub2.reference.update.called
+
+    @patch("app.services.push_dispatcher.db")
+    @patch("app.services.push_dispatcher.pywebpush")
+    @patch("app.services.push_dispatcher.make_snooze_token")
+    @patch("app.services.push_dispatcher.Config")
+    def test_410_deletes_subscription(self, mock_config, mock_token, mock_pywebpush, mock_db):
+        mock_config.PUSH_ENABLED = True
+        mock_config.VAPID_PRIVATE_KEY = "PEM"
+        mock_config.VAPID_CLAIMS_SUB = "mailto:t@x.io"
+        mock_token.return_value = "tok"
+
+        sub = self._sub_doc()
+        mock_db.collection.return_value.document.return_value \
+            .collection.return_value.stream.return_value = [sub]
+
+        # Mock pywebpush.webpush raising 410
+        class _FakeResponse:
+            status_code = 410
+        class _FakeException(Exception):
+            response = _FakeResponse()
+        mock_pywebpush.WebPushException = _FakeException
+        mock_pywebpush.webpush.side_effect = _FakeException("Gone")
+
+        from app.services.push_dispatcher import send_push_for_reminder
+        send_push_for_reminder(self._reminder(), user_id="u1")
+
+        assert sub.reference.delete.called
+
+    @patch("app.services.push_dispatcher.db")
+    @patch("app.services.push_dispatcher.pywebpush")
+    @patch("app.services.push_dispatcher.make_snooze_token")
+    @patch("app.services.push_dispatcher.Config")
+    def test_413_retries_with_truncated_body(self, mock_config, mock_token, mock_pywebpush, mock_db):
+        mock_config.PUSH_ENABLED = True
+        mock_config.VAPID_PRIVATE_KEY = "PEM"
+        mock_config.VAPID_CLAIMS_SUB = "mailto:t@x.io"
+        mock_token.return_value = "tok"
+
+        sub = self._sub_doc()
+        mock_db.collection.return_value.document.return_value \
+            .collection.return_value.stream.return_value = [sub]
+
+        class _FakeResponse413:
+            status_code = 413
+        class _FakeException(Exception):
+            response = _FakeResponse413()
+        mock_pywebpush.WebPushException = _FakeException
+        # First call raises 413, second call succeeds
+        mock_pywebpush.webpush.side_effect = [_FakeException("Too Large"), None]
+
+        # Use a reminder with a long body so payload > PAYLOAD_BODY_RETRY_LIMIT (256)
+        # and the retry payload is measurably shorter.
+        long_reminder = {
+            "id": "rid_x", "name": "Standup",
+            "instructions": "x" * 1000,
+            "sourceChatId": "session_abc",
+        }
+
+        from app.services.push_dispatcher import send_push_for_reminder
+        send_push_for_reminder(long_reminder, user_id="u1")
+
+        assert mock_pywebpush.webpush.call_count == 2
+        first_data = mock_pywebpush.webpush.call_args_list[0].kwargs.get("data", "")
+        second_data = mock_pywebpush.webpush.call_args_list[1].kwargs.get("data", "")
+        assert len(second_data) < len(first_data)
