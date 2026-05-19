@@ -439,3 +439,60 @@ class TestApplySnooze:
         from app.blueprints.reminders_routes import _apply_snooze
         status, _ = _apply_snooze("rid_abc", "10m", "uid_xyz")
         assert status == 404
+
+
+class TestSnoozePostRoute:
+    """POST /reminders/<id>/snooze — session-authenticated in-app surface."""
+
+    @patch("app.blueprints.reminders_routes.Config")
+    @patch("app.blueprints.reminders_routes.db")
+    def test_post_happy_path_returns_200(self, mock_db, mock_config, client, auth_session):
+        mock_config.REMINDERS_SNOOZE_ENABLED = True
+        fake_doc_ref = MagicMock()
+        fake_snap = MagicMock()
+        fake_snap.exists = True
+        fake_snap.to_dict.return_value = {
+            "id": "rid_x", "userId": "u1",
+            "status": "scheduled", "name": "t", "recurrence": None,
+        }
+        fake_doc_ref.get.return_value = fake_snap
+        mock_db.collection.return_value.document.return_value \
+               .collection.return_value.document.return_value = fake_doc_ref
+
+        resp = client.post(
+            "/reminders/rid_x/snooze",
+            json={"dur": "10m"},
+            headers={"X-CSRFToken": "test"},
+        )
+        assert resp.status_code == 200, resp.get_json()
+        assert "snoozedUntil" in resp.get_json()
+
+    def test_post_unauthenticated_returns_401_or_redirect(self, client):
+        resp = client.post(
+            "/reminders/rid_x/snooze",
+            json={"dur": "10m"},
+            headers={"X-CSRFToken": "test"},
+        )
+        # @login_required typically returns 401 or 302 — accept either.
+        assert resp.status_code in (401, 302, 403)
+
+    @patch("app.blueprints.reminders_routes.Config")
+    @patch("app.blueprints.reminders_routes.db")
+    def test_post_invalid_dur_returns_400(self, mock_db, mock_config, client, auth_session):
+        mock_config.REMINDERS_SNOOZE_ENABLED = True
+        resp = client.post(
+            "/reminders/rid_x/snooze",
+            json={"dur": "banana"},
+            headers={"X-CSRFToken": "test"},
+        )
+        assert resp.status_code == 400
+
+    @patch("app.blueprints.reminders_routes.Config")
+    def test_post_flag_off_returns_503(self, mock_config, client, auth_session):
+        mock_config.REMINDERS_SNOOZE_ENABLED = False
+        resp = client.post(
+            "/reminders/rid_x/snooze",
+            json={"dur": "10m"},
+            headers={"X-CSRFToken": "test"},
+        )
+        assert resp.status_code == 503

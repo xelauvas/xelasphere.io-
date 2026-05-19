@@ -173,6 +173,23 @@ def create_reminder():
     return jsonify({"id": doc_ref.id, "reminder": reminder}), 201
 
 
+@reminders_bp.route("/reminders/<reminder_id>/snooze", methods=["POST"])
+@error_handler
+@login_required
+@csrf_required
+def snooze_reminder(reminder_id: str):
+    """In-app snooze (session-authenticated). JSON body: {"dur": "10m"|"1h"|"tomorrow"}."""
+    if not Config.REMINDERS_SNOOZE_ENABLED:
+        return jsonify({"error": "snooze disabled"}), 503
+
+    payload = request.get_json(silent=True) or {}
+    dur = payload.get("dur", "")
+
+    user_id = session["user"]["uid"]
+    status, body = _apply_snooze(reminder_id, dur, user_id)
+    return jsonify(body), status
+
+
 @reminders_bp.route("/reminders/<reminder_id>", methods=["GET"])
 @error_handler
 @login_required
