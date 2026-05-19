@@ -94,11 +94,23 @@
   const ICON_PLAY = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
   const ICON_TRASH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>`;
   const ICON_RETRY = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>`;
+  const ICON_CHECK_CIRCLE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></svg>`;
+  const ICON_ALERT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+
+  function iconForStatus(status) {
+    switch (status) {
+      case 'delivered': return ICON_CHECK_CIRCLE;
+      case 'failed':    return ICON_ALERT;
+      case 'paused':    return ICON_PAUSE;
+      default:          return ICON_CLOCK;
+    }
+  }
 
   // ---------- card rendering ----------
 
   function renderCardInner(reminder) {
-    return `<span class="reminder-card__icon">${ICON_CLOCK}</span>
+    const status = reminder.status || 'scheduled';
+    return `<span class="reminder-card__icon">${iconForStatus(status)}</span>
             <span class="reminder-card__body">
               <span class="reminder-card__name">${escapeHtml(reminder.name)}</span>
               <span class="reminder-card__when">${escapeHtml(formatWhen(reminder))}</span>
