@@ -28,6 +28,18 @@
         <span class="reminders-modal__tz" data-tz>—</span>
       </fieldset>
 
+      <label class="reminders-modal__field" data-reminders-recurrence-field>
+        <span class="reminders-modal__label">Repeat</span>
+        <select name="recurrence" data-reminders-recurrence>
+          <option value="">Doesn't repeat</option>
+          <option value="DAILY">Daily</option>
+          <option value="WEEKDAYS">Every weekday (Mon–Fri)</option>
+          <option value="WEEKLY" data-dynamic-label>Weekly</option>
+          <option value="MONTHLY" data-dynamic-label>Monthly</option>
+          <option value="YEARLY" data-dynamic-label>Yearly</option>
+        </select>
+      </label>
+
       <footer class="reminders-modal__footer">
         <div class="reminders-modal__left-actions">
           <button type="button" class="btn btn--ghost" data-action="pause">Pause</button>

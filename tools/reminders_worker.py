@@ -314,6 +314,38 @@ def process_reminder(doc_ref, reminder: dict, *, user_email: str) -> None:
             )
         return
 
+    # Recurring reminders advance fireAt and stay scheduled. Non-recurring
+    # ones (or any recurring when the kill switch is off) terminate as before.
+    from app.config import Config
+    from app.services.recurrence import next_fire_at, RECURRENCE_PRESETS
+    recurrence_on = Config.REMINDERS_RECURRENCE_ENABLED
+    is_recurring = reminder.get("recurrence") in RECURRENCE_PRESETS
+
+    if recurrence_on and is_recurring:
+        next_dt = next_fire_at(reminder)
+        if next_dt is not None:
+            doc_ref.update({
+                "status": "scheduled",
+                "fireAt": next_dt.isoformat(),
+                "deliveryCount": reminder.get("deliveryCount", 0) + 1,
+                "lastFiredAt": now_iso,
+                "snoozedUntil": None,
+                "attemptCount": 0,
+                "lastError": None,
+                "lockedAt": None,
+                "updatedAt": now_iso,
+            })
+            logger.info(
+                "reminder_recurring_advanced",
+                extra={"extra_fields": {
+                    "name": name, "recurrence": reminder.get("recurrence"),
+                    "nextFireAt": next_dt.isoformat(),
+                    "deliveryCount": reminder.get("deliveryCount", 0) + 1,
+                }},
+            )
+            return
+
+    # Non-recurring (or flag off): terminal delivered.
     doc_ref.update({
         "status": "delivered",
         "deliveredAt": now_iso,

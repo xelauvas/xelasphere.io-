@@ -38,3 +38,5 @@ scipy==1.15.2
 sentence-transformers==3.4.1
 transformers==4.49.0
 einops==0.8.0
+
+python-dateutil>=2.9,<3

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added — Reminders M1.1 (recurrence)
+
+Recurring reminders shipped on xelasphere.com (behind `REMINDERS_RECURRENCE_ENABLED=true`).
+
+- Five recurrence presets in the edit modal: **Daily**, **Every weekday (Mon–Fri)**, **Weekly on \<day\>**, **Monthly on the \<N\>th**, **Yearly on \<Month N\>**. Dynamic labels reflect the reminder's current `fireAt`.
+- Worker advances `fireAt` in the reminder's local timezone after each delivery (DST-safe via `python-dateutil`). DAILY/WEEKLY/MONTHLY/YEARLY use `relativedelta`; WEEKDAYS skips Sat/Sun. Leap-year and month-end (e.g. Jan 31 → Feb 28) fall back correctly.
+- Reminder cards now show a recurrence label in the subtitle: `May 20, 09:00 · London · Daily`.
+- New Firestore fields on `users/{uid}/reminders/{id}`: `recurrence`, `deliveryCount`, `lastFiredAt`, `snoozedUntil` (latter used by M1.2 snooze, not yet wired).
+- Live E2E verified: DAILY test reminder fired, worker logged `reminder_recurring_advanced`, `fireAt` advanced exactly +24h, `deliveryCount=1`.
+- 36 new unit + integration tests (`tests/test_recurrence.py` 16 + `tests/test_reminders_worker.py` 1 + `tests/test_reminders_routes.py` 4 + worker baseline).
+
+M1.2 (snooze: signed-link infra + email/push/in-app surfaces) and M1.3 (web push + service worker + VAPID) are separate brainstorms — see `docs/superpowers/specs/2026-05-19-reminders-m1-design.md`.
+
 ### Added — M0 pre-P0 completion
 
 MemPalace integration M0 milestone completed. Flask app can now be deployed alongside the mempalace sidecar with all infrastructure, observability, and rollout scaffolding in place. Default shipped state is `MEMPALACE_MODE=off` + `LEGACY_MEMORY=on`, which preserves pre-M0 chat flow behavior byte-identically (mempalace branch is untaken at mode=off; wrapping template's try/except ensures legacy path is unaffected under any mempalace exception).

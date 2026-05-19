@@ -21,6 +21,7 @@ from app.services.reminder_model import (
     new_reminder_dict, validate_reminder_payload, compute_fire_at_utc,
     STATUS_SCHEDULED, STATUS_FAILED,
 )
+from app.services.recurrence import RECURRENCE_PRESETS
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ reminders_bp = Blueprint("reminders", __name__)
 
 
 # ==================== Helpers ====================
-_EDITABLE_FIELDS = {"name", "instructions", "fireAtLocal", "timezone", "status"}
+_EDITABLE_FIELDS = {"name", "instructions", "fireAtLocal", "timezone", "status", "recurrence"}
 # User-settable statuses via PATCH. delivered/sending/failed are server-set.
 _PATCH_ALLOWED_STATUSES = {"scheduled", "paused", "cancelled"}
 
@@ -74,6 +75,12 @@ def create_reminder():
     if not ok:
         return jsonify({"error": err}), 400
 
+    recurrence_val = payload.get("recurrence")
+    if recurrence_val is not None and recurrence_val not in RECURRENCE_PRESETS:
+        return jsonify({
+            "error": f"recurrence must be one of {sorted(RECURRENCE_PRESETS)} or null"
+        }), 400
+
     user_id = session["user"]["uid"]
     fire_at_utc = compute_fire_at_utc(payload["fireAtLocal"], payload["timezone"])
 
@@ -89,6 +96,10 @@ def create_reminder():
         source_message_id=payload.get("sourceMessageId"),
         created_by=payload.get("createdBy", "user"),
     )
+    reminder["recurrence"] = recurrence_val       # None if not provided
+    reminder["deliveryCount"] = 0                 # M1 init
+    reminder["lastFiredAt"] = None                # M1 init
+    reminder["snoozedUntil"] = None               # M1 init (used by M1.2 snooze)
     doc_ref.set(reminder)
 
     # Cache the user's default timezone so future reminders pre-fill correctly.
@@ -188,6 +199,14 @@ def patch_reminder(reminder_id: str):
         if payload["status"] not in _PATCH_ALLOWED_STATUSES:
             return jsonify({"error": f"status must be one of {sorted(_PATCH_ALLOWED_STATUSES)}"}), 400
         update["status"] = payload["status"]
+
+    if "recurrence" in payload:
+        v = payload["recurrence"]
+        if v is not None and v not in RECURRENCE_PRESETS:
+            return jsonify({
+                "error": f"recurrence must be one of {sorted(RECURRENCE_PRESETS)} or null"
+            }), 400
+        update["recurrence"] = v
 
     if payload.get("_retry") and current.get("status") == STATUS_FAILED:
         update["status"] = STATUS_SCHEDULED
