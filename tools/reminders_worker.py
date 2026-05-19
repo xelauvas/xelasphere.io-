@@ -54,6 +54,26 @@ def _build_chat_url(reminder: dict) -> Optional[str]:
     return f"{Config.APP_BASE_URL}/c/{chat_id}"
 
 
+def _build_snooze_links(reminder: dict) -> dict:
+    """Returns {dur: url} for the 3 snooze durations, or empty dict if the
+    kill switch is off. Each URL contains a freshly-minted signed token."""
+    from app.config import Config
+    if not Config.REMINDERS_SNOOZE_ENABLED:
+        return {}
+    rid = reminder.get("id")
+    uid = reminder.get("userId")
+    if not rid or not uid:
+        return {}
+    from app.services.signed_links import make_snooze_token
+    token = make_snooze_token(rid, uid)
+    base = f"{Config.APP_BASE_URL}/reminders/{rid}/snooze"
+    return {
+        "10m": f"{base}?dur=10m&token={token}",
+        "1h": f"{base}?dur=1h&token={token}",
+        "tomorrow": f"{base}?dur=tomorrow&token={token}",
+    }
+
+
 def _late_delivery_seconds(reminder: dict) -> Optional[float]:
     """Returns seconds-late if past threshold, else None."""
     try:
@@ -80,7 +100,16 @@ def _build_email_body(reminder: dict) -> str:
         banner = f"\n(This reminder was scheduled for {fire_at_iso} but delivery was delayed.)\n"
     chat_url = _build_chat_url(reminder)
     link_line = f"\nOpen chat: {chat_url}" if chat_url else ""
-    return f"{body}{banner}\n\n— XelaSphere Reminders\nScheduled for: {fire_at_iso}{link_line}\n"
+    snooze_urls = _build_snooze_links(reminder)
+    snooze_block = ""
+    if snooze_urls:
+        snooze_block = (
+            "\n\nNeed more time?\n"
+            f" - Snooze 10 min:         {snooze_urls['10m']}\n"
+            f" - Snooze 1 hour:         {snooze_urls['1h']}\n"
+            f" - Snooze until tomorrow: {snooze_urls['tomorrow']}"
+        )
+    return f"{body}{banner}{snooze_block}\n\n— XelaSphere Reminders\nScheduled for: {fire_at_iso}{link_line}\n"
 
 
 def _build_email_html(reminder: dict) -> str:
@@ -108,6 +137,23 @@ def _build_email_html(reminder: dict) -> str:
             'color:#fff;text-decoration:none;border-radius:8px;font-weight:600;'
             'font-size:14px;">Open chat</a></p>'
         )
+    snooze_urls = _build_snooze_links(reminder)
+    snooze_html = ""
+    if snooze_urls:
+        snooze_html = (
+            '<p style="margin:24px 0 0 0;font-size:13px;color:#666;">Need more time?</p>'
+            '<p style="margin:6px 0 0 0;">'
+            f'<a href="{snooze_urls["10m"]}" '
+            'style="display:inline-block;padding:8px 14px;background:#F0F0F0;color:#333;'
+            'text-decoration:none;border-radius:6px;font-size:13px;margin-right:6px;">Snooze 10 min</a>'
+            f'<a href="{snooze_urls["1h"]}" '
+            'style="display:inline-block;padding:8px 14px;background:#F0F0F0;color:#333;'
+            'text-decoration:none;border-radius:6px;font-size:13px;margin-right:6px;">Snooze 1 hour</a>'
+            f'<a href="{snooze_urls["tomorrow"]}" '
+            'style="display:inline-block;padding:8px 14px;background:#F0F0F0;color:#333;'
+            'text-decoration:none;border-radius:6px;font-size:13px;">Snooze until tomorrow</a>'
+            '</p>'
+        )
     return (
         '<!DOCTYPE html><html><body style="margin:0;padding:24px;'
         "background:#F7F7F8;font-family:-apple-system,BlinkMacSystemFont,"
@@ -120,6 +166,7 @@ def _build_email_html(reminder: dict) -> str:
         f'{banner_html}'
         f'<p style="margin:0;font-size:15px;line-height:1.55;color:#3a3a3a;white-space:pre-wrap;">{body_safe}</p>'
         f'{button_html}'
+        f'{snooze_html}'
         '<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0 16px 0;">'
         f'<p style="margin:0;font-size:12px;color:#888;">— XelaSphere Reminders &middot; Scheduled for {fire_at_iso_safe}</p>'
         '</div></body></html>'
@@ -273,6 +320,29 @@ def process_reminder(doc_ref, reminder: dict, *, user_email: str) -> None:
     body_html = _build_email_html(reminder)
     attempt = reminder.get("attemptCount", 0)
     now_iso = datetime.now(timezone.utc).isoformat()
+
+    # M1.2: honor snoozedUntil — release the claim and skip if not yet due.
+    snoozed_until = reminder.get("snoozedUntil")
+    if snoozed_until:
+        try:
+            snoozed_dt = datetime.fromisoformat(snoozed_until.replace("Z", "+00:00"))
+            if snoozed_dt.tzinfo is None:
+                snoozed_dt = snoozed_dt.replace(tzinfo=timezone.utc)
+        except (ValueError, AttributeError):
+            snoozed_dt = None
+        if snoozed_dt and snoozed_dt > datetime.now(timezone.utc):
+            doc_ref.update({
+                "status": "scheduled",
+                "lockedAt": None,
+                "updatedAt": now_iso,
+            })
+            logger.info(
+                "reminder_snooze_skip",
+                extra={"extra_fields": {
+                    "name": name, "until": snoozed_until, "rid": reminder.get("id"),
+                }},
+            )
+            return
 
     try:
         result = send_transactional_email(

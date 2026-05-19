@@ -63,6 +63,25 @@
     }
     const tzShort = tz.includes('/') ? tz.split('/').pop().replace('_', ' ') : tz;
     const recLabel = _recurrenceLabel(reminder.recurrence);
+
+    // M1.2: if snoozedUntil is set + in the future, show that time + (Snoozed)
+    const snoozedUntil = reminder.snoozedUntil;
+    if (snoozedUntil) {
+      const sdt = new Date(snoozedUntil);
+      if (!isNaN(sdt.getTime()) && sdt.getTime() > Date.now()) {
+        let snoozeLabel;
+        try {
+          snoozeLabel = sdt.toLocaleString(undefined, {
+            timeZone: tz, month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+          });
+        } catch {
+          snoozeLabel = sdt.toLocaleString();
+        }
+        return snoozeLabel + ' · ' + tzShort + (recLabel ? ' · ' + recLabel : '') + ' (Snoozed)';
+      }
+    }
+
     return label + ' · ' + tzShort + (recLabel ? ' · ' + recLabel : '');
   }
 
@@ -211,6 +230,32 @@
       onClick: () => { closeDropdown(); openModal(reminder); },
     });
 
+    // M1.2: Snooze (active states only, kill-switch-gated)
+    const _snoozeEnabled = (window.RemindersModule && window.RemindersModule.config &&
+                            window.RemindersModule.config.snoozeEnabled) === true;
+    const _snoozeEligible = (
+      status === 'scheduled' ||
+      status === 'sending' ||
+      (status === 'delivered' && reminder.recurrence)
+    );
+    if (_snoozeEnabled && _snoozeEligible) {
+      items.push({
+        icon: ICON_PAUSE,
+        label: 'Snooze 10 min',
+        onClick: () => { closeDropdown(); _doSnooze(reminder.id, '10m'); },
+      });
+      items.push({
+        icon: ICON_PAUSE,
+        label: 'Snooze 1 hour',
+        onClick: () => { closeDropdown(); _doSnooze(reminder.id, '1h'); },
+      });
+      items.push({
+        icon: ICON_PAUSE,
+        label: 'Snooze tomorrow',
+        onClick: () => { closeDropdown(); _doSnooze(reminder.id, 'tomorrow'); },
+      });
+    }
+
     if (status === 'scheduled' || status === 'sending') {
       items.push({
         icon: ICON_PAUSE, label: 'Pause',
@@ -291,6 +336,31 @@
     if (data.reminder) applyReminderToCards(data.reminder);
     else await rehydrateCardsForReminder(reminderId);
     if (window.RemindersModule.refreshSchedulesTab) window.RemindersModule.refreshSchedulesTab();
+  }
+
+  async function _doSnooze(reminderId, dur) {
+    const resp = await fetch(`/reminders/${encodeURIComponent(reminderId)}/snooze`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrf(),
+      },
+      body: JSON.stringify({ dur }),
+    });
+    if (!resp.ok) {
+      console.warn('snooze failed', resp.status);
+      return;
+    }
+    const data = await resp.json().catch(() => ({}));
+    if (data.reminder) {
+      applyReminderToCards(data.reminder);
+    } else {
+      // Fallback: re-fetch the reminder
+      if (window.RemindersModule.refreshSchedulesTab) {
+        window.RemindersModule.refreshSchedulesTab();
+      }
+    }
   }
 
   async function retryReminder(reminderId) {
