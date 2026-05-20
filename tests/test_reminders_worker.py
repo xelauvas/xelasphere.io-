@@ -462,3 +462,82 @@ def test_email_text_includes_snooze_urls_when_enabled(monkeypatch):
     text = _build_email_body(reminder)
     assert "Snooze 10 min" in text
     assert "/reminders/rid_x/snooze?dur=10m&token=" in text
+
+
+def test_process_reminder_calls_push_dispatcher_on_success(monkeypatch):
+    """After successful SendGrid send (non-recurring, non-snoozed), the
+    worker calls push_dispatcher.send_push_for_reminder."""
+    from tools import reminders_worker
+
+    # Mock SendGrid success
+    from app.services import email_sender
+    class _OkResult:
+        status_code = 202
+    monkeypatch.setattr(email_sender, "send_transactional_email", lambda **kw: _OkResult())
+
+    # Spy on push_dispatcher
+    push_calls = []
+    from app.services import push_dispatcher
+    monkeypatch.setattr(
+        push_dispatcher, "send_push_for_reminder",
+        lambda reminder, user_id: push_calls.append((reminder, user_id)),
+    )
+
+    updates = []
+    class _FakeDocRef:
+        def update(self, data): updates.append(data)
+    doc_ref = _FakeDocRef()
+
+    reminder = {
+        "id": "rid_p", "name": "with push", "userId": "u_push",
+        "fireAt": "2026-05-19T08:00:00+00:00",
+        "snoozedUntil": None,
+        "recurrence": None,
+        "attemptCount": 0, "deliveryCount": 0,
+        "sourceChatId": None, "timezone": "UTC",
+    }
+    reminders_worker.process_reminder(doc_ref, reminder, user_email="a@b.com")
+
+    assert len(push_calls) == 1
+    assert push_calls[0][1] == "u_push"
+
+
+def test_process_reminder_does_not_call_push_dispatcher_when_skipped(monkeypatch):
+    """When the reminder is skipped due to snoozedUntil, the worker does
+    NOT call push_dispatcher."""
+    from tools import reminders_worker
+    from datetime import datetime, timezone, timedelta
+
+    # SendGrid would succeed if called — but it should NOT be called
+    sg_called = []
+    from app.services import email_sender
+    monkeypatch.setattr(
+        email_sender, "send_transactional_email",
+        lambda **kw: sg_called.append(kw) or type("R", (), {"status_code": 202})(),
+    )
+
+    push_calls = []
+    from app.services import push_dispatcher
+    monkeypatch.setattr(
+        push_dispatcher, "send_push_for_reminder",
+        lambda reminder, user_id: push_calls.append((reminder, user_id)),
+    )
+
+    updates = []
+    class _FakeDocRef:
+        def update(self, data): updates.append(data)
+    doc_ref = _FakeDocRef()
+
+    future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    reminder = {
+        "id": "rid_snooze", "name": "snoozed", "userId": "u_x",
+        "fireAt": "2026-05-19T08:00:00+00:00",
+        "snoozedUntil": future,
+        "recurrence": None,
+        "attemptCount": 0, "deliveryCount": 0,
+        "sourceChatId": None, "timezone": "UTC",
+    }
+    reminders_worker.process_reminder(doc_ref, reminder, user_email="a@b.com")
+
+    assert push_calls == [], "Expected push to be skipped along with email"
+    assert sg_called == [], "Expected SendGrid to be skipped too"

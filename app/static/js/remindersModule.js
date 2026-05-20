@@ -133,6 +133,56 @@
     }
   }
 
+  // ---------- M1.3: push banner ----------
+
+  async function _maybeShowPushBanner(messageEl) {
+    if (!messageEl) return;
+    if (!window.RemindersModule?.config?.pushEnabled) return;
+    if (!window.RemindersModule?.push?.isSupported) return;
+    if (!window.RemindersModule.push.isSupported()) return;
+    try {
+      if (await window.RemindersModule.push.isSubscribed()) return;
+    } catch { return; }
+
+    try {
+      const resp = await fetch('/push/dismiss-status', { credentials: 'same-origin' });
+      if (resp.ok) {
+        const { dismissedRecently } = await resp.json();
+        if (dismissedRecently) return;
+      }
+    } catch { /* ignore — show banner */ }
+
+    const tmpl = document.createElement('template');
+    tmpl.innerHTML = `
+<div class="push-permission-banner" data-push-banner>
+  <div class="push-permission-banner__icon" aria-hidden="true">🔔</div>
+  <div class="push-permission-banner__body">
+    <p class="push-permission-banner__title">Want a browser ping too?</p>
+    <p class="push-permission-banner__sub">Get notified even when this tab isn't open.</p>
+  </div>
+  <div class="push-permission-banner__actions">
+    <button type="button" class="btn btn--primary" data-push-banner-enable>Enable push</button>
+    <button type="button" class="btn btn--ghost" data-push-banner-dismiss>Not now</button>
+    <button type="button" class="push-permission-banner__close" data-push-banner-close aria-label="Dismiss">✕</button>
+  </div>
+</div>`.trim();
+    const banner = tmpl.content.firstElementChild;
+
+    banner.querySelector('[data-push-banner-enable]').addEventListener('click', async () => {
+      const r = await window.RemindersModule.push.subscribe();
+      banner.remove();
+      if (!r.ok) console.warn('push subscribe failed', r);
+    });
+    banner.querySelectorAll('[data-push-banner-dismiss], [data-push-banner-close]').forEach(el => {
+      el.addEventListener('click', async () => {
+        try { await window.RemindersModule.push.dismissPrompt(); } catch {}
+        banner.remove();
+      });
+    });
+
+    messageEl.appendChild(banner);
+  }
+
   // ---------- icons (Lucide-style line SVGs, 1.75px stroke) ----------
 
   const ICON_CLOCK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
@@ -192,6 +242,8 @@
     if (messageEl.querySelector(`.reminder-card[data-reminder-id="${reminder.id}"]`)) return;
     const card = buildCardElement(reminder);
     messageEl.appendChild(card);
+    // M1.3 — opportunistically prompt for push permission
+    _maybeShowPushBanner(messageEl);
     // Saved snapshots in chat history can be stale (worker may have
     // delivered/failed since save). Refresh from API for non-terminal states.
     const status = reminder.status || 'scheduled';
@@ -668,10 +720,39 @@
     setTimeout(() => el.remove(), 6000);
   }
 
+  // ---------- M1.3: Settings → Notifications toggle wiring ----------
+
+  function _initPushSettingsToggle() {
+    const pushToggle = document.querySelector('[data-push-settings-toggle]');
+    if (!pushToggle || !window.RemindersModule?.push) return;
+
+    window.RemindersModule.push.isSubscribed().then(sub => {
+      pushToggle.setAttribute('aria-checked', sub ? 'true' : 'false');
+    });
+
+    // Avoid double-binding if called more than once
+    if (pushToggle.dataset.pushToggleBound) return;
+    pushToggle.dataset.pushToggleBound = '1';
+
+    pushToggle.addEventListener('click', async () => {
+      const isOn = pushToggle.getAttribute('aria-checked') === 'true';
+      if (!isOn) {
+        const r = await window.RemindersModule.push.subscribe();
+        if (r.ok) pushToggle.setAttribute('aria-checked', 'true');
+      } else {
+        if (confirm('Disable push and remove all subscribed devices?')) {
+          await window.RemindersModule.push.unsubscribeAll();
+          pushToggle.setAttribute('aria-checked', 'false');
+        }
+      }
+    });
+  }
+
   // ---------- DOM ready bootstrap ----------
 
   document.addEventListener('DOMContentLoaded', () => {
     bindSchedulesTab();
+    _initPushSettingsToggle();
 
     const modal = document.getElementById('reminders-modal');
     if (modal) {
@@ -696,6 +777,7 @@
   // Settings modal dispatches a custom event when the user switches tabs
   document.addEventListener('settings-tab-shown', (ev) => {
     if (ev.detail && ev.detail.tab === 'schedules') refreshSchedulesTab();
+    if (ev.detail && ev.detail.tab === 'notifications') _initPushSettingsToggle();
   });
 
   // Expose API

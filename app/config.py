@@ -145,6 +145,10 @@ class Config:
     REMINDERS_ENABLED = os.getenv('REMINDERS_ENABLED', 'false').lower() == 'true'
     REMINDERS_RECURRENCE_ENABLED = os.getenv('REMINDERS_RECURRENCE_ENABLED', 'false').lower() == 'true'
     REMINDERS_SNOOZE_ENABLED = os.getenv('REMINDERS_SNOOZE_ENABLED', 'false').lower() == 'true'
+    PUSH_ENABLED = os.getenv('PUSH_ENABLED', 'false').lower() == 'true'
+    VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
+    VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
+    VAPID_CLAIMS_SUB = os.getenv('VAPID_CLAIMS_SUB', 'mailto:noreply@xelasphere.com')
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
     SENDGRID_FROM_EMAIL = os.getenv('SENDGRID_FROM_EMAIL', 'noreply@xelasphere.io')
     SENDGRID_FROM_NAME = os.getenv('SENDGRID_FROM_NAME', 'XelaSphere Reminders')

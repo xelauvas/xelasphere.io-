@@ -222,9 +222,13 @@
     <script>
       window.RemindersModule = window.RemindersModule || {};
       window.RemindersModule.config = {
-        snoozeEnabled: {{ 'true' if config.REMINDERS_SNOOZE_ENABLED else 'false' }}
+        snoozeEnabled: {{ 'true' if config.REMINDERS_SNOOZE_ENABLED else 'false' }},
+        pushEnabled:   {{ 'true' if config.PUSH_ENABLED else 'false' }}
       };
     </script>
+
+    <!-- Push bootstrap (M1.3) — must load BEFORE remindersModule.js -->
+    <script src="{{ url_for('static', filename='js/pushSetup.js') }}"></script>
 
     <!-- Reminders M0 JS -->
     <script defer src="{{ url_for('static', filename='js/remindersModule.js') }}"></script>

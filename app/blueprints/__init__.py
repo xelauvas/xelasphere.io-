@@ -15,6 +15,7 @@ from .media_routes import media_bp
 from .upload_routes import upload_bp
 from .chat_routes import chat_bp
 from .reminders_routes import reminders_bp
+from .push_routes import push_bp
 
 __all__ = [
     'weather_bp',
@@ -28,4 +29,5 @@ __all__ = [
     'upload_bp',
     'chat_bp',
     'reminders_bp',
+    'push_bp',
 ]
