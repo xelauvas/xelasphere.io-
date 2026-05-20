@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Fixed — Reminders snooze for one-off reminders
+
+Snooze was broken for one-off (non-recurring) reminders — the common case.
+
+- Every reminder email carries "Snooze 10m / 1h / tomorrow" buttons, but for a one-off reminder the button was dead the moment the email landed: once the reminder fires it becomes `delivered`, and `_apply_snooze` only accepted `scheduled`, `sending`, or `delivered`+recurring. Clicking it returned 409 → the `wrong_state` confirmation page ("This reminder can't be snoozed in its current state").
+- Fix: a `delivered` reminder is now snoozeable. Snoozing resurrects it back to `scheduled` so the worker re-fires it; for a one-off the snooze target also becomes the new `fireAt` (no future natural fire time exists). The in-app kebab now offers Snooze on delivered reminders too. Only `paused`/`failed`/`cancelled` are still rejected.
+- The `reminder_snoozed` log gains a `resurrected` field.
+
+### Fixed — Rescheduling a delivered reminder
+
+Editing an already-fired reminder failed with "Could not save reminder: fireAtLocal must be in the future".
+
+- The edit modal pre-filled the date/time inputs from the reminder's stored `fireAt` even when that time was already in the past (a delivered or overdue reminder). Saving then sent that past time straight back, which the PATCH route correctly rejected.
+- Frontend fix: `openModal` now defaults the date/time to one hour from now whenever the reminder's `fireAt` is missing or in the past (the new-reminder default already did this). The default is computed in the reminder's own timezone so it matches what the save sends.
+- Backend fix: rescheduling a `delivered` reminder to a future time now resurrects it back to `scheduled`, so the worker actually re-fires it. Without this the PATCH would succeed but the reminder would never fire. Mirrors the existing `_retry` path (failed → scheduled).
+
 ### Added — Reminders M1.3 (web push)
 
 Browser push notifications for reminders (behind `PUSH_ENABLED=true` + VAPID keypair installed). **M1 complete** — recurrence + snooze + push all shipped.

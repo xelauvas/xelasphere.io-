@@ -113,10 +113,8 @@
     });
   }
 
-  function splitFireAtLocal(reminder) {
-    // Convert UTC fireAt + tz → date input (YYYY-MM-DD) + time input (HH:MM)
-    const dt = new Date(reminder.fireAt);
-    const tz = reminder.timezone || getBrowserTz();
+  function _splitDateInTz(dt, tz) {
+    // Format a Date as { date: 'YYYY-MM-DD', time: 'HH:MM' } wall-clock in tz.
     try {
       const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: tz,
@@ -131,6 +129,11 @@
     } catch {
       return { date: '', time: '' };
     }
+  }
+
+  function splitFireAtLocal(reminder) {
+    // Convert UTC fireAt + tz → date input (YYYY-MM-DD) + time input (HH:MM)
+    return _splitDateInTz(new Date(reminder.fireAt), reminder.timezone || getBrowserTz());
   }
 
   // ---------- M1.3: push banner ----------
@@ -282,13 +285,15 @@
       onClick: () => { closeDropdown(); openModal(reminder); },
     });
 
-    // M1.2: Snooze (active states only, kill-switch-gated)
+    // M1.2: Snooze (kill-switch-gated). A delivered reminder is snoozeable
+    // too — snoozing resurrects it back to scheduled. Only paused/failed/
+    // cancelled hide the option, matching _apply_snooze eligibility.
     const _snoozeEnabled = (window.RemindersModule && window.RemindersModule.config &&
                             window.RemindersModule.config.snoozeEnabled) === true;
     const _snoozeEligible = (
       status === 'scheduled' ||
       status === 'sending' ||
-      (status === 'delivered' && reminder.recurrence)
+      status === 'delivered'
     );
     if (_snoozeEnabled && _snoozeEligible) {
       items.push({
@@ -489,21 +494,26 @@
     form.elements['name'].value = reminder.name || '';
     form.elements['instructions'].value = reminder.instructions || '';
 
+    const tz = reminder.timezone || getBrowserTz();
+
     let dateStr = '', timeStr = '';
-    if (reminder.fireAt) {
+    const fireAtMs = reminder.fireAt ? Date.parse(reminder.fireAt) : NaN;
+    if (fireAtMs > Date.now()) {
+      // Existing reminder with a still-future fire time — pre-fill it.
       const split = splitFireAtLocal(reminder);
       dateStr = split.date; timeStr = split.time;
     } else {
-      // Default: 1 hour from now in browser tz
-      const now = new Date(Date.now() + 60 * 60 * 1000);
-      const pad = n => String(n).padStart(2, '0');
-      dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-      timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      // New reminder, OR editing one whose fireAt is already in the past
+      // (delivered / overdue): default to 1 hour from now. Pre-filling the
+      // stale past time would make the save fail validation with
+      // "fireAtLocal must be in the future". Computed in `tz` so the wall
+      // clock matches the timezone sent on save.
+      const split = _splitDateInTz(new Date(Date.now() + 60 * 60 * 1000), tz);
+      dateStr = split.date; timeStr = split.time;
     }
     form.elements['date'].value = dateStr;
     form.elements['time'].value = timeStr;
 
-    const tz = reminder.timezone || getBrowserTz();
     modal.querySelector('[data-tz]').textContent = tz;
     form.dataset.timezone = tz;
 

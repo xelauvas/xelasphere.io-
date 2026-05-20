@@ -19,7 +19,7 @@ from app.blueprints.shared import login_required, error_handler
 from app.limiter import limiter, csrf_required
 from app.services.reminder_model import (
     new_reminder_dict, validate_reminder_payload, compute_fire_at_utc,
-    STATUS_SCHEDULED, STATUS_FAILED,
+    STATUS_SCHEDULED, STATUS_FAILED, STATUS_DELIVERED,
 )
 from app.services.recurrence import RECURRENCE_PRESETS
 from app.services.signed_links import (
@@ -55,7 +55,10 @@ def _apply_snooze(reminder_id: str, dur: str, user_id: str) -> tuple[int, dict]:
 
     Used by both POST (session auth) and GET (signed-token auth). The
     only difference between the two is how the caller extracted user_id.
-    Eligibility: scheduled, sending, OR delivered+recurring.
+    Eligibility: scheduled, sending, or delivered. A `delivered` reminder
+    is terminal — the worker only re-examines docs in `scheduled` state —
+    so snoozing one resurrects it back to `scheduled` (see below). Only
+    paused/failed/cancelled are rejected.
 
     Owner-check simplification: we look up the doc under
     users/<user_id>/reminders/<reminder_id>, so a wrong-owner attempt
@@ -77,29 +80,37 @@ def _apply_snooze(reminder_id: str, dur: str, user_id: str) -> tuple[int, dict]:
 
     status = reminder.get("status")
     recurrence = reminder.get("recurrence")
-    eligible = (
-        status in _SNOOZE_ELIGIBLE_STATES
-        or (status == "delivered" and recurrence is not None)
-    )
+    eligible = status in _SNOOZE_ELIGIBLE_STATES or status == "delivered"
     if not eligible:
         return 409, {"error": f"cannot snooze a reminder in state {status!r}"}
 
     now = datetime.now(timezone.utc)
     snoozed_until = now + _SNOOZE_DURATIONS[dur]
-    doc_ref.update({
+    updates = {
         "snoozedUntil": snoozed_until.isoformat(),
         "updatedAt":    now.isoformat(),
-    })
+    }
+    # A `delivered` reminder is terminal: the worker's hot query only matches
+    # status=="scheduled", so a bare snoozedUntil write would never re-fire it.
+    # Resurrect it back to `scheduled`. A one-off has no future natural fireAt,
+    # so the snooze target becomes its new fireAt — this also keeps the
+    # re-delivery from being flagged as a late delivery by the worker.
+    if status == "delivered":
+        updates["status"] = "scheduled"
+        if recurrence is None:
+            updates["fireAt"] = snoozed_until.isoformat()
+    doc_ref.update(updates)
     logger.info(
         "reminder_snoozed",
         extra={"extra_fields": {
             "rid": reminder_id, "duration": dur,
             "until": snoozed_until.isoformat(), "uid": user_id,
+            "resurrected": status == "delivered",
         }},
     )
 
     fresh = snap.to_dict() or {}
-    fresh["snoozedUntil"] = snoozed_until.isoformat()
+    fresh.update(updates)
     return 200, {"reminder": fresh, "snoozedUntil": snoozed_until.isoformat()}
 
 
@@ -349,6 +360,12 @@ def patch_reminder(reminder_id: str):
             return jsonify({"error": "fireAtLocal must be in the future"}), 400
         update["fireAt"] = fire_at_utc.isoformat()
         update["timezone"] = new_tz
+        # A `delivered` reminder is terminal — the worker only fires docs in
+        # `scheduled` state. Rescheduling one to a future time must resurrect
+        # it, or this PATCH would "succeed" yet the reminder would never fire.
+        # Mirrors the _retry path (failed -> scheduled) below.
+        if current.get("status") == STATUS_DELIVERED:
+            update["status"] = STATUS_SCHEDULED
 
     if "status" in payload:
         if payload["status"] not in _PATCH_ALLOWED_STATUSES:

@@ -235,6 +235,48 @@ class TestPatchReminder:
         resp = auth_session.patch("/reminders/missing", json={"name": "x"}, headers=CSRF_HEADERS)
         assert resp.status_code == 404
 
+    @patch("app.blueprints.reminders_routes.db")
+    def test_patch_reschedule_resurrects_delivered(self, mock_db, auth_session):
+        # Rescheduling a delivered (terminal) reminder to a future time must
+        # flip status back to scheduled — otherwise the worker, which only
+        # queries status==scheduled, would never fire the rescheduled reminder.
+        snap = MagicMock(exists=True)
+        snap.to_dict.return_value = {
+            "id": "rem_x", "status": "delivered", "name": "call mom",
+            "timezone": "Europe/London", "fireAt": "2020-01-01T00:00:00+00:00",
+        }
+        doc_ref = mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value
+        doc_ref.get.return_value = snap
+
+        resp = auth_session.patch(
+            "/reminders/rem_x",
+            json={"fireAtLocal": "2099-01-01T09:00:00", "timezone": "Europe/London"},
+            headers=CSRF_HEADERS,
+        )
+        assert resp.status_code == 200, resp.get_json()
+        written = doc_ref.update.call_args[0][0]
+        assert written["status"] == "scheduled"
+        assert "fireAt" in written
+
+    @patch("app.blueprints.reminders_routes.db")
+    def test_patch_reschedule_scheduled_keeps_status(self, mock_db, auth_session):
+        # Rescheduling a still-scheduled reminder must NOT inject a status change.
+        snap = MagicMock(exists=True)
+        snap.to_dict.return_value = {
+            "id": "rem_x", "status": "scheduled", "name": "standup",
+            "timezone": "Europe/London", "fireAt": "2099-01-01T00:00:00+00:00",
+        }
+        doc_ref = mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value
+        doc_ref.get.return_value = snap
+
+        resp = auth_session.patch(
+            "/reminders/rem_x",
+            json={"fireAtLocal": "2099-06-01T09:00:00", "timezone": "Europe/London"},
+            headers=CSRF_HEADERS,
+        )
+        assert resp.status_code == 200, resp.get_json()
+        assert "status" not in doc_ref.update.call_args[0][0]
+
 
 class TestRecurrenceField:
     """recurrence field is accepted on POST + PATCH and validated against
@@ -337,6 +379,10 @@ class TestApplySnooze:
         snoozed_until = datetime.fromisoformat(update_call["snoozedUntil"])
         expected = datetime.now(timezone.utc) + timedelta(minutes=10)
         assert abs((snoozed_until - expected).total_seconds()) < 5
+        # A still-scheduled reminder keeps its status and natural fireAt;
+        # only snoozedUntil moves. Resurrection logic must not touch these.
+        assert "status" not in update_call
+        assert "fireAt" not in update_call
 
     @patch("app.blueprints.reminders_routes.db")
     def test_apply_tomorrow_sets_24h_later(self, mock_db):
@@ -399,21 +445,33 @@ class TestApplySnooze:
         from app.blueprints.reminders_routes import _apply_snooze
         status, _ = _apply_snooze("rid_abc", "10m", "uid_xyz")
         assert status == 200
+        # delivered+recurring also resurrects back to scheduled.
+        assert fake_doc_ref.update.call_args[0][0]["status"] == "scheduled"
 
     @patch("app.blueprints.reminders_routes.db")
-    def test_apply_on_delivered_one_off_returns_409(self, mock_db):
+    def test_apply_on_delivered_one_off_resurrects(self, mock_db):
+        # A delivered one-off IS snoozeable — deferring a reminder that just
+        # fired is the whole point of snooze. The helper resurrects it back
+        # to `scheduled` (so the worker re-fires it) and moves fireAt to the
+        # snooze target (a one-off has no future natural fire time).
+        fake_doc_ref = MagicMock()
         fake_snap = MagicMock()
         fake_snap.exists = True
         fake_snap.to_dict.return_value = {
             "id": "rid_abc", "userId": "uid_xyz", "status": "delivered",
             "name": "test", "recurrence": None,
+            "fireAt": "2020-01-01T00:00:00+00:00",
         }
+        fake_doc_ref.get.return_value = fake_snap
         mock_db.collection.return_value.document.return_value \
-               .collection.return_value.document.return_value.get.return_value = fake_snap
+               .collection.return_value.document.return_value = fake_doc_ref
 
         from app.blueprints.reminders_routes import _apply_snooze
         status, _ = _apply_snooze("rid_abc", "10m", "uid_xyz")
-        assert status == 409
+        assert status == 200
+        written = fake_doc_ref.update.call_args[0][0]
+        assert written["status"] == "scheduled"
+        assert written["fireAt"] == written["snoozedUntil"]
 
     @patch("app.blueprints.reminders_routes.db")
     def test_apply_wrong_owner_returns_404(self, mock_db):
