@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed — Reminders timezone extraction
+
+Chat-created reminders were silently dropped for any user in a timezone ahead of UTC (e.g. most of Europe, Africa, Asia).
+
+- The extraction model was given the current time in UTC and asked for a local fire-time. The 8B model (`llama-3.1-8b-instant`) could not do the UTC→local conversion: it kept the UTC clock value and only restamped the timezone offset. For a timezone ahead of UTC this produced a `fireAt` in the past, which the worker's `fire_at_utc <= now` guard then discarded — no reminder, no error, no log line.
+- Fix: the extractor now hands the model the current time already converted to the user's local timezone, so relative phrasing ("in one minute") needs no conversion. Garbage timezones fall back to UTC.
+- Verified end-to-end against the live model across UTC, Europe/Bucharest (UTC+3), and America/New_York — all three now resolve to the correct future fire time.
+
 ### Fixed — Reminders snooze for one-off reminders
 
 Snooze was broken for one-off (non-recurring) reminders — the common case.
