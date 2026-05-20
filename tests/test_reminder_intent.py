@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from app.services.reminder_intent import (
     is_reminder_request, extract_reminder, needs_clarification,
+    _build_extract_user_msg,
 )
 
 
@@ -122,3 +123,39 @@ class TestNeedsClarification:
             "remind me",
             {"name": None, "instructions": None, "fireAtLocal": None, "timezone": "UTC"},
         ) is False
+
+
+class TestBuildExtractUserMsg:
+    """Regression guard for the timezone bug: the extraction LLM must be fed
+    the current time in the user's LOCAL zone, not UTC. Feeding UTC made the
+    8B model emit a fireAtLocal in the past for any tz ahead of UTC, so
+    "remind me ... in one minute" was silently dropped."""
+
+    NOW_UTC = datetime(2026, 5, 20, 10, 17, 0, tzinfo=timezone.utc)
+
+    def test_uses_local_time_for_positive_offset_tz(self):
+        # Europe/Bucharest is UTC+3 (EEST) on 2026-05-20 -> 13:17 local.
+        msg = _build_extract_user_msg(
+            "remind me to call mom in one minute", self.NOW_UTC, "Europe/Bucharest"
+        )
+        assert "2026-05-20T13:17:00" in msg
+        assert "10:17" not in msg  # the UTC clock must NOT leak through
+        assert "Europe/Bucharest" in msg
+
+    def test_uses_local_time_for_negative_offset_tz(self):
+        # America/New_York is UTC-4 (EDT) on 2026-05-20 -> 06:17 local.
+        msg = _build_extract_user_msg("remind me", self.NOW_UTC, "America/New_York")
+        assert "2026-05-20T06:17:00" in msg
+        assert "10:17" not in msg
+
+    def test_emitted_time_is_naive_no_offset_no_micros(self):
+        # Clean naive format so the model echoes a naive fireAtLocal that
+        # compute_fire_at_utc interprets against the named timezone.
+        msg = _build_extract_user_msg("remind me", self.NOW_UTC, "Europe/Bucharest")
+        assert "2026-05-20T13:17:00." not in msg  # no microseconds
+        assert "2026-05-20T13:17:00+" not in msg  # no offset suffix
+
+    def test_falls_back_to_utc_on_bad_timezone(self):
+        # Garbage tz must not raise — extract_reminder promises to never raise.
+        msg = _build_extract_user_msg("remind me", self.NOW_UTC, "Not/AZone")
+        assert "2026-05-20T10:17:00" in msg

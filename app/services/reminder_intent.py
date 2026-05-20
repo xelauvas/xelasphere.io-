@@ -13,6 +13,7 @@ import logging
 import re
 from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -81,16 +82,37 @@ Other rules:
 """
 
 
+def _build_extract_user_msg(prompt: str, now_utc: datetime, user_timezone: str) -> str:
+    """Build the user message handed to the extraction LLM.
+
+    The 8B extraction model is unreliable at UTC->local conversion: given a
+    UTC clock and a target timezone it tends to keep the UTC wall-clock value
+    and merely restamp the offset, so "in one minute" lands in the *past* for
+    any timezone ahead of UTC (the reminder is then silently dropped by the
+    `fire_at_utc <= now` guard). We sidestep that by handing the model the
+    current time already in the user's local zone — "in N minutes" reduces to
+    plain arithmetic on a value it was given, with no conversion required.
+    """
+    try:
+        now_local = now_utc.astimezone(ZoneInfo(user_timezone))
+    except Exception:
+        # Unknown/garbage tz — fall back to the UTC wall clock. compute_fire_at_utc
+        # will reject a bad timezone downstream; this just keeps extraction alive.
+        now_local = now_utc
+    return (
+        f"Current local time ({user_timezone}): "
+        f"{now_local.strftime('%Y-%m-%dT%H:%M:%S')}\n"
+        f"User's timezone: {user_timezone}\n"
+        f"User's message: {prompt}\n"
+    )
+
+
 def _llm_extract_json(prompt: str, now_utc: datetime, user_timezone: str) -> str:
     """Call the cheap Groq model in JSON mode. Returns raw string (may be junk)."""
     import requests
     from app.config import Config
 
-    user_msg = (
-        f"Current UTC time: {now_utc.isoformat()}\n"
-        f"User's timezone: {user_timezone}\n"
-        f"User's message: {prompt}\n"
-    )
+    user_msg = _build_extract_user_msg(prompt, now_utc, user_timezone)
     try:
         resp = requests.post(
             Config.API_URL,  # Groq endpoint
