@@ -14,7 +14,7 @@ from google.cloud import firestore as gc_firestore
 logger = logging.getLogger(__name__)
 
 # Module-level whitelist of fields safe to PATCH from /chat/<id>
-ALLOWED_PATCH_FIELDS = {'starred', 'pinned', 'title', 'tags'}
+ALLOWED_PATCH_FIELDS = {'starred', 'pinned', 'title', 'tags', 'project_id'}
 
 
 def _adjust_user_session_total(db, user_id: str, delta: int) -> None:
