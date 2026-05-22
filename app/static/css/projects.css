@@ -1,0 +1,187 @@
+/* Projects — sidebar section, create modal, landing page.
+   Spec: docs/superpowers/specs/2026-05-22-projects-design.md */
+
+/* ---------- Sidebar section ---------- */
+.sidebar-projects {
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border-secondary, rgba(255,255,255,0.07));
+}
+
+.sidebar-projects-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary, rgba(255,255,255,0.5));
+}
+
+.sidebar-projects-add {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease;
+}
+.sidebar-projects-add:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.06));
+}
+
+.sidebar-projects-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-project-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  margin: 1px 4px;
+  text-decoration: none;
+  color: inherit;
+  transition: background 120ms ease;
+}
+.sidebar-project-row:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.06));
+}
+.sidebar-project-row[data-drag-over='true'] {
+  background: color-mix(in srgb, var(--project-accent, #2563eb) 18%, transparent);
+}
+.sidebar-project-row .folder-icon {
+  flex: 0 0 18px;
+  height: 18px;
+  width: 18px;
+  color: var(--project-accent, #2563eb);
+}
+.sidebar-project-row .name {
+  flex: 1;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-projects-more-hint {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-tertiary, rgba(255,255,255,0.45));
+}
+
+/* ---------- Create modal ---------- */
+.project-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.project-modal[hidden] { display: none; }
+
+.project-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(2px);
+}
+
+.project-modal-content {
+  position: relative;
+  width: min(520px, calc(100vw - 32px));
+  background: var(--bg-elevated, #2b2a27);
+  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+}
+
+.project-modal-heading {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.project-modal-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--text-secondary, rgba(255,255,255,0.7));
+}
+
+.project-modal-input {
+  width: 100%;
+  background: var(--bg-base, #1f1e1c);
+  border: 1px solid var(--border-primary, rgba(255,255,255,0.12));
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 15px;
+  color: inherit;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+.project-modal-input:focus {
+  border-color: var(--accent, #2563eb);
+}
+
+.project-modal-helper {
+  margin: 12px 0 20px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-tertiary, rgba(255,255,255,0.55));
+}
+
+.project-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-modal-cancel,
+.project-modal-create {
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid var(--border-primary, rgba(255,255,255,0.12));
+  background: transparent;
+  color: inherit;
+}
+.project-modal-create {
+  background: var(--accent, #2563eb);
+  border-color: var(--accent, #2563eb);
+  color: white;
+}
+.project-modal-create:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---------- "in: <project>" tag at top of chat area ---------- */
+.project-context-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--project-accent, #2563eb) 14%, transparent);
+  color: var(--project-accent, #2563eb);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.project-context-tag .folder-icon { width: 12px; height: 12px; }
