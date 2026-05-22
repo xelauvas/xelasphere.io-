@@ -194,8 +194,20 @@ class ChatSession:
             except Exception as fallback_err:
                 logger.error(f"Fallback save also failed for session {session_id}: {fallback_err}")
 
-    def get_history(self, user_id: str, page_size: int = 10, page_token: Optional[str] = None) -> Dict[str, Any]:
+    def get_history(
+        self,
+        user_id: str,
+        page_size: int = 10,
+        page_token: Optional[str] = None,
+        project_id: Optional[str] = None,
+        ungrouped: bool = False,
+    ) -> Dict[str, Any]:
+        from google.cloud.firestore_v1.base_query import FieldFilter
         sessions_query = self._get_sessions_query(user_id, page_token)
+        if project_id is not None:
+            sessions_query = sessions_query.where(filter=FieldFilter('project_id', '==', project_id))
+        elif ungrouped:
+            sessions_query = sessions_query.where(filter=FieldFilter('project_id', '==', None))
         sessions = sessions_query.limit(page_size + 1).stream()
 
         chat_history = []
@@ -435,6 +447,21 @@ class ChatSession:
         if deleted > 0:
             batch.commit()
         return deleted
+
+    def count_grouped(self, user_id: str) -> int:
+        """Return the count of sessions whose project_id is not null.
+
+        Firestore '!=' queries require composite indexes. If unavailable
+        in production, fall back to total_active - ungrouped_count via two
+        queries. The route layer is resilient to either implementation.
+        """
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        ref = (
+            self.db.collection('users').document(user_id)
+            .collection('chat_sessions')
+            .where(filter=FieldFilter('project_id', '!=', None))
+        )
+        return sum(1 for _ in ref.stream())
 
     def _get_session_ref(self, user_id: str, session_id: str) -> gc_firestore.DocumentReference:
         return self.db.collection('users').document(user_id).collection('chat_sessions').document(session_id)

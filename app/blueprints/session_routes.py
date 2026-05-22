@@ -451,12 +451,17 @@ def get_unread_counts():
 @error_handler
 @login_required
 def get_chat_history():
-    """Get paginated chat history for the user."""
+    """Get paginated chat history for the user, optionally filtered by project."""
     user_id = session['user']['uid']
     page_size = request.args.get('page_size', default=10, type=int)
     page_token = request.args.get('page_token', default=None, type=str)
+    project_id = request.args.get('project_id', default=None, type=str)
+    ungrouped = request.args.get('ungrouped', default='0') == '1'
 
-    history = chat_session.get_history(user_id, page_size, page_token)
+    history = chat_session.get_history(
+        user_id, page_size, page_token,
+        project_id=project_id, ungrouped=ungrouped,
+    )
     chat_history = history.get('chat_history', [])
 
     if not isinstance(chat_history, list):
@@ -464,10 +469,15 @@ def get_chat_history():
         raise TypeError("Expected 'chat_history' to be a list of dictionaries.")
 
     categorized_history = categorize_sessions(chat_history)
-    return make_etag_response({
+
+    payload = {
         'categorized_history': categorized_history,
-        'next_page_token': history.get('next_page_token')
-    })
+        'next_page_token': history.get('next_page_token'),
+    }
+    if ungrouped and not project_id:
+        payload['grouped_count'] = chat_session.count_grouped(user_id)
+
+    return make_etag_response(payload)
 
 
 @session_bp.route('/chat/list-metadata', methods=['GET'])
