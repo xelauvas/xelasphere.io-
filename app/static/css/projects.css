@@ -365,3 +365,33 @@
 .project-page-color-picker button:hover {
   border-color: rgba(255,255,255,0.4);
 }
+
+/* ---------- Empty state in sidebar (no projects yet) ---------- */
+.sidebar-projects-empty {
+  list-style: none;
+  padding: 4px;
+}
+.sidebar-projects-empty-cta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-hover, rgba(255,255,255,0.04));
+  border: 1px dashed var(--border-primary, rgba(255,255,255,0.15));
+  border-radius: 8px;
+  color: var(--text-secondary, rgba(255,255,255,0.7));
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.sidebar-projects-empty-cta:hover {
+  background: var(--bg-hover-strong, rgba(255,255,255,0.08));
+  border-color: var(--accent, #2563eb);
+  color: var(--text-primary, rgba(255,255,255,0.95));
+}
+.sidebar-projects-empty-cta svg { flex-shrink: 0; }
+
+/* Brighten the section header so it doesn't read as disabled */
+.sidebar-projects-header { color: var(--text-secondary, rgba(255,255,255,0.7)); }
+.sidebar-projects-add { color: var(--text-secondary, rgba(255,255,255,0.7)); }
