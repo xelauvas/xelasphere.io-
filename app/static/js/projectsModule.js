@@ -34,20 +34,8 @@
 
   function renderList() {
     if (!els.list) return;
-    els.list.innerHTML = '';
-    if (state.projects.length === 0) {
-      const empty = document.createElement('li');
-      empty.className = 'sidebar-projects-empty';
-      empty.innerHTML = `
-        <button type="button" class="sidebar-projects-empty-cta" id="project-create-cta">
-          <i class="fas fa-plus" aria-hidden="true"></i>
-          <span>New project</span>
-        </button>
-      `;
-      empty.querySelector('button').addEventListener('click', openModal);
-      els.list.appendChild(empty);
-      return;
-    }
+    // Wipe only the project rows; the always-on "New project" newrow stays.
+    els.list.querySelectorAll('.sidebar-project-row').forEach((n) => n.remove());
     state.projects.forEach((project) => {
       const li = document.createElement('li');
       li.className = 'sidebar-project-row';
@@ -325,10 +313,29 @@
     window.dispatchEvent(new CustomEvent('projects:loaded'));
   }
 
+  function bindToggle() {
+    const toggle = document.getElementById('projects-section-toggle');
+    if (!toggle || !els.section) return;
+    // Restore prior collapsed state from localStorage.
+    try {
+      if (localStorage.getItem('projects:collapsed') === '1') {
+        toggle.setAttribute('aria-expanded', 'false');
+        els.section.classList.add('sidebar-projects--collapsed');
+      }
+    } catch (_) {}
+    toggle.addEventListener('click', () => {
+      const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', String(!isExpanded));
+      els.section.classList.toggle('sidebar-projects--collapsed', isExpanded);
+      try { localStorage.setItem('projects:collapsed', isExpanded ? '1' : '0'); } catch (_) {}
+    });
+  }
+
   async function init() {
     cache();
     if (!els.section) return;
     bindModal();
+    bindToggle();
     try { await reload(); } catch (e) { console.warn('projects: load failed', e); }
   }
 

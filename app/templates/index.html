@@ -166,7 +166,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=10">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=51">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=18">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=19">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
@@ -489,13 +489,21 @@
                 <div class="sidebar-secondary-nav">
                     <!-- Projects section: replaces the prior "Projects · Coming soon" placeholder. -->
                     <section id="projects-section" class="sidebar-projects" aria-label="Projects">
-                      <header class="sidebar-projects-header">
+                      <button type="button" class="sidebar-projects-header" id="projects-section-toggle" aria-expanded="true" aria-controls="project-list">
+                        <i class="fas fa-chevron-down sidebar-projects-chevron" aria-hidden="true"></i>
                         <span class="sidebar-projects-title">Projects</span>
-                        <button type="button" id="project-create-btn" class="sidebar-projects-add" aria-label="Create project" data-tooltip="New project">
-                          <i class="fas fa-plus" aria-hidden="true"></i>
-                        </button>
-                      </header>
-                      <ul id="project-list" class="sidebar-projects-list" role="list"></ul>
+                      </button>
+                      <ul id="project-list" class="sidebar-projects-list" role="list">
+                        <li class="sidebar-project-newrow">
+                          <button type="button" id="project-create-btn" class="sidebar-project-newbtn" aria-label="Create new project">
+                            <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+                              <path d="M2 10h20"/>
+                            </svg>
+                            <span class="name">New project</span>
+                          </button>
+                        </li>
+                      </ul>
                     </section>
                     <div id="project-more-hint" class="sidebar-projects-more-hint" hidden></div>
                     <button class="sidebar-action-btn is-placeholder" id="action-code" aria-label="Code" data-tooltip="Code · Coming soon">
@@ -1400,7 +1408,7 @@
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=47"></script>
-    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=7" defer></script>
+    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=8" defer></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Dropdown Menu Logic ---
