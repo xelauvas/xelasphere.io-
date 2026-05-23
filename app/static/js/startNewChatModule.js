@@ -1246,7 +1246,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
                     status: session.status || 'active',
                     pinned_at: session.pinned_at || null,
                     is_pinned: Boolean(session.pinned_at),
-                    is_temporary: Boolean(session.is_temporary) || session.status === 'temporary'
+                    is_temporary: Boolean(session.is_temporary) || session.status === 'temporary',
+                    project_id: session.project_id || null,
                 };
                 this.ensureSessionPages(session.session_id);
                 const localSession = this.chatHistory[session.session_id];
@@ -1343,7 +1344,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
                 status: data.status || 'active',
                 pinned_at: data.pinned_at || null,
                 is_pinned: Boolean(data.pinned_at),
-                is_temporary: Boolean(data.is_temporary)
+                is_temporary: Boolean(data.is_temporary),
+                project_id: data.project_id || null,
             };
             this.ensureSessionPages(sessionId);
             this.renderChatTabs();
@@ -1580,6 +1582,11 @@ async loadChatHistory(pageToken = null, limit = 30) {
 
             const hasMessages = Array.isArray(sessionData.messages) && sessionData.messages.length > 0;
             this.updateFirstMessageFlag(hasMessages);
+
+            // Update the in-header project context tag.
+            if (typeof window.updateChatProjectTag === 'function') {
+                window.updateChatProjectTag(sessionData);
+            }
             if (typeof window !== 'undefined') {
                 if (hasMessages && typeof window.dismissEphemeralOptions === 'function') {
                     window.dismissEphemeralOptions();
@@ -5832,6 +5839,40 @@ document.addEventListener('DOMContentLoaded', () => {
             window.chatManager.loadChatHistory();
         } else {
             window.location.reload();
+        }
+    });
+
+    // Update the in-header project context tag when the active session changes.
+    window.updateChatProjectTag = function updateChatProjectTag(session) {
+        const tag = document.getElementById('chat-project-tag');
+        if (!tag) return;
+        const projectId = session?.project_id;
+        if (!projectId) {
+            tag.hidden = true;
+            return;
+        }
+        const project = window.projects?.getList?.().find((p) => p.id === projectId);
+        if (!project) {
+            // Projects list not yet loaded — stay hidden (graceful degradation).
+            tag.hidden = true;
+            return;
+        }
+        tag.querySelector('.name').textContent = project.name;
+        tag.style.setProperty('--project-accent', project.color);
+        tag.href = `/p/${encodeURIComponent(project.id)}`;
+        tag.hidden = false;
+    };
+
+    // Re-run tag update after projects list loads (handles race where chat session
+    // was already active before projectsModule finished its fetch).
+    window.addEventListener('projects:loaded', () => {
+        const manager = window.chatManager;
+        if (!manager) return;
+        const activeId = manager.activeSessionId;
+        if (!activeId) return;
+        const sessionData = manager.chatHistory?.[activeId];
+        if (sessionData) {
+            window.updateChatProjectTag(sessionData);
         }
     });
 });

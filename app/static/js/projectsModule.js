@@ -188,6 +188,7 @@
     state.loaded = true;
     renderList();
     renderSubmenu();
+    window.dispatchEvent(new CustomEvent('projects:loaded'));
   }
 
   async function init() {

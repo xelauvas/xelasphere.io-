@@ -262,7 +262,8 @@ class ChatSession:
                 'active_page_id': session_data.get('active_page_id'),
                 'status': status,
                 'pinned_at': pinned_at,
-                'is_temporary': is_temporary
+                'is_temporary': is_temporary,
+                'project_id': session_data.get('project_id') or None,
             })
 
         return {'chat_history': chat_history, 'next_page_token': next_token}
@@ -375,7 +376,8 @@ class ChatSession:
             'status': session_data.get('status', 'active'),
             'pinned_at': pinned_at,
             'is_temporary': session_data.get('is_temporary', False),
-            'model_label': session_data.get('model_label') or session_data.get('model') or ''
+            'model_label': session_data.get('model_label') or session_data.get('model') or '',
+            'project_id': session_data.get('project_id') or None,
         }
 
     def archive_session(self, user_id: str, session_id: str) -> Dict[str, Any]:
