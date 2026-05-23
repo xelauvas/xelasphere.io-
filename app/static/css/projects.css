@@ -35,8 +35,11 @@
 }
 
 /* ---------- Sidebar Projects section ---------- */
+/* Outer side-padding (6px) matches .sidebar-quick-actions so every
+   icon column in this section lines up with the action buttons above
+   (icons at 16px, labels at 44px from sidebar-content edge). */
 .sidebar-projects {
-  padding: 12px 4px 10px;
+  padding: 12px 6px 10px;
   border-bottom: 1px solid var(--border-secondary);
 }
 
@@ -49,12 +52,16 @@
 /* Title flush at the very left margin (no inner padding past the gap
    to the chevron). No background on hover — only a subtle color lift
    on the chevron + title. */
+/* Title at the very left margin (zero left padding). Chevron sits
+   immediately after the word. Inline-flex keeps the row only as wide
+   as its content so the hover hit area is the word + the gap, not the
+   whole sidebar width. */
 .sidebar-projects-header {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin: 0 0 4px;
-  padding: 6px 8px 6px 4px;
+  padding: 6px 8px 6px 0;
   background: transparent !important;
   border: none;
   border-radius: 0;
