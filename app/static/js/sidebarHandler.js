@@ -491,6 +491,7 @@ class SidebarManager {
     const sidebarManager = new SidebarManager();
     sidebarManager.init();
     window.sidebarManager = sidebarManager;
+    window.projects?.init?.();
 
     // Enable mobile sidebar transitions after initial render (prevents FOUC)
     requestAnimationFrame(() => {
