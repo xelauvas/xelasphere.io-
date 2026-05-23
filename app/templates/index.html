@@ -166,7 +166,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=10">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=51">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=12">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=13">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
@@ -490,7 +490,13 @@
                     <!-- Projects section: replaces the prior "Projects · Coming soon" placeholder. -->
                     <section id="projects-section" class="sidebar-projects" aria-label="Projects">
                       <header class="sidebar-projects-header">
-                        <span class="sidebar-projects-title">Projects</span>
+                        <span class="sidebar-projects-title">
+                          <svg class="sidebar-projects-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+                            <path d="M2 10h20"/>
+                          </svg>
+                          <span>Projects</span>
+                        </span>
                         <button type="button" id="project-create-btn" class="sidebar-projects-add" aria-label="Create project" data-tooltip="New project">
                           <i class="fas fa-plus" aria-hidden="true"></i>
                         </button>
