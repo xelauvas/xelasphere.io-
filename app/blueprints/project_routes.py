@@ -4,13 +4,18 @@ docs/superpowers/specs/2026-05-22-projects-design.md
 from __future__ import annotations
 
 import logging
+import os
+import re
+import uuid
 
 from flask import Blueprint, jsonify, request, session
+from werkzeug.utils import secure_filename
 
-from app.config import db
+from app.config import Config, db
 from app.limiter import limiter, csrf_required
 from app.blueprints.shared import error_handler, login_required, chat_session
 from app.project_service import ProjectService
+from app.text_extractor import TextExtractorUtility
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +23,7 @@ project_bp = Blueprint('project_bp', __name__)
 
 MAX_NAME_LEN = 120
 MAX_INSTRUCTIONS_LEN = 8_000
+MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB per file
 COLOR_PALETTE = [
     '#d97706', '#dc2626', '#db2777', '#7c3aed', '#2563eb',
     '#0891b2', '#16a34a', '#ca8a04', '#475569', '#737373',
@@ -157,4 +163,87 @@ def delete_project(project_id):
     ok = _service().delete(uid, project_id)
     if not ok:
         return jsonify({'error': 'Project not found'}), 404
+    return ('', 204)
+
+
+@project_bp.route('/projects/<project_id>/files', methods=['POST'])
+@limiter.limit("20 per minute")
+@csrf_required
+@error_handler
+@login_required
+def upload_project_file(project_id):
+    uid = session['user']['uid']
+    svc = _service()
+    if not svc.get(uid, project_id):
+        return jsonify({'error': 'Project not found'}), 404
+
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'error': 'No file provided'}), 400
+
+    # Size check
+    f.stream.seek(0, os.SEEK_END)
+    size_bytes = f.stream.tell()
+    f.stream.seek(0)
+    if size_bytes > MAX_FILE_BYTES:
+        return jsonify({'error': 'File too large (>10 MB)'}), 413
+
+    filename = secure_filename(f.filename) or f'file-{uuid.uuid4().hex}'
+    sanitized_user_id = re.sub(r'[^\w\-]', '_', uid)
+    project_dir = os.path.join(
+        os.path.abspath(Config.UPLOAD_FOLDER),
+        sanitized_user_id, 'projects', project_id,
+    )
+    os.makedirs(project_dir, exist_ok=True)
+    file_id = uuid.uuid4().hex
+    storage_path_abs = os.path.join(project_dir, f'{file_id}-{filename}')
+    f.save(storage_path_abs)
+    storage_path_rel = os.path.relpath(storage_path_abs, os.path.abspath(Config.UPLOAD_FOLDER))
+
+    try:
+        extracted_text, _debug = TextExtractorUtility.extract_text(storage_path_abs)
+    except Exception as e:
+        logger.warning(f"Text extraction failed for {storage_path_abs}: {e}")
+        extracted_text = ''
+
+    try:
+        meta = svc.add_file(
+            uid, project_id,
+            file_id=file_id, filename=filename,
+            mime_type=f.mimetype or 'application/octet-stream',
+            size_bytes=size_bytes, storage_path=storage_path_rel,
+            extracted_text=extracted_text or '',
+        )
+    except ProjectService.LimitExceeded as e:
+        try:
+            os.remove(storage_path_abs)
+        except OSError:
+            pass
+        return jsonify({'error': str(e)}), 409
+
+    return jsonify({'file': meta}), 201
+
+
+@project_bp.route('/projects/<project_id>/files/<file_id>', methods=['DELETE'])
+@limiter.limit("30 per minute")
+@csrf_required
+@error_handler
+@login_required
+def delete_project_file(project_id, file_id):
+    uid = session['user']['uid']
+    svc = _service()
+    p = svc.get(uid, project_id)
+    if not p:
+        return jsonify({'error': 'Project not found'}), 404
+    meta = next((f for f in p['files'] if f.get('file_id') == file_id), None)
+    if not meta:
+        return jsonify({'error': 'File not found'}), 404
+
+    abs_path = os.path.join(os.path.abspath(Config.UPLOAD_FOLDER), meta['storage_path'])
+    try:
+        os.remove(abs_path)
+    except OSError as e:
+        logger.warning(f'Failed to remove disk file: {e}')
+
+    svc.remove_file(uid, project_id, file_id)
     return ('', 204)
