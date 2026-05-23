@@ -5835,3 +5835,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+// Honor /?new=1&project_id=X — create a fresh chat scoped to this project.
+(function handleNewInProjectFromURL() {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('new') !== '1') return;
+    const projectId = url.searchParams.get('project_id');
+    if (!projectId) return;
+    // Strip the params so reloads don't re-trigger.
+    url.searchParams.delete('new');
+    url.searchParams.delete('project_id');
+    window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
+
+    // Tag a session-attribute so the next-created chat sets project_id.
+    window.__pendingProjectId = projectId;
+
+    // If the chat manager exposes createNewChat with options, use it.
+    // Note: createNewChat does not currently accept project_id in its options;
+    // __pendingProjectId is stashed for a future task to wire end-to-end.
+    if (window.chatManager?.createNewChat) {
+        window.chatManager.createNewChat(null, { project_id: projectId, notifySuccess: false });
+    }
+    // Otherwise: nothing — the chat manager will pick up __pendingProjectId on next chat.
+})();
