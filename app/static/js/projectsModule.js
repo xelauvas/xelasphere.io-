@@ -49,6 +49,48 @@
     });
   }
 
+  function renderSubmenu() {
+    const target = document.getElementById('submenu-projects-list');
+    if (!target) return;
+    target.innerHTML = '';
+    if (state.projects.length === 0) {
+      target.innerHTML = '<div style="padding:9px 14px;font-size:13px;opacity:0.5">No projects yet</div>';
+      return;
+    }
+    state.projects.forEach((p) => {
+      const item = document.createElement('div');
+      item.className = 'asi submenu-project-item';
+      item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:13.5px;';
+      item.dataset.projectId = p.id;
+      item.innerHTML = `
+        <svg style="width:14px;height:14px;color:${p.color};flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M2 10h20"/></svg>
+        <span>${escapeHtml(p.name)}</span>
+      `;
+      item.addEventListener('click', () => addCurrentChatToProject(p.id));
+      target.appendChild(item);
+    });
+  }
+
+  async function addCurrentChatToProject(projectId) {
+    const sid = window.chatManager?.currentSessionId || window.chatManager?.sessionId;
+    const currentSessionId = typeof sid === 'function' ? sid() : sid;
+    if (!currentSessionId) {
+      window.toast?.error?.('No active chat to add');
+      return;
+    }
+    await fetch(`/chat/${encodeURIComponent(currentSessionId)}`, {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ project_id: projectId }),
+    });
+    window.dispatchEvent(new CustomEvent('projects:session-moved', {
+      detail: { sessionId: currentSessionId, projectId },
+    }));
+    const submenu = document.getElementById('submenu-projects');
+    if (submenu) submenu.style.display = 'none';
+  }
+
   /* ---------- Create modal ---------- */
   function openModal() {
     els.modal.hidden = false;
@@ -145,6 +187,7 @@
     state.projects = await fetchProjects();
     state.loaded = true;
     renderList();
+    renderSubmenu();
   }
 
   async function init() {
