@@ -86,7 +86,8 @@
 .project-modal {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  /* Must beat the sidebar (z-index 1100) so the modal isn't covered. */
+  z-index: 1500;
   display: flex;
   align-items: center;
   justify-content: center;

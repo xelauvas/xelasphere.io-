@@ -196,14 +196,28 @@ class ChatSession:
                 logger.error(f"Fallback save also failed for session {session_id}: {fallback_err}")
 
     def get_history(self, user_id: str, page_size: int = 10, page_token: Optional[str] = None, project_id: Optional[str] = None) -> Dict[str, Any]:
-        sessions_query = self._get_sessions_query(user_id, page_token)
-        # Specific-project filter is safe in Firestore (equality on a value).
-        # Do NOT add a == None filter here — Firestore excludes documents that
-        # don't have the field at all, which is every pre-Projects chat.
         if project_id:
+            # Filter-by-project_id query. Avoid combining where(project_id) with
+            # order_by(last_updated) — that requires a composite index. Instead
+            # query without order_by and sort client-side. Page tokens are not
+            # used in this path (project chat lists are typically small).
             from google.cloud.firestore_v1.base_query import FieldFilter
-            sessions_query = sessions_query.where(filter=FieldFilter('project_id', '==', project_id))
-        sessions = sessions_query.limit(page_size + 1).stream()
+            sessions_query = self.db.collection('users').document(user_id) \
+                .collection('chat_sessions') \
+                .where(filter=FieldFilter('project_id', '==', project_id))
+            all_docs = list(sessions_query.stream())
+            # Sort by last_updated desc client-side.
+            def _last_updated_sort_key(doc):
+                d = doc.to_dict() or {}
+                lu = d.get('last_updated')
+                if isinstance(lu, datetime):
+                    return lu.timestamp()
+                return 0
+            all_docs.sort(key=_last_updated_sort_key, reverse=True)
+            sessions = iter(all_docs[:page_size + 1])
+        else:
+            sessions_query = self._get_sessions_query(user_id, page_token)
+            sessions = sessions_query.limit(page_size + 1).stream()
 
         chat_history = []
         next_token = None

@@ -238,7 +238,7 @@
     node.style.top = `${rect.bottom + window.scrollY + 4}px`;
     // Place right-edge-aligned with the anchor.
     node.style.left = `${rect.right + window.scrollX - node.offsetWidth}px`;
-    node.style.zIndex = '500';
+    node.style.zIndex = '1500';
   }
 
   function openProjectMenu(e) {

@@ -4228,7 +4228,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
         picker.style.position = 'fixed';
         picker.style.top = `${rect.bottom + 4}px`;
         picker.style.left = `${Math.max(8, rect.left)}px`;
-        picker.style.zIndex = '600';
+        // Must beat the sidebar (z-index 1100) and the create-project modal (1000).
+        picker.style.zIndex = '1500';
         document.body.appendChild(picker);
 
         picker.addEventListener('click', async (e) => {
