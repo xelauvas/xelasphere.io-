@@ -405,7 +405,4 @@
   color: var(--text-primary, rgba(255,255,255,0.9));
 }
 
-/* Project rows: neutral folder icon (no per-project accent in sidebar — ChatGPT shows folders monochrome) */
-.sidebar-project-row .folder-icon {
-  color: var(--text-secondary, rgba(255,255,255,0.7));
-}
+/* (Per-project folder color is set inline via --project-accent in renderList) */
