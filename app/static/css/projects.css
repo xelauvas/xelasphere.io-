@@ -135,7 +135,7 @@
   transition: border-color 120ms ease;
 }
 .project-modal-input:focus {
-  border-color: var(--accent, #2563eb);
+  border-color: rgba(255,255,255,0.28);
 }
 
 .project-modal-helper {
@@ -162,13 +162,22 @@
   color: inherit;
 }
 .project-modal-create {
-  background: var(--accent, #2563eb);
-  border-color: var(--accent, #2563eb);
-  color: white;
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #0d0d0d;
+  font-weight: 500;
+}
+.project-modal-create:hover:not(:disabled) {
+  background: #e5e5e5;
+  border-color: #e5e5e5;
 }
 .project-modal-create:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.project-modal-cancel:hover {
+  background: rgba(255,255,255,0.06);
 }
 
 /* ---------- "in: <project>" tag at top of chat area ---------- */
