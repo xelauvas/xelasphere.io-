@@ -1,40 +1,57 @@
 /* Projects — sidebar section, create modal, landing page.
    Spec: docs/superpowers/specs/2026-05-22-projects-design.md */
 
-/* ---------- Sidebar section (theme-aware via design tokens) ---------- */
+/* ---------- Sidebar Projects section ---------- */
 .sidebar-projects {
-  padding: 8px 4px;
+  padding: 10px 4px 6px;
   border-bottom: 1px solid var(--border-secondary);
 }
 
+/* Header row: title-case label (not uppercase) + neat + button.
+   Matches ChatGPT's softer, more readable typography. */
 .sidebar-projects-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 12px;
+  padding: 2px 10px 6px;
+  height: 28px;
+}
+
+.sidebar-projects-title {
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+  user-select: none;
 }
 
 .sidebar-projects-add {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   cursor: pointer;
   border-radius: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 150ms ease, color 150ms ease, transform 150ms ease;
 }
 .sidebar-projects-add:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+.sidebar-projects-add:active { transform: scale(0.92); }
+.sidebar-projects-add:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.sidebar-projects-add i.fas {
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .sidebar-projects-list {
@@ -82,40 +99,52 @@
   color: var(--text-tertiary);
 }
 
-/* ---------- Create-project modal (theme-aware) ---------- */
+/* ---------- Create-project modal ---------- */
 .project-modal {
   position: fixed;
   inset: 0;
-  /* Must beat the sidebar (z-index 1100) so the modal isn't covered. */
-  z-index: 1500;
+  z-index: 1500;            /* must beat sidebar (1100) */
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: project-modal-fade 160ms ease-out;
 }
 .project-modal[hidden] { display: none; }
+
+@keyframes project-modal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes project-modal-rise {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
 
 .project-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: var(--bg-overlay);
-  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .project-modal-content {
   position: relative;
-  width: min(520px, calc(100vw - 32px));
+  width: min(480px, calc(100vw - 32px));
   background: var(--bg-elevated);
   color: var(--text-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 14px;
-  padding: 24px;
-  box-shadow: var(--shadow-xl);
+  border-radius: 16px;
+  padding: 28px 28px 22px;
+  box-shadow: var(--shadow-2xl);
+  animation: project-modal-rise 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .project-modal-heading {
-  margin: 0 0 16px;
-  font-size: 18px;
+  margin: 0 0 22px;
+  font-size: 20px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 
@@ -123,7 +152,7 @@
   display: block;
   font-size: 13px;
   font-weight: 500;
-  margin-bottom: 6px;
+  margin: 0 0 8px;
   color: var(--text-secondary);
 }
 
@@ -131,42 +160,58 @@
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 10px;
+  padding: 12px 14px;
   font-size: 15px;
+  line-height: 1.3;
   color: var(--text-primary);
   outline: none;
-  transition: border-color 120ms ease;
+  box-shadow: 0 0 0 0 transparent;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
 }
 .project-modal-input::placeholder { color: var(--text-tertiary); }
+.project-modal-input:hover {
+  border-color: color-mix(in srgb, var(--border-primary) 70%, var(--text-tertiary) 30%);
+}
 .project-modal-input:focus {
-  border-color: var(--text-tertiary);
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 14%, transparent);
 }
 
 .project-modal-helper {
-  margin: 12px 0 20px;
+  margin: 14px 0 22px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--text-tertiary);
 }
 
 .project-modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
 }
 
 .project-modal-cancel,
 .project-modal-create {
-  border-radius: 8px;
-  padding: 8px 14px;
+  min-width: 96px;
+  border-radius: 10px;
+  padding: 9px 18px;
   font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, opacity 120ms ease;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease,
+              opacity 150ms ease, transform 120ms ease;
+}
+.project-modal-cancel:active,
+.project-modal-create:active:not(:disabled) { transform: scale(0.98); }
+.project-modal-cancel:focus-visible,
+.project-modal-create:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-/* Secondary action: text-only in both themes */
+/* Secondary — quiet text/border button */
 .project-modal-cancel {
   background: transparent;
   color: var(--text-primary);
@@ -174,23 +219,34 @@
 }
 .project-modal-cancel:hover {
   background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--border-primary) 50%, var(--text-tertiary) 50%);
 }
 
-/* Primary action: high-contrast inverse button.
-   Dark theme: cream bg, dark text. Light theme: dark bg, cream text.
-   Achieved by using the theme's text-primary as bg and bg-primary as text. */
+/* Primary — inverse high-contrast button.
+   Dark theme: cream bg + dark text. Light theme: dark bg + cream text. */
 .project-modal-create {
   background: var(--text-primary);
   color: var(--bg-primary);
   border-color: var(--text-primary);
-  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.18);
 }
 .project-modal-create:hover:not(:disabled) {
-  opacity: 0.88;
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.22);
 }
 .project-modal-create:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Reduce-motion respects user prefs */
+@media (prefers-reduced-motion: reduce) {
+  .project-modal,
+  .project-modal-content { animation: none; }
+  .project-modal-cancel,
+  .project-modal-create { transition: none; transform: none; }
 }
 
 /* ---------- "in: <project>" tag at top of chat area ---------- */
