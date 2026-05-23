@@ -220,4 +220,140 @@
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
     return `${(n / 1024 / 1024).toFixed(1)} MB`;
   }
+
+  /* ---------- Project page ⋯ menu (rename / color / delete) ---------- */
+  const PALETTE = ['#d97706', '#dc2626', '#db2777', '#7c3aed', '#2563eb',
+                   '#0891b2', '#16a34a', '#ca8a04', '#475569', '#737373'];
+
+  const menuBtn = document.getElementById('project-menu');
+  menuBtn?.addEventListener('click', (e) => { e.stopPropagation(); openProjectMenu(e); });
+
+  function closeAnyOpenMenus() {
+    document.querySelectorAll('.project-page-menu-popover, .project-page-color-picker').forEach((n) => n.remove());
+  }
+
+  function positionPopover(node, anchor) {
+    const rect = anchor.getBoundingClientRect();
+    node.style.position = 'absolute';
+    node.style.top = `${rect.bottom + window.scrollY + 4}px`;
+    // Place right-edge-aligned with the anchor.
+    node.style.left = `${rect.right + window.scrollX - node.offsetWidth}px`;
+    node.style.zIndex = '500';
+  }
+
+  function openProjectMenu(e) {
+    closeAnyOpenMenus();
+    const m = document.createElement('div');
+    m.className = 'project-page-menu-popover';
+    m.innerHTML = `
+      <button type="button" data-action="rename">Rename</button>
+      <button type="button" data-action="color">Change color</button>
+      <button type="button" data-action="delete" class="danger">Delete project</button>
+    `;
+    document.body.appendChild(m);
+    positionPopover(m, e.currentTarget);
+    m.addEventListener('click', (ev) => {
+      const action = ev.target.dataset?.action;
+      if (action === 'rename') { triggerRename(); m.remove(); }
+      else if (action === 'color') { openColorPicker(m, ev.target); }
+      else if (action === 'delete') { triggerDelete(); m.remove(); }
+    });
+    // Close on next outside click.
+    setTimeout(() => {
+      document.addEventListener('click', closeAnyOpenMenus, { once: true });
+    }, 0);
+  }
+
+  function openColorPicker(parentMenu, anchor) {
+    const picker = document.createElement('div');
+    picker.className = 'project-page-color-picker';
+    PALETTE.forEach((c) => {
+      const swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.style.background = c;
+      swatch.dataset.color = c;
+      swatch.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const resp = await fetch(`/projects/${encodeURIComponent(projectId)}`, {
+            method: 'PATCH', credentials: 'same-origin', headers: jsonHeaders(),
+            body: JSON.stringify({ color: c }),
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          root.style.setProperty('--project-accent', c);
+        } catch (err) {
+          window.toast?.error?.(`Couldn't change color: ${err.message}`);
+        }
+        picker.remove();
+        parentMenu.remove();
+      });
+      picker.appendChild(swatch);
+    });
+    document.body.appendChild(picker);
+    positionPopover(picker, anchor);
+  }
+
+  function triggerRename() {
+    const next = window.prompt('Rename project:', els.title.textContent);
+    if (!next || next.trim() === els.title.textContent) return;
+    fetch(`/projects/${encodeURIComponent(projectId)}`, {
+      method: 'PATCH', headers: jsonHeaders(), credentials: 'same-origin',
+      body: JSON.stringify({ name: next.trim() }),
+    }).then((r) => {
+      if (r.ok) {
+        els.title.textContent = next.trim();
+        document.title = `${next.trim()} · XelaSphere`;
+      } else {
+        window.toast?.error?.(`Rename failed (${r.status})`);
+      }
+    });
+  }
+
+  async function triggerDelete() {
+    // Count chats in the project so we can phrase the dialog right.
+    let count = 0;
+    try {
+      const r = await fetch(
+        `/chat/history?project_id=${encodeURIComponent(projectId)}&page_size=500`,
+        { credentials: 'same-origin' },
+      );
+      if (r.ok) {
+        const body = await r.json();
+        count = Object.values(body.categorized_history || {})
+          .reduce((sum, list) => sum + list.length, 0);
+      }
+    } catch (_) { /* count remains 0 */ }
+
+    let cascade;
+    if (count === 0) {
+      if (!confirm('Delete this project?')) return;
+      cascade = 'keep';
+    } else {
+      const choice = prompt(
+        `This project contains ${count} chat${count === 1 ? '' : 's'}.\n\n` +
+        `Type "keep" to keep the chats (they return to your main history), ` +
+        `or "delete" to also delete them.`,
+        'keep',
+      );
+      if (choice === null) return;
+      if (choice !== 'keep' && choice !== 'delete') {
+        alert('Cancelled — type exactly "keep" or "delete".');
+        return;
+      }
+      if (choice === 'delete' && !confirm(
+        `Permanently delete ${count} chat${count === 1 ? '' : 's'}?`,
+      )) return;
+      cascade = choice;
+    }
+
+    const resp = await fetch(
+      `/projects/${encodeURIComponent(projectId)}?cascade=${cascade}`,
+      { method: 'DELETE', credentials: 'same-origin', headers: jsonHeaders() },
+    );
+    if (resp.ok) {
+      window.location.href = '/';
+    } else {
+      window.toast?.error?.(`Couldn't delete project (${resp.status})`);
+    }
+  }
 })();
