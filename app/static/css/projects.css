@@ -49,7 +49,7 @@
 .sidebar-projects-header {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  justify-content: space-between;
   width: 100%;
   margin: 0 0 2px;
   padding: 0.4rem 0.625rem;
@@ -66,17 +66,21 @@
   color: var(--text-primary);
 }
 
+/* Chevron sits at the right end. Rotates -90° in the collapsed state. */
 .sidebar-projects-chevron {
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
   font-size: 11px;
   line-height: 1;
-  color: inherit;
-  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--text-tertiary);
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), color 150ms ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+.sidebar-projects-header:hover .sidebar-projects-chevron {
+  color: var(--text-secondary);
 }
 
 .sidebar-projects--collapsed .sidebar-projects-chevron {
