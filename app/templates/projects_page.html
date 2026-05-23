@@ -29,7 +29,12 @@
 
   <section class="project-section">
     <h2 class="project-section-title">Files</h2>
-    <div class="project-files-empty">Files come in the next release.</div>
+    <div class="project-files-dropzone" id="project-files-dropzone">
+      <input type="file" id="project-file-input" multiple style="display:none" />
+      <button type="button" class="project-add-files-btn" id="project-add-files-btn">+ Add files</button>
+      <span class="project-files-hint">or drop files here (PDF, doc, image, text — 10 MB max each)</span>
+    </div>
+    <ul id="project-files" class="project-files" role="list"></ul>
   </section>
 
   <section class="project-section">

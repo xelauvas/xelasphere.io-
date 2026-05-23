@@ -129,4 +129,95 @@
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return d.toLocaleDateString();
   }
+
+  /* ---------- Files (upload, list, remove) ---------- */
+  const fileEls = {
+    dropzone: document.getElementById('project-files-dropzone'),
+    input: document.getElementById('project-file-input'),
+    addBtn: document.getElementById('project-add-files-btn'),
+    list: document.getElementById('project-files'),
+  };
+
+  if (fileEls.dropzone) {
+    fileEls.addBtn.addEventListener('click', () => fileEls.input.click());
+    fileEls.input.addEventListener('change', (e) => uploadFiles(e.target.files));
+    fileEls.dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      fileEls.dropzone.classList.add('drag-over');
+    });
+    fileEls.dropzone.addEventListener('dragleave', () => {
+      fileEls.dropzone.classList.remove('drag-over');
+    });
+    fileEls.dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      fileEls.dropzone.classList.remove('drag-over');
+      uploadFiles(e.dataTransfer.files);
+    });
+    loadFiles();
+  }
+
+  async function loadFiles() {
+    try {
+      const resp = await fetch(`/projects/${encodeURIComponent(projectId)}`, { credentials: 'same-origin' });
+      if (!resp.ok) return;
+      const { project } = await resp.json();
+      renderFiles(project.files || []);
+    } catch (_) { /* non-fatal */ }
+  }
+
+  function renderFiles(files) {
+    if (!fileEls.list) return;
+    fileEls.list.innerHTML = '';
+    if (!files.length) {
+      fileEls.list.innerHTML = '<li class="project-files-empty">No files yet.</li>';
+      return;
+    }
+    files.forEach((f) => {
+      const li = document.createElement('li');
+      li.className = 'project-file-row';
+      li.innerHTML = `
+        <span class="filename">${escapeHtml(f.filename)}</span>
+        <span class="size">${formatSize(f.size_bytes)}</span>
+        <button type="button" class="file-remove" data-file-id="${escapeHtml(f.file_id)}" aria-label="Remove file">×</button>
+      `;
+      li.querySelector('.file-remove').addEventListener('click', () => removeFile(f.file_id));
+      fileEls.list.appendChild(li);
+    });
+  }
+
+  async function uploadFiles(fileList) {
+    for (const file of fileList) {
+      const fd = new FormData();
+      fd.append('file', file);
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+      const resp = await fetch(`/projects/${encodeURIComponent(projectId)}/files`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': csrf },
+        body: fd,
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        window.toast?.error?.(`Couldn't upload ${file.name}: ${err.error || resp.status}`);
+      }
+    }
+    await loadFiles();
+  }
+
+  async function removeFile(fileId) {
+    if (!confirm('Remove this file from the project?')) return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const resp = await fetch(
+      `/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileId)}`,
+      { method: 'DELETE', credentials: 'same-origin', headers: { 'X-CSRFToken': csrf } },
+    );
+    if (resp.ok) await loadFiles();
+  }
+
+  function formatSize(n) {
+    if (typeof n !== 'number' || n < 0) return '';
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  }
 })();

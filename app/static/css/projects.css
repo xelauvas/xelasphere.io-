@@ -279,3 +279,39 @@
   color: var(--text-tertiary, rgba(255,255,255,0.45));
   font-style: italic;
 }
+
+/* ---------- Project page: files list & dropzone ---------- */
+.project-files-dropzone {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px;
+  border: 1px dashed var(--border-primary, rgba(255,255,255,0.15));
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+.project-files-dropzone.drag-over {
+  border-color: var(--project-accent);
+  background: color-mix(in srgb, var(--project-accent) 8%, transparent);
+}
+.project-add-files-btn {
+  background: var(--bg-hover, rgba(255,255,255,0.06));
+  border: none; color: inherit;
+  padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+}
+.project-files-hint {
+  font-size: 12px;
+  color: var(--text-tertiary, rgba(255,255,255,0.5));
+}
+
+.project-files { list-style: none; padding: 0; margin: 0; }
+.project-file-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 10px; border-radius: 8px;
+}
+.project-file-row:hover { background: var(--bg-hover, rgba(255,255,255,0.04)); }
+.project-file-row .filename { flex: 1; font-size: 14px; }
+.project-file-row .size { font-size: 12px; color: var(--text-tertiary, rgba(255,255,255,0.45)); }
+.project-file-row .file-remove {
+  background: transparent; border: none; color: var(--text-tertiary, rgba(255,255,255,0.5));
+  font-size: 16px; cursor: pointer; padding: 2px 6px;
+}
+.project-file-row .file-remove:hover { color: var(--danger, #ef4444); }
