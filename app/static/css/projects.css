@@ -59,14 +59,22 @@
    inline indent in some layouts. justify-content keeps content
    left-aligned; the button still takes full row width but the
    hover bg is opt-out (just color shift). */
-.sidebar-projects-header {
-  display: flex;
+/* Diagnostic: !important on the padding to beat
+   responsive-foundation.css's generic `button` rule that's sneaking in
+   ~16px left padding. The specificity SHOULD be enough on its own
+   (class beats element), so the fact that this is required is a clue
+   to investigate later. */
+.sidebar-projects-header,
+.sidebar-projects-header.sidebar-projects-header {
+  display: flex !important;
   justify-content: flex-start;
   align-items: center;
   gap: 6px;
-  width: 100%;
-  margin: 0 0 6px;
-  padding: 4px 0;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 0 6px !important;
+  padding: 4px 0 !important;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -134,13 +142,19 @@
   padding: 0;
 }
 
+/* Same !important treatment so generic `button { padding: ... }`
+   doesn't sneak left padding into the New project button. */
 .sidebar-project-newbtn,
-.sidebar-project-row {
-  display: flex;
+.sidebar-project-row,
+.sidebar-project-newbtn.sidebar-project-newbtn,
+.sidebar-project-row.sidebar-project-row {
+  display: flex !important;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  padding: 6px 8px 6px 0;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 6px 8px 6px 0 !important;
   background: transparent;
   border: none;
   border-radius: 6px;
