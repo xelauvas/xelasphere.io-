@@ -52,11 +52,11 @@ class ChatSession:
             'last_updated': now,
             'is_pinned': False,
             'pinned_at': None,
+            'project_id': project_id,
             # Unread notification tracking for cross-device sync
             'unread_count': 0,
             'last_message_at': None,
-            'last_read_at': now,
-            'project_id': project_id,
+            'last_read_at': now
         }
         session_ref.set(session_data)
         if not temporary:
@@ -195,20 +195,14 @@ class ChatSession:
             except Exception as fallback_err:
                 logger.error(f"Fallback save also failed for session {session_id}: {fallback_err}")
 
-    def get_history(
-        self,
-        user_id: str,
-        page_size: int = 10,
-        page_token: Optional[str] = None,
-        project_id: Optional[str] = None,
-        ungrouped: bool = False,
-    ) -> Dict[str, Any]:
-        from google.cloud.firestore_v1.base_query import FieldFilter
+    def get_history(self, user_id: str, page_size: int = 10, page_token: Optional[str] = None, project_id: Optional[str] = None) -> Dict[str, Any]:
         sessions_query = self._get_sessions_query(user_id, page_token)
-        if project_id is not None:
+        # Specific-project filter is safe in Firestore (equality on a value).
+        # Do NOT add a == None filter here — Firestore excludes documents that
+        # don't have the field at all, which is every pre-Projects chat.
+        if project_id:
+            from google.cloud.firestore_v1.base_query import FieldFilter
             sessions_query = sessions_query.where(filter=FieldFilter('project_id', '==', project_id))
-        elif ungrouped:
-            sessions_query = sessions_query.where(filter=FieldFilter('project_id', '==', None))
         sessions = sessions_query.limit(page_size + 1).stream()
 
         chat_history = []
@@ -264,7 +258,7 @@ class ChatSession:
                 'status': status,
                 'pinned_at': pinned_at,
                 'is_temporary': is_temporary,
-                'project_id': session_data.get('project_id') or None,
+                'project_id': session_data.get('project_id'),
             })
 
         return {'chat_history': chat_history, 'next_page_token': next_token}
@@ -378,7 +372,7 @@ class ChatSession:
             'pinned_at': pinned_at,
             'is_temporary': session_data.get('is_temporary', False),
             'model_label': session_data.get('model_label') or session_data.get('model') or '',
-            'project_id': session_data.get('project_id') or None,
+            'project_id': session_data.get('project_id'),
         }
 
     def archive_session(self, user_id: str, session_id: str) -> Dict[str, Any]:
@@ -450,21 +444,6 @@ class ChatSession:
         if deleted > 0:
             batch.commit()
         return deleted
-
-    def count_grouped(self, user_id: str) -> int:
-        """Return the count of sessions whose project_id is not null.
-
-        Firestore '!=' queries require composite indexes. If unavailable
-        in production, fall back to total_active - ungrouped_count via two
-        queries. The route layer is resilient to either implementation.
-        """
-        from google.cloud.firestore_v1.base_query import FieldFilter
-        ref = (
-            self.db.collection('users').document(user_id)
-            .collection('chat_sessions')
-            .where(filter=FieldFilter('project_id', '!=', None))
-        )
-        return sum(1 for _ in ref.stream())
 
     def _get_session_ref(self, user_id: str, session_id: str) -> gc_firestore.DocumentReference:
         return self.db.collection('users').document(user_id).collection('chat_sessions').document(session_id)

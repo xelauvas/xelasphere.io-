@@ -1449,6 +1449,13 @@ async loadChatHistory(pageToken = null, limit = 30) {
      * @param {string} sessionId - The session ID to switch to.
      */
     async switchSession(sessionId, forceReload = false) {
+        // If we're currently in the inline project view (chat-shell hidden),
+        // clicking a chat must full-navigate so the user actually sees it.
+        if (document.querySelector('.project-page')) {
+            window.location.href = `/c/${encodeURIComponent(sessionId)}`;
+            return;
+        }
+
         // If we're not forcing and the session is already active, simply return.
         if (!forceReload && this.activeSessionId === sessionId) return;
         if (this.imagesPageActive) this.hideImagesPage();
