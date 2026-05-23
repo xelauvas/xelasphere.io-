@@ -35,11 +35,12 @@
 }
 
 /* ---------- Sidebar Projects section ---------- */
-/* Outer side-padding (6px) matches .sidebar-quick-actions so every
-   icon column in this section lines up with the action buttons above
-   (icons at 16px, labels at 44px from sidebar-content edge). */
+/* NO horizontal padding on the section itself — the .sidebar-content
+   parent already adds 6px sides, matching .sidebar-quick-actions. Any
+   side padding here would double up and push everything right of the
+   action buttons above. Vertical padding stays for breathing room. */
 .sidebar-projects {
-  padding: 12px 6px 10px;
+  padding: 12px 0 10px;
   border-bottom: 1px solid var(--border-secondary);
 }
 
