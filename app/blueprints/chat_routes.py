@@ -225,6 +225,7 @@ def start_new_chat():
     data = request.get_json(silent=True) or {}
     temporary = bool(data.get('temporary'))
     session_name = data.get('session_name') or 'New Chat'
+    project_id = data.get('project_id') if isinstance(data.get('project_id'), str) else None
 
     # Guest mode: create ephemeral session (not saved to Firestore)
     if is_guest():
@@ -253,7 +254,7 @@ def start_new_chat():
 
     # Regular user: create persistent session
     user_id = session['user']['uid']
-    session_id = chat_session.create_session(user_id, session_name=session_name)
+    session_id = chat_session.create_session(user_id, session_name=session_name, project_id=project_id)
     session['current_session_id'] = session_id
 
     return jsonify({

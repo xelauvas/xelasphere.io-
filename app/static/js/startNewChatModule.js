@@ -1737,7 +1737,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
         const {
             showOverlay = false,
             notifySuccess,
-            temporary = false
+            temporary = false,
+            project_id = null
         } = options || {};
         const isTemporary = Boolean(temporary);
         const shouldNotify = typeof notifySuccess === 'boolean' ? notifySuccess : !isTemporary;
@@ -1767,7 +1768,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
     
             const response = await this.fetchApi('/chat/new', 'POST', {
                 session_name: sessionName,
-                temporary: isTemporary
+                temporary: isTemporary,
+                project_id: project_id || null
             });
     
             if (response.session_id) {
@@ -1786,7 +1788,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
                     manuallyRenamed: false,
                     autoTitleEligible: this.isGenericName(sessionName),
                     status: isTemporary ? 'temporary' : 'active',
-                    is_temporary: isTemporary
+                    is_temporary: isTemporary,
+                    project_id: project_id || null
                 };
                 // activeSessionId is the source of truth for the form-sent
                 // session_id on chat POSTs (codeWindow.js reads it). MUST be
@@ -5891,11 +5894,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tag a session-attribute so the next-created chat sets project_id.
     window.__pendingProjectId = projectId;
 
-    // If the chat manager exposes createNewChat with options, use it.
-    // Note: createNewChat does not currently accept project_id in its options;
-    // __pendingProjectId is stashed for a future task to wire end-to-end.
+    // createNewChat now accepts project_id in its options and forwards it to
+    // POST /chat/new, which persists it on the Firestore session document.
     if (window.chatManager?.createNewChat) {
         window.chatManager.createNewChat(null, { project_id: projectId, notifySuccess: false });
     }
-    // Otherwise: nothing — the chat manager will pick up __pendingProjectId on next chat.
 })();

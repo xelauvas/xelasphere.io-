@@ -37,7 +37,7 @@ class ChatSession:
         self.db = db_client
         pass
 
-    def create_session(self, user_id: str, session_name: Optional[str] = None, temporary: bool = False) -> str:
+    def create_session(self, user_id: str, session_name: Optional[str] = None, temporary: bool = False, project_id: Optional[str] = None) -> str:
         session_id = f"session_{uuid.uuid4()}"
         session_ref = self._get_session_ref(user_id, session_id)
         now = datetime.utcnow()
@@ -55,7 +55,8 @@ class ChatSession:
             # Unread notification tracking for cross-device sync
             'unread_count': 0,
             'last_message_at': None,
-            'last_read_at': now
+            'last_read_at': now,
+            'project_id': project_id,
         }
         session_ref.set(session_data)
         if not temporary:
