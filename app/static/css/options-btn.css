@@ -142,7 +142,9 @@
 .options button:hover {
     transform: translateY(-3px);
     background: var(--bg-hover, rgba(255, 255, 255, 0.06));
-    border-color: var(--border-focus, rgba(255, 255, 255, 0.18));
+    /* Neutral hover border (was var(--border-focus) which is the accent
+       purple, jarring on hover). */
+    border-color: color-mix(in srgb, var(--border-primary) 50%, var(--text-tertiary) 50%);
     box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
   }
 
