@@ -159,13 +159,13 @@
   padding: 0;
 }
 
-/* Project rows are indented under the "New project" entry — same
-   horizontal padding as the sidebar action buttons. */
+/* Project rows are indented further under the "New project" entry —
+   they read as children of the section. */
 .sidebar-project-row {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.4rem 0.625rem;
+  padding: 0.4rem 0.625rem 0.4rem 1.25rem;
   cursor: pointer;
   border-radius: 0.5rem;
   margin: 0;
