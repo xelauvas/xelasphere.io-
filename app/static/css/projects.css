@@ -224,48 +224,27 @@
    icons that gets ugly with many projects.
    ================================================================== */
 
-/* The single-icon button: hidden by default, visible only when the
-   sidebar is collapsed. */
-.sidebar-projects-collapsed-icon {
-  display: none;
-}
+/* The collapsed-only icon is hidden in expanded state. In collapsed
+   state, .sidebar-action-btn (already on this button) provides all
+   the size, hover, and tooltip styling — same as every other icon
+   in the collapsed sidebar. */
+.sidebar-projects-collapsed-icon { display: none !important; }
 
 body.sidebar-collapsed .sidebar-projects {
   padding: 0.35rem 0 !important;
   border-bottom: none;
-  display: flex;
-  justify-content: center;
 }
 
-/* Hide everything in the section when collapsed... */
+/* Hide the expanded-state controls when collapsed. */
 body.sidebar-collapsed .sidebar-projects-header,
 body.sidebar-collapsed .sidebar-projects-list {
   display: none !important;
 }
 
-/* ...except this single icon button. */
+/* Show the single icon button when collapsed. !important overrides
+   the default-hidden rule above. */
 body.sidebar-collapsed .sidebar-projects-collapsed-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: background 150ms ease, color 150ms ease;
-  position: relative;
-}
-body.sidebar-collapsed .sidebar-projects-collapsed-icon:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-body.sidebar-collapsed .sidebar-projects-collapsed-icon svg {
-  width: 18px;
-  height: 18px;
+  display: flex !important;
 }
 
 /* ---------- Create-project modal ---------- */
