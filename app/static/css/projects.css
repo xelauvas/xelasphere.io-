@@ -172,16 +172,19 @@
   line-height: 1.3;
   color: var(--text-primary);
   outline: none;
-  box-shadow: 0 0 0 0 transparent;
-  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+  transition: border-color 150ms ease, background 150ms ease;
 }
 .project-modal-input::placeholder { color: var(--text-tertiary); }
 .project-modal-input:hover {
-  border-color: color-mix(in srgb, var(--border-primary) 70%, var(--text-tertiary) 30%);
+  border-color: color-mix(in srgb, var(--border-primary) 60%, var(--text-tertiary) 40%);
 }
-.project-modal-input:focus {
-  border-color: var(--text-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 14%, transparent);
+/* Quiet focus: no ring, no colored outline — just a subtle border tone shift.
+   The !important on outline kills the global :focus-visible accent ring. */
+.project-modal-input:focus,
+.project-modal-input:focus-visible {
+  outline: none !important;
+  border-color: var(--text-secondary);
+  box-shadow: none;
 }
 
 .project-modal-helper {
