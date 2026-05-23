@@ -1,6 +1,29 @@
 /* Projects — sidebar section, create modal, landing page.
    Spec: docs/superpowers/specs/2026-05-22-projects-design.md */
 
+/* -----------------------------------------------------------------------
+   Quiet focus across the entire Projects feature.
+
+   styles.css has a global :focus-visible rule that paints a 2px
+   var(--accent) outline (purple — perceived as blue) on every focused
+   element. We don't want any colored rings inside the Projects UI —
+   focus is communicated via subtle background/border shifts only.
+
+   This rule wins because it's defined here (loaded after styles.css)
+   AND uses a more specific descendant selector. !important is belt-
+   and-braces against future global focus tweaks.
+   ----------------------------------------------------------------------- */
+.sidebar-projects :focus-visible,
+.project-modal :focus-visible,
+.project-page :focus-visible,
+.sidebar-project-menu-popover :focus-visible,
+.project-page-menu-popover :focus-visible,
+.project-page-color-picker :focus-visible,
+.session-project-picker :focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 /* ---------- Sidebar Projects section ---------- */
 .sidebar-projects {
   padding: 12px 4px 10px;
@@ -50,10 +73,6 @@
   color: var(--text-primary);
 }
 .sidebar-projects-add:active { transform: scale(0.92); }
-.sidebar-projects-add:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
 .sidebar-projects-add i.fas {
   font-size: 12px;
   line-height: 1;
@@ -214,11 +233,6 @@
 }
 .project-modal-cancel:active,
 .project-modal-create:active:not(:disabled) { transform: scale(0.98); }
-.project-modal-cancel:focus-visible,
-.project-modal-create:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
 
 /* Secondary — quiet text/border button */
 .project-modal-cancel {
