@@ -169,6 +169,51 @@ def _read_memory_toggles(user_id: str) -> dict:
         return {"master": True, "ref_v2": True, "ref_mempalace": True}
 
 
+def _apply_project_context(user_id, session_data, base_system):
+    """If the session belongs to a Project, prepend the Project's
+    instructions and file knowledge to base_system.
+
+    Returns the (possibly augmented) base_system string.
+    """
+    project_id = (session_data or {}).get('project_id') if isinstance(session_data, dict) else None
+    if not project_id:
+        return base_system
+    try:
+        from app.project_service import ProjectService
+        from app.project_context import build_project_context_block
+        from app.config import db
+        psvc = ProjectService(db)
+        project = psvc.get(user_id, project_id)
+        if not project:
+            return base_system
+        file_texts = psvc.list_files(user_id, project_id)
+        files_by_id = {f['file_id']: f for f in file_texts}
+        files_for_context = []
+        for meta in project.get('files') or []:
+            fid = meta.get('file_id')
+            text = files_by_id.get(fid, {}).get('extracted_text', '')
+            files_for_context.append({
+                'filename': meta.get('filename', 'file'),
+                'extracted_text': text,
+            })
+        addendum = build_project_context_block(
+            instructions=project.get('instructions', ''),
+            files=files_for_context,
+        )
+        if addendum:
+            return base_system + "\n\n" + addendum
+        return base_system
+    except Exception as e:
+        # Project context is a feature, not a hard dependency.
+        # If anything goes wrong, log and continue without it.
+        import logging
+        logging.getLogger(__name__).warning(
+            "Project context injection failed for user %s session %s: %s",
+            user_id, (session_data or {}).get('session_id'), e,
+        )
+        return base_system
+
+
 @chat_bp.route('/chat/new', methods=['POST'])
 @limiter.limit("20 per minute")
 @csrf_required
@@ -1203,6 +1248,8 @@ def chat_stream():
         except Exception as exc:
             logger.warning(f"[Stream] response-style classification failed: {exc}")
             chosen_style = None
+
+    base_system = _apply_project_context(user_id, session_data, base_system)
 
     built_context = context_builder.build(
         system_prompt=base_system,
@@ -3154,6 +3201,8 @@ def chat():
             base_system = SYSTEM_INSTRUCTIONS + "\n" + get_developer_instructions(model)
             if style_charter:
                 base_system = base_system + "\n\n" + style_charter
+
+            base_system = _apply_project_context(user_id, session_data, base_system)
 
             built_context = context_builder.build(
                 system_prompt=base_system,
