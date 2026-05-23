@@ -166,7 +166,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=10">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=51">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=9">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=10">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
@@ -492,7 +492,7 @@
                       <header class="sidebar-projects-header">
                         <span class="sidebar-projects-title">Projects</span>
                         <button type="button" id="project-create-btn" class="sidebar-projects-add" aria-label="Create project" data-tooltip="New project">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                          <i class="fas fa-plus" aria-hidden="true"></i>
                         </button>
                       </header>
                       <ul id="project-list" class="sidebar-projects-list" role="list"></ul>
@@ -1400,7 +1400,7 @@
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=47"></script>
-    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=6" defer></script>
+    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=7" defer></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Dropdown Menu Logic ---

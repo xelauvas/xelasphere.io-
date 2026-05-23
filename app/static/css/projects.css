@@ -547,3 +547,10 @@
 .sidebar-project-menu-popover button:hover { background: var(--bg-hover); }
 .sidebar-project-menu-popover button.danger { color: var(--border-error); }
 .sidebar-project-menu-popover button i { width: 14px; opacity: 0.85; }
+
+/* Font Awesome icons inside the projects sidebar buttons */
+.sidebar-projects-add i.fas,
+.sidebar-projects-empty-cta i.fas {
+  font-size: 12px;
+  line-height: 1;
+}
