@@ -48,8 +48,12 @@
        doesn't crowd against the sidebar edge.
    ================================================================== */
 
+/* Small horizontal inset so content isn't flush against the
+   sidebar-content margin. 10px lines everything in this section up
+   with the action button icons above (which sit at 18px from sidebar
+   edge: 6px sidebar-content pad + 10px btn pad + 2px icon nudge). */
 .sidebar-projects {
-  padding: 10px 0 8px;
+  padding: 10px 10px 8px;
   border-bottom: 1px solid var(--border-secondary);
 }
 
