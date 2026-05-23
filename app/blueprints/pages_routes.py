@@ -438,7 +438,7 @@ def favicon():
     return send_from_directory(icon_dir, 'logo.png', mimetype='image/png')
 
 
-@pages_bp.route('/projects/<project_id>', methods=['GET'])
+@pages_bp.route('/p/<project_id>', methods=['GET'])
 @error_handler
 @login_required
 def project_page(project_id):

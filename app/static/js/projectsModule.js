@@ -42,7 +42,7 @@
       li.style.setProperty('--project-accent', project.color);
       li.innerHTML = `${FOLDER_SVG}<span class="name">${escapeHtml(project.name)}</span>`;
       li.addEventListener('click', () => {
-        window.location.href = `/projects/${encodeURIComponent(project.id)}`;
+        window.location.href = `/p/${encodeURIComponent(project.id)}`;
       });
       attachDropTarget(li, project.id);
       els.list.appendChild(li);
@@ -97,7 +97,7 @@
       }
       const { project } = await resp.json();
       closeModal();
-      window.location.href = `/projects/${encodeURIComponent(project.id)}`;
+      window.location.href = `/p/${encodeURIComponent(project.id)}`;
     } catch (err) {
       window.toast?.error?.(`Couldn't create project: ${err.message}`);
       els.modalCreate.disabled = false;
