@@ -21,13 +21,15 @@
 .project-page-color-picker :focus-visible,
 .session-project-picker :focus-visible,
 /* Chat-row ⋯ menu option buttons (Share / Pin / Archive / Rename /
-   Add to project / Delete). Same quiet focus treatment so the menu
-   feels consistent with the Projects UI. */
+   Add to project / Delete) */
 .button-group :focus-visible,
 .chat-btn:focus-visible,
-/* "Add to project" submenu inside the global attach menu (#action-add-to-project) */
+/* "Add to project" submenu inside the global attach menu */
 #submenu-projects :focus-visible,
-.submenu-project-item:focus-visible {
+.submenu-project-item:focus-visible,
+/* The 4 task-suggestion cards on the new-chat home screen */
+.options .options-button:focus-visible,
+.options-button:focus-visible {
   outline: none !important;
   box-shadow: none !important;
 }
