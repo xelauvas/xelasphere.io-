@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · XelaSphere{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/design-tokens.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}">
+
+<main class="project-page" data-project-id="{{ project.id }}" style="--project-accent: {{ project.color }};">
+  <header class="project-page-header">
+    <a href="/" class="project-page-back" aria-label="Back to chats">←</a>
+    <svg class="project-page-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+      <path d="M2 10h20"/>
+    </svg>
+    <h1 class="project-page-title" id="project-title">{{ project.name }}</h1>
+    <button type="button" id="project-rename" class="project-page-edit" aria-label="Rename project">Rename</button>
+    <button type="button" id="project-menu" class="project-page-menu" aria-label="Project options">⋯</button>
+  </header>
+
+  <button type="button" id="project-new-chat" class="project-new-chat-btn">+ New chat in this project</button>
+
+  <section class="project-section">
+    <h2 class="project-section-title">Instructions</h2>
+    <textarea id="project-instructions" class="project-instructions"
+              maxlength="8000" placeholder="How should the AI respond in this project?">{{ project.instructions or '' }}</textarea>
+    <div class="project-instructions-status" id="project-instructions-status" aria-live="polite"></div>
+  </section>
+
+  <section class="project-section">
+    <h2 class="project-section-title">Files</h2>
+    <div class="project-files-empty">Files come in the next release.</div>
+  </section>
+
+  <section class="project-section">
+    <h2 class="project-section-title">Chats</h2>
+    <ul id="project-chats" class="project-chats" role="list"></ul>
+  </section>
+</main>
+<script src="{{ url_for('static', filename='js/projectsPage.js') }}?v=1" defer></script>
+{% endblock %}

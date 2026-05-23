@@ -438,6 +438,20 @@ def favicon():
     return send_from_directory(icon_dir, 'logo.png', mimetype='image/png')
 
 
+@pages_bp.route('/projects/<project_id>', methods=['GET'])
+@error_handler
+@login_required
+def project_page(project_id):
+    """Render the Project landing page."""
+    uid = session['user']['uid']
+    from app.project_service import ProjectService
+    from app.config import db
+    project = ProjectService(db).get(uid, project_id)
+    if not project:
+        return render_template('404.html'), 404
+    return render_template('projects_page.html', project=project)
+
+
 @pages_bp.route('/debug', methods=['POST'])
 @csrf_required
 @error_handler
