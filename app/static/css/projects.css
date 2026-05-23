@@ -218,47 +218,54 @@
 }
 
 /* ==================================================================
-   Collapsed sidebar — show icons only, centered, no labels.
-   Matches the .sidebar-action-btn collapsed treatment above.
+   Collapsed sidebar — show ONE single Projects icon, regardless of
+   how many projects exist. Clicking it expands the sidebar so the
+   full list becomes accessible. Avoids the long stack of folder
+   icons that gets ugly with many projects.
    ================================================================== */
+
+/* The single-icon button: hidden by default, visible only when the
+   sidebar is collapsed. */
+.sidebar-projects-collapsed-icon {
+  display: none;
+}
+
 body.sidebar-collapsed .sidebar-projects {
-  padding: 0.2rem 0 0.35rem !important;
-}
-
-body.sidebar-collapsed .sidebar-projects-header {
-  display: none !important;
-}
-
-body.sidebar-collapsed .sidebar-projects-list {
-  display: flex !important;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-body.sidebar-collapsed .sidebar-project-newrow,
-body.sidebar-collapsed .sidebar-project-row {
-  width: auto !important;
-}
-
-body.sidebar-collapsed .sidebar-project-newbtn,
-body.sidebar-collapsed .sidebar-project-row {
-  width: 36px !important;
-  height: 36px !important;
-  padding: 0 !important;
+  padding: 0.35rem 0 !important;
+  border-bottom: none;
+  display: flex;
   justify-content: center;
 }
 
-body.sidebar-collapsed .sidebar-project-newbtn .name,
-body.sidebar-collapsed .sidebar-project-row .name,
-body.sidebar-collapsed .sidebar-project-menu-btn,
-body.sidebar-collapsed .sidebar-projects-more-hint {
+/* Hide everything in the section when collapsed... */
+body.sidebar-collapsed .sidebar-projects-header,
+body.sidebar-collapsed .sidebar-projects-list {
   display: none !important;
 }
 
-body.sidebar-collapsed .sidebar-project-newbtn .folder-icon,
-body.sidebar-collapsed .sidebar-project-row .folder-icon {
-  flex: 0 0 18px;
+/* ...except this single icon button. */
+body.sidebar-collapsed .sidebar-projects-collapsed-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background 150ms ease, color 150ms ease;
+  position: relative;
+}
+body.sidebar-collapsed .sidebar-projects-collapsed-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+body.sidebar-collapsed .sidebar-projects-collapsed-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* ---------- Create-project modal ---------- */

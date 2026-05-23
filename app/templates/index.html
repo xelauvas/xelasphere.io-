@@ -166,7 +166,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=10">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=51">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=36">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=37">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
@@ -492,6 +492,15 @@
                       <button type="button" class="sidebar-projects-header" id="projects-section-toggle" aria-expanded="true" aria-controls="project-list">
                         <span class="sidebar-projects-title">Projects</span>
                         <i class="fas fa-chevron-down sidebar-projects-chevron" aria-hidden="true"></i>
+                      </button>
+                      <!-- Single icon shown ONLY when sidebar is collapsed.
+                           Clicking it expands the sidebar so the full Projects
+                           list becomes visible again. -->
+                      <button type="button" class="sidebar-projects-collapsed-icon" id="projects-collapsed-expand" aria-label="Show projects" data-tooltip="Projects">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+                          <path d="M2 10h20"/>
+                        </svg>
                       </button>
                       <ul id="project-list" class="sidebar-projects-list" role="list">
                         <li class="sidebar-project-newrow">

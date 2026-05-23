@@ -331,11 +331,25 @@
     });
   }
 
+  function bindCollapsedExpand() {
+    const btn = document.getElementById('projects-collapsed-expand');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      // Expand the sidebar so the user can see their projects.
+      if (typeof window.toggleLeftSidebar === 'function') {
+        window.toggleLeftSidebar();
+      } else {
+        document.body.classList.remove('sidebar-collapsed');
+      }
+    });
+  }
+
   async function init() {
     cache();
     if (!els.section) return;
     bindModal();
     bindToggle();
+    bindCollapsedExpand();
     try { await reload(); } catch (e) { console.warn('projects: load failed', e); }
   }
 
