@@ -1,10 +1,10 @@
 /* Projects — sidebar section, create modal, landing page.
    Spec: docs/superpowers/specs/2026-05-22-projects-design.md */
 
-/* ---------- Sidebar section ---------- */
+/* ---------- Sidebar section (theme-aware via design tokens) ---------- */
 .sidebar-projects {
   padding: 8px 4px;
-  border-bottom: 1px solid var(--border-secondary, rgba(255,255,255,0.07));
+  border-bottom: 1px solid var(--border-secondary);
 }
 
 .sidebar-projects-header {
@@ -16,7 +16,7 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--text-tertiary, rgba(255,255,255,0.5));
+  color: var(--text-tertiary);
 }
 
 .sidebar-projects-add {
@@ -24,16 +24,17 @@
   height: 22px;
   border: none;
   background: transparent;
-  color: inherit;
+  color: var(--text-tertiary);
   cursor: pointer;
   border-radius: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 120ms ease;
+  transition: background 120ms ease, color 120ms ease;
 }
 .sidebar-projects-add:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.06));
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .sidebar-projects-list {
@@ -51,20 +52,20 @@
   border-radius: 6px;
   margin: 1px 4px;
   text-decoration: none;
-  color: inherit;
+  color: var(--text-primary);
   transition: background 120ms ease;
 }
 .sidebar-project-row:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.06));
+  background: var(--bg-hover);
 }
 .sidebar-project-row[data-drag-over='true'] {
-  background: color-mix(in srgb, var(--project-accent, #2563eb) 18%, transparent);
+  background: color-mix(in srgb, var(--project-accent, var(--accent)) 18%, transparent);
 }
 .sidebar-project-row .folder-icon {
   flex: 0 0 18px;
   height: 18px;
   width: 18px;
-  color: var(--project-accent, #2563eb);
+  color: var(--project-accent, var(--accent));
 }
 .sidebar-project-row .name {
   flex: 1;
@@ -78,10 +79,10 @@
   padding: 8px 12px;
   font-size: 12px;
   font-style: italic;
-  color: var(--text-tertiary, rgba(255,255,255,0.45));
+  color: var(--text-tertiary);
 }
 
-/* ---------- Create modal ---------- */
+/* ---------- Create-project modal (theme-aware) ---------- */
 .project-modal {
   position: fixed;
   inset: 0;
@@ -95,24 +96,26 @@
 .project-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  background: var(--bg-overlay);
   backdrop-filter: blur(2px);
 }
 
 .project-modal-content {
   position: relative;
   width: min(520px, calc(100vw - 32px));
-  background: var(--bg-elevated, #2b2a27);
-  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 14px;
   padding: 24px;
-  box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-xl);
 }
 
 .project-modal-heading {
   margin: 0 0 16px;
   font-size: 18px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .project-modal-label {
@@ -120,29 +123,30 @@
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 6px;
-  color: var(--text-secondary, rgba(255,255,255,0.7));
+  color: var(--text-secondary);
 }
 
 .project-modal-input {
   width: 100%;
-  background: var(--bg-base, #1f1e1c);
-  border: 1px solid var(--border-primary, rgba(255,255,255,0.12));
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 15px;
-  color: inherit;
+  color: var(--text-primary);
   outline: none;
   transition: border-color 120ms ease;
 }
+.project-modal-input::placeholder { color: var(--text-tertiary); }
 .project-modal-input:focus {
-  border-color: rgba(255,255,255,0.28);
+  border-color: var(--text-tertiary);
 }
 
 .project-modal-helper {
   margin: 12px 0 20px;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--text-tertiary, rgba(255,255,255,0.55));
+  color: var(--text-tertiary);
 }
 
 .project-modal-actions {
@@ -157,29 +161,38 @@
   padding: 8px 14px;
   font-size: 14px;
   cursor: pointer;
-  border: 1px solid var(--border-primary, rgba(255,255,255,0.12));
-  background: transparent;
-  color: inherit;
+  border: 1px solid transparent;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, opacity 120ms ease;
 }
+
+/* Secondary action: text-only in both themes */
+.project-modal-cancel {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: var(--border-primary);
+}
+.project-modal-cancel:hover {
+  background: var(--bg-hover);
+}
+
+/* Primary action: high-contrast inverse button.
+   Dark theme: cream bg, dark text. Light theme: dark bg, cream text.
+   Achieved by using the theme's text-primary as bg and bg-primary as text. */
 .project-modal-create {
-  background: #ffffff;
-  border-color: #ffffff;
-  color: #0d0d0d;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  border-color: var(--text-primary);
   font-weight: 500;
 }
 .project-modal-create:hover:not(:disabled) {
-  background: #e5e5e5;
-  border-color: #e5e5e5;
+  opacity: 0.88;
 }
 .project-modal-create:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.project-modal-cancel:hover {
-  background: rgba(255,255,255,0.06);
-}
-
+/* ---------- "in: <project>" tag at top of chat area ---------- */
 /* ---------- "in: <project>" tag at top of chat area ---------- */
 .project-context-tag {
   display: inline-flex;
@@ -187,8 +200,8 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--project-accent, #2563eb) 14%, transparent);
-  color: var(--project-accent, #2563eb);
+  background: color-mix(in srgb, var(--project-accent, var(--accent)) 14%, transparent);
+  color: var(--project-accent, var(--accent));
   font-size: 12px;
   font-weight: 500;
   text-decoration: none;
@@ -200,40 +213,64 @@
   max-width: 860px;
   margin: 0 auto;
   padding: 32px 24px;
-  color: var(--text-primary, rgba(255,255,255,0.88));
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  min-height: 100vh;
 }
 .project-page-header {
   display: flex; align-items: center; gap: 12px;
   margin-bottom: 24px;
 }
 .project-page-back {
-  font-size: 18px; text-decoration: none; color: var(--text-secondary, rgba(255,255,255,0.7));
+  font-size: 18px;
+  text-decoration: none;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 120ms ease, color 120ms ease;
 }
-.project-page-folder { width: 28px; height: 28px; color: var(--project-accent); }
-.project-page-title { flex: 1; font-size: 24px; font-weight: 600; margin: 0; }
+.project-page-back:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.project-page-folder { width: 28px; height: 28px; color: var(--project-accent, var(--accent)); }
+.project-page-title { flex: 1; font-size: 24px; font-weight: 600; margin: 0; color: var(--text-primary); }
 .project-page-edit,
 .project-page-menu {
-  background: transparent; border: 1px solid var(--border-primary, rgba(255,255,255,0.12));
-  border-radius: 8px; padding: 4px 10px; font-size: 13px; color: inherit; cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 120ms ease;
 }
+.project-page-edit:hover,
+.project-page-menu:hover { background: var(--bg-hover); }
 
+/* Primary action — same inverse high-contrast pattern as modal Create */
 .project-new-chat-btn {
   width: 100%;
   padding: 14px 18px;
-  background: var(--project-accent);
-  color: white;
-  border: none;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  border: 1px solid var(--text-primary);
   border-radius: 12px;
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   margin-bottom: 32px;
+  transition: opacity 120ms ease;
 }
+.project-new-chat-btn:hover { opacity: 0.88; }
 
 .project-section { margin: 28px 0; }
 .project-section-title {
-  font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--text-tertiary, rgba(255,255,255,0.5));
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
   margin: 0 0 10px;
 }
 
@@ -241,51 +278,51 @@
   width: 100%;
   min-height: 120px;
   resize: vertical;
-  background: var(--bg-elevated, #2b2a27);
-  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
   border-radius: 10px;
   padding: 12px 14px;
-  color: inherit;
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.55;
   outline: none;
   font-family: inherit;
+  transition: border-color 120ms ease;
 }
-.project-instructions:focus { border-color: var(--project-accent); }
+.project-instructions::placeholder { color: var(--text-tertiary); }
+.project-instructions:focus { border-color: var(--text-tertiary); }
 
 .project-instructions-status {
   font-size: 12px;
-  color: var(--text-tertiary, rgba(255,255,255,0.45));
+  color: var(--text-tertiary);
   margin-top: 4px;
   min-height: 16px;
 }
 
 .project-files-empty {
   font-size: 13px;
-  color: var(--text-tertiary, rgba(255,255,255,0.45));
+  color: var(--text-tertiary);
   padding: 12px;
   font-style: italic;
 }
 
-.project-chats {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
+.project-chats { list-style: none; padding: 0; margin: 0; }
 .project-chat-row {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px;
   border-radius: 8px;
   cursor: pointer;
+  color: var(--text-primary);
+  transition: background 120ms ease;
 }
-.project-chat-row:hover { background: var(--bg-hover, rgba(255,255,255,0.05)); }
+.project-chat-row:hover { background: var(--bg-hover); }
 .project-chat-row .title { flex: 1; font-size: 14px; }
-.project-chat-row .updated { font-size: 12px; color: var(--text-tertiary, rgba(255,255,255,0.45)); }
+.project-chat-row .updated { font-size: 12px; color: var(--text-tertiary); }
 
 .project-chats-empty {
   padding: 14px;
   font-size: 13px;
-  color: var(--text-tertiary, rgba(255,255,255,0.45));
+  color: var(--text-tertiary);
   font-style: italic;
 }
 
@@ -293,45 +330,61 @@
 .project-files-dropzone {
   display: flex; align-items: center; gap: 12px;
   padding: 14px;
-  border: 1px dashed var(--border-primary, rgba(255,255,255,0.15));
+  border: 1px dashed var(--border-primary);
   border-radius: 10px;
   margin-bottom: 10px;
+  background: var(--bg-tertiary);
+  transition: border-color 120ms ease, background 120ms ease;
 }
 .project-files-dropzone.drag-over {
-  border-color: var(--project-accent);
-  background: color-mix(in srgb, var(--project-accent) 8%, transparent);
+  border-color: var(--project-accent, var(--accent));
+  background: color-mix(in srgb, var(--project-accent, var(--accent)) 8%, transparent);
 }
 .project-add-files-btn {
-  background: var(--bg-hover, rgba(255,255,255,0.06));
-  border: none; color: inherit;
-  padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 120ms ease;
 }
-.project-files-hint {
-  font-size: 12px;
-  color: var(--text-tertiary, rgba(255,255,255,0.5));
-}
+.project-add-files-btn:hover { background: var(--bg-hover); }
+.project-files-hint { font-size: 12px; color: var(--text-tertiary); }
 
 .project-files { list-style: none; padding: 0; margin: 0; }
 .project-file-row {
   display: flex; align-items: center; gap: 12px;
   padding: 8px 10px; border-radius: 8px;
+  color: var(--text-primary);
+  transition: background 120ms ease;
 }
-.project-file-row:hover { background: var(--bg-hover, rgba(255,255,255,0.04)); }
+.project-file-row:hover { background: var(--bg-hover); }
 .project-file-row .filename { flex: 1; font-size: 14px; }
-.project-file-row .size { font-size: 12px; color: var(--text-tertiary, rgba(255,255,255,0.45)); }
+.project-file-row .size { font-size: 12px; color: var(--text-tertiary); }
 .project-file-row .file-remove {
-  background: transparent; border: none; color: var(--text-tertiary, rgba(255,255,255,0.5));
-  font-size: 16px; cursor: pointer; padding: 2px 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 120ms ease, color 120ms ease;
 }
-.project-file-row .file-remove:hover { color: var(--danger, #ef4444); }
+.project-file-row .file-remove:hover {
+  color: var(--border-error);
+  background: var(--bg-hover);
+}
 
 /* ---------- Project page ⋯ menu popover + color picker ---------- */
 .project-page-menu-popover {
-  background: var(--bg-elevated, #2b2a27);
-  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
   border-radius: 10px;
   padding: 6px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   min-width: 160px;
@@ -339,44 +392,43 @@
 .project-page-menu-popover button {
   background: transparent;
   border: none;
-  color: inherit;
+  color: var(--text-primary);
   text-align: left;
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
+  transition: background 120ms ease;
 }
-.project-page-menu-popover button:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.06));
-}
-.project-page-menu-popover button.danger {
-  color: var(--danger, #ef4444);
-}
+.project-page-menu-popover button:hover { background: var(--bg-hover); }
+.project-page-menu-popover button.danger { color: var(--border-error); }
 
 .project-page-color-picker {
   display: grid;
   grid-template-columns: repeat(5, 28px);
   gap: 8px;
   padding: 10px;
-  background: var(--bg-elevated, #2b2a27);
-  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-lg);
 }
 .project-page-color-picker button {
   width: 28px;
   height: 28px;
-  border: 2px solid transparent;
+  border: 2px solid var(--border-primary);
   border-radius: 50%;
   cursor: pointer;
-  transition: border-color 120ms ease;
+  transition: border-color 120ms ease, transform 120ms ease;
 }
 .project-page-color-picker button:hover {
-  border-color: rgba(255,255,255,0.4);
+  border-color: var(--text-primary);
+  transform: scale(1.05);
 }
 
-/* ---------- Empty state in sidebar (no projects yet) ---------- */
-/* Empty state — ChatGPT-style neutral row, NOT a dashed CTA */
+/* ---------- Empty state in sidebar (no projects yet) ----------
+   ChatGPT-style neutral row, NOT a dashed CTA. Reads as a normal
+   sidebar item that lights up on hover. */
 .sidebar-projects-empty {
   list-style: none;
   margin: 1px 4px;
@@ -390,28 +442,16 @@
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: var(--text-tertiary, rgba(255,255,255,0.55));
+  color: var(--text-tertiary);
   font-size: 14px;
   text-align: left;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
 }
 .sidebar-projects-empty-cta:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.06));
-  color: var(--text-primary, rgba(255,255,255,0.92));
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 .sidebar-projects-empty-cta svg { flex-shrink: 0; opacity: 0.85; }
 
-/* Neutral section header — matches PINNED / TODAY style */
-.sidebar-projects-header {
-  color: var(--text-tertiary, rgba(255,255,255,0.55));
-}
-.sidebar-projects-add {
-  color: var(--text-tertiary, rgba(255,255,255,0.55));
-}
-.sidebar-projects-add:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.06));
-  color: var(--text-primary, rgba(255,255,255,0.9));
-}
-
-/* (Per-project folder color is set inline via --project-accent in renderList) */
+/* Per-project folder color is set inline via --project-accent in renderList(). */
