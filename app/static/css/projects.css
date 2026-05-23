@@ -159,14 +159,13 @@
   padding: 0;
 }
 
-/* Folders sit at the very margin (zero left inset) so they line up
-   directly under the "P" in "Projects". Same on .sidebar-project-newbtn
-   so the New project folder column matches every project's folder. */
+/* Project rows are indented under the "New project" entry — same
+   horizontal padding as the sidebar action buttons. */
 .sidebar-project-row {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.4rem 0;
+  padding: 0.4rem 0.625rem;
   cursor: pointer;
   border-radius: 0.5rem;
   margin: 0;
