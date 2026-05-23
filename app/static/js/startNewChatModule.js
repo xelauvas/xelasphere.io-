@@ -660,6 +660,17 @@ class ChatManager {
         // NOTE: deliberately not calling addInfiniteScroll() — the cap
         // above replaces the progressive-loading model. The "All chats"
         // link is the canonical path to the rest of the history.
+
+        // Render "+N more in projects" hint
+        const moreHint = document.getElementById('project-more-hint');
+        if (moreHint) {
+            if (this.groupedCount > 0) {
+                moreHint.textContent = `+ ${this.groupedCount} more in projects`;
+                moreHint.hidden = false;
+            } else {
+                moreHint.hidden = true;
+            }
+        }
     }
     
     addInfiniteScroll() {
@@ -1194,10 +1205,17 @@ async loadChatHistory(pageToken = null, limit = 30) {
         // Show the spinner
         this.manageLoadMoreSpinner(true, 'circle', 'bottom');
 
-        let url = `/chat/history?page_size=${limit}`;
+        const params = new URLSearchParams({ page_size: limit });
         if (pageToken) {
-            url += `&page_token=${pageToken}`;
+            params.set('page_token', pageToken);
         }
+        const projectMatch = window.location.pathname.match(/^\/projects\/([^/?]+)/);
+        if (projectMatch) {
+            params.set('project_id', projectMatch[1]);
+        } else {
+            params.set('ungrouped', '1');
+        }
+        const url = `/chat/history?${params.toString()}`;
 
         const response = await this.fetchApi(url, 'GET');
 
@@ -1240,6 +1258,11 @@ async loadChatHistory(pageToken = null, limit = 30) {
 
         // Store next page token
         this.nextPageToken = response.next_page_token;
+
+        // Cache grouped count for the "+N more in projects" hint
+        if (!pageToken) {
+            this.groupedCount = response.grouped_count || 0;
+        }
 
         // Render the tabs
         this.renderChatTabs();
@@ -5802,4 +5825,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupGhostEyes('temp-chat-button');
     setupGhostEyes('temp-chat-button-desktop');
+
+    // Re-fetch sidebar history when a chat is moved into/out of a project
+    window.addEventListener('projects:session-moved', () => {
+        if (window.chatManager?.loadChatHistory) {
+            window.chatManager.loadChatHistory();
+        } else {
+            window.location.reload();
+        }
+    });
 });
