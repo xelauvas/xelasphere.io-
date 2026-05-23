@@ -49,16 +49,16 @@
 .sidebar-projects-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: calc(100% - 8px);
-  margin: 0 4px 4px;
-  padding: 6px 10px;
-  height: 30px;
+  gap: 0.625rem;
+  width: 100%;
+  margin: 0 0 2px;
+  padding: 0.4rem 0.625rem;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: 0.5rem;
   cursor: pointer;
   color: var(--text-secondary);
+  text-align: left;
   transition: background 150ms ease, color 150ms ease;
 }
 .sidebar-projects-header:hover {
@@ -67,8 +67,9 @@
 }
 
 .sidebar-projects-chevron {
-  flex-shrink: 0;
-  width: 12px;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
   font-size: 11px;
   line-height: 1;
   color: inherit;
