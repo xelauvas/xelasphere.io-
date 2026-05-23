@@ -1155,6 +1155,10 @@ class ChatManager {
                             <i class="fas fa-edit" aria-hidden="true"></i>
                             <span>Rename</span>
                         </button>
+                        <button class="chat-btn add-to-project-btn" data-action="addToProjectSession" title="Add to project" role="menuitem">
+                            <i class="fas fa-folder" aria-hidden="true"></i>
+                            <span>Add to project</span>
+                        </button>
                         <button class="chat-btn delete-btn" data-action="deleteSession" title="Delete" role="menuitem">
                             <i class="fas fa-trash" aria-hidden="true"></i>
                             <span>Delete</span>
@@ -4184,6 +4188,75 @@ async loadChatHistory(pageToken = null, limit = 30) {
         }
 
         this.markSessionDirty(this.activeSessionId);
+    }
+
+    /**
+     * Add a chat session to a project. Opens a popover listing all projects;
+     * clicking one PATCHes the session with project_id and refreshes the sidebar.
+     * @param {string} sessionId - The session ID to add to a project.
+     */
+    addToProjectSession(sessionId) {
+        const projects = window.projects?.getList?.() || [];
+        if (projects.length === 0) {
+            this.showNotification('No projects yet — create one first', 'info');
+            return;
+        }
+
+        // Close any existing picker.
+        document.querySelectorAll('.session-project-picker').forEach((n) => n.remove());
+
+        const picker = document.createElement('div');
+        picker.className = 'session-project-picker';
+        picker.innerHTML = projects.map((p) => `
+            <button type="button" class="session-project-picker__item" data-project-id="${p.id}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:${p.color};flex-shrink:0" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M2 10h20"/></svg>
+                <span>${p.name.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</span>
+            </button>
+        `).join('');
+
+        // Position near the session's menu trigger.
+        const sessionRow = document.querySelector(`.chat-tab[data-session-id="${sessionId}"]`);
+        const anchor = sessionRow?.querySelector('[data-actions-toggle]') || sessionRow;
+        const rect = (anchor || document.body).getBoundingClientRect();
+        picker.style.position = 'fixed';
+        picker.style.top = `${rect.bottom + 4}px`;
+        picker.style.left = `${Math.max(8, rect.left)}px`;
+        picker.style.zIndex = '600';
+        document.body.appendChild(picker);
+
+        picker.addEventListener('click', async (e) => {
+            const item = e.target.closest('[data-project-id]');
+            if (!item) return;
+            const projectId = item.dataset.projectId;
+            picker.remove();
+            try {
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+                const resp = await fetch(`/chat/${encodeURIComponent(sessionId)}`, {
+                    method: 'PATCH',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                    body: JSON.stringify({ project_id: projectId }),
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const proj = projects.find((p) => p.id === projectId);
+                this.showNotification(`Added to ${proj?.name || 'project'}`, 'success');
+                window.dispatchEvent(new CustomEvent('projects:session-moved', { detail: { sessionId, projectId } }));
+            } catch (err) {
+                this.showNotification('Failed to add to project', 'error');
+                console.error(err);
+            }
+        });
+
+        // Close on outside click (deferred so this click doesn't immediately close it).
+        setTimeout(() => {
+            const closeHandler = (ev) => {
+                if (!picker.contains(ev.target)) {
+                    picker.remove();
+                    document.removeEventListener('click', closeHandler);
+                }
+            };
+            document.addEventListener('click', closeHandler);
+        }, 0);
     }
 
     /**

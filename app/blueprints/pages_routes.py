@@ -133,7 +133,7 @@ def _load_api_key_state(user_id):
     return state
 
 
-def _render_home(initial_surface='chat'):
+def _render_home(initial_surface='chat', current_project=None):
     """Main index page."""
     try:
         # Check if user is logged in, if not set up guest mode
@@ -232,7 +232,8 @@ def _render_home(initial_surface='chat'):
             session_has_messages=False,
             initial_surface=initial_surface,
             is_admin=is_admin_user(session.get('user')),
-            api_keys=_load_api_key_state(session.get('user', {}).get('uid'))
+            api_keys=_load_api_key_state(session.get('user', {}).get('uid')),
+            current_project=current_project,
         )
     except Exception as e:
         logger.error(f"Failed to load the index page: {e}")
@@ -442,14 +443,19 @@ def favicon():
 @error_handler
 @login_required
 def project_page(project_id):
-    """Render the Project landing page."""
+    """Render the Project landing page inside the main chat shell.
+
+    Project view replaces the chat workspace in the same template so the
+    sidebar (with chats + projects) stays visible. The view is opt-in via
+    the current_project Jinja context var.
+    """
     uid = session['user']['uid']
     from app.project_service import ProjectService
     from app.config import db
     project = ProjectService(db).get(uid, project_id)
     if not project:
         return render_template('404.html'), 404
-    return render_template('projects_page.html', project=project)
+    return _render_home(initial_surface='chat', current_project=project)
 
 
 @pages_bp.route('/debug', methods=['POST'])
