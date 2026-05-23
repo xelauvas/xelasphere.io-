@@ -486,3 +486,56 @@
   transition: background 120ms ease;
 }
 .session-project-picker__item:hover { background: var(--bg-hover); }
+
+/* ---------- Per-project-row ⋯ menu trigger + popover ---------- */
+.sidebar-project-row .sidebar-project-menu-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 100ms ease, background 100ms ease, color 100ms ease;
+}
+.sidebar-project-row:hover .sidebar-project-menu-btn,
+.sidebar-project-row .sidebar-project-menu-btn:focus-visible {
+  opacity: 1;
+}
+.sidebar-project-row .sidebar-project-menu-btn:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.sidebar-project-menu-popover {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+}
+.sidebar-project-menu-popover button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.sidebar-project-menu-popover button:hover { background: var(--bg-hover); }
+.sidebar-project-menu-popover button.danger { color: var(--border-error); }
+.sidebar-project-menu-popover button i { width: 14px; opacity: 0.85; }

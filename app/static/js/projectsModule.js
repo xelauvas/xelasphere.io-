@@ -53,13 +53,136 @@
       li.className = 'sidebar-project-row';
       li.dataset.projectId = project.id;
       li.style.setProperty('--project-accent', project.color);
-      li.innerHTML = `${FOLDER_SVG}<span class="name">${escapeHtml(project.name)}</span>`;
-      li.addEventListener('click', () => {
+      li.innerHTML = `
+        ${FOLDER_SVG}
+        <span class="name">${escapeHtml(project.name)}</span>
+        <button type="button" class="sidebar-project-menu-btn" aria-label="Project options" data-project-menu>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>
+          </svg>
+        </button>
+      `;
+      li.addEventListener('click', (e) => {
+        if (e.target.closest('[data-project-menu]')) return;
         window.location.href = `/p/${encodeURIComponent(project.id)}`;
+      });
+      li.querySelector('[data-project-menu]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openProjectRowMenu(project, e.currentTarget);
       });
       attachDropTarget(li, project.id);
       els.list.appendChild(li);
     });
+  }
+
+  /* ---------- Project-row ⋯ menu (Share / Rename / Delete) ---------- */
+  function openProjectRowMenu(project, anchor) {
+    document.querySelectorAll('.sidebar-project-menu-popover').forEach((n) => n.remove());
+
+    const m = document.createElement('div');
+    m.className = 'sidebar-project-menu-popover';
+    m.innerHTML = `
+      <button type="button" data-pact="share"><i class="fas fa-share-alt"></i><span>Share project</span></button>
+      <button type="button" data-pact="rename"><i class="fas fa-edit"></i><span>Rename project</span></button>
+      <button type="button" data-pact="delete" class="danger"><i class="fas fa-trash"></i><span>Delete project</span></button>
+    `;
+    document.body.appendChild(m);
+    const rect = anchor.getBoundingClientRect();
+    m.style.position = 'fixed';
+    m.style.top = `${rect.bottom + 4}px`;
+    m.style.left = `${Math.max(8, rect.left - m.offsetWidth + rect.width)}px`;
+    m.style.zIndex = '1500';
+
+    m.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-pact]');
+      if (!btn) return;
+      const act = btn.dataset.pact;
+      m.remove();
+      if (act === 'share') shareProject(project);
+      else if (act === 'rename') renameProject(project);
+      else if (act === 'delete') deleteProject(project);
+    });
+
+    setTimeout(() => {
+      const close = (ev) => { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', close); } };
+      document.addEventListener('click', close);
+    }, 0);
+  }
+
+  async function shareProject(project) {
+    const url = `${window.location.origin}/p/${encodeURIComponent(project.id)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      window.toast?.success?.('Project link copied');
+    } catch (_) {
+      window.prompt('Copy this project link:', url);
+    }
+  }
+
+  async function renameProject(project) {
+    const next = window.prompt('Rename project:', project.name);
+    if (!next || next.trim() === project.name) return;
+    try {
+      const resp = await fetch(`/projects/${encodeURIComponent(project.id)}`, {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: jsonHeaders(),
+        body: JSON.stringify({ name: next.trim() }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      await reload();
+    } catch (err) {
+      window.toast?.error?.(`Couldn't rename: ${err.message}`);
+    }
+  }
+
+  async function deleteProject(project) {
+    // Count chats so the confirm copy reads naturally.
+    let count = 0;
+    try {
+      const r = await fetch(`/chat/history?project_id=${encodeURIComponent(project.id)}&page_size=500`, { credentials: 'same-origin' });
+      if (r.ok) {
+        const b = await r.json();
+        count = Object.values(b.categorized_history || {}).reduce((s, l) => s + l.length, 0);
+      }
+    } catch (_) {}
+
+    let cascade;
+    if (count === 0) {
+      if (!confirm(`Delete project "${project.name}"?`)) return;
+      cascade = 'keep';
+    } else {
+      const choice = prompt(
+        `Project "${project.name}" contains ${count} chat${count === 1 ? '' : 's'}.\n\n` +
+        `Type "keep" to keep the chats (they return to your main history), ` +
+        `or "delete" to also delete them.`,
+        'keep',
+      );
+      if (choice === null) return;
+      if (choice !== 'keep' && choice !== 'delete') {
+        alert('Cancelled — type exactly "keep" or "delete".');
+        return;
+      }
+      if (choice === 'delete' && !confirm(`Permanently delete ${count} chat${count === 1 ? '' : 's'}?`)) return;
+      cascade = choice;
+    }
+
+    try {
+      const resp = await fetch(`/projects/${encodeURIComponent(project.id)}?cascade=${cascade}`, {
+        method: 'DELETE', credentials: 'same-origin', headers: jsonHeaders(),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      // If we're currently viewing this project, return to /. Else just refresh sidebar.
+      const onThisProject = document.querySelector(`.project-page[data-project-id="${project.id}"]`);
+      if (onThisProject) {
+        window.location.href = '/';
+      } else {
+        await reload();
+        window.dispatchEvent(new CustomEvent('projects:session-moved'));
+      }
+    } catch (err) {
+      window.toast?.error?.(`Couldn't delete: ${err.message}`);
+    }
   }
 
   function renderSubmenu() {
