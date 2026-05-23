@@ -54,12 +54,17 @@
 }
 
 /* --- Title row -------------------------------------------------- */
-/* inline-flex keeps the row only as wide as "Projects [chevron]" so the
-   hover hit area is tight; no background lift on hover, only color. */
+/* Block-level flex (not inline-flex) so it sits on its own line at
+   the section's left edge — inline-flex was getting 16px of extra
+   inline indent in some layouts. justify-content keeps content
+   left-aligned; the button still takes full row width but the
+   hover bg is opt-out (just color shift). */
 .sidebar-projects-header {
-  display: inline-flex;
+  display: flex;
+  justify-content: flex-start;
   align-items: center;
   gap: 6px;
+  width: 100%;
   margin: 0 0 6px;
   padding: 4px 0;
   background: transparent;
@@ -118,11 +123,15 @@
 }
 
 /* "New project" + each project row share identical box geometry so
-   folder icons stack in one column. */
+   folder icons stack in one column. display:block on the wrappers
+   neutralizes the default list-item marker box (which was offsetting
+   .sidebar-project-newrow's button by ~16px). */
 .sidebar-project-newrow,
 .sidebar-project-row {
+  display: block;
   list-style: none;
   margin: 0;
+  padding: 0;
 }
 
 .sidebar-project-newbtn,
