@@ -46,31 +46,26 @@
    (rows are margin:1px 4px + padding:7px 12px → 16px left edge for content). */
 /* Header is now a single clickable button that toggles the project list
    open/closed. Chevron on the left rotates -90° when collapsed. */
-/* Title flush to the very left margin of the section; chevron sits
-   right after the word "Projects" with a small gap. Header expands
-   only to the natural content width so the rest of the row stays
-   blank/clickable but doesn't push the chevron away. */
+/* Title flush at the very left margin (no inner padding past the gap
+   to the chevron). No background on hover — only a subtle color lift
+   on the chevron + title. */
 .sidebar-projects-header {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin: 0 0 4px;
   padding: 6px 8px 6px 4px;
-  background: transparent;
+  background: transparent !important;
   border: none;
-  border-radius: 0.5rem;
+  border-radius: 0;
   cursor: pointer;
   color: var(--text-secondary);
   text-align: left;
-  transition: background 150ms ease, color 150ms ease;
+  transition: color 150ms ease;
 }
-.sidebar-projects-header:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
+.sidebar-projects-header:hover { color: var(--text-primary); }
 
-/* Chevron right next to the word — small, quiet, rotates -90° when
-   collapsed. */
+/* Chevron only appears on hover. Tiny, quiet, rotates -90° collapsed. */
 .sidebar-projects-chevron {
   flex: 0 0 auto;
   width: 12px;
@@ -78,12 +73,20 @@
   font-size: 10px;
   line-height: 1;
   color: var(--text-tertiary);
-  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), color 150ms ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 150ms ease,
+              opacity 120ms ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-.sidebar-projects-header:hover .sidebar-projects-chevron {
+.sidebar-projects-header:hover .sidebar-projects-chevron,
+.sidebar-projects-header:focus-visible .sidebar-projects-chevron,
+.sidebar-projects--collapsed .sidebar-projects-chevron {
+  opacity: 1;
+  pointer-events: auto;
   color: var(--text-secondary);
 }
 
@@ -102,9 +105,12 @@
   user-select: none;
 }
 
-/* Always-on "New project" row — same shape as the header + action btns */
+/* New-project row: same outer geometry as a real project row so its
+   folder icon sits in the same column as every project's folder. */
 .sidebar-project-newrow {
   list-style: none;
+  margin: 0;
+  padding: 0;
 }
 .sidebar-project-newbtn {
   display: flex;
@@ -118,8 +124,11 @@
   color: var(--text-secondary);
   border-radius: 0.5rem;
   cursor: pointer;
+  font: inherit;
   font-size: 14px;
   text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
   transition: background 150ms ease, color 150ms ease;
 }
 .sidebar-project-newbtn:hover {
@@ -134,6 +143,7 @@
   transition: color 150ms ease;
 }
 .sidebar-project-newbtn:hover .folder-icon { color: var(--text-secondary); }
+.sidebar-project-newbtn .name { font-size: 14px; line-height: 1.2; }
 
 .sidebar-projects-list {
   list-style: none;
