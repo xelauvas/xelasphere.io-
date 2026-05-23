@@ -19,7 +19,15 @@
 .sidebar-project-menu-popover :focus-visible,
 .project-page-menu-popover :focus-visible,
 .project-page-color-picker :focus-visible,
-.session-project-picker :focus-visible {
+.session-project-picker :focus-visible,
+/* Chat-row ⋯ menu option buttons (Share / Pin / Archive / Rename /
+   Add to project / Delete). Same quiet focus treatment so the menu
+   feels consistent with the Projects UI. */
+.button-group :focus-visible,
+.chat-btn:focus-visible,
+/* "Add to project" submenu inside the global attach menu (#action-add-to-project) */
+#submenu-projects :focus-visible,
+.submenu-project-item:focus-visible {
   outline: none !important;
   box-shadow: none !important;
 }
