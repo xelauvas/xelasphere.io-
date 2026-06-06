@@ -2322,76 +2322,10 @@ window.addEventListener('load', function() {
         }
 
         applyPatchesVisually(patches, patchResults, finalArtifact, { sessionId = null, reference = null } = {}) {
-            // Open patched artifact on code tab, highlight changed regions,
-            // scroll to first change, then transition to preview.
-            // "Make change visible, not theatrical."
-            if (!finalArtifact) return;
-
-            const applied = patches.filter((p, i) => !patchResults?.[i] || patchResults[i].status === 'applied');
-            const failed = patches.length - applied.length;
-
-            // Open directly on code tab — no flash from preview→code switch
-            this.openArtifact(finalArtifact, { sessionId, reference, initialTab: 'code' });
-
-            // Update title with patch summary
-            const savedTitle = finalArtifact.title;
-            if (this.titleEl) {
-                const summary = failed > 0
-                    ? `Updated (${applied.length} changes, ${failed} failed)`
-                    : `Updated (${applied.length} change${applied.length !== 1 ? 's' : ''})`;
-                this.titleEl.textContent = summary;
-            }
-
-            // Highlight changed regions — switch to the patched file first
-            if (this.codeBlock && applied.length > 0 && this.currentVersion?.files) {
-                // Find which file was patched (use first applied patch's target)
-                const patchedFileName = applied[0].file;
-                const patchedFile = this.currentVersion.files.find(f => f.path === patchedFileName);
-                if (patchedFile && this.currentFile?.path !== patchedFileName) {
-                    this.renderCodeViewer(this.currentVersion, patchedFile);
-                    // Update file dropdown to match
-                    if (this.fileSelect) {
-                        const idx = this.currentVersion.files.indexOf(patchedFile);
-                        if (idx >= 0) this.fileSelect.value = String(idx);
-                    }
-                }
-
-                // Wait two frames for Prism to finish highlighting
-                requestAnimationFrame(() => { requestAnimationFrame(() => {
-                    for (const patch of applied) {
-                        if (!patch.new_string) continue;
-                        // If patch targets a different file than currently shown, skip
-                        if (patch.file !== this.currentFile?.path) continue;
-                        this._highlightTextInElement(this.codeBlock, patch.new_string);
-                    }
-                    const firstMark = this.codeBlock.querySelector('.patch-highlight');
-                    if (firstMark) this._scrollToElement(firstMark);
-                }); });
-            }
-
-            // After 3s, fade highlights and switch to preview
-            setTimeout(() => {
-                if (this.codeBlock) {
-                    this.codeBlock.querySelectorAll('.patch-highlight').forEach(el => {
-                        el.classList.add('patch-highlight-fade');
-                    });
-                }
-                // Remove marks and switch tab after fade completes
-                setTimeout(() => {
-                    if (this.codeBlock) {
-                        this.codeBlock.querySelectorAll('.patch-highlight').forEach(el => {
-                            const parent = el.parentNode;
-                            while (el.firstChild) parent.insertBefore(el.firstChild, el);
-                            parent.removeChild(el);
-                        });
-                    }
-                    this.activeTab = 'preview';
-                    this.switchTab('preview');
-                    if (this.titleEl && savedTitle) {
-                        this.titleEl.textContent = savedTitle;
-                    }
-                }, 400);
-            }, 3000);
+            // Capture the currently-shown version's files as the "before" side,
+            // then show a reviewable unified diff (no auto-switch to preview).
+            var prevFiles = (this.currentVersion && this.currentVersion.files) || [];
+            this.enterPatchDiffMode(patches || [], patchResults || [], finalArtifact, prevFiles, { sessionId: sessionId, reference: reference });
         }
 
         openPatchStreaming() {

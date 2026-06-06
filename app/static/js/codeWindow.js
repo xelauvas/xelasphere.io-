@@ -597,12 +597,10 @@ const ThinkingIndicator = (() => {
 
     function appendReasoning(text) {
         if (!indicatorElement || !isStreaming) {
-            console.log('appendReasoning skipped:', { hasElement: !!indicatorElement, isStreaming });
             return;
         }
 
         reasoningText += text;
-        console.log('appendReasoning: adding text, total length:', reasoningText.length);
         const streamEl = indicatorElement.querySelector('.reasoning-stream');
         if (streamEl) {
             // Escape HTML and preserve newlines
@@ -839,6 +837,13 @@ function getGuestBannerThreshold() {
     return isNaN(threshold) ? 3 : threshold;
 }
 
+function formatGuestComposerPlaceholder(remaining) {
+    if (window.matchMedia?.('(max-width: 480px)').matches) {
+        return 'Try XelaSphere';
+    }
+    return `Try XelaSphere (${remaining} message${remaining !== 1 ? 's' : ''} left)`;
+}
+
 function updateGuestMessageCount(count) {
     document.body.dataset.guestMessageCount = count;
     // Update placeholder with remaining messages
@@ -846,7 +851,7 @@ function updateGuestMessageCount(count) {
     if (promptInput && isGuestMode()) {
         const limit = parseInt(document.body.dataset.guestMessageLimit, 10) || 5;
         const remaining = Math.max(0, limit - count);
-        promptInput.placeholder = `Try XelaSphere (${remaining} message${remaining !== 1 ? 's' : ''} left)`;
+        promptInput.placeholder = formatGuestComposerPlaceholder(remaining);
     }
 }
 
@@ -896,6 +901,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Prevent disabled elements from working in guest mode
     if (isGuestMode()) {
+        updateGuestMessageCount(getGuestMessageCount());
+        window.addEventListener('resize', () => updateGuestMessageCount(getGuestMessageCount()));
+
         document.querySelectorAll('.guest-disabled').forEach(el => {
             el.addEventListener('click', function(e) {
                 e.preventDefault();
@@ -1454,12 +1462,20 @@ function renderLiveAttachments(container, attachmentsMeta) {
                 showMeta: true,
                 onClick: (attachment) => {
                     const isImg = att.isImage || FilePreview.isImage(att.name, att.type);
-                    if (isImg && typeof openAttachmentLightbox === 'function') {
+                    const url = FilePreview.resolveUrl(attachment) || att.url;
+                    if (isImg && url && typeof window.__xelasphereOpenLightbox === 'function') {
+                        window.__xelasphereOpenLightbox({
+                            src: url,
+                            name: att.name,
+                            type: att.type || 'image',
+                            isImage: true
+                        });
+                    } else if (isImg && typeof openAttachmentLightbox === 'function') {
                         openAttachmentLightbox({
-                            src: att.url,
+                            src: url,
                             title: att.name,
                             downloadName: att.name,
-                            openUrl: att.url,
+                            openUrl: url,
                             isImage: true
                         });
                     } else {
@@ -2208,10 +2224,16 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             }
         }
 
-        // Claude-style: keep view pinned to bottom, new messages appear below.
-        // No scroll-to-top — just ensure we're at the bottom showing the user's message.
+        // ChatGPT/Claude-style: anchor the just-sent prompt near the top and
+        // reserve space below (via scrollUserMessageToTop's 40vh padding) so the
+        // answer streams in beneath it. Plain pin-to-bottom used to let the
+        // prompt scroll up under the fixed mobile header and clip out of view —
+        // especially on the first message of a fresh chat (nothing above it).
+        // contentArrived() hands off to follow-the-response once tokens arrive.
         if (primaryUserMessage) {
-            if (typeof window.scrollToBottom === 'function') {
+            if (typeof window.scrollUserMessageToTop === 'function') {
+                window.scrollUserMessageToTop(primaryUserMessage);
+            } else if (typeof window.scrollToBottom === 'function') {
                 window.scrollToBottom(true, true);
             }
         }
@@ -2370,6 +2392,22 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 });
 
                 if (!streamResponse.ok) {
+                    if (streamResponse.status === 403) {
+                        const contentType = streamResponse.headers.get('content-type') || '';
+                        let errorPayload = {};
+                        if (contentType.includes('application/json')) {
+                            try {
+                                errorPayload = await streamResponse.json();
+                            } catch (e) {
+                                errorPayload = {};
+                            }
+                        }
+                        if (errorPayload.error === 'guest_limit_reached') {
+                            showGuestSignupModal();
+                            resetState();
+                            return;
+                        }
+                    }
                     throw new Error(`Stream request failed: ${streamResponse.status}`);
                 }
 
@@ -2923,6 +2961,14 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             }
                         } else if (chunk.type === 'done') {
                             console.log('Received done chunk:', chunk);
+                            if (chunk.guest_mode) {
+                                if (typeof chunk.guest_message_count === 'number') {
+                                    updateGuestMessageCount(chunk.guest_message_count);
+                                }
+                                if (chunk.guest_show_banner) {
+                                    showGuestSignupBanner();
+                                }
+                            }
                             streamedReasoning = chunk.reasoning || streamedReasoning;
                             // Join accumulated chunks if not already joined
                             if (_contentChunks.length > _contentJoinedAt) {
