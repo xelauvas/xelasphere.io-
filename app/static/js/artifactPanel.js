@@ -1853,6 +1853,14 @@ window.addEventListener('load', function() {
         }
 
         openStreaming() {
+            // Snapshot the currently-shown version BEFORE streaming overwrites the
+            // panel, so a full regeneration of the SAME artifact can show an
+            // old-vs-new diff at finalize (not just explicit patches).
+            this._streamPrevFiles = (this.currentVersion && this.currentVersion.files)
+                ? this.currentVersion.files.map(function (f) { return { path: f.path, content: f.content, language: f.language }; })
+                : null;
+            this._streamPrevArtifactId = (this.currentArtifact && this.currentArtifact.artifactId) || null;
+
             this.isStreaming = true;
             this.streamingStartTime = Date.now();
             this._streamBuffer = '';
@@ -2161,8 +2169,26 @@ window.addEventListener('load', function() {
                 }
 
                 if (artifactData) {
-                    // openArtifact will render preview + populate code tab properly
-                    this.openArtifact(artifactData, { sessionId, reference });
+                    // If this stream UPDATED the same artifact that was already open,
+                    // show an old-vs-new diff (covers full regenerations, not just
+                    // explicit patches). Otherwise render the preview as a fresh artifact.
+                    const prevFiles = this._streamPrevFiles;
+                    const sameArtifact = !!(prevFiles && this._streamPrevArtifactId
+                        && artifactData.artifactId === this._streamPrevArtifactId);
+                    this._streamPrevFiles = null;
+                    this._streamPrevArtifactId = null;
+                    if (this.isEditMode) this.exitEditMode();
+                    // openStreaming() hid the read-only code view (display:none) to show
+                    // CodeMirror, without setting isEditMode — so exitEditMode above won't
+                    // restore it. Restore unconditionally so the diff is actually visible.
+                    if (this.codeDisplay) this.codeDisplay.style.display = 'block';
+                    if (this.editCodeMirrorContainer) this.editCodeMirrorContainer.style.display = 'none';
+                    if (sameArtifact && this.enterPatchDiffMode) {
+                        this.enterPatchDiffMode([], [], artifactData, prevFiles, { sessionId, reference });
+                    } else {
+                        // openArtifact will render preview + populate code tab properly
+                        this.openArtifact(artifactData, { sessionId, reference });
+                    }
                 } else {
                     // Parsing failed — the streamed code stays visible in the code tab
                     if (this.titleEl) {
