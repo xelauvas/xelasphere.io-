@@ -21,6 +21,14 @@
   --artifact-shadow: rgba(0, 0, 0, 0.35);
 }
 
+/* Light theme — pure black shadow at 35% reads too heavy on cream;
+   shift to a warm-dark tint at lower alpha so depth still registers
+   without the dark blob. */
+[data-theme="light"] .artifact-panel,
+[data-theme="light"] .artifact-chat-pill {
+  --artifact-shadow: rgba(40, 30, 15, 0.10);
+}
+
 /* ==================== */
 /* ARTIFACT PANEL - MAIN CONTAINER */
 /* Design spec: Deep charcoal, 45-55% viewport, rounded corners */
@@ -231,6 +239,33 @@ body.artifact-panel-resizing .chat-container {
   body.artifact-panel-open .page-wrapper,
   body.artifact-panel-open .chat-container {
     margin-right: 0;
+  }
+
+  /* The app's .mobile-header-bar is z-index:9999 (mobile.css) — far above the
+     panel's z-index:2000 — so it rendered ON TOP of the full-screen artifact
+     overlay and clipped the Preview/Code tabs. The panel has its own header
+     (tabs + close), so hide the chat header (and the scroll arrow) while open. */
+  body.artifact-panel-open .mobile-header-bar,
+  body.artifact-panel-open .arrow-down,
+  body.artifact-panel-open .scroll-to-bottom {
+    display: none !important;
+  }
+
+  /* Now that the panel header is the topmost bar, clear the status bar/notch
+     at the top and the home indicator at the bottom. Opaque backgrounds so
+     scrolled content doesn't bleed into the safe-area strips. */
+  .artifact-panel__header {
+    height: auto;
+    min-height: 44px;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 4px);
+    padding-bottom: 4px;
+    background: var(--artifact-bg, var(--bg-secondary, #1a1a22));
+  }
+  .artifact-panel__footer {
+    height: auto;
+    min-height: 40px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
+    background: var(--artifact-bg, var(--bg-secondary, #1a1a22));
   }
 }
 
@@ -3123,3 +3158,20 @@ button.artifact-chat-pill,
     padding: 8px 12px !important;
   }
 }
+
+/* ── Patch diff view ── */
+.artifact-diff { font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow: auto; }
+.artifact-diff__row { display: flex; }
+.artifact-diff__row--add { background: rgba(46, 160, 67, 0.18); }
+.artifact-diff__row--del { background: rgba(248, 81, 73, 0.18); }
+.artifact-diff__ln { width: 3em; flex: none; text-align: right; padding: 0 .4em; opacity: .4; user-select: none; }
+.artifact-diff__gutter { width: 1.2em; flex: none; text-align: center; opacity: .7; }
+.artifact-diff__code { flex: 1; padding-left: .5em; }
+.artifact-diff__gap { padding: 2px 1em; opacity: .5; font-style: italic; }
+.artifact-diff-banner { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: var(--bg-tertiary, #30302e); border-bottom: 1px solid var(--border-primary, rgba(255,255,255,.08));
+  font: 13px/1.4 system-ui, sans-serif; color: var(--text-primary, #f3eee5); }
+.artifact-diff-banner__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-diff-banner__btn { flex: none; padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+.artifact-diff-banner__btn--done { background: var(--accent, #7c6aef); color: #fff; }
+.artifact-diff-banner__btn--revert { background: transparent; color: var(--text-link, #c9a672); border: 1px solid var(--border-primary, rgba(255,255,255,.15)); }
