@@ -8,8 +8,8 @@
   // Long unchanged runs are collapsed to `context` lines around each change.
   function computeUnifiedDiff(oldText, newText, context) {
     context = context == null ? 3 : context;
-    var a = (oldText || '').split('\n');
-    var b = (newText || '').split('\n');
+    var a = oldText ? oldText.split('\n') : [];
+    var b = newText ? newText.split('\n') : [];
     var n = a.length, m = b.length;
 
     // Guard: very large files -> cheap replace-all diff (avoid O(n*m) blowup).
