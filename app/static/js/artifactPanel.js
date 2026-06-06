@@ -2217,7 +2217,16 @@ window.addEventListener('load', function() {
             if (!nf) return;
             var rows = window.ArtifactDiff.computeUnifiedDiff(pf ? (pf.content || '') : '', nf.content || '');
             this.codeDisplay.dataset.diffMode = '1';
-            window.ArtifactDiff.renderDiffView(this.codeDisplay, rows);
+            // Render the diff into a dedicated container so the normal <pre><code>
+            // (referenced by this.codeBlock) is preserved, not wiped by renderDiffView.
+            var pre = this.codeDisplay.querySelector('pre');
+            if (pre) pre.style.display = 'none';
+            if (!this._diffContainer || !this._diffContainer.isConnected) {
+                this._diffContainer = document.createElement('div');
+                this._diffContainer.className = 'artifact-diff-container';
+                this.codeDisplay.appendChild(this._diffContainer);
+            }
+            window.ArtifactDiff.renderDiffView(this._diffContainer, rows);
             if (this.fileSelect) {
                 var idx = newFiles.indexOf(nf);
                 if (idx >= 0) this.fileSelect.value = String(idx);
@@ -2263,6 +2272,13 @@ window.addEventListener('load', function() {
         exitPatchDiffMode() {
             this._removeDiffBanner();
             if (this.codeDisplay) delete this.codeDisplay.dataset.diffMode;
+            // Tear down the diff overlay and restore the normal code <pre>.
+            if (this._diffContainer && this._diffContainer.parentNode) {
+                this._diffContainer.parentNode.removeChild(this._diffContainer);
+            }
+            this._diffContainer = null;
+            var pre = this.codeDisplay && this.codeDisplay.querySelector('pre');
+            if (pre) pre.style.display = '';
             var f = (this.currentVersion && this.currentVersion.files && this.currentVersion.files[0]) || null;
             if (this.fileSelect && this.currentVersion) {
                 var idx = parseInt(this.fileSelect.value, 10);
