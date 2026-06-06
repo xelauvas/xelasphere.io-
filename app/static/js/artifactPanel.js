@@ -146,26 +146,17 @@
                 // Check if this is a complete HTML document (single file with everything)
                 const isCompleteDocument = /<!doctype\s+html|<html[\s>]/i.test(htmlContent);
 
-                // Build file lookup map for resolving external references.
-                // Models routinely emit href="./style.css" or "/style.css" — normalize on both sides.
-                const normalizeRef = p => (p || '').replace(/^\.?\//, '');
+                // Build file lookup map for resolving external references
                 const cssFileMap = {};
                 const jsFileMap = {};
                 version.files.forEach(file => {
-                    const raw = file.path || '';
-                    const lower = raw.toLowerCase();
-                    const normRaw = normalizeRef(raw);
-                    const normLower = normalizeRef(lower);
-                    if (lower.endsWith('.css')) {
-                        cssFileMap[raw] = file.content || '';
-                        cssFileMap[lower] = file.content || '';
-                        cssFileMap[normRaw] = file.content || '';
-                        cssFileMap[normLower] = file.content || '';
-                    } else if (lower.endsWith('.js') || lower.endsWith('.jsx') || lower.endsWith('.tsx') || lower.endsWith('.ts') || (file.language || '').toLowerCase() === 'javascript') {
-                        jsFileMap[raw] = file.content || '';
-                        jsFileMap[lower] = file.content || '';
-                        jsFileMap[normRaw] = file.content || '';
-                        jsFileMap[normLower] = file.content || '';
+                    const path = (file.path || '').toLowerCase();
+                    if (path.endsWith('.css')) {
+                        cssFileMap[file.path] = file.content || '';
+                        cssFileMap[path] = file.content || '';
+                    } else if (path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.tsx') || path.endsWith('.ts') || (file.language || '').toLowerCase() === 'javascript') {
+                        jsFileMap[file.path] = file.content || '';
+                        jsFileMap[path] = file.content || '';
                     }
                 });
 
@@ -179,10 +170,7 @@
                         const hrefMatch = match.match(/href\s*=\s*["']([^"']+)["']/i);
                         if (hrefMatch) {
                             const href = hrefMatch[1];
-                            const cssContent = cssFileMap[href]
-                                || cssFileMap[href.toLowerCase()]
-                                || cssFileMap[normalizeRef(href)]
-                                || cssFileMap[normalizeRef(href.toLowerCase())];
+                            const cssContent = cssFileMap[href] || cssFileMap[href.toLowerCase()];
                             if (cssContent) {
                                 return `<style>${cssContent}</style>`;
                             }
@@ -192,10 +180,7 @@
 
                     // Replace <script src="..."></script> with inline <script>
                     doc = doc.replace(/<script\s+[^>]*src\s*=\s*["']([^"']+)["'][^>]*>\s*<\/script>/gi, (match, src) => {
-                        const jsContent = jsFileMap[src]
-                            || jsFileMap[src.toLowerCase()]
-                            || jsFileMap[normalizeRef(src)]
-                            || jsFileMap[normalizeRef(src.toLowerCase())];
+                        const jsContent = jsFileMap[src] || jsFileMap[src.toLowerCase()];
                         if (jsContent) {
                             return `<script>${escapeScript(stripImports(jsContent))}</script>`;
                         }
@@ -309,10 +294,28 @@
                 }))));
                 console.log('[CSS Debug] Found', cssFiles.length, 'CSS files');
 
-                // Collect all JS/JSX/TS/TSX files
+                // Collect all JS/JSX/TS/TSX files — but only ones meant to RUN in the
+                // preview. The model often emits a full Vite project (vite.config.js,
+                // main.jsx, package.json, index.html, src/*.jsx); concatenating the
+                // build config and entry bootstrap into the executed blob breaks it:
+                // vite.config.js references build-only globals (defineConfig/react →
+                // undefined) and main.jsx's createRoot(...) references a stripped import
+                // and double-renders. The preview mounts the detected component itself,
+                // so exclude those non-app files.
                 const jsFiles = version.files?.filter(f => {
                     const path = (f.path || '').toLowerCase();
-                    return path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.tsx') || path.endsWith('.ts');
+                    const isJs = path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.tsx') || path.endsWith('.ts');
+                    if (!isJs) return false;
+                    // Build/tooling config files — never app code.
+                    if (/\.config\.[jt]sx?$/.test(path)) return false;
+                    // Entry/bootstrap file that mounts the app (createRoot / ReactDOM.render
+                    // into #root) — the preview does its own mount, and the bootstrap's
+                    // createRoot is an unresolved import here.
+                    const content = f.content || '';
+                    const mountsRoot = /\b(?:createRoot|ReactDOM\s*\.\s*render)\s*\(/.test(content)
+                        && /getElementById\(\s*['"]root['"]\s*\)/.test(content);
+                    if (mountsRoot) return false;
+                    return true;
                 }) || [];
 
                 // Markdown cleanup for DeepSeek (embeds markdown in JSX)
@@ -367,26 +370,73 @@
                     return code;
                 };
 
-                // Sort files: other components first, then App file last
-                const appFile = jsFiles.find(f => (f.path || '').toLowerCase().includes('app.'));
-                const otherFiles = jsFiles.filter(f => f !== appFile);
-                const orderedFiles = [...otherFiles, ...(appFile ? [appFile] : [])];
+                // --- Module-based preview ---------------------------------
+                // Each source file is transformed by Babel and resolved via a
+                // tiny require() registry. React + react-dom are pinned to ONE
+                // exact version via an import map; a curated set of libraries is
+                // SELF-HOSTED (/static/vendor/*.mjs, built with react external) so
+                // they share that single React instance — guaranteeing hooks work.
+                // Non-curated packages fall back to esm.sh (also react-external).
+                // Tailwind is available by default. No concatenation, no
+                // import/export stripping, no JSX rewriting.
+                const fileMap = {};
+                (version.files || []).forEach(f => {
+                    const p = (f.path || '').replace(/^\.\//, '');
+                    if (/\.(jsx?|tsx?)$/i.test(p)) {
+                        fileMap[p] = cleanMd(f.content || '');
+                    }
+                });
 
-                // Log raw code BEFORE markdown cleanup
-                const rawCode = orderedFiles.map(f => normalizeContent(f.content || '')).join('\n\n');
-                console.log('[Artifact] RAW code (before cleanMd):', rawCode);
+                // Curated, self-hosted libraries (react-external bundles).
+                const CURATED = {
+                    'react-router-dom': 'react-router-dom.mjs',
+                    'lucide-react': 'lucide-react.mjs',
+                    'recharts': 'recharts.mjs',
+                    'clsx': 'clsx.mjs',
+                    'date-fns': 'date-fns.mjs',
+                    'zustand': 'zustand.mjs',
+                    'framer-motion': 'framer-motion.mjs'
+                };
+                const REACT_V = '19.2.7';
+                const ORIGIN = (typeof window !== 'undefined' && window.location && window.location.origin) || '';
 
-                // Concatenate all code (keep imports/exports — Babel will convert them)
-                let combinedCode = orderedFiles.map(f => cleanMd(f.content || '')).join('\n\n');
+                // Discover bare (npm) imports.
+                const bareSet = new Set();
+                Object.values(fileMap).forEach(src => {
+                    const re = /\bfrom\s*['"]([^'"]+)['"]/g;
+                    let m;
+                    while ((m = re.exec(src))) {
+                        const s = m[1];
+                        if (s[0] === '.') continue;
+                        if (s === 'react' || s === 'react-dom' || s === 'react-dom/client') continue;
+                        if (/\.(css|scss|sass|less|svg|png|jpe?g|gif|webp|avif|mp4|woff2?)$/i.test(s)) continue;
+                        bareSet.add(s);
+                    }
+                });
+                const bareList = Array.from(bareSet);
 
-                console.log('[Artifact] CLEANED code (after cleanMd):', combinedCode);
+                // Import map: one shared React; curated → self-hosted; rest → esm.sh.
+                const importmap = { imports: {
+                    'react': 'https://cdn.jsdelivr.net/npm/react@' + REACT_V + '/+esm',
+                    'react-dom': 'https://cdn.jsdelivr.net/npm/react-dom@' + REACT_V + '/+esm',
+                    'react-dom/client': 'https://cdn.jsdelivr.net/npm/react-dom@' + REACT_V + '/client/+esm',
+                    'react/jsx-runtime': 'https://cdn.jsdelivr.net/npm/react@' + REACT_V + '/jsx-runtime/+esm',
+                    'react/jsx-dev-runtime': 'https://cdn.jsdelivr.net/npm/react@' + REACT_V + '/jsx-dev-runtime/+esm'
+                }};
+                bareList.forEach(pkg => {
+                    importmap.imports[pkg] = CURATED[pkg]
+                        ? (ORIGIN + '/static/vendor/' + CURATED[pkg])
+                        : ('https://esm.sh/' + pkg + '?external=react,react-dom');
+                });
+                console.log('[Artifact] preview files:', Object.keys(fileMap), 'packages:', bareList);
 
-                // Embed code AND CSS safely via JSON in data elements
-                // Replace </script> to prevent breaking the HTML parser
                 const safeJson = (val) => JSON.stringify(val).replace(/<\/script>/gi, '<\\/script>');
-                const codePayload = safeJson(combinedCode);
+                const filesPayload = safeJson(fileMap);
                 const cssPayload = safeJson(cssFiles.map(f => normalizeContent(f.content || '')));
+                const barePayload = safeJson(bareList);
+                const importmapPayload = JSON.stringify(importmap).replace(/<\/script>/gi, '<\\/script>');
 
+                // NOTE: inside a template literal — backslashes in regexes are doubled (\\).
                 const doc = `<!doctype html>
 <html>
 <head>
@@ -394,191 +444,125 @@
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <style>
         body { margin: 0; padding: 0; background: #1a1a2e; color: #f4f4f4; font-family: system-ui, -apple-system, sans-serif; }
-        #root { min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+        #root { min-height: 100vh; }
     </style>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
+    <script type="importmap">${importmapPayload}<\/script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"><\/script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
 </head>
 <body>
     <div id="root"><p style="padding:2rem;color:#888;font-family:monospace;">Loading React...</p></div>
-    <script id="code-data" type="application/json">${codePayload}<\/script>
+    <script id="files-data" type="application/json">${filesPayload}<\/script>
     <script id="css-data" type="application/json">${cssPayload}<\/script>
+    <script id="bare-data" type="application/json">${barePayload}<\/script>
     <script>
     (function() {
-        // --- 1. INJECT CSS ---
-        var cssArray = JSON.parse(document.getElementById('css-data').textContent);
-        console.log('[Artifact] CSS:', cssArray.length, 'files,', cssArray.reduce(function(a,b){return a+b.length},0), 'chars');
-        cssArray.forEach(function(css) {
-            var s = document.createElement('style');
-            s.textContent = css;
-            document.head.appendChild(s);
-        });
+        function escErr(s){ var d=document.createElement('div'); d.textContent=String(s); return d.innerHTML; }
+        var errored = false;
+        function showError(msg){
+            errored = true;
+            document.getElementById('root').innerHTML = '<pre style="padding:1rem;color:#ff6b6b;font-family:monospace;font-size:12px;white-space:pre-wrap;">' + escErr(msg) + '</pre>';
+            try { window.parent.postMessage({ type: 'artifact-preview-error', error: String(msg) }, '*'); } catch(e){}
+        }
+        window.addEventListener('error', function(ev){ if (!errored) showError((ev && ev.message) || 'Runtime error'); });
+        window.addEventListener('unhandledrejection', function(ev){ if (!errored) showError((ev && ev.reason && ev.reason.message) || 'Failed to load a dependency'); });
 
-        // --- 2. GET CODE ---
-        var code = JSON.parse(document.getElementById('code-data').textContent);
+        (async function(){
+        try {
+            var cssArray = JSON.parse(document.getElementById('css-data').textContent);
+            cssArray.forEach(function(css){ var s=document.createElement('style'); s.textContent=css; document.head.appendChild(s); });
 
-        // --- 3. STRIP IMPORTS (resolved via globals) ---
-        // Single-line imports: import X from '...', import { X } from '...'
-        code = code.replace(/^\\s*import\\s+.*from\\s+['\"][^'\"]+['\"];?\\s*$/gm, '');
-        // Multiline destructured: import {\\n  X,\\n  Y\\n} from '...'
-        code = code.replace(/^\\s*import\\s*(?:[\\w$]+\\s*,\\s*)?\\{[\\s\\S]*?\\}\\s*from\\s+['\"][^'\"]+['\"];?\\s*$/gm, '');
-        // Side-effect imports: import './style.css'
-        code = code.replace(/^\\s*import\\s+['\"][^'\"]+['\"];?\\s*$/gm, '');
-
-        // --- 4. STRIP EXPORTS (keep declarations) ---
-        code = code.replace(/export\\s+default\\s+function\\s+/g, 'function ');
-        code = code.replace(/export\\s+default\\s+class\\s+/g, 'class ');
-        code = code.replace(/export\\s+default\\s+/g, 'var __defaultExport = ');
-        code = code.replace(/export\\s+(const|let|var|function|class)\\s+/g, '$1 ');
-
-        // --- 4b. FIX MALFORMED JSX ---
-        // Self-closing + closing tag: <tag .../></tag> -> <tag ...></tag>
-        // Only match when /> is immediately followed by </tag> (no JSX content between)
-        code = code.replace(/\\/>\\s*<\\/([a-zA-Z][a-zA-Z0-9]*?)>/g, '></$1>');
-
-        // --- 4c. FIX UNCLOSED VOID ELEMENTS ---
-        // Handle multiline void tags: <input\\n  attr={e => val}\\n> → .../>
-        // Regex fails on => inside attrs, so use line-by-line scan instead.
-        (function() {
-            var voidRe = /^\\s*<(img|input|br|hr|meta|link|source|track|wbr|area|base|col|embed|param)\\b/i;
-            var selfCloseRe = /\\/\\>\\s*$/;
-            var loneCloseRe = /^(\\s*)>(.*)$/;
-            var lines = code.split('\\n');
-            var inVoid = false;
-            for (var i = 0; i < lines.length; i++) {
-                if (voidRe.test(lines[i])) {
-                    // Single-line void tag: <input type="text">
-                    if (lines[i].includes('>')) {
-                        if (selfCloseRe.test(lines[i])) {
-                            inVoid = false; // already self-closed
-                        } else {
-                            // Check if > is at the end (not inside => or attributes)
-                            var trimmed = lines[i].trimEnd();
-                            if (trimmed.endsWith('>') && !trimmed.endsWith('=>')) {
-                                lines[i] = trimmed.slice(0, -1) + ' />' ;
-                            } else {
-                                inVoid = true; // > is inside attrs, closing > is on a later line
-                            }
-                        }
-                    } else {
-                        inVoid = true; // multiline tag
-                    }
-                } else if (inVoid) {
-                    if (selfCloseRe.test(lines[i])) {
-                        inVoid = false;
-                    } else if (loneCloseRe.test(lines[i])) {
-                        // Line is just whitespace + > + maybe more content
-                        lines[i] = lines[i].replace(loneCloseRe, '$1/>$2');
-                        inVoid = false;
-                    }
-                }
+            // One shared React (via import map) — used for rendering AND by every
+            // package, so hooks/context never see a null dispatcher.
+            // Wrap a native ESM namespace so Babel's CommonJS interop reads it
+            // correctly (marks __esModule so default-import resolves to ns.default).
+            function interop(ns){
+                if (!ns || ns.__esModule) return ns;
+                var o = { __esModule: true };
+                Object.keys(ns).forEach(function(k){ o[k] = ns[k]; });
+                if (!('default' in o)) o.default = ns;
+                return o;
             }
-            code = lines.join('\\n');
+            var ReactNS = await import('react');
+            var React = ReactNS.default || ReactNS;
+            var ReactDOMNS = await import('react-dom');
+            var ReactDOMClientNS = await import('react-dom/client');
+            var createRoot = (ReactDOMClientNS && ReactDOMClientNS.createRoot) || (ReactDOMNS && (ReactDOMNS.default && ReactDOMNS.default.createRoot || ReactDOMNS.createRoot));
+            var externals = { 'react': interop(ReactNS), 'react-dom': interop(ReactDOMNS), 'react-dom/client': interop(ReactDOMClientNS) };
+
+            var bareList = JSON.parse(document.getElementById('bare-data').textContent);
+            for (var bi=0; bi<bareList.length; bi++) {
+                try { externals[bareList[bi]] = interop(await import(bareList[bi])); }
+                catch(impErr){ throw new Error('Failed to load package "' + bareList[bi] + '": ' + (impErr && impErr.message || impErr)); }
+            }
+
+            var RAW = JSON.parse(document.getElementById('files-data').textContent);
+            var FILES = {}; Object.keys(RAW).forEach(function(k){ FILES[k.replace(/^\\.\\//,'')] = RAW[k]; });
+            var paths = Object.keys(FILES);
+            var isCode = function(p){ return /\\.(jsx?|tsx?)$/.test(p) && !/\\.config\\.[jt]sx?$/.test(p); };
+            var factories = {};
+            paths.filter(isCode).forEach(function(p){
+                var out = Babel.transform(FILES[p], { presets: ['react', ['env', { modules: 'commonjs' }]], filename: p }).code;
+                factories[p] = new Function('module', 'exports', 'require', out);
+            });
+
+            function resolve(spec, fromPath){
+                var base = fromPath.indexOf('/') >= 0 ? fromPath.slice(0, fromPath.lastIndexOf('/')) : '';
+                var parts = base ? base.split('/') : [];
+                spec.split('/').forEach(function(seg){ if (seg === '.' || seg === '') return; if (seg === '..') parts.pop(); else parts.push(seg); });
+                var p = parts.join('/');
+                var cands = [p, p+'.jsx', p+'.js', p+'.tsx', p+'.ts', p+'/index.jsx', p+'/index.js', p+'/index.tsx', p+'/index.ts'];
+                for (var i=0;i<cands.length;i++){ if (factories[cands[i]]) return cands[i]; }
+                return null;
+            }
+            var cache = {};
+            function requirePath(path){
+                if (cache[path]) return cache[path].exports;
+                var module = { exports: {} }; cache[path] = module;
+                factories[path](module, module.exports, makeRequire(path));
+                return module.exports;
+            }
+            function makeRequire(fromPath){
+                return function(spec){
+                    if (externals.hasOwnProperty(spec)) return externals[spec];
+                    if (spec.charAt(0) === '.') {
+                        if (/\\.(css|scss|sass|less|svg|png|jpe?g|gif|webp|avif|mp4|woff2?)$/i.test(spec)) return {};
+                        var r = resolve(spec, fromPath);
+                        if (!r) throw new Error('Module not found: ' + spec + ' (from ' + fromPath + ')');
+                        return requirePath(r);
+                    }
+                    throw new Error('Unsupported import "' + spec + '" — not found among the artifact files or loaded packages.');
+                };
+            }
+
+            // BrowserRouter shim: srcdoc URL isn't "/", so normalize it.
+            try { window.history.replaceState(null, '', '/'); } catch (e) {}
+
+            var entry = paths.filter(isCode).find(function(p){
+                return /(?:createRoot|ReactDOM\\s*\\.\\s*render)\\s*\\(/.test(FILES[p]) && /getElementById\\(\\s*['"]root['"]\\s*\\)/.test(FILES[p]);
+            });
+            console.log('[Artifact] preview entry:', entry || '(App default export)');
+            if (entry) {
+                requirePath(entry);
+            } else {
+                var appPath = paths.filter(isCode).find(function(p){ return /(^|\\/)app\\.(jsx?|tsx?)$/i.test(p); }) || paths.filter(isCode)[0];
+                if (!appPath) throw new Error('No runnable component file found.');
+                var mod = requirePath(appPath);
+                var Comp = mod.default || mod[Object.keys(mod).find(function(k){ return typeof mod[k] === 'function'; })];
+                if (typeof Comp !== 'function') throw new Error('No React component export found in ' + appPath);
+                if (!createRoot) throw new Error('react-dom createRoot unavailable.');
+                createRoot(document.getElementById('root')).render(React.createElement(Comp));
+            }
+
+            setTimeout(function(){
+                var root = document.getElementById('root');
+                if (!errored && root && root.children.length > 0) {
+                    console.log('[Artifact] Rendered OK');
+                    try { window.parent.postMessage({ type: 'artifact-preview-ok' }, '*'); } catch(e){}
+                }
+            }, 100);
+        } catch(e){ showError(e && e.message ? e.message : e); }
         })();
-
-        // --- 5. DETECT MAIN COMPONENT ---
-        // Collect ALL PascalCase identifiers from functions, classes, and const/let/var assignments
-        var componentName = null;
-        var allNames = [];
-        var funcMatches = code.match(/function\\s+([A-Z][A-Za-z0-9]*)/g);
-        if (funcMatches) { funcMatches.forEach(function(m) { allNames.push(m.replace(/function\\s+/, '')); }); }
-        var classMatches = code.match(/class\\s+([A-Z][A-Za-z0-9]*)/g);
-        if (classMatches) { classMatches.forEach(function(m) { allNames.push(m.replace(/class\\s+/, '')); }); }
-        // Arrow function components: const App = () => { ... }
-        var constMatches = code.match(/(?:const|let|var)\\s+([A-Z][A-Za-z0-9]*)\\s*=/g);
-        if (constMatches) { constMatches.forEach(function(m) { allNames.push(m.replace(/(?:const|let|var)\\s+/, '').replace(/\\s*=$/,'')); }); }
-        // Prefer 'App', else use last PascalCase name found
-        if (allNames.indexOf('App') !== -1) { componentName = 'App'; }
-        else if (allNames.length > 0) { componentName = allNames[allNames.length - 1]; }
-        console.log('[Artifact] Detected component:', componentName, 'candidates:', allNames);
-        console.log('[Artifact] Code after strip (full):', code);
-
-        // --- 6. TRANSFORM & RENDER ---
-        function escErr(s) { var d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
-        function showError(msg) { document.getElementById('root').innerHTML = '<pre style="padding:1rem;color:#ff6b6b;font-family:monospace;font-size:12px;white-space:pre-wrap;">' + escErr(msg) + '</pre>'; }
-        var lastRenderError = '';
-
-        function tryRender(src, label) {
-            try {
-                var transformed = Babel.transform(src, { presets: ['react'], filename: 'app.jsx' }).code;
-
-                // Build execution wrapper: provide React hooks as locals, return the component
-                var hookSetup = 'var useState=React.useState,useEffect=React.useEffect,useRef=React.useRef,useCallback=React.useCallback,useMemo=React.useMemo,useContext=React.useContext,useReducer=React.useReducer,createContext=React.createContext,Fragment=React.Fragment,memo=React.memo,forwardRef=React.forwardRef,useLayoutEffect=React.useLayoutEffect,useDeferredValue=React.useDeferredValue,useTransition=React.useTransition,useId=React.useId;';
-
-                var returnComponent = componentName
-                    ? '\\nreturn typeof ' + componentName + '==="function"?' + componentName + ':typeof __defaultExport==="function"?__defaultExport:null;'
-                    : '\\nreturn typeof __defaultExport==="function"?__defaultExport:null;';
-
-                var fn = new Function('React', 'ReactDOM', hookSetup + transformed + returnComponent);
-                var Component = fn(React, ReactDOM);
-
-                if (typeof Component === 'function') {
-                    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Component));
-                    console.log('[Artifact] Rendered OK (' + label + ')');
-
-                    // Log DOM structure for debugging (3 levels deep)
-                    setTimeout(function() {
-                        function describeEl(el, depth) {
-                            if (!el || depth > 3) return '';
-                            var tag = el.tagName.toLowerCase();
-                            if (el.className) tag += '.' + el.className.replace(/\\s+/g, '.');
-                            if (el.id) tag += '#' + el.id;
-                            var kids = [];
-                            for (var i = 0; i < Math.min(el.children.length, 8); i++) {
-                                kids.push(describeEl(el.children[i], depth + 1));
-                            }
-                            if (el.children.length > 8) kids.push('...+' + (el.children.length - 8));
-                            return tag + (kids.length ? ' > [' + kids.join(', ') + ']' : '');
-                        }
-                        var root = document.getElementById('root');
-                        if (root && root.firstElementChild) {
-                            console.log('[Artifact] DOM tree:', describeEl(root.firstElementChild, 0));
-                        }
-                    }, 500);
-                    return true;
-                }
-                lastRenderError = label + ': Component is ' + (typeof Component);
-                console.warn('[Artifact] ' + lastRenderError);
-                return false;
-            } catch(e) {
-                lastRenderError = e.message;
-                console.warn('[Artifact] ' + label + ':', e.message);
-                return false;
-            }
-        }
-
-        if (!tryRender(code, 'direct')) {
-            // Adjacent JSX error — wrap return(...) bodies in <> ... </>
-            var fragCode = code;
-            var returnRe = /\\breturn\\s*\\(/g;
-            var match;
-            var parts = [];
-            var lastEnd = 0;
-            returnRe.lastIndex = 0;
-            while ((match = returnRe.exec(code)) !== null) {
-                var openPos = match.index + match[0].length - 1;
-                var depth = 1;
-                var pos = openPos + 1;
-                while (pos < code.length && depth > 0) {
-                    if (code[pos] === '(') depth++;
-                    else if (code[pos] === ')') depth--;
-                    pos++;
-                }
-                var closePos = pos - 1;
-                parts.push(code.substring(lastEnd, openPos + 1));
-                parts.push('<>');
-                parts.push(code.substring(openPos + 1, closePos));
-                parts.push('<\\/>');
-                lastEnd = closePos;
-            }
-            parts.push(code.substring(lastEnd));
-            fragCode = parts.join('');
-            console.log('[Artifact] Fragment-wrapped code (first 400):', fragCode.substring(0, 400));
-            if (!tryRender(fragCode, 'fragment-wrapped')) {
-                showError(lastRenderError || 'Could not render component');
-            }
-        }
     })();
     <\/script>
 </body>
@@ -1259,6 +1243,10 @@ window.addEventListener('load', function() {
                     this._showRunOnServer(e.data);
                 } else if (e.data?.type === 'sandbox-exec') {
                     this._handleExec(e.data.command);
+                } else if (e.data?.type === 'artifact-preview-error') {
+                    this._handlePreviewError(e.data.error);
+                } else if (e.data?.type === 'artifact-preview-ok') {
+                    this._handlePreviewOk();
                 }
             });
 
@@ -2193,6 +2181,98 @@ window.addEventListener('load', function() {
             }
         }
 
+        // Show a reviewable unified diff for an AI patch. `prevFiles` is the
+        // file list of the version shown BEFORE this patch; `newArtifact` is the
+        // already-persisted patched artifact.
+        enterPatchDiffMode(patches, patchResults, newArtifact, prevFiles, opts) {
+            opts = opts || {};
+            if (!newArtifact) return;
+            this._patchPrevFiles = (prevFiles || []).slice();
+            this.openArtifact(newArtifact, { sessionId: opts.sessionId || null, reference: opts.reference || null, initialTab: 'code' });
+
+            var newFiles = (this.currentVersion && this.currentVersion.files) || [];
+            var prevByPath = {};
+            this._patchPrevFiles.forEach(function (f) { prevByPath[f.path] = f; });
+
+            var changed = newFiles.filter(function (f) {
+                var p = prevByPath[f.path];
+                return !p || (p.content || '') !== (f.content || '');
+            }).map(function (f) { return f.path; });
+            if (changed.length === 0) { return; }
+            this._patchChangedPaths = changed;
+
+            var failed = (patchResults || []).filter(function (r) { return r && r.status === 'failed'; }).length;
+            this._patchRegenerated = failed > 0;
+
+            this._renderDiffBanner(changed.length, opts);
+            this._showDiffForFile(changed[0]);
+            this._markChangedFilesInDropdown(changed);
+        }
+
+        _showDiffForFile(path) {
+            if (!this.codeDisplay || !window.ArtifactDiff) return;
+            var newFiles = (this.currentVersion && this.currentVersion.files) || [];
+            var nf = newFiles.find(function (f) { return f.path === path; });
+            var pf = (this._patchPrevFiles || []).find(function (f) { return f.path === path; });
+            if (!nf) return;
+            var rows = window.ArtifactDiff.computeUnifiedDiff(pf ? (pf.content || '') : '', nf.content || '');
+            this.codeDisplay.dataset.diffMode = '1';
+            window.ArtifactDiff.renderDiffView(this.codeDisplay, rows);
+            if (this.fileSelect) {
+                var idx = newFiles.indexOf(nf);
+                if (idx >= 0) this.fileSelect.value = String(idx);
+            }
+        }
+
+        _renderDiffBanner(fileCount, opts) {
+            this._removeDiffBanner();
+            var host = this.codeDisplay && this.codeDisplay.parentElement;
+            if (!host) return;
+            var bar = document.createElement('div');
+            bar.className = 'artifact-diff-banner';
+            var title = document.createElement('span');
+            title.className = 'artifact-diff-banner__title';
+            title.textContent = '✦ Changes in ' + fileCount + ' file' + (fileCount !== 1 ? 's' : '')
+                + (this._patchRegenerated ? ' · regenerated' : '');
+            var revert = document.createElement('button');
+            revert.type = 'button'; revert.className = 'artifact-diff-banner__btn artifact-diff-banner__btn--revert';
+            revert.textContent = 'Revert';
+            revert.addEventListener('click', () => this.revertToPreviousVersion());
+            var done = document.createElement('button');
+            done.type = 'button'; done.className = 'artifact-diff-banner__btn artifact-diff-banner__btn--done';
+            done.textContent = 'Done';
+            done.addEventListener('click', () => this.exitPatchDiffMode());
+            bar.appendChild(title); bar.appendChild(revert); bar.appendChild(done);
+            host.insertBefore(bar, this.codeDisplay);
+            this._diffBanner = bar;
+        }
+
+        _removeDiffBanner() {
+            if (this._diffBanner && this._diffBanner.parentNode) this._diffBanner.parentNode.removeChild(this._diffBanner);
+            this._diffBanner = null;
+        }
+
+        _markChangedFilesInDropdown(paths) {
+            if (!this.fileSelect) return;
+            Array.prototype.forEach.call(this.fileSelect.options, function (opt) {
+                var base = opt.textContent.replace(/^●\s*/, '');
+                opt.textContent = (paths.indexOf(base) >= 0 ? '● ' : '') + base;
+            });
+        }
+
+        exitPatchDiffMode() {
+            this._removeDiffBanner();
+            if (this.codeDisplay) delete this.codeDisplay.dataset.diffMode;
+            var f = (this.currentVersion && this.currentVersion.files && this.currentVersion.files[0]) || null;
+            if (this.fileSelect && this.currentVersion) {
+                var idx = parseInt(this.fileSelect.value, 10);
+                if (!isNaN(idx) && this.currentVersion.files[idx]) f = this.currentVersion.files[idx];
+            }
+            if (f) this.renderCodeViewer(this.currentVersion, f);
+            this._markChangedFilesInDropdown([]);
+            this._patchChangedPaths = null; this._patchPrevFiles = null;
+        }
+
         applyPatchesVisually(patches, patchResults, finalArtifact, { sessionId = null, reference = null } = {}) {
             // Open patched artifact on code tab, highlight changed regions,
             // scroll to first change, then transition to preview.
@@ -2561,16 +2641,6 @@ window.addEventListener('load', function() {
                     credentials: 'same-origin'
                 });
 
-                if (!resp.ok) {
-                    let detail = `${resp.status} ${resp.statusText}`;
-                    try {
-                        const errBody = await resp.json();
-                        if (errBody && errBody.error) detail = errBody.error;
-                    } catch(_) { /* non-JSON body — keep status text */ }
-                    append('Server error: ' + detail + '\n', 'stderr');
-                    return;
-                }
-
                 const reader = resp.body.getReader();
                 const decoder = new TextDecoder();
                 let buf = '';
@@ -2932,6 +3002,7 @@ window.addEventListener('load', function() {
 
         renderVersion(version) {
             if (!version) return;
+            this._removePreviewFixBar();
             this.currentVersion = version;
             version.files = version.files || [];
             this.renderPreview(version);
@@ -3005,6 +3076,11 @@ window.addEventListener('load', function() {
         }
 
         handleFileSelectChange() {
+            if (this.codeDisplay && this.codeDisplay.dataset.diffMode && this._patchChangedPaths) {
+                var files = (this.currentVersion && this.currentVersion.files) || [];
+                var sel = files[parseInt(this.fileSelect.value, 10)];
+                if (sel) { this._showDiffForFile(sel.path); return; }
+            }
             if (!this.fileSelect || !this.currentVersion?.files) return;
             const selectedIndex = parseInt(this.fileSelect.value, 10);
             if (isNaN(selectedIndex) || selectedIndex < 0) return;
@@ -3796,6 +3872,98 @@ window.addEventListener('load', function() {
 
             const hasContent = this.composerPrompt.value.trim().length > 0;
             this.composerSubmitBtn.disabled = !hasContent;
+        }
+
+        // ── Preview auto-repair ──────────────────────────────────────────
+        // The preview iframe posts the REAL compile/runtime error here (any
+        // language). Auto-fix once per version by feeding that error back
+        // through the normal update pipeline; if the regenerated version still
+        // fails, fall back to a manual "Fix again" button so we never loop.
+        // Error-agnostic: the actual error string drives the correction — no
+        // per-error or per-framework hardcoding.
+        _handlePreviewError(errorMsg) {
+            if (!errorMsg || !this.currentArtifact) return;
+            // Key the "auto-fix once" guard by ARTIFACT, not version: each auto-fix
+            // produces a NEW version, so a per-version guard would never trip and
+            // would loop forever. We auto-fix an artifact at most once; the flag is
+            // only cleared by a SUCCESSFUL render (_handlePreviewOk). If the
+            // regenerated version still fails, fall back to a manual button.
+            const aid = this.currentArtifact.artifactId || 'artifact';
+            this._autoFixedArtifacts = this._autoFixedArtifacts || {};
+            if (this._autoFixedArtifacts[aid]) {
+                this._showPreviewFixBar(errorMsg, aid);
+                return;
+            }
+            this._autoFixedArtifacts[aid] = true;
+            this._sendPreviewFix(errorMsg);
+        }
+
+        _handlePreviewOk() {
+            // Preview rendered cleanly — clear the auto-fix guard + any fix bar so
+            // a genuinely new error later can auto-fix again.
+            const aid = this.currentArtifact?.artifactId || 'artifact';
+            if (this._autoFixedArtifacts) this._autoFixedArtifacts[aid] = false;
+            this._removePreviewFixBar();
+        }
+
+        _sendPreviewFix(errorMsg) {
+            if (typeof window.sendMessage !== 'function' || !this.currentArtifact) return;
+            this._removePreviewFixBar();
+            const filesContext = (this.currentVersion?.files?.length)
+                ? this.buildFilesContext(this.currentVersion.files)
+                : `Artifact: ${this.currentArtifact.title}`;
+            const messageText =
+`The preview of artifact "${this.currentArtifact.title}" failed to compile/run with this error:
+
+${errorMsg}
+
+Fix the code so it compiles and runs cleanly. Keep all existing functionality; change only what is needed to resolve this error.
+
+Current code:
+${filesContext}`;
+            const initialVersionCount = this.currentArtifact.versions?.length || 0;
+            try {
+                if (window.Toast) Toast.success('Auto-fixing preview error…');
+                this.switchTab('preview');
+                window.sendMessage(messageText, null, { displayPrompt: '🔧 Auto-fixing preview error' });
+                this.monitorForNewVersion(initialVersionCount, document.getElementById('composer-progress-text'));
+            } catch (e) {
+                console.warn('[Artifact] auto-fix send failed:', e);
+            }
+        }
+
+        _showPreviewFixBar(errorMsg, verId) {
+            const host = this.previewFrame?.parentElement;
+            if (!host) return;
+            let bar = host.querySelector('.artifact-preview-fixbar');
+            if (!bar) {
+                bar = document.createElement('div');
+                bar.className = 'artifact-preview-fixbar';
+                bar.style.cssText = 'position:absolute;left:0;right:0;bottom:0;z-index:5;display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(40,18,18,0.96);border-top:1px solid rgba(255,107,107,0.4);font:12px/1.4 sans-serif;color:#ffb4b4;';
+                const txt = document.createElement('span');
+                txt.className = 'artifact-preview-fixbar__text';
+                txt.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = 'Fix again';
+                btn.style.cssText = 'flex-shrink:0;padding:5px 12px;border:none;border-radius:6px;background:#ff6b6b;color:#1a0a0a;font-weight:600;cursor:pointer;';
+                btn.addEventListener('click', () => {
+                    // Manual, user-initiated retry — bypasses the once-per-artifact
+                    // auto guard without re-arming auto-fix.
+                    this._sendPreviewFix(errorMsg);
+                });
+                bar.appendChild(txt);
+                bar.appendChild(btn);
+                if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+                host.appendChild(bar);
+            }
+            bar.querySelector('.artifact-preview-fixbar__text').textContent =
+                'Preview still failing: ' + String(errorMsg).split('\n')[0];
+        }
+
+        _removePreviewFixBar() {
+            const bar = this.previewFrame?.parentElement?.querySelector('.artifact-preview-fixbar');
+            if (bar) bar.remove();
         }
 
         async submitComposerPrompt() {
