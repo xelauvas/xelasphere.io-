@@ -2289,6 +2289,35 @@ window.addEventListener('load', function() {
             this._patchChangedPaths = null; this._patchPrevFiles = null;
         }
 
+        async revertToPreviousVersion() {
+            if (!this._patchPrevFiles || !this.currentArtifact || !this.currentSessionId) return;
+            var files = this._patchPrevFiles.map(function (f) {
+                return { path: f.path, content: f.content, language: f.language };
+            });
+            try {
+                var resp = await fetch('/chat/' + this.currentSessionId + '/artifacts/'
+                    + this.currentArtifact.artifactId + '/edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ files: files, title: this.currentArtifact.title, description: 'Reverted patch' })
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                var data = await resp.json();
+                this.exitPatchDiffMode();
+                if (window.Toast) Toast.success('Reverted to previous version');
+                // edit endpoint returns {success, artifactId, versionId} — no artifact object;
+                // fall through to reloadCurrentVersion to refresh the panel.
+                var reverted = null;
+                if (reverted) {
+                    this.openArtifact(reverted, { sessionId: this.currentSessionId, initialTab: 'code' });
+                } else if (typeof this.reloadCurrentVersion === 'function') {
+                    this.reloadCurrentVersion();
+                }
+            } catch (e) {
+                if (window.Toast) Toast.error('Revert failed: ' + (e && e.message || e));
+            }
+        }
+
         applyPatchesVisually(patches, patchResults, finalArtifact, { sessionId = null, reference = null } = {}) {
             // Open patched artifact on code tab, highlight changed regions,
             // scroll to first change, then transition to preview.
