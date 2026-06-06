@@ -1296,7 +1296,13 @@ def chat_stream():
                     enhanced_prompt = f"{context_str}\n\nUser question: {enhanced_prompt}"
 
     def _load_current_artifact_files(uid, sid):
-        """Load current artifact files for patching."""
+        """Load current artifact files for patching.
+
+        Resilient to the legacy `_append_version` bug that could leave the
+        active version fileless: if the active version has no files, fall back
+        to the most recent version that actually has files so a patch still
+        lands instead of being silently dropped.
+        """
         try:
             store = artifact_store
             artifacts_data = store.list_artifacts(uid, sid)
@@ -1308,9 +1314,21 @@ def chat_stream():
             if not full:
                 return None, None
             version = full.get('activeVersion')
-            if not version:
-                return None, None
-            return version.get('files', []), full
+            files = version.get('files', []) if version else []
+            if files:
+                return files, full
+            # Active version is fileless — recover from the newest version with files.
+            for v in full.get('versions', []):
+                vid = v.get('versionId')
+                if not vid:
+                    continue
+                full_v = store.get_artifact_version(uid, sid, active['artifactId'], vid, include_files=True)
+                if full_v and full_v.get('files'):
+                    logger.warning(
+                        f"Active version of {active['artifactId']} is fileless; "
+                        f"falling back to version {vid} with {len(full_v['files'])} files")
+                    return full_v.get('files', []), full
+            return None, None
         except Exception as e:
             logger.warning(f"Failed to load artifact files for patching: {e}")
             return None, None
@@ -2293,6 +2311,10 @@ def chat_stream():
                                                 'versionId': persisted['activeVersion'].get('versionId'),
                                                 'versionNumber': persisted['activeVersion'].get('versionNumber', version_count)
                                             }]
+                                        # Forward the previous version's files (present only on
+                                        # updates) so the frontend can show an old-vs-new diff.
+                                        if persisted.get('previousVersion'):
+                                            artifact_data['previousVersion'] = persisted['previousVersion']
 
                                         artifact_ref = {
                                             'artifactId': persisted.get('artifactId'),

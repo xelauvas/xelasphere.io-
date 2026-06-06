@@ -42,12 +42,7 @@ ARTIFACT_UNCLOSED_PATTERN = re.compile(r"```artifact\s*([\s\S]+)", re.IGNORECASE
 ARTIFACT_PATCH_FENCE_PATTERN = re.compile(r"```artifact_patch\s*([\s\S]*?)\s*```", re.IGNORECASE)
 # New fenced format patterns (artifact-meta + artifact-file blocks)
 FENCED_META_RE = re.compile(r"```artifact-meta\s*\n(.*?)\n\s*```", re.DOTALL | re.IGNORECASE)
-FENCED_FILE_OPEN_RE = re.compile(
-    r"^```artifact-file:([^:\n]+):([\w.+-]+)[ \t]*$",
-    re.MULTILINE | re.IGNORECASE,
-)
-# Matches a bare closing fence (```) on its own line.
-_BARE_FENCE_LINE_RE = re.compile(r"(?:^|\n)```[ \t]*(?:\n|\Z)")
+FENCED_FILE_RE = re.compile(r"```artifact-file:([^:]+):(\w+)\s*\n([\s\S]*?)```", re.IGNORECASE)
 MAX_ARTIFACT_FILES = 40
 MAX_ARTIFACT_TOTAL_BYTES = 800_000
 MAX_ARTIFACT_FILE_BYTES = 200_000
@@ -679,63 +674,6 @@ def extract_artifact_block(text: str) -> Optional[Dict[str, Any]]:
     raise ArtifactParseError("Artifact block must contain valid JSON.")
 
 
-def _iter_fenced_files(text: str):
-    """Yield (start, end, path, language, content) for each artifact-file block.
-
-    Walks each block's range (from its opening fence up to the next opening fence
-    or end-of-text) and treats the LAST bare ``` line in that range as the outer
-    closer. This correctly handles markdown content with inner ``` code fences,
-    which the previous regex truncated at the first inner fence.
-    """
-    opens = list(FENCED_FILE_OPEN_RE.finditer(text))
-    for i, open_match in enumerate(opens):
-        path = open_match.group(1).strip()
-        language = open_match.group(2).strip()
-        # Content begins on the line after the opening fence
-        content_start = open_match.end()
-        if content_start < len(text) and text[content_start] == '\n':
-            content_start += 1
-        # The block can extend up to the next opening fence (exclusive) or EOT
-        block_limit = opens[i + 1].start() if i + 1 < len(opens) else len(text)
-        block_text = text[content_start:block_limit]
-        # Find the LAST bare-fence line within the block — that's the outer closer
-        close_match = None
-        for m in _BARE_FENCE_LINE_RE.finditer(block_text):
-            close_match = m
-        if close_match is None:
-            continue
-        # close_match may include a leading \n; strip it from the content boundary
-        close_offset = close_match.start()
-        if close_offset < len(block_text) and block_text[close_offset] == '\n':
-            close_offset += 1
-        content = block_text[:close_offset]
-        if content.endswith('\n'):
-            content = content[:-1]
-        block_end = content_start + close_match.end()
-        yield (open_match.start(), block_end, path, language, content)
-
-
-# Back-compat shim: action_parser.py uses FENCED_FILE_RE.sub() to strip blocks
-# from chat text. Provide a minimal regex object exposing only .sub() that
-# delegates to the parser.
-class _FencedFileStripper:
-    def sub(self, repl, text):  # noqa: D401 — mirrors re.Pattern.sub
-        spans = [(s, e) for s, e, *_ in _iter_fenced_files(text)]
-        if not spans:
-            return text
-        out = []
-        cursor = 0
-        for s, e in spans:
-            out.append(text[cursor:s])
-            out.append(repl if isinstance(repl, str) else repl(None))
-            cursor = e
-        out.append(text[cursor:])
-        return "".join(out)
-
-
-FENCED_FILE_RE = _FencedFileStripper()
-
-
 def extract_fenced_artifact(text: str) -> Optional[dict]:
     """Parse the new fenced artifact format (artifact-meta + artifact-file blocks).
     Returns normalized artifact payload dict, or None if format not found.
@@ -752,7 +690,12 @@ def extract_fenced_artifact(text: str) -> Optional[dict]:
         return None
 
     files = []
-    for _start, _end, path, language, content in _iter_fenced_files(text):
+    for file_match in FENCED_FILE_RE.finditer(text):
+        path = file_match.group(1).strip()
+        language = file_match.group(2).strip()
+        content = file_match.group(3)
+        if content.endswith('\n'):
+            content = content[:-1]
         files.append({
             'path': path,
             'language': language,
@@ -1987,7 +1930,22 @@ class ArtifactStore:
             return self._create_artifact(user_id, session_id, payload, source_message_id, created_by)
 
         logger.info(f"persist_decision: Appending version to artifact {active_snapshot.id}")
-        return self._append_version(active_snapshot, payload, source_message_id)
+        # Capture the previous active version's files BEFORE appending, so the
+        # frontend can render an old-vs-new diff for this update regardless of
+        # whether the artifact was open in the panel.
+        prev_files = None
+        try:
+            prev_active_id = active_data.get("activeVersionId")
+            if prev_active_id:
+                prev_version = self._load_version_with_files(active_snapshot.reference, prev_active_id)
+                if prev_version:
+                    prev_files = prev_version.get("files")
+        except Exception as exc:
+            logger.warning(f"persist_decision: could not load previous version files: {exc}")
+        result = self._append_version(active_snapshot, payload, source_message_id)
+        if result is not None and prev_files:
+            result["previousVersion"] = {"files": prev_files}
+        return result
 
     def _get_active_snapshot(self, user_id: str, session_id: str) -> Optional[gc_firestore.DocumentSnapshot]:
         # First try to find an artifact explicitly marked as active
@@ -2069,6 +2027,20 @@ class ArtifactStore:
             return None
         artifact_ref = snapshot.reference
         version_id = f"ver_{uuid.uuid4().hex}"
+        version_ref = artifact_ref.collection("versions").document(version_id)
+        files = payload.get("files", []) or []
+
+        # Write the version's files FIRST, before the transaction flips
+        # activeVersionId. Previously files were written AFTER the txn (and
+        # skipped entirely when empty), so the active version could briefly —
+        # or permanently, on an empty/failed payload or a concurrent append —
+        # point at a version with zero files, which silently broke every
+        # subsequent patch ("No active artifact found to patch").
+        self._write_version_files(version_ref, files)
+
+        # Never promote a fileless version to active — keep the previous good
+        # active version so metadata-only/empty appends can't orphan the code.
+        make_active = bool(files)
 
         # Use Google Cloud Firestore transaction (not Firebase Admin)
         transaction = self.db.transaction()
@@ -2085,16 +2057,15 @@ class ArtifactStore:
                 "meta": payload.get("meta") or data.get("meta") or {},
                 "updatedAt": gc_firestore.SERVER_TIMESTAMP,
                 "versionCount": next_version_number,
-                "activeVersionId": version_id,
-                "isActive": True,
             }
+            if make_active:
+                updates["activeVersionId"] = version_id
+                updates["isActive"] = True
             version_doc = self._version_document(payload, version_id, next_version_number, source_message_id)
             transaction.update(artifact_ref, updates)
-            transaction.set(artifact_ref.collection("versions").document(version_id), version_doc)
+            transaction.set(version_ref, version_doc)
 
         _txn(transaction)
-        version_ref = artifact_ref.collection("versions").document(version_id)
-        self._write_version_files(version_ref, payload.get("files", []))
         return self._build_artifact_response(artifact_ref, artifact_ref.get())
 
     def _write_version_files(self, version_ref: gc_firestore.DocumentReference, files: List[Dict[str, Any]]) -> None:

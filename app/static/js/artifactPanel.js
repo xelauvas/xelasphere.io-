@@ -2169,12 +2169,15 @@ window.addEventListener('load', function() {
                 }
 
                 if (artifactData) {
-                    // If this stream UPDATED the same artifact that was already open,
-                    // show an old-vs-new diff (covers full regenerations, not just
-                    // explicit patches). Otherwise render the preview as a fresh artifact.
-                    const prevFiles = this._streamPrevFiles;
-                    const sameArtifact = !!(prevFiles && this._streamPrevArtifactId
-                        && artifactData.artifactId === this._streamPrevArtifactId);
+                    // Show an old-vs-new diff when this stream UPDATED an existing
+                    // artifact (full regenerations included, not just explicit patches).
+                    // Prefer the server-provided previous version — it's present on every
+                    // update regardless of whether the artifact was open in the panel.
+                    // Fall back to the panel snapshot for the same-artifact case.
+                    const serverPrev = artifactData.previousVersion && artifactData.previousVersion.files;
+                    const panelPrev = (this._streamPrevFiles && this._streamPrevArtifactId
+                        && artifactData.artifactId === this._streamPrevArtifactId) ? this._streamPrevFiles : null;
+                    const prevFiles = serverPrev || panelPrev;
                     this._streamPrevFiles = null;
                     this._streamPrevArtifactId = null;
                     if (this.isEditMode) this.exitEditMode();
@@ -2183,7 +2186,7 @@ window.addEventListener('load', function() {
                     // restore it. Restore unconditionally so the diff is actually visible.
                     if (this.codeDisplay) this.codeDisplay.style.display = 'block';
                     if (this.editCodeMirrorContainer) this.editCodeMirrorContainer.style.display = 'none';
-                    if (sameArtifact && this.enterPatchDiffMode) {
+                    if (prevFiles && prevFiles.length && this.enterPatchDiffMode) {
                         this.enterPatchDiffMode([], [], artifactData, prevFiles, { sessionId, reference });
                     } else {
                         // openArtifact will render preview + populate code tab properly
