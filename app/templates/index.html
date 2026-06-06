@@ -152,12 +152,12 @@
     <!-- Responsive Foundation (load first for CSS variables) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-foundation.css') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/_tokens.css') }}?v=2">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=3.15">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/chat-shell.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=3.16">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chat-shell.css') }}?v=5">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/code-window.css') }}?v=5">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tree-view.css') }}?v=1.1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/message-styles.css') }}?v=9">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/message-styles.css') }}?v=14">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/recipe-card.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/prism.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
@@ -165,8 +165,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/search-results.css') }}?v=10">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=10">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=51">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=38">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=53">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=43">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
@@ -176,7 +176,7 @@
 
     <!-- Artifact Panel -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/design-tokens.css') }}?v=2">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/artifact-panel.css') }}?v=11">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/artifact-panel.css') }}?v=12">
 
     <!-- Email Composer -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/email-composer.css') }}?v=6">
@@ -197,7 +197,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/email-edit-toolbar.css') }}">
 
     <!-- Mobile Responsive -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=63">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=70">
 
     <!-- Context Menu (long-press actions) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/context-menu.css') }}">
@@ -230,6 +230,10 @@
 
     <!-- Push bootstrap (M1.3) — must load BEFORE remindersModule.js -->
     <script src="{{ url_for('static', filename='js/pushSetup.js') }}"></script>
+
+    <!-- Project icon library — must load BEFORE projectsPage.js (which is
+         inline inside the current_project block further down). -->
+    <script src="{{ url_for('static', filename='js/projectIcons.js') }}?v=2" defer></script>
 
     <!-- Reminders M0 JS -->
     <script defer src="{{ url_for('static', filename='js/remindersModule.js') }}"></script>
@@ -691,29 +695,48 @@
             <main class="container chat-area" role="main" aria-label="Chat Interface">
                 <div class="chat-stage">
                 {% if current_project %}
-                <main class="project-page" data-project-id="{{ current_project.id }}" style="--project-accent: {{ current_project.color }};">
+                <main class="project-page" data-project-id="{{ current_project.id }}"
+                      data-project-icon="{{ current_project.icon or 'code' }}"
+                      style="--project-accent: {{ current_project.color }};">
                   <header class="project-page-header">
-                    <a href="/" class="project-page-back" aria-label="Back to chats">←</a>
-                    <svg class="project-page-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
-                      <path d="M2 10h20"/>
-                    </svg>
+                    <a href="/" class="project-page-back pp-hidden" aria-label="Back to chats">←</a>
+                    <button type="button" id="project-page-icon-btn" class="project-page-icon-btn"
+                            aria-label="Change icon and color" data-icon-trigger>
+                      <!-- Default {} glyph is inline so the header never renders
+                           empty; projectsPage.js swaps this for the project's
+                           saved icon (via data-project-icon) once PROJECT_ICONS
+                           is available. -->
+                      <span class="project-page-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/>
+                          <path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>
+                        </svg>
+                      </span>
+                    </button>
                     <h1 class="project-page-title" id="project-title">{{ current_project.name }}</h1>
-                    <button type="button" id="project-rename" class="project-page-edit" aria-label="Rename project">Rename</button>
-                    <button type="button" id="project-menu" class="project-page-menu" aria-label="Project options">⋯</button>
+                    <button type="button" id="project-rename" class="project-page-edit pp-hidden" aria-label="Rename project">Rename</button>
+                    <button type="button" id="project-menu" class="project-page-menu pp-hidden" aria-label="Project options">⋯</button>
                   </header>
+
+                  <!-- ChatGPT-style tabs. "Sources" is a placeholder for now. -->
+                  <div class="project-page-tabs" role="tablist" aria-label="Project sections">
+                    <button type="button" role="tab" class="project-page-tab is-active"
+                            data-tab="chats" aria-selected="true">Chats</button>
+                    <button type="button" role="tab" class="project-page-tab"
+                            data-tab="sources" aria-selected="false">Sources</button>
+                  </div>
 
                   <button type="button" id="project-new-chat" class="project-new-chat-btn">+ New chat in this project</button>
 
-                  <section class="project-section">
+                  <section class="project-section pp-hidden">
                     <h2 class="project-section-title">Instructions</h2>
                     <textarea id="project-instructions" class="project-instructions"
                               maxlength="8000" placeholder="How should the AI respond in this project?">{{ current_project.instructions or '' }}</textarea>
                     <div class="project-instructions-status" id="project-instructions-status" aria-live="polite"></div>
                   </section>
 
-                  <section class="project-section">
+                  <section class="project-section pp-hidden">
                     <h2 class="project-section-title">Files</h2>
                     <div class="project-files-dropzone" id="project-files-dropzone">
                       <input type="file" id="project-file-input" multiple style="display:none" />
@@ -723,12 +746,15 @@
                     <ul id="project-files" class="project-files" role="list"></ul>
                   </section>
 
-                  <section class="project-section">
-                    <h2 class="project-section-title">Chats</h2>
+                  <section class="project-section project-tab-panel" data-panel="chats" role="tabpanel">
                     <ul id="project-chats" class="project-chats" role="list"></ul>
                   </section>
+
+                  <section class="project-section project-tab-panel pp-hidden" data-panel="sources" role="tabpanel">
+                    <p class="project-sources-placeholder">Sources coming soon.</p>
+                  </section>
                 </main>
-                <script src="{{ url_for('static', filename='js/projectsPage.js') }}?v=3" defer></script>
+                <script src="{{ url_for('static', filename='js/projectsPage.js') }}?v=5" defer></script>
                 {% endif %}
                 <div class="chat-shell"{% if current_project %} style="display:none"{% endif %} role="region" aria-label="Chat workspace">
                     <header class="chat-shell__header">
@@ -1359,11 +1385,12 @@
     <script src="{{ url_for('static', filename='js/speechSynthesisModule.js') }}?v=15"></script>
     <script src="{{ url_for('static', filename='js/dictationModule.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/voiceModeModule.js') }}?v=40"></script>
-    <script src="{{ url_for('static', filename='js/filePreview.js') }}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="{{ url_for('static', filename='js/filePreview.js') }}?v=6"></script>
     <script src="{{ url_for('static', filename='js/scrollState.js') }}"></script>
     <script src="{{ url_for('static', filename='js/recipeDetector.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=63"></script>
-    <script src="{{ url_for('static', filename='script.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=67"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/styleManager.js') }}?v=4"></script>
     <script>
     // Patch: intercept FormData append to inject image files for vision API
@@ -1414,13 +1441,14 @@
         window.sharedSessionId = "{{ shared_session_id|default('', true) }}";
     </script>
     <script src="{{ url_for('static', filename='js/toast.js') }}?v=7"></script>
-    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=24"></script>
+    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=26"></script>
     <script src="{{ url_for('static', filename='js/chatsPage.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=7"></script>
-    <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=47"></script>
-    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=8" defer></script>
+    <script src="{{ url_for('static', filename='js/artifactDiff.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=61"></script>
+    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=10" defer></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Dropdown Menu Logic ---
