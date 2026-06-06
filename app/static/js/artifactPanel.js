@@ -2480,6 +2480,12 @@ window.addEventListener('load', function() {
                         this.editCodeMirror.setOption('readOnly', false);
                     }
 
+                    // Leave edit mode so the read-only code view (#artifact-code-display)
+                    // is visible — the diff renders into it; in edit mode it stays hidden.
+                    if (this.isEditMode) {
+                        this.exitEditMode();
+                    }
+
                     // Show the reviewable patch diff (red/green) on the Code tab,
                     // using the pre-patch snapshot captured at stream start. Falls
                     // back to a plain open if no snapshot is available.
@@ -3279,10 +3285,14 @@ window.addEventListener('load', function() {
             // Initialize tab content when switching
             clearTimeout(this._autoEditTimer);
             if (target === 'code' && this.currentVersion) {
-                // Auto-enter edit mode when switching to code tab (not during streaming)
-                if (!this.isEditMode && !this.isPatchStreaming && !this.isStreaming) {
+                // Auto-enter edit mode when switching to code tab (not during streaming
+                // and not while a reviewable patch diff is showing — that needs the
+                // read-only code view visible, which enterEditMode would hide).
+                if (!this.isEditMode && !this.isPatchStreaming && !this.isStreaming
+                    && !(this.codeDisplay && this.codeDisplay.dataset.diffMode)) {
                     this._autoEditTimer = setTimeout(() => {
-                        if (!this.isStreaming && !this.isPatchStreaming) {
+                        if (!this.isStreaming && !this.isPatchStreaming
+                            && !(this.codeDisplay && this.codeDisplay.dataset.diffMode)) {
                             this.enterEditMode();
                         }
                     }, 50);
