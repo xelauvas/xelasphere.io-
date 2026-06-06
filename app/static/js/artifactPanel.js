@@ -2294,12 +2294,18 @@ window.addEventListener('load', function() {
             var files = this._patchPrevFiles.map(function (f) {
                 return { path: f.path, content: f.content, language: f.language };
             });
+            // Preserve structural metadata so the reverted version keeps the right
+            // entrypoint/language (the edit endpoint defaults these away if omitted).
+            var entrypointPath = (this.currentVersion && this.currentVersion.entrypointPath)
+                || (this.currentArtifact && this.currentArtifact.entrypointPath) || null;
+            var primaryLanguage = (this.currentArtifact && this.currentArtifact.primaryLanguage)
+                || (this.currentVersion && this.currentVersion.primaryLanguage) || 'code';
             try {
                 var resp = await fetch('/chat/' + this.currentSessionId + '/artifacts/'
                     + this.currentArtifact.artifactId + '/edit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ files: files, title: this.currentArtifact.title, description: 'Reverted patch' })
+                    body: JSON.stringify({ files: files, title: this.currentArtifact.title, description: 'Reverted patch', entrypointPath: entrypointPath, primaryLanguage: primaryLanguage })
                 });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 var data = await resp.json();
@@ -2334,6 +2340,12 @@ window.addEventListener('load', function() {
             this.isPatchStreaming = true;
             this._patchQueue = Promise.resolve();
             this._patchMarks = [];
+
+            // Capture the pre-patch files now; live streaming mutates the editor,
+            // so this snapshot is the only reliable "before" side for the diff.
+            this._patchStreamPrevFiles = (this.currentVersion.files || []).map(function (f) {
+                return { path: f.path, content: f.content, language: f.language };
+            });
 
             // Switch to code tab
             this.activeTab = 'code';
@@ -2451,7 +2463,7 @@ window.addEventListener('load', function() {
             }
         }
 
-        finalizePatchStreaming(artifact, { sessionId = null, reference = null } = {}) {
+        finalizePatchStreaming(artifact, { sessionId = null, reference = null, patches = null, patchResults = null } = {}) {
             if (!this.isPatchStreaming) return;
 
             // Wait for animation queue to drain, then switch to final artifact
@@ -2468,9 +2480,17 @@ window.addEventListener('load', function() {
                         this.editCodeMirror.setOption('readOnly', false);
                     }
 
-                    // Open the server-patched artifact (authoritative) on Preview
+                    // Show the reviewable patch diff (red/green) on the Code tab,
+                    // using the pre-patch snapshot captured at stream start. Falls
+                    // back to a plain open if no snapshot is available.
                     if (artifact) {
-                        this.openArtifact(artifact, { sessionId, reference });
+                        const prevFiles = this._patchStreamPrevFiles;
+                        this._patchStreamPrevFiles = null;
+                        if (prevFiles && this.enterPatchDiffMode) {
+                            this.enterPatchDiffMode(patches || [], patchResults || [], artifact, prevFiles, { sessionId, reference });
+                        } else {
+                            this.openArtifact(artifact, { sessionId, reference });
+                        }
                     }
                 }, 500);
             });

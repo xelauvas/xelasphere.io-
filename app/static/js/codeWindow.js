@@ -3531,7 +3531,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     if (window.artifactPanel.isPatchStreaming) {
                         window.artifactPanel.finalizePatchStreaming(streamArtifact, {
                             sessionId: requestSessionId,
-                            reference: artifactRef
+                            reference: artifactRef,
+                            patches: (streamArtifactPatches && streamArtifactPatches.patches) || [],
+                            patchResults: (streamArtifactPatches && streamArtifactPatches.patch_results) || []
                         });
                     } else {
                         // Patch streaming didn't activate — clear streaming state and show in CodeMirror

@@ -58,22 +58,22 @@
     container.innerHTML = '';
     var d = container.ownerDocument;
     var wrap = d.createElement('div');
-    wrap.className = 'artifact-diff';
+    wrap.className = 'artifact-patch-diff';
     rows.forEach(function (r) {
       if (r.type === 'gap') {
         var g = d.createElement('div');
-        g.className = 'artifact-diff__gap';
+        g.className = 'artifact-patch-diff__gap';
         g.textContent = '⋯ ' + r.count + ' unchanged line' + (r.count !== 1 ? 's' : '');
         wrap.appendChild(g);
         return;
       }
       var row = d.createElement('div');
-      row.className = 'artifact-diff__row artifact-diff__row--' + r.type;
-      var oldn = d.createElement('span'); oldn.className = 'artifact-diff__ln'; oldn.textContent = r.oldNo || '';
-      var newn = d.createElement('span'); newn.className = 'artifact-diff__ln'; newn.textContent = r.newNo || '';
-      var gut = d.createElement('span'); gut.className = 'artifact-diff__gutter';
+      row.className = 'artifact-patch-diff__row artifact-patch-diff__row--' + r.type;
+      var oldn = d.createElement('span'); oldn.className = 'artifact-patch-diff__ln'; oldn.textContent = r.oldNo || '';
+      var newn = d.createElement('span'); newn.className = 'artifact-patch-diff__ln'; newn.textContent = r.newNo || '';
+      var gut = d.createElement('span'); gut.className = 'artifact-patch-diff__gutter';
       gut.textContent = r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' ';
-      var code = d.createElement('span'); code.className = 'artifact-diff__code'; code.textContent = r.text;
+      var code = d.createElement('span'); code.className = 'artifact-patch-diff__code'; code.textContent = r.text;
       row.appendChild(oldn); row.appendChild(newn); row.appendChild(gut); row.appendChild(code);
       wrap.appendChild(row);
     });
