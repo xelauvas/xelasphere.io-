@@ -2305,13 +2305,16 @@ window.addEventListener('load', function() {
                 var data = await resp.json();
                 this.exitPatchDiffMode();
                 if (window.Toast) Toast.success('Reverted to previous version');
-                // edit endpoint returns {success, artifactId, versionId} — no artifact object;
-                // fall through to reloadCurrentVersion to refresh the panel.
-                var reverted = null;
-                if (reverted) {
-                    this.openArtifact(reverted, { sessionId: this.currentSessionId, initialTab: 'code' });
-                } else if (typeof this.reloadCurrentVersion === 'function') {
-                    this.reloadCurrentVersion();
+                // The edit endpoint returns only ids; re-fetch the full artifact so
+                // its activeVersion reflects the newly-created reverted version.
+                var aid = this.currentArtifact.artifactId;
+                var r2 = await fetch('/chat/' + this.currentSessionId + '/artifacts/' + aid);
+                if (r2.ok) {
+                    var full = await r2.json();
+                    var artifact = full && (full.artifact || full);   // GET returns {artifact: ...}
+                    if (artifact && artifact.artifactId) {
+                        this.openArtifact(artifact, { sessionId: this.currentSessionId, initialTab: 'code' });
+                    }
                 }
             } catch (e) {
                 if (window.Toast) Toast.error('Revert failed: ' + (e && e.message || e));
