@@ -189,6 +189,12 @@ class ChatManager {
         if (!sessionId && (currentPath === '/chats' || currentPath === '/images')) {
             return;
         }
+        // Same for project pages /p/<id>: the user opened the project view
+        // explicitly. Never rewrite away from it just because chatManager
+        // has no active session loaded yet.
+        if (currentPath.startsWith('/p/')) {
+            return;
+        }
         const suffix = `${window.location.search || ''}${window.location.hash || ''}`;
         const newPath = sessionId ? `/c/${sessionId}` : '/';
         if (currentPath === newPath) {
@@ -583,6 +589,12 @@ class ChatManager {
      * Render the chat tabs based on categorized sessions.
      */
     renderChatTabs() {
+        // Reparent/clean up any open tab menu before we null its state or
+        // wipe the tab list. toggleTabMenu moves the .button-group into
+        // <body>; without this, a re-render orphans it there with live
+        // data-action buttons pointing at the now-stale session.
+        this.closeOpenTabMenu();
+
         const categorizedSessions = this.categorizeSessions();
         const tabList = this.elements.tabList;
         this.openTabMenu = null;
@@ -684,6 +696,12 @@ class ChatManager {
             tabList.appendChild(sentinel);
         }
     
+        // Disconnect any observer from a prior call before creating a new
+        // one, otherwise stale observers accumulate across re-renders.
+        if (this._infiniteScrollObserver) {
+            this._infiniteScrollObserver.disconnect();
+        }
+
         const observer = new IntersectionObserver(entries => {
             entries.forEach(entry => {
                 if (entry.isIntersecting && this.nextPageToken) {
@@ -692,7 +710,8 @@ class ChatManager {
                 }
             });
         });
-    
+        this._infiniteScrollObserver = observer;
+
         observer.observe(sentinel);
     }
 
@@ -1529,6 +1548,16 @@ async loadChatHistory(pageToken = null, limit = 30) {
         }
         if (requestEpoch !== this.switchEpoch) return;
 
+        // Verify the session exists in local history BEFORE mutating
+        // activeSessionId / URL / title. Otherwise a miss leaves partial
+        // state pointing at a session that was never loaded, which later
+        // null-derefs (e.g. in displayMessage's chatHistory push).
+        let sessionData = this.chatHistory[sessionId];
+        if (!sessionData) {
+            this.showNotification('Failed to switch chat session', 'error');
+            return;
+        }
+
         this.activeSessionId = sessionId;
         this.updateSessionUrl(sessionId);
         this.updatePageTitle(sessionId);
@@ -1544,10 +1573,6 @@ async loadChatHistory(pageToken = null, limit = 30) {
             }
             if (requestEpoch !== this.switchEpoch) return;
 
-            let sessionData = this.chatHistory[sessionId];
-            if (!sessionData) {
-                throw new Error('Session not found in chat history');
-            }
             this.ensureSessionPages(sessionId);
             if (requestEpoch !== this.switchEpoch) return;
 
@@ -1731,6 +1756,27 @@ async loadChatHistory(pageToken = null, limit = 30) {
             // Scroll to bottom (respect user scroll intent)
             if (typeof window.scrollManager !== 'undefined' && window.scrollManager.scrollToBottom) {
                 window.scrollManager.scrollToBottom(true, false); // immediate but not forced
+            }
+
+            // Persist the buffered reply into local chat history. It was only
+            // rendered to the DOM above; without this it would vanish on the
+            // next re-render and never be saved. Match the message shape used
+            // elsewhere in chatHistory (sender / content / timestamp).
+            const targetSession = this.chatHistory[sessionId];
+            if (targetSession) {
+                if (!Array.isArray(targetSession.messages)) {
+                    targetSession.messages = [];
+                }
+                const now = new Date().toISOString();
+                targetSession.messages.push({
+                    sender: 'AI',
+                    content: displayContent,
+                    timestamp: now
+                });
+                targetSession.last_updated = now;
+                if (typeof this.markSessionDirty === 'function') {
+                    this.markSessionDirty(sessionId);
+                }
             }
 
             // Clear the request from BackgroundRequestManager
@@ -3585,7 +3631,15 @@ async loadChatHistory(pageToken = null, limit = 30) {
         const session = this.ensureSessionPages(sessionId);
         if (!session) return;
 
-        // Reset chart stagger counter for new page render
+        // Reset chart stagger counter for new page render. Also clear any
+        // chart-render timers still pending from a prior render of this page;
+        // otherwise resetting the index mid-stagger bursts the queued
+        // requests (each fires at its already-scheduled time but now off a
+        // freshly-zeroed counter).
+        if (Array.isArray(this._chartHistoryTimers)) {
+            this._chartHistoryTimers.forEach(id => clearTimeout(id));
+        }
+        this._chartHistoryTimers = [];
         this._chartHistoryIndex = 0;
 
         if (typeof window !== 'undefined' && typeof window.clearChat === 'function') {
@@ -4394,6 +4448,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
      * @param {string} sessionId - The session ID to pin/unpin.
      */
     async pinSession(sessionId) {
+        // Re-read the session immediately before computing the toggle so we
+        // don't act on a stale is_pinned value captured earlier.
         const session = this.chatHistory[sessionId];
         if (!session) return;
 
@@ -4888,7 +4944,12 @@ async loadChatHistory(pageToken = null, limit = 30) {
         // Stagger history chart renders to avoid CoinGecko rate limits
         this._chartHistoryIndex = (this._chartHistoryIndex || 0) + 1;
         const staggerDelay = (this._chartHistoryIndex - 1) * 2000; // 2s between charts
-        setTimeout(() => {
+        // Guard against switch races: capture the epoch now and bail if the
+        // user has switched sessions by the time this fires (otherwise the
+        // chart renders into whatever session is active later).
+        const epoch = this.switchEpoch;
+        const timerId = setTimeout(() => {
+            if (this.switchEpoch !== epoch) return;
             const targetEl = document.getElementById(`ai-${messageId}`);
             if (!targetEl) {
                 console.warn('[Chart History] Target element not found:', `ai-${messageId}`);
@@ -4945,6 +5006,12 @@ async loadChatHistory(pageToken = null, limit = 30) {
                 console.warn('[Chart History] No asset found in chart data');
             }
         }, 100 + staggerDelay);
+        // Track the timer so a re-render of this page can cancel pending
+        // chart renders before resetting the stagger counter.
+        if (!Array.isArray(this._chartHistoryTimers)) {
+            this._chartHistoryTimers = [];
+        }
+        this._chartHistoryTimers.push(timerId);
     }
 
     /**
@@ -5273,14 +5340,23 @@ async loadChatHistory(pageToken = null, limit = 30) {
                 const card = FilePreview.createFileCard(attachment, {
                     showMeta: true,
                     onClick: (att) => {
-                        // For images, use the existing lightbox for better UX
+                        // User-uploaded images should open in the same
+                        // fullscreen viewer used elsewhere in chat.
                         const isImage = FilePreview.isImage(
                             att.original_filename || att.name || att.filename,
                             att.mime_type
                         );
                         const url = FilePreview.resolveUrl(att);
 
-                        if (isImage && typeof openAttachmentLightbox === 'function') {
+                        if (isImage && url && typeof window.__xelasphereOpenLightbox === 'function') {
+                            const name = att.original_filename || att.name || att.filename || 'Image';
+                            window.__xelasphereOpenLightbox({
+                                src: url,
+                                name,
+                                type: att.mime_type || 'image',
+                                isImage: true
+                            });
+                        } else if (isImage && typeof openAttachmentLightbox === 'function') {
                             const name = att.original_filename || att.name || att.filename || 'Image';
                             openAttachmentLightbox({
                                 src: url,
@@ -5324,13 +5400,23 @@ async loadChatHistory(pageToken = null, limit = 30) {
                         card.classList.add('loaded');
                     }
 
-                    img.addEventListener('click', () => openAttachmentLightbox({
-                        src,
-                        title: name,
-                        downloadName: name,
-                        openUrl: src,
-                        isImage: true
-                    }));
+                    img.addEventListener('click', () => {
+                        if (typeof window.__xelasphereOpenLightbox === 'function') {
+                            window.__xelasphereOpenLightbox({
+                                src,
+                                name,
+                                isImage: true
+                            });
+                            return;
+                        }
+                        openAttachmentLightbox({
+                            src,
+                            title: name,
+                            downloadName: name,
+                            openUrl: src,
+                            isImage: true
+                        });
+                    });
 
                     card.appendChild(img);
                     attachmentsWrapper.appendChild(card);
@@ -5389,15 +5475,18 @@ async loadChatHistory(pageToken = null, limit = 30) {
         }
 
         // Update chat history
-        if (this.activeSessionId) {
+        const activeSession = this.activeSessionId
+            ? this.chatHistory[this.activeSessionId]
+            : null;
+        if (activeSession && Array.isArray(activeSession.messages)) {
             const now = new Date().toISOString();
-            this.chatHistory[this.activeSessionId].messages.push({
+            activeSession.messages.push({
                 sender: sender === 'user' ? 'User' : 'AI',
                 content: content,
                 timestamp: now
             });
             // Update last_updated so session moves to top of list
-            this.chatHistory[this.activeSessionId].last_updated = now;
+            activeSession.last_updated = now;
             this.markSessionDirty(this.activeSessionId);
             // Re-render tabs immediately so session moves to top
             this.renderChatTabs();
@@ -5409,7 +5498,11 @@ async loadChatHistory(pageToken = null, limit = 30) {
      * @returns {string} - A unique message ID.
      */
     generateMessageId() {
-        return 'msg-' + Math.random().toString(36).substr(2, 9);
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            return 'msg-' + crypto.randomUUID();
+        }
+        // Fallback for non-secure contexts where crypto.randomUUID is unavailable.
+        return 'msg-' + Math.random().toString(36).slice(2, 11);
     }
 
     /**

@@ -77,6 +77,19 @@
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.0.0/dist/markdown-it.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
     <script>
+        // Harden every sanitized link against reverse-tabnabbing: any anchor gets
+        // rel="noopener noreferrer", and target-_blank links keep that target.
+        // Registered before any DOMPurify.sanitize() call so it applies globally.
+        if (window.DOMPurify) {
+            DOMPurify.addHook('afterSanitizeAttributes', function (node) {
+                if (node.tagName === 'A' && node.hasAttribute('href')) {
+                    node.setAttribute('rel', 'noopener noreferrer');
+                    if (node.hasAttribute('target')) node.setAttribute('target', '_blank');
+                }
+            });
+        }
+    </script>
+    <script>
         // Initialize markdown-it with options
         const md = window.markdownit({
             html: false,          // Disable raw HTML for security
@@ -248,10 +261,10 @@
     <script defer src="{{ url_for('static', filename='js/mobileLongPress.js') }}?v=6"></script>
 
     <!-- Mobile Message Actions (Long-Press Popup) -->
-    <script defer src="{{ url_for('static', filename='js/messageActions.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/messageActions.js') }}?v=1"></script>
 
     <!-- URL Preview JS -->
-    <script defer src="{{ url_for('static', filename='js/urlPreview.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/urlPreview.js') }}?v=1"></script>
 
     <!-- Lottie Animation Player -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
@@ -1135,7 +1148,7 @@
                                 </div>
 
                                 <div class="textarea-container">
-                                    <textarea class="chat-input" id="prompt" placeholder="{% if is_guest %}Try XelaSphere ({{ guest_message_limit - guest_message_count }} messages left){% else %}Ask anything{% endif %}" aria-label="Type your message here" rows="1" autofocus></textarea>
+                                    <textarea class="chat-input" id="prompt" placeholder="{% if is_guest %}Try XelaSphere ({{ guest_message_limit - guest_message_count }} messages left){% else %}Ask anything{% endif %}" aria-label="Type your message here" rows="1"></textarea>
                                     <!-- Microphone button for dictation -->
                                     <button class="microphone-button{% if is_guest %} guest-disabled{% endif %}" id="microphone-button" aria-label="{% if is_guest %}Sign up to use voice{% else %}Start voice input{% endif %}" {% if not is_guest %}data-tooltip="Dictate"{% endif %}{% if is_guest %} disabled{% endif %}>
                                         <i class="fa-solid fa-microphone-lines"></i>
@@ -1387,10 +1400,10 @@
     <script src="{{ url_for('static', filename='js/voiceModeModule.js') }}?v=40"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="{{ url_for('static', filename='js/filePreview.js') }}?v=6"></script>
-    <script src="{{ url_for('static', filename='js/scrollState.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/scrollState.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='js/recipeDetector.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=68"></script>
-    <script src="{{ url_for('static', filename='script.js') }}?v=7"></script>
+    <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=69"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=8"></script>
     <script src="{{ url_for('static', filename='js/styleManager.js') }}?v=4"></script>
     <script>
     // Patch: intercept FormData append to inject image files for vision API
@@ -1441,7 +1454,7 @@
         window.sharedSessionId = "{{ shared_session_id|default('', true) }}";
     </script>
     <script src="{{ url_for('static', filename='js/toast.js') }}?v=7"></script>
-    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=26"></script>
+    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=27"></script>
     <script src="{{ url_for('static', filename='js/chatsPage.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
@@ -1652,5 +1665,16 @@
     </div>
   </div>
 </div>
+<script>
+    // Focus the composer on load for pointer/desktop devices only — autofocus
+    // was removed from the textarea because it popped the on-screen keyboard and
+    // scroll-jumped the page on phones/tablets.
+    if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) {
+        window.addEventListener('DOMContentLoaded', function () {
+            var p = document.getElementById('prompt');
+            if (p) { try { p.focus({ preventScroll: true }); } catch (e) { p.focus(); } }
+        });
+    }
+</script>
 </body>
 </html>

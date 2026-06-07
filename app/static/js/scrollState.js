@@ -33,10 +33,18 @@ function initScrollState() {
     let isPinnedToBottom = true;
     let waitingForContent = false;
     let isProgrammaticScroll = false;
+    let userBrokePin = false;
+    let topAnchorEl = null;
     let raf1 = null;
     let raf2 = null;
 
     const BOTTOM_THRESHOLD = 80;
+    const TRUE_BOTTOM_THRESHOLD = 4;
+
+    // Distance-from-bottom check at the true bottom (not the 80px arrow band)
+    function atTrueBottom() {
+        return scrollEl.scrollHeight - (scrollEl.scrollTop + scrollEl.clientHeight) <= TRUE_BOTTOM_THRESHOLD;
+    }
 
     // Check if user is near the bottom
     function nearBottom() {
@@ -51,6 +59,9 @@ function initScrollState() {
     // Schedule scroll after layout settles (2-frame for markdown reflow)
     function schedulePinnedScroll() {
         if (waitingForContent || window._keepMessageAtTop) {
+            return;
+        }
+        if (userBrokePin) {
             return;
         }
         if (!isStreaming || !isPinnedToBottom) {
@@ -78,12 +89,21 @@ function initScrollState() {
         if (isProgrammaticScroll) return;
 
         const wasAtBottom = isPinnedToBottom;
-        isPinnedToBottom = nearBottom();
+
+        // Only (re)pin when the user genuinely reaches the true bottom, not the
+        // 80px arrow band. Reaching true bottom also clears a user-broken pin.
+        if (atTrueBottom()) {
+            isPinnedToBottom = true;
+            userBrokePin = false;
+        } else {
+            isPinnedToBottom = false;
+        }
 
         // When user manually scrolls to bottom, remove padding and reset flags
         if (!wasAtBottom && isPinnedToBottom && window._keepMessageAtTop) {
             window._keepMessageAtTop = false;
             waitingForContent = false;
+            topAnchorEl = null;
             const chatDisplayEl = document.getElementById('chat-display');
             if (chatDisplayEl) {
                 chatDisplayEl.classList.remove('scroll-padding-active');
@@ -94,6 +114,15 @@ function initScrollState() {
         updateArrowVisibility();
 
     }, { passive: true });
+
+    // Sticky user-intent break: any manual wheel/touch scroll stops auto-pinning
+    // until the user returns to the true bottom (handled in the scroll listener).
+    function breakPinOnUserScroll() {
+        userBrokePin = true;
+        isPinnedToBottom = false;
+    }
+    scrollEl.addEventListener("wheel", breakPinOnUserScroll, { passive: true });
+    scrollEl.addEventListener("touchmove", breakPinOnUserScroll, { passive: true });
 
     // MutationObserver catches appended nodes + text updates
     const mo = new MutationObserver(() => {
@@ -109,6 +138,16 @@ function initScrollState() {
     // Catch late layout changes (images, video posters, iframes, etc.)
     chatDisplay.addEventListener("load", (e) => {
         if (e.target && (e.target.tagName === "IMG" || e.target.tagName === "VIDEO" || e.target.tagName === "IFRAME")) {
+            // While the prompt is anchored at the top, a late media load shifts
+            // layout; re-run the top-anchor routine instead of letting it drift.
+            if (window._keepMessageAtTop && topAnchorEl) {
+                isProgrammaticScroll = true;
+                anchorMessageToTop(topAnchorEl);
+                setTimeout(() => {
+                    isProgrammaticScroll = false;
+                }, 200);
+                return;
+            }
             schedulePinnedScroll();
         }
     }, true);
@@ -125,6 +164,8 @@ function initScrollState() {
 
     const isMobileDevice = () => {
         return document.body.classList.contains('device-phone') ||
+               document.body.classList.contains('device-tablet') ||
+               document.body.classList.contains('viewport-mobile') ||
                document.body.classList.contains('is-mobile') ||
                document.body.classList.contains('is-ios');
     };
@@ -151,18 +192,14 @@ function initScrollState() {
 
     function showDownArrow() {
         document.body.classList.remove('at-scroll-bottom');
-        if (!isMobileDevice()) {
-            const downArrow = document.getElementById('downArrow');
-            if (downArrow) downArrow.style.display = 'flex';
-        }
+        const downArrow = document.getElementById('downArrow');
+        if (downArrow) downArrow.style.display = 'flex';
     }
 
     function hideDownArrow() {
         document.body.classList.add('at-scroll-bottom');
-        if (!isMobileDevice()) {
-            const downArrow = document.getElementById('downArrow');
-            if (downArrow) downArrow.style.display = 'none';
-        }
+        const downArrow = document.getElementById('downArrow');
+        if (downArrow) downArrow.style.display = 'none';
     }
 
     function updateArrowVisibility() {
@@ -182,31 +219,22 @@ function initScrollState() {
         const newArrow = downArrow.cloneNode(true);
         downArrow.parentNode.replaceChild(newArrow, downArrow);
 
+        let lastArrowHandledAt = 0;
         const handleArrowClick = (e) => {
             e.preventDefault();
             e.stopPropagation();
+
+            // touchstart + click both fire on touch devices; ignore the echo.
+            const now = Date.now();
+            if (now - lastArrowHandledAt < 400) return;
+            lastArrowHandledAt = now;
+
             isPinnedToBottom = true;
+            userBrokePin = false;
 
-            const isMobile = isMobileDevice();
-
-            if (isMobile) {
-                const sentinel = document.getElementById('scroll-sentinel');
-                if (sentinel) {
-                    sentinel.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                } else {
-                    const messages = document.querySelectorAll('#chat-display .message');
-                    if (messages.length > 0) {
-                        messages[messages.length - 1].scrollIntoView({ behavior: 'smooth', block: 'end' });
-                    }
-                }
-                setTimeout(() => {
-                    scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: 'smooth' });
-                }, 300);
-                setTimeout(hideDownArrow, 400);
-            } else {
-                scrollToBottom("smooth");
-                hideDownArrow();
-            }
+            // Single scroll to the true bottom (no competing second animation).
+            scrollToBottom("smooth");
+            hideDownArrow();
         };
 
         newArrow.addEventListener('click', handleArrowClick);
@@ -222,6 +250,26 @@ function initScrollState() {
     // Initialize
     setupDownArrow();
     hideDownArrow();
+
+    // -----------------------------
+    // Mobile keyboard / visualViewport re-anchor
+    // -----------------------------
+    // When the on-screen keyboard opens/closes the visual viewport resizes;
+    // if we were pinned to the bottom, re-pin so the latest content stays in view.
+    if (window.visualViewport && !window._scrollStateViewportBound) {
+        window._scrollStateViewportBound = true;
+        let viewportTimer = null;
+        const onViewportChange = () => {
+            if (viewportTimer) clearTimeout(viewportTimer);
+            viewportTimer = setTimeout(() => {
+                if (isPinnedToBottom && !userBrokePin) {
+                    scrollEl.scrollTop = scrollEl.scrollHeight;
+                }
+            }, 100);
+        };
+        window.visualViewport.addEventListener('resize', onViewportChange);
+        window.visualViewport.addEventListener('scroll', onViewportChange);
+    }
 
     // -----------------------------
     // Public API
@@ -242,6 +290,7 @@ function initScrollState() {
             }
             if (window._keepMessageAtTop) {
                 window._keepMessageAtTop = false;
+                topAnchorEl = null;
                 const chatDisplayEl = document.getElementById('chat-display');
                 if (chatDisplayEl) {
                     chatDisplayEl.classList.remove('scroll-padding-active');
@@ -249,6 +298,7 @@ function initScrollState() {
             }
             // Re-pin to bottom after streaming completes
             isPinnedToBottom = true;
+            userBrokePin = false;
             updateArrowVisibility();
         }
     };
@@ -259,9 +309,19 @@ function initScrollState() {
         }
 
         isPinnedToBottom = true;
+        userBrokePin = false;
         scrollEl.scrollTop = scrollEl.scrollHeight;
         hideDownArrow();
     };
+
+    // Position a message at the top of the scroll region (16px inset).
+    function anchorMessageToTop(messageElement) {
+        const messageRect = messageElement.getBoundingClientRect();
+        const scrollRect = scrollEl.getBoundingClientRect();
+        const offsetFromTop = messageRect.top - scrollRect.top;
+        const targetScrollTop = scrollEl.scrollTop + offsetFromTop - 16;
+        scrollEl.scrollTop = Math.max(0, targetScrollTop);
+    }
 
     window.scrollUserMessageToTop = function(messageElement) {
         if (!messageElement) return;
@@ -270,6 +330,7 @@ function initScrollState() {
         waitingForContent = true;
         window._keepMessageAtTop = true;
         isProgrammaticScroll = true;
+        topAnchorEl = messageElement;
 
         const chatDisplay = document.getElementById('chat-display');
         if (chatDisplay) {
@@ -278,12 +339,7 @@ function initScrollState() {
 
         // Wait one frame for padding to apply and layout to settle
         requestAnimationFrame(() => {
-            const messageRect = messageElement.getBoundingClientRect();
-            const scrollRect = scrollEl.getBoundingClientRect();
-            const offsetFromTop = messageRect.top - scrollRect.top;
-            const targetScrollTop = scrollEl.scrollTop + offsetFromTop - 16;
-
-            scrollEl.scrollTop = Math.max(0, targetScrollTop);
+            anchorMessageToTop(messageElement);
 
             setTimeout(() => {
                 isProgrammaticScroll = false;
@@ -305,11 +361,13 @@ function initScrollState() {
         if (isStreaming && !isPinnedToBottom) {
             // Remove the scroll-to-top padding since we're now following content
             window._keepMessageAtTop = false;
+            topAnchorEl = null;
             const chatDisplayEl = document.getElementById('chat-display');
             if (chatDisplayEl) {
                 chatDisplayEl.classList.remove('scroll-padding-active');
             }
             isPinnedToBottom = true;
+            userBrokePin = false;
             isProgrammaticScroll = true;
             scrollToBottom("auto");
             setTimeout(() => {
@@ -326,7 +384,7 @@ function initScrollState() {
     };
 
     window.scrollToBottom = function(force = false, instant = false) {
-        if (force) isPinnedToBottom = true;
+        if (force) { isPinnedToBottom = true; userBrokePin = false; }
         if (isPinnedToBottom || force) {
             if (instant) {
                 scrollEl.scrollTop = scrollEl.scrollHeight;
@@ -344,6 +402,8 @@ function initScrollState() {
         isPinnedToBottom = true;
         isStreaming = false;
         waitingForContent = false;
+        userBrokePin = false;
+        topAnchorEl = null;
         window._keepMessageAtTop = false;
         if (raf1) cancelAnimationFrame(raf1);
         if (raf2) cancelAnimationFrame(raf2);
@@ -361,11 +421,13 @@ function initScrollState() {
     window.showDownArrow = showDownArrow;
 
     Object.defineProperty(window.scrollState, 'isPinnedToBottom', {
+        configurable: true,
         get: () => isPinnedToBottom,
         set: (val) => { isPinnedToBottom = val; }
     });
 
     Object.defineProperty(window.scrollState, 'isStreaming', {
+        configurable: true,
         get: () => isStreaming
     });
 }

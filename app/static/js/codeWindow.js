@@ -150,6 +150,11 @@ const NAME_FALLBACKS = {
 let ASSET_NAMES = {};  // Will be populated from API
 let CRYPTO_TICKERS = {};  // Will be populated from API
 
+// Active request's fallback AbortController. Previously assigned in sendMessage
+// without ever being declared, creating an implicit global. Declared here so
+// abortMessage() and sendMessage() share the same module-scoped binding.
+let abortController = null;
+
 // Per-message search stream data (replaces window._stream* globals)
 const _searchStreamData = new Map();
 
@@ -603,9 +608,15 @@ const ThinkingIndicator = (() => {
         reasoningText += text;
         const streamEl = indicatorElement.querySelector('.reasoning-stream');
         if (streamEl) {
-            // Escape HTML and preserve newlines
-            const escaped = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            streamEl.innerHTML += escaped.replace(/\n/g, '<br>');
+            // Escape HTML and preserve newlines. Escape & FIRST so a literal
+            // "&lt;" in the model output isn't double-rendered. Append via
+            // insertAdjacentHTML (not innerHTML +=) so the browser doesn't
+            // re-parse the entire accumulated buffer on every token (O(n²)).
+            const escaped = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            streamEl.insertAdjacentHTML('beforeend', escaped.replace(/\n/g, '<br>'));
 
             // Auto-scroll reasoning area
             const reasoningDiv = indicatorElement.querySelector('.thinking-reasoning');
@@ -2018,6 +2029,15 @@ function createPreStreamBubble(prompt) {
 
 // Enhanced message sending function
 async function sendMessage(promptText, messageId = null, options = {}) {
+    // Synchronous double-submit guard. Two fast Enters/clicks both clear the
+    // per-session dedupe guard (which only registers after awaits like
+    // ensureActiveSession / attachment fetch) and fire duplicate requests.
+    // This flag is set/checked synchronously before any await, so the second
+    // call bails immediately. Cleared in the outermost finally + every early
+    // exit before this turn yields control.
+    if (window.__sendInFlight) return;
+    window.__sendInFlight = true;
+
     const {
         skipUserMessageRender = false,
         reuseMessageIdForResponse = true,
@@ -2041,6 +2061,9 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
     // Also check global typing stopped flag (for abort scenarios)
     if (isTypingStopped) {
+        // Returns before the try block, so the outermost finally won't run —
+        // clear the in-flight guard here or the composer locks up.
+        window.__sendInFlight = false;
         resetState();
         return;
     }
@@ -2124,13 +2147,18 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 }
                 const promptEl = document.getElementById('prompt');
                 if (promptEl) promptEl.focus();
-                throw new Error('Empty image prompt');
+                // Validation, not an error — return cleanly so only the toast
+                // shows. Throwing here rendered a red error bubble on top of it.
+                // (finally runs and clears state / the in-flight guard.)
+                return;
             }
         }
 
-        // Validate prompt or attachments
+        // Validate prompt or attachments. Empty input is a no-op, not an error —
+        // return cleanly so we don't render a red "Empty prompt" error bubble.
+        // (finally runs and clears the in-flight guard.)
         if (!prompt && attachments.length === 0) {
-            throw new Error('Empty prompt');
+            return;
         }
 
         // Mobile: Dismiss keyboard immediately after send
@@ -2473,7 +2501,17 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                 let patchStreamActive = false;
                 let patchStreamBuffer = '';
                 let patchParsedPatches = [];
+                // Set once the 'done' chunk is processed. Trailing content lines
+                // after done would otherwise re-run artifact/patch detection on
+                // stale state; processLine bails early for non-done lines once set.
+                let streamDone = false;
                 let artifactStreamActive = false;
+                // Request-local buffer for cross-chunk artifact fence detection.
+                // Previously stored on window._artifactStreamBuf, which two
+                // concurrent streams (e.g. background session + active session)
+                // would stomp, corrupting each other's code. Localized per
+                // sendMessage like patchStreamBuffer above.
+                let artifactStreamBuf = '';
                 let artifactMetaPending = false;
                 let artifactMetaIndex = -1;
                 let searchMsgId = null; // Track message element for search banner
@@ -2535,6 +2573,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     try {
                         const chunk = JSON.parse(jsonStr);
 
+                        // Once 'done' has been processed, ignore any trailing
+                        // content/reasoning lines — they would re-run artifact /
+                        // patch detection against the post-done snapshot.
+                        if (streamDone && chunk.type !== 'done') return;
+
                         if (chunk.type === 'reasoning') {
                             streamHasVisibleOutput = true;
                             streamedReasoning += chunk.text || '';
@@ -2564,11 +2607,15 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             // Fast path: once artifact/patch streaming is active,
                             // only forward to panel. Filter out fence markers, handle file switches.
                             if (artifactStreamActive) {
-                                if (window.artifactPanel) {
+                                // Session guard: only drive the live panel when this
+                                // request's session is the one on screen. A backgrounded
+                                // stream must not write into the active session's panel
+                                // (the bubble path is buffered via BackgroundRequestManager
+                                // below; we just skip the panel write here).
+                                if (window.artifactPanel && isSessionActive()) {
                                     // Buffer for cross-chunk fence detection
-                                    if (!window._artifactStreamBuf) window._artifactStreamBuf = '';
-                                    window._artifactStreamBuf += chunkText;
-                                    let buf = window._artifactStreamBuf;
+                                    artifactStreamBuf += chunkText;
+                                    let buf = artifactStreamBuf;
 
                                     // Check for file boundary: closing ``` + new artifact-file:
                                     if (buf.includes('artifact-file:')) {
@@ -2610,10 +2657,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                         if (cleaned) {
                                             window.artifactPanel.appendStreamingCode(cleaned);
                                         }
-                                        window._artifactStreamBuf = processed.slice(processed.length - KEEP);
+                                        artifactStreamBuf = processed.slice(processed.length - KEEP);
                                     } else {
                                         // Not enough data yet — keep buffering
-                                        window._artifactStreamBuf = processed;
+                                        artifactStreamBuf = processed;
                                     }
                                 }
                                 if (bgRequest) {
@@ -2622,9 +2669,16 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             } else if (patchStreamActive) {
                                 patchStreamBuffer += chunkText;
                                 const newPatches = extractCompletePatchesFromBuffer(patchStreamBuffer, patchParsedPatches.length);
+                                // Session guard: keep advancing the parse cursor
+                                // (patchParsedPatches) regardless so the skip index
+                                // stays correct, but only animate into the panel when
+                                // this request's session is the one on screen.
+                                const _patchActive = window.artifactPanel && isSessionActive();
                                 for (const patch of newPatches) {
                                     patchParsedPatches.push(patch);
-                                    window.artifactPanel.applyLivePatch(patch.file, patch.old_string, patch.new_string);
+                                    if (_patchActive) {
+                                        window.artifactPanel.applyLivePatch(patch.file, patch.old_string, patch.new_string);
+                                    }
                                 }
                                 if (bgRequest) {
                                     BackgroundRequestManager.appendContent(requestSessionId, chunkText);
@@ -2687,6 +2741,14 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             });
                                             _streamRenderer = new StreamRenderer(targetContent, { streamMeta });
                                             window._activeStreamRenderer = _streamRenderer;
+                                            // A bubble/renderer now exists on screen. Mark
+                                            // visible output so a mid-stream network drop is
+                                            // treated as a partial response (keep it), not
+                                            // "nothing rendered" (which re-fires /chat and
+                                            // duplicates the turn). Empty-text chunks that
+                                            // still create the renderer otherwise left this
+                                            // false.
+                                            streamHasVisibleOutput = true;
                                         } else {
                                             console.warn('[StreamRenderer] No target element — falling back');
                                             _streamRenderer = null; window._activeStreamRenderer = null;
@@ -2770,15 +2832,21 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                                 artifactMetaPending = false;
                                                 _fenceJustTriggered = true;
                                                 artifactFencePosition = metaMatch.index;
-                                                window.artifactPanel.openStreaming();
-                                                const firstPath = fileMatch[1].trim();
-                                                const firstLang = fileMatch[2].trim();
-                                                if (window.artifactPanel.switchStreamingFile) {
-                                                    window.artifactPanel.switchStreamingFile(firstPath, firstLang);
+                                                // Session guard: only open/drive the live
+                                                // panel for the on-screen session. Inactive
+                                                // streams still advance their flags/buffer
+                                                // but skip the panel writes.
+                                                if (isSessionActive()) {
+                                                    window.artifactPanel.openStreaming();
+                                                    const firstPath = fileMatch[1].trim();
+                                                    const firstLang = fileMatch[2].trim();
+                                                    if (window.artifactPanel.switchStreamingFile) {
+                                                        window.artifactPanel.switchStreamingFile(firstPath, firstLang);
+                                                    }
                                                 }
                                                 const fileContentStart = streamedContent.indexOf('\n', fileMatch.index) + 1;
                                                 if (fileContentStart > 0) {
-                                                    window._artifactStreamBuf = streamedContent.slice(fileContentStart);
+                                                    artifactStreamBuf = streamedContent.slice(fileContentStart);
                                                 }
                                             }
                                         }
@@ -2791,12 +2859,16 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                                 _fenceJustTriggered = true;
                                                 artifactFencePosition = fenceMatch.index;
                                                 _reseedChatWithProse(fenceMatch.index);
-                                                window.artifactPanel.openStreaming();
-                                                const fenceEnd = streamedContent.indexOf('\n', fenceMatch.index);
-                                                if (fenceEnd !== -1) {
-                                                    const afterFence = streamedContent.slice(fenceEnd + 1);
-                                                    if (afterFence) {
-                                                        window.artifactPanel.appendStreamingCode(afterFence);
+                                                // Session guard: skip panel writes for
+                                                // backgrounded streams (flag still advances).
+                                                if (isSessionActive()) {
+                                                    window.artifactPanel.openStreaming();
+                                                    const fenceEnd = streamedContent.indexOf('\n', fenceMatch.index);
+                                                    if (fenceEnd !== -1) {
+                                                        const afterFence = streamedContent.slice(fenceEnd + 1);
+                                                        if (afterFence) {
+                                                            window.artifactPanel.appendStreamingCode(afterFence);
+                                                        }
                                                     }
                                                 }
                                             }
@@ -2810,7 +2882,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                             patchStreamActive = true;
                                             patchStreamBuffer = streamedContent.slice(patchFenceMatch.index);
                                             patchParsedPatches = [];
-                                            window.artifactPanel.openPatchStreaming();
+                                            // Session guard: only enter live patch mode in
+                                            // the panel for the on-screen session.
+                                            if (isSessionActive()) {
+                                                window.artifactPanel.openPatchStreaming();
+                                            }
                                         }
                                     }
                                 }
@@ -2961,6 +3037,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             }
                         } else if (chunk.type === 'done') {
                             console.log('Received done chunk:', chunk);
+                            // Mark the stream finished so any trailing content
+                            // lines after this are ignored (see guard at top of
+                            // processLine). The done snapshot below still runs.
+                            streamDone = true;
                             if (chunk.guest_mode) {
                                 if (typeof chunk.guest_message_count === 'number') {
                                     updateGuestMessageCount(chunk.guest_message_count);
@@ -3044,6 +3124,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                                 setTimeout(() => {
                                     const mgr = window.chatManager;
                                     const titleSessionId = requestSessionId || mgr?.activeSessionId;
+                                    // Re-check the session still exists before renaming —
+                                    // it may have been deleted between done and this tick.
+                                    // (applySessionTitle also no-ops on a missing session.)
+                                    if (!titleSessionId || !mgr?.chatHistory?.[titleSessionId]) return;
                                     applySessionTitle(titleSessionId, chunk.session_name);
                                 }, 100);
                             }
@@ -3089,6 +3173,11 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                     }
 
                     if (done) {
+                        // Flush the decoder — the terminating read often has
+                        // value === undefined, so a trailing partial multibyte
+                        // char buffered inside the decoder would otherwise be
+                        // dropped. decode() with no args emits any pending bytes.
+                        buffer += decoder.decode();
                         // Process any remaining data in buffer
                         if (buffer.trim()) {
                             processLine(buffer);
@@ -3574,10 +3663,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                         );
                     } else if (artifactStreamActive) {
                         // Live streaming was active — flush remaining buffer and finalize
-                        if (window._artifactStreamBuf) {
-                            const remaining = window._artifactStreamBuf.replace(/\n```\s*$/, '').replace(/```\s*$/, '');
+                        if (artifactStreamBuf) {
+                            const remaining = artifactStreamBuf.replace(/\n```\s*$/, '').replace(/```\s*$/, '');
                             if (remaining) window.artifactPanel.appendStreamingCode(remaining);
-                            window._artifactStreamBuf = '';
+                            artifactStreamBuf = '';
                         }
                         window.artifactPanel.finalizeStreaming(streamArtifact, {
                             sessionId: requestSessionId,
@@ -3619,6 +3708,10 @@ async function sendMessage(promptText, messageId = null, options = {}) {
 
                                 console.log('[PROGRESSIVE] files:', files.map(f => ({ path: f.path, lang: f.language, len: (f.content||'').length })));
                                 const tick = () => {
+                                    // No-op after an abort (or once the panel left
+                                    // streaming mode) so the progressive typewriter
+                                    // doesn't keep writing into a torn-down editor.
+                                    if (isTypingStopped || !panel.editCodeMirror) return;
                                     const file = files[fileIdx];
                                     const content = file.content || '';
                                     const end = Math.min(charIdx + CHARS_PER_TICK, content.length);
@@ -3655,6 +3748,17 @@ async function sendMessage(promptText, messageId = null, options = {}) {
                             panel.openArtifact(streamArtifact, { sessionId: requestSessionId, reference: artifactRef });
                         }
                     }
+                }
+
+                // Safety net: if the panel entered patch mode ("Updating…") but
+                // `done` carried no artifact, both finalize branches above were
+                // skipped (they require streamArtifact) and the panel stays stuck.
+                // Guard on !streamArtifact so we never double-finalize a stream the
+                // branch above already handled. finalizePatchStreaming(null) drains
+                // the queue, clears marks, restores editability, and exits without
+                // reopening any artifact.
+                if (!streamArtifact && window.artifactPanel?.isPatchStreaming) {
+                    window.artifactPanel.finalizePatchStreaming(null, { sessionId: requestSessionId });
                 }
 
                 // Attach artifact preview if present
@@ -4208,6 +4312,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
         return null;
 
     } finally {
+        // Release the synchronous double-submit guard. This finally runs for
+        // every path that entered the try block (success, throw, early return),
+        // so all in-try exits are covered here; only pre-try returns clear it
+        // inline.
+        window.__sendInFlight = false;
+
         const stillActive = isSessionActive();
 
         // ChatGPT-style: mark streaming ended and ensure scroll is at bottom
@@ -4252,6 +4362,12 @@ async function sendMessage(promptText, messageId = null, options = {}) {
             if (promptInput) {
                 if (!messageId) {
                     promptInput.value = '';
+                    // Re-run the composer autosize after clearing — otherwise an
+                    // attachment-only / edit send leaves the textarea height (and
+                    // the .composer-expanded class) stuck from the prior content.
+                    // Dispatching 'input' fires script.js's listener, which calls
+                    // autoGrowComposer() — no duplicated sizing logic here.
+                    promptInput.dispatchEvent(new Event('input', { bubbles: true }));
                 }
                 // Don't refocus on mobile - keeps keyboard dismissed after send
                 const isMobile = document.body.classList.contains('device-phone') ||
@@ -4358,11 +4474,23 @@ function renderUserMessage(container, text, messageId) {
     messageEl.classList.add('text-message');
     div.appendChild(messageEl);
 
-    if (window.md) {
+    // index.html declares the markdown-it instance as a `const md` (module-local),
+    // so `window.md` was never actually set and this path always fell through to
+    // plaintext — user markdown rendered dead. Lazily build our own instance from
+    // the global markdown-it factory, with safe options (no raw HTML), and always
+    // run the output through DOMPurify. Only render markdown when BOTH a renderer
+    // and DOMPurify are present; otherwise fall back to sanitized plaintext.
+    if (!window.md && typeof window.markdownit === 'function') {
+        try {
+            window.md = window.markdownit({ html: false, linkify: true, breaks: true });
+        } catch (e) { /* leave window.md unset — plaintext fallback below */ }
+    }
+    if (window.md && typeof DOMPurify !== 'undefined') {
         messageEl.innerHTML = DOMPurify.sanitize(window.md.render(text || ''));
     } else {
-        // markdown-it CDN failed to load (e.g. offline). Render as plain text
-        // rather than throwing — preserves send flow over flaky networks.
+        // No safe renderer (markdown-it CDN failed to load, or DOMPurify absent).
+        // Render as plain text rather than injecting unsanitized HTML — preserves
+        // the send flow over flaky networks without an XSS surface.
         messageEl.textContent = text || '';
     }
 }

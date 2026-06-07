@@ -20,9 +20,14 @@
     let activeMessage = null;
     let popup = null;
     let overlay = null;
+    let _initialized = false;
 
     function init() {
         if (!isTouchDevice) return;
+        // Idempotent: refresh()/re-init must not stack duplicate popups, overlays,
+        // or document-level listeners (each click would otherwise fire closePopup N times).
+        if (_initialized) return;
+        _initialized = true;
 
         createPopup();
         createOverlay();

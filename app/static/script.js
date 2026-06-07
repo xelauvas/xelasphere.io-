@@ -1348,6 +1348,16 @@ function appendPdfMessage(messageDiv, fileUrl) {
     link.href = fileUrl;
     link.target = '_blank';
     link.classList.add('file-link');
+    link.addEventListener('click', (event) => {
+        if (typeof FilePreview === 'undefined' || !FilePreview.openPreviewModal) return;
+        event.preventDefault();
+        FilePreview.openPreviewModal({
+            original_filename: extractFileName(fileUrl),
+            name: extractFileName(fileUrl),
+            mime_type: 'application/pdf',
+            url: fileUrl
+        });
+    });
 
     const pdfIcon = document.createElement('i');
     pdfIcon.className = 'fas fa-file-pdf';
@@ -1373,6 +1383,15 @@ function appendFileMessage(messageDiv, fileUrl) {
     link.href = fileUrl;
     link.target = '_blank';
     link.classList.add('file-link');
+    link.addEventListener('click', (event) => {
+        if (typeof FilePreview === 'undefined' || !FilePreview.openPreviewModal) return;
+        event.preventDefault();
+        FilePreview.openPreviewModal({
+            original_filename: extractFileName(fileUrl),
+            name: extractFileName(fileUrl),
+            url: fileUrl
+        });
+    });
 
     const fileIcon = document.createElement('i');
     fileIcon.className = 'fas fa-file-alt';
@@ -1813,7 +1832,12 @@ function autoGrowComposer() {
         measurementClone.style.fontWeight = cs.fontWeight;
         measurementClone.style.letterSpacing = cs.letterSpacing;
         measurementClone.style.lineHeight = `${LINE_HEIGHT_MULTI}`;
-        measurementClone.style.padding = '0';
+        // Include horizontal padding so the clone's text-wrap width matches
+        // the real textarea, preventing 1-line jitter.
+        measurementClone.style.paddingTop = '0';
+        measurementClone.style.paddingBottom = '0';
+        measurementClone.style.paddingLeft = cs.paddingLeft;
+        measurementClone.style.paddingRight = cs.paddingRight;
         measurementClone.value = promptInput.value;
 
         const textHeight = measurementClone.scrollHeight;
@@ -1876,7 +1900,8 @@ function initPromptInputHandlers() {
 
     input.addEventListener('keydown', (event) => {
         // Don't send while IME is composing (Japanese/Chinese/Korean input)
-        if (isComposingMessage || event.isComposing) {
+        // keyCode 229 catches IME combos where isComposing may already be false
+        if (isComposingMessage || event.isComposing || event.keyCode === 229) {
             return;
         }
         // Enter without Shift = send message
@@ -2072,6 +2097,10 @@ function updateSendButtonState() {
     const isEmpty = promptInput.value.trim() === '';
     const isStopVisible = sendButton.classList.contains('show-stop');
 
+    if (isEmpty) {
+        sendButton.classList.remove('typing');
+    }
+
     // Toggle between voice mode button and send button
     if (voiceModeButton) {
         if (isEmpty && !isStopVisible) {
@@ -2260,8 +2289,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             if (!files.length) return;
-            // Only intercept if the focused target isn't one that needs the
-            // file as text (e.g. file inputs — none currently expect paste).
+            // Only intercept when the composer is the paste target so that
+            // file pastes elsewhere on the page (e.g. text editors, other
+            // inputs) are not hijacked.
+            const ae = document.activeElement;
+            const composerFocused = ae && (ae.id === 'prompt' || ae.closest('.input-container'));
+            if (!composerFocused) return;
             e.preventDefault();
             forwardFilesToPipeline(files);
         });
@@ -2571,6 +2604,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function displayPreview(attachment) {
         const filePreviewContainer = createPreviewContainer(attachment.id, attachment.name);
+        filePreviewContainer.classList.add(attachment.isImage ? 'is-image' : 'is-file');
+        if (typeof FilePreview !== 'undefined' && attachment.name) {
+            filePreviewContainer.dataset.fileType = FilePreview.getFileCategory(attachment.name);
+        }
         const closeButton = createCloseButton(filePreviewContainer, attachment.id); // Pass container for removal
         filePreviewContainer.appendChild(closeButton);
 
@@ -2584,9 +2621,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         filePreviewContainer.appendChild(elementToAppend);
 
-        if (!attachment.isImage) {
+        if (attachment.name) {
             const fileNameLabel = createFileNameLabel(attachment.name);
+            if (attachment.isImage) {
+                fileNameLabel.classList.add('file-name--image');
+            }
             filePreviewContainer.appendChild(fileNameLabel);
+        }
+
+        if (!attachment.isImage) {
             enableFileOpen(filePreviewContainer, attachment);
         }
 

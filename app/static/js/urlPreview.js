@@ -24,6 +24,20 @@
     let currentUrls = [];
     let urlMetadataCache = {};
     let excludedUrls = new Set();
+    let previewGeneration = 0;
+
+    /**
+     * Escape HTML special characters for safe interpolation into HTML text/attribute contexts
+     */
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
 
     /**
      * Get CSRF token
@@ -131,24 +145,31 @@
         const typeInfo = URL_TYPES[metadata.type] || URL_TYPES.article;
         const hasImage = metadata.image && metadata.type === 'youtube'; // Only show thumbnail for YouTube
 
+        const safeUrl   = escapeHtml(metadata.url);
+        const safeImage = escapeHtml(metadata.image);
+        const safeFavicon = escapeHtml(metadata.favicon);
+        const safeTitle = escapeHtml(metadata.title || metadata.domain);
+        const safeDomain = escapeHtml(metadata.domain);
+        const safeDesc  = escapeHtml(metadata.description);
+
         return `
-            <div class="url-card" data-url="${metadata.url}">
+            <div class="url-card" data-url="${safeUrl}">
                 ${hasImage ? `
-                    <a href="${metadata.url}" target="_blank" rel="noopener noreferrer" class="url-card-thumbnail" title="Open video">
-                        <img src="${metadata.image}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'">
+                    <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="url-card-thumbnail" title="Open video">
+                        <img src="${safeImage}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'">
                         <div class="url-card-play"><i class="fas fa-play"></i></div>
                     </a>
                 ` : ''}
                 <div class="url-card-content">
                     <div class="url-card-icon" style="color: ${typeInfo.color}">
-                        <img src="${metadata.favicon}" alt="" onerror="this.outerHTML='<i class=\\'${typeInfo.icon}\\'></i>'">
+                        <img src="${safeFavicon}" alt="" onerror="this.outerHTML='<i class=\\'${typeInfo.icon}\\'></i>'">
                     </div>
                     <div class="url-card-info">
-                        <div class="url-card-title" title="${metadata.title || metadata.domain}">${metadata.title || metadata.domain}</div>
-                        ${metadata.description ? `<div class="url-card-desc">${metadata.description}</div>` : ''}
+                        <div class="url-card-title" title="${safeTitle}">${safeTitle}</div>
+                        ${metadata.description ? `<div class="url-card-desc">${safeDesc}</div>` : ''}
                         <div class="url-card-domain">
                             <i class="${typeInfo.icon}" style="color: ${typeInfo.color}"></i>
-                            ${metadata.domain}
+                            ${safeDomain}
                         </div>
                     </div>
                 </div>
@@ -176,6 +197,7 @@
         card.style.transform = 'scale(0.8)';
         card.style.opacity = '0';
         setTimeout(() => {
+            if (!card.isConnected) return;
             card.remove();
             // Check if any cards left
             const cardsContainer = container.querySelector('.url-preview-cards');
@@ -189,6 +211,7 @@
      * Show the container with URL cards
      */
     async function showPreview(urls) {
+        const gen = ++previewGeneration;
         const el = getContainer();
         const cardsContainer = el.querySelector('.url-preview-cards');
 
@@ -213,6 +236,7 @@
         // Fetch metadata for each URL
         for (const url of activeUrls) {
             const metadata = await fetchMetadata(url);
+            if (gen !== previewGeneration) return;
             const card = cardsContainer.querySelector(`[data-url="${url}"]`);
             if (card) {
                 const newCard = document.createElement('div');
