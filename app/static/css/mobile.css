@@ -608,6 +608,60 @@ body.is-ios .temp-chat-button:hover {
     background: transparent !important;
 }
 
+/* Sidebar incognito ghost — icon only. The global `button {}` rule (debug.css)
+   paints a default background + shadow; strip it on mobile so it reads as a
+   bare icon, matching .mobile-header-ghost. */
+body.device-phone .sidebar-header-ghost,
+body.device-tablet .sidebar-header-ghost,
+body.is-mobile .sidebar-header-ghost,
+body.is-ios .sidebar-header-ghost,
+body.device-phone .sidebar-header-ghost:hover,
+body.device-tablet .sidebar-header-ghost:hover,
+body.is-mobile .sidebar-header-ghost:hover,
+body.is-ios .sidebar-header-ghost:hover,
+body.device-phone .sidebar-header-ghost:active,
+body.device-tablet .sidebar-header-ghost:active,
+body.is-mobile .sidebar-header-ghost:active,
+body.is-ios .sidebar-header-ghost:active {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* ============================================================
+   Chat-embedded rich cards — mobile width fix.
+
+   On desktop these match the rounded input bar by FORCING
+   width: calc(var(--chat-content-width) - …) !important. But
+   --chat-content-width is clamp(720px, 50vw, 1100px) → floors at
+   720px and is never overridden on mobile, so the cards render
+   ~690px wide and overflow the phone viewport horizontally.
+   Regular messages escape this via min(100%, …); these cards
+   don't. Constrain them to the content column on mobile and drop
+   the desktop transform/centering offset.
+   ============================================================ */
+body.device-phone .email-composer-card,
+body.device-tablet .email-composer-card,
+body.is-mobile .email-composer-card,
+body.is-ios .email-composer-card,
+body.device-phone .crypto-chart-wrapper,
+body.device-tablet .crypto-chart-wrapper,
+body.is-mobile .crypto-chart-wrapper,
+body.is-ios .crypto-chart-wrapper,
+body.device-phone .code-window,
+body.device-tablet .code-window,
+body.is-mobile .code-window,
+body.is-ios .code-window {
+    width: 100% !important;
+    max-width: 100% !important;
+    transform: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box;
+}
+
 /* Hide toggle button in temp chat mode on mobile - use mobile header burger instead */
 body.device-phone.temporary-chat-mode .toggle-button,
 body.device-tablet.temporary-chat-mode .toggle-button,
@@ -1041,32 +1095,90 @@ body.device-phone .scroll-to-bottom,
 body.device-phone .arrow-down,
 body.device-tablet .scroll-to-bottom,
 body.device-tablet .arrow-down,
+body.viewport-mobile .scroll-to-bottom,
+body.viewport-mobile .arrow-down,
 body.is-mobile .scroll-to-bottom,
 body.is-mobile .arrow-down,
 body.is-ios .scroll-to-bottom,
 body.is-ios .arrow-down {
     position: fixed !important;
-    width: 44px !important;
-    height: 44px !important;
-    bottom: calc(var(--composer-reserved-height, 100px) + env(safe-area-inset-bottom, 0px) + 8px) !important;
+    width: 36px !important;
+    height: 36px !important;
+    bottom: calc(var(--composer-reserved-height, 100px) + env(safe-area-inset-bottom, 0px) + 1px) !important;
     left: 50% !important;
     right: auto !important;
     top: auto !important;
     transform: translateX(-50%) !important;
     border-radius: 50% !important;
     z-index: 9999 !important;
-    background: rgba(40, 40, 40, 0.95) !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    background: color-mix(in srgb, var(--bg-elevated, #24242a) 42%, transparent) !important;
+    color: color-mix(in srgb, var(--text-primary, #f5f5f5) 70%, transparent) !important;
+    border: 1px solid color-mix(in srgb, var(--text-primary, #ffffff) 8%, transparent) !important;
+    box-shadow:
+        0 3px 10px rgba(0, 0, 0, 0.07),
+        inset 0 1px 0 color-mix(in srgb, var(--text-primary, #ffffff) 5%, transparent) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    backdrop-filter: blur(18px) saturate(1.15);
     cursor: pointer !important;
     touch-action: manipulation !important;
     -webkit-tap-highlight-color: transparent !important;
     pointer-events: auto !important;
+    transition:
+        transform 140ms ease,
+        background-color 140ms ease,
+        box-shadow 140ms ease,
+        border-color 140ms ease !important;
+}
+
+body.device-phone .arrow-down i,
+body.device-tablet .arrow-down i,
+body.viewport-mobile .arrow-down i,
+body.is-mobile .arrow-down i,
+body.is-ios .arrow-down i {
+    color: currentColor !important;
+    font-size: 13px !important;
+    transform: translateY(1px) !important;
+}
+
+body.device-phone .arrow-down:active,
+body.device-tablet .arrow-down:active,
+body.viewport-mobile .arrow-down:active,
+body.is-mobile .arrow-down:active,
+body.is-ios .arrow-down:active {
+    transform: translateX(-50%) translateY(2px) scale(0.96) !important;
+    background: color-mix(in srgb, var(--bg-elevated, #24242a) 58%, transparent) !important;
+    border-color: color-mix(in srgb, var(--text-primary, #ffffff) 12%, transparent) !important;
+    box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.09),
+        inset 0 1px 0 color-mix(in srgb, var(--text-primary, #ffffff) 7%, transparent) !important;
+}
+
+[data-theme="light"] body.device-phone .arrow-down,
+[data-theme="light"] body.device-tablet .arrow-down,
+[data-theme="light"] body.viewport-mobile .arrow-down,
+[data-theme="light"] body.is-mobile .arrow-down,
+[data-theme="light"] body.is-ios .arrow-down {
+    background: rgba(255, 255, 255, 0.38) !important;
+    color: rgba(28, 28, 30, 0.64) !important;
+    border-color: rgba(60, 60, 67, 0.09) !important;
+    box-shadow:
+        0 3px 10px rgba(20, 24, 32, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.32) !important;
+}
+
+[data-theme="light"] body.device-phone .arrow-down:active,
+[data-theme="light"] body.device-tablet .arrow-down:active,
+[data-theme="light"] body.viewport-mobile .arrow-down:active,
+[data-theme="light"] body.is-mobile .arrow-down:active,
+[data-theme="light"] body.is-ios .arrow-down:active {
+    background: rgba(255, 255, 255, 0.54) !important;
+    border-color: rgba(60, 60, 67, 0.13) !important;
 }
 
 /* Show arrow when has messages */
 body.device-phone.has-messages .arrow-down,
 body.device-tablet.has-messages .arrow-down,
+body.viewport-mobile.has-messages .arrow-down,
 body.is-mobile.has-messages .arrow-down,
 body.is-ios.has-messages .arrow-down {
     display: flex !important;
@@ -1075,6 +1187,7 @@ body.is-ios.has-messages .arrow-down {
 /* Hide when at bottom - uses body class from IntersectionObserver */
 body.device-phone.at-scroll-bottom .arrow-down,
 body.device-tablet.at-scroll-bottom .arrow-down,
+body.viewport-mobile.at-scroll-bottom .arrow-down,
 body.is-mobile.at-scroll-bottom .arrow-down,
 body.is-ios.at-scroll-bottom .arrow-down {
     display: none !important;
@@ -1082,25 +1195,20 @@ body.is-ios.at-scroll-bottom .arrow-down {
 
 /* Down arrow bounce animation on mobile */
 body.device-phone .arrow-down,
+body.viewport-mobile .arrow-down,
 body.is-mobile .arrow-down,
 body.is-ios .arrow-down {
-    animation: downArrowBounce 0.6s ease-out;
+    animation: downArrowRise 180ms ease-out;
 }
 
-@keyframes downArrowBounce {
+@keyframes downArrowRise {
     0% {
-        transform: translateX(-50%) translateY(20px);
+        transform: translateX(-50%) translateY(8px) scale(0.96);
         opacity: 0;
     }
-    50% {
-        transform: translateX(-50%) translateY(-8px);
-        opacity: 1;
-    }
-    70% {
-        transform: translateX(-50%) translateY(4px);
-    }
     100% {
-        transform: translateX(-50%) translateY(0);
+        transform: translateX(-50%) translateY(0) scale(1);
+        opacity: 1;
     }
 }
 
@@ -1384,14 +1492,15 @@ body.is-ios .arrow-down {
         flex-shrink: 0;
     }
 
-    /* Logo — bigger tap target, same size as burger area */
+    /* Logo — keep the wordmark visible while preserving a large tap target. */
     .sidebar-header .sidebar-logo-link {
-        width: 40px;
+        width: auto;
+        min-width: 40px;
         height: 40px;
         display: flex;
         align-items: center;
-        justify-content: center;
-        padding: 0;
+        justify-content: flex-start;
+        padding: 0 8px;
     }
 
     .sidebar-header img {
@@ -1423,7 +1532,12 @@ body.is-ios .arrow-down {
         max-height: calc(100vh - 140px);
         max-height: calc(100dvh - 140px);
         overflow-y: auto;
+        overflow-x: hidden;
         -webkit-overflow-scrolling: touch;
+    }
+
+    #tab-list {
+        overflow: visible;
     }
 
     /* --- Input Container Full Width --- */
@@ -2387,34 +2501,72 @@ body.is-ios .arrow-down {
     }
 
     /* File preview modal */
+    .file-preview-modal {
+        align-items: stretch;
+        justify-content: stretch;
+        padding: 0;
+    }
+
     .file-preview-modal__container {
-        width: 95vw;
-        max-width: none;
-        max-height: 90vh;
-        margin: 1rem;
+        width: 100vw;
+        height: 100dvh;
+        max-width: 100vw;
+        max-height: 100dvh;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
     }
 
     .file-preview-modal__header {
-        padding: 0.75rem;
-        flex-wrap: wrap;
+        min-height: 52px;
+        padding: calc(env(safe-area-inset-top, 0px) + 0.5rem) 0.5rem 0.5rem 0.75rem;
+        flex-wrap: nowrap;
         gap: 0.5rem;
     }
 
     .file-preview-modal__title {
         font-size: 0.9rem;
+        min-width: 0;
     }
 
     .file-preview-modal__actions {
-        width: 100%;
+        width: auto;
+        flex: 0 0 auto;
         justify-content: flex-end;
     }
 
     .file-preview-modal__content {
-        padding: 0.5rem;
+        min-height: 0;
+        max-height: none;
+        padding: 0;
     }
 
     .file-preview-modal__image {
-        max-height: 50vh;
+        max-height: 100%;
+    }
+
+    .file-preview-modal__pdf-shell,
+    .file-preview-modal__pdf-pages {
+        min-height: 0;
+        height: 100%;
+    }
+
+    .file-preview-modal__pdf-pages {
+        padding: 10px 8px 14px;
+    }
+
+    .file-preview-modal__pdf-page {
+        margin-bottom: 12px;
+        border-radius: 3px;
+    }
+
+    .file-preview-modal__pdf {
+        height: 100%;
+        min-height: 0;
+    }
+
+    .file-preview-modal__pdf-hint {
+        display: flex;
     }
 
     /* Image previews in messages */
@@ -3068,6 +3220,10 @@ body.is-ios .arrow-down {
         box-sizing: border-box;
     }
 
+    .chat-shell__composer .input-container .input-row.composer-expanded {
+        align-items: flex-end !important;
+    }
+
     /* === Inner pill wrapper (textarea + buttons) === */
     .chat-shell__composer .input-row > .textarea-container {
         flex: 1 1 auto !important;
@@ -3084,6 +3240,14 @@ body.is-ios .arrow-down {
         border: none;
         order: 1 !important;
         transition: background 0.15s ease;
+    }
+
+    .chat-shell__composer .input-row.composer-expanded > .textarea-container {
+        height: auto !important;
+        min-height: 44px !important;
+        align-items: flex-start !important;
+        padding-top: 8px !important;
+        padding-bottom: 4px !important;
     }
 
     /* === + Button - Left of pill, centered === */
@@ -3104,10 +3268,10 @@ body.is-ios .arrow-down {
 
     /* === Send Button - Inside the pill === */
     .chat-shell__composer .textarea-container .send-button {
-        width: 36px;
-        height: 36px;
-        min-width: 36px;
-        min-height: 36px;
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        min-height: 36px !important;
         border-radius: 50%;
         padding: 0;
         align-items: center;
@@ -3185,6 +3349,18 @@ body.is-ios .arrow-down {
         line-height: 34px;
     }
 
+    .chat-shell__composer .input-row.composer-expanded textarea.chat-input {
+        width: 100% !important;
+    }
+
+    .chat-shell__composer .textarea-container:has(.voice-mode-button.guest-disabled) textarea.chat-input {
+        padding-right: 10px !important;
+    }
+
+    .chat-shell__composer .textarea-container:has(.voice-mode-button.guest-disabled) textarea.chat-input::placeholder {
+        font-size: 14px !important;
+    }
+
     /* === Microphone button === */
     .chat-shell__composer .textarea-container .microphone-button {
         width: 32px;
@@ -3202,6 +3378,10 @@ body.is-ios .arrow-down {
         padding: 4px;
     }
 
+    .chat-shell__composer .textarea-container .microphone-button.guest-disabled {
+        display: none !important;
+    }
+
     /* === Voice mode button — white circle like send === */
     .chat-shell__composer .textarea-container .voice-mode-button {
         width: 36px;
@@ -3217,6 +3397,19 @@ body.is-ios .arrow-down {
         color: #000;
         touch-action: manipulation;
         transition: background 0.15s ease;
+    }
+
+    .chat-shell__composer .textarea-container .voice-mode-button.guest-disabled {
+        display: none !important;
+    }
+
+    .chat-shell__composer .textarea-container:has(.send-button[style*="display: flex"]) textarea.chat-input,
+    .chat-shell__composer .textarea-container:has(.send-button.typing) textarea.chat-input {
+        padding-right: 48px !important;
+    }
+
+    .chat-shell__composer .textarea-container .microphone-button:not(.guest-disabled) {
+        right: 52px !important;
     }
 
     .chat-shell__composer .textarea-container .voice-mode-button:active {
@@ -3268,10 +3461,10 @@ body.is-ios .arrow-down {
 
     .chat-shell__composer .input-row .actions-toggle,
     .chat-shell__composer .input-row .actions-menu > button {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
-        min-height: 44px;
+        width: 44px !important;
+        height: 44px !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
         border-radius: 50%;
         padding: 0;
         display: flex;
@@ -3979,12 +4172,18 @@ body.is-ios .arrow-down {
     /* === Scroll to Bottom Button === */
     .scroll-to-bottom,
     .arrow-down {
-        width: 40px !important;
-        height: 40px !important;
-        bottom: calc(var(--composer-reserved-height, 90px) + env(safe-area-inset-bottom, 0px) + 8px) !important;
-        right: 12px !important;
+        width: 36px !important;
+        height: 36px !important;
+        bottom: calc(var(--composer-reserved-height, 90px) + env(safe-area-inset-bottom, 0px) + 1px) !important;
+        left: 50% !important;
+        right: auto !important;
         border-radius: 50% !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+        background: color-mix(in srgb, var(--bg-elevated, #24242a) 42%, transparent) !important;
+        color: color-mix(in srgb, var(--text-primary, #f5f5f5) 70%, transparent) !important;
+        border: 1px solid color-mix(in srgb, var(--text-primary, #ffffff) 8%, transparent) !important;
+        box-shadow:
+            0 3px 10px rgba(0, 0, 0, 0.07),
+            inset 0 1px 0 color-mix(in srgb, var(--text-primary, #ffffff) 5%, transparent) !important;
         touch-action: manipulation !important;
     }
 
@@ -4047,7 +4246,7 @@ body.is-ios .arrow-down {
         height: 16px !important;
     }
 
-    .actions-menu button,
+    .actions-menu button:not(#actions-toggle),
     .add-action-btn {
         width: 32px !important;
         height: 32px !important;
@@ -4110,8 +4309,15 @@ body.is-ios .arrow-down {
     .arrow-down {
         width: 36px !important;
         height: 36px !important;
-        bottom: calc(var(--composer-reserved-height, 80px) + env(safe-area-inset-bottom, 0px) + 8px) !important;
-        right: 8px !important;
+        bottom: calc(var(--composer-reserved-height, 80px) + env(safe-area-inset-bottom, 0px) + 1px) !important;
+        left: 50% !important;
+        right: auto !important;
+        background: color-mix(in srgb, var(--bg-elevated, #24242a) 42%, transparent) !important;
+        color: color-mix(in srgb, var(--text-primary, #f5f5f5) 70%, transparent) !important;
+        border: 1px solid color-mix(in srgb, var(--text-primary, #ffffff) 8%, transparent) !important;
+        box-shadow:
+            0 3px 10px rgba(0, 0, 0, 0.07),
+            inset 0 1px 0 color-mix(in srgb, var(--text-primary, #ffffff) 5%, transparent) !important;
     }
 }
 
@@ -4245,6 +4451,7 @@ body.is-ios .text-selection-ask-btn {
 
 /* Quote indicator - inside input-row flex, matches pill width */
 body.device-phone .input-row .quote-reply-indicator,
+body.viewport-mobile .input-row .quote-reply-indicator,
 body.is-mobile .input-row .quote-reply-indicator,
 body.is-ios .input-row .quote-reply-indicator {
     /* Same flex as pill */
@@ -4260,6 +4467,7 @@ body.is-ios .input-row .quote-reply-indicator {
 
 /* Pill connects below quote */
 body.device-phone .input-row .quote-reply-indicator + .textarea-container,
+body.viewport-mobile .input-row .quote-reply-indicator + .textarea-container,
 body.is-mobile .input-row .quote-reply-indicator + .textarea-container,
 body.is-ios .input-row .quote-reply-indicator + .textarea-container {
     border-radius: 0 0 20px 20px !important;
@@ -4268,12 +4476,14 @@ body.is-ios .input-row .quote-reply-indicator + .textarea-container {
 
 /* Make input-row wrap when quote present */
 body.device-phone .input-row:has(.quote-reply-indicator),
+body.viewport-mobile .input-row:has(.quote-reply-indicator),
 body.is-mobile .input-row:has(.quote-reply-indicator),
 body.is-ios .input-row:has(.quote-reply-indicator) {
     flex-wrap: wrap !important;
 }
 
 body.device-phone .quote-reply-content,
+body.viewport-mobile .quote-reply-content,
 body.is-mobile .quote-reply-content,
 body.is-ios .quote-reply-content {
     padding: 10px 14px !important;
@@ -4707,6 +4917,79 @@ body.viewport-mobile .chat-shell__composer {
     border: none !important;
     border-top: none !important;
     box-shadow: none !important;
+}
+
+/* Light mobile terminal/home treatment.
+   The base mobile rules intentionally use dim white text for dark mode; when
+   the active theme is light, those forced colors become unreadable. */
+@media (max-width: 768px) {
+    [data-theme="light"] body:not(.has-messages) .greeting-text,
+    [data-theme="light"] body.viewport-mobile:not(.has-messages) .greeting-text,
+    [data-theme="light"] body.device-phone:not(.has-messages) .greeting-text,
+    [data-theme="light"] body.is-mobile:not(.has-messages) .greeting-text {
+        color: rgba(26, 29, 46, 0.72) !important;
+    }
+
+    [data-theme="light"] body .greeting-text.typewriter-active .greeting-typed-text::after {
+        color: rgba(26, 29, 46, 0.72) !important;
+    }
+
+    [data-theme="light"] body.viewport-mobile .options button,
+    [data-theme="light"] body.device-phone .options button,
+    [data-theme="light"] body.is-mobile .options button,
+    [data-theme="light"] body:not(.has-messages) .options button {
+        color: rgba(26, 29, 46, 0.64) !important;
+        border-bottom-color: rgba(26, 29, 46, 0.08) !important;
+    }
+
+    [data-theme="light"] body.viewport-mobile .options button:active,
+    [data-theme="light"] body.device-phone .options button:active,
+    [data-theme="light"] body.is-mobile .options button:active,
+    [data-theme="light"] body:not(.has-messages) .options button:active,
+    [data-theme="light"] body.viewport-mobile .options button.terminal-tap,
+    [data-theme="light"] body.device-phone .options button.terminal-tap,
+    [data-theme="light"] body.is-mobile .options button.terminal-tap {
+        color: rgba(26, 29, 46, 0.92) !important;
+        text-shadow: 0 0 8px rgba(26, 29, 46, 0.12);
+    }
+
+    [data-theme="light"] body.viewport-mobile .options button .button-text::before,
+    [data-theme="light"] body.device-phone .options button .button-text::before,
+    [data-theme="light"] body.is-mobile .options button .button-text::before,
+    [data-theme="light"] body:not(.has-messages) .options button .button-text::before,
+    [data-theme="light"] body.viewport-mobile .options button.more-button .button-text::before,
+    [data-theme="light"] body.device-phone .options button.more-button .button-text::before,
+    [data-theme="light"] body.is-mobile .options button.more-button .button-text::before {
+        color: rgba(26, 29, 46, 0.38) !important;
+    }
+
+    [data-theme="light"] body.viewport-mobile .options button:nth-last-child(2) .button-text::after,
+    [data-theme="light"] body.device-phone .options button:nth-last-child(2) .button-text::after,
+    [data-theme="light"] body.is-mobile .options button:nth-last-child(2) .button-text::after {
+        color: rgba(26, 29, 46, 0.45) !important;
+    }
+
+    [data-theme="light"] body.viewport-mobile .mobile-header-center .ghost-pill__label,
+    [data-theme="light"] body.device-phone .mobile-header-center .ghost-pill__label,
+    [data-theme="light"] body.is-mobile .mobile-header-center .ghost-pill__label {
+        color: rgba(26, 29, 46, 0.38) !important;
+    }
+
+    [data-theme="light"] body.viewport-mobile .mobile-header-center .ghost-pill + .ghost-pill::before,
+    [data-theme="light"] body.device-phone .mobile-header-center .ghost-pill + .ghost-pill::before,
+    [data-theme="light"] body.is-mobile .mobile-header-center .ghost-pill + .ghost-pill::before {
+        background: rgba(26, 29, 46, 0.18) !important;
+    }
+
+    [data-theme="light"] body.viewport-mobile .mobile-header-center .ghost-pill.active .ghost-pill__label,
+    [data-theme="light"] body.viewport-mobile .mobile-header-center .ghost-pill.locked .ghost-pill__label,
+    [data-theme="light"] body.device-phone .mobile-header-center .ghost-pill.active .ghost-pill__label,
+    [data-theme="light"] body.device-phone .mobile-header-center .ghost-pill.locked .ghost-pill__label,
+    [data-theme="light"] body.is-mobile .mobile-header-center .ghost-pill.active .ghost-pill__label,
+    [data-theme="light"] body.is-mobile .mobile-header-center .ghost-pill.locked .ghost-pill__label {
+        color: rgba(26, 29, 46, 0.86) !important;
+        text-shadow: none !important;
+    }
 }
 
 body.viewport-mobile .input-container {
@@ -5172,7 +5455,7 @@ body.device-tablet .left-sidebar {
     width: 280px !important;
     transform: translateX(-100%) !important;
     background: var(--bg-secondary, #1a1a22) !important;
-    transition: transform 0.5s ease !important;
+    transition: transform 260ms cubic-bezier(0.2, 0, 0, 1), box-shadow 260ms ease !important;
     box-shadow: none !important;
 }
 
@@ -5181,7 +5464,7 @@ body.device-phone.mobile-sidebar-open .left-sidebar,
 body.device-tablet.mobile-sidebar-open .left-sidebar {
     transform: translateX(0) !important;
     box-shadow: 6px 0 20px rgba(0, 0, 0, 0.3) !important;
-    transition: transform 0.5s ease !important;
+    transition: transform 260ms cubic-bezier(0.2, 0, 0, 1), box-shadow 260ms ease !important;
 }
 
 /* Overlay synced */
@@ -5229,16 +5512,52 @@ body.device-tablet .mobile-overlay {
 
     /* ═══ Action Sheet — mobile ═══ */
     #action-sheet-modal {
+        left: 12px !important;
+        right: 12px !important;
+        bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+        width: auto !important;
         max-width: calc(100vw - 24px) !important;
+        max-height: calc(100vh - 142px - env(safe-area-inset-bottom, 0px)) !important;
+        border-radius: 18px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        overscroll-behavior: contain !important;
+        box-shadow: 0 18px 48px rgba(20, 18, 12, 0.18), 0 1px 0 rgba(255, 255, 255, 0.8) inset !important;
     }
-    /* Submenus: open above parent instead of to the right (no room) */
+
+    #action-sheet-modal .asi {
+        min-height: 44px !important;
+        padding: 9px 14px !important;
+        gap: 13px !important;
+        font-size: 14px !important;
+        line-height: 1.2 !important;
+        box-sizing: border-box !important;
+    }
+
+    #action-sheet-modal .asi svg {
+        width: 18px !important;
+        height: 18px !important;
+    }
+
+    #action-sheet-modal .asi:active {
+        background: rgba(0, 0, 0, 0.055) !important;
+        border-radius: 12px !important;
+    }
+
+    /* Submenus: expand inline on phones so they do not cover other rows. */
     #submenu-styles,
     #submenu-skills {
-        left: 0 !important;
-        bottom: 100% !important;
+        position: static !important;
+        left: auto !important;
+        bottom: auto !important;
         top: auto !important;
-        margin-bottom: 6px !important;
-        width: 100% !important;
+        margin: 4px 8px 8px !important;
+        width: calc(100% - 16px) !important;
+        max-height: min(30vh, 190px) !important;
+        overflow-y: auto !important;
+        box-sizing: border-box !important;
+        border-radius: 14px !important;
+        box-shadow: none !important;
     }
     /* ═══ End Action Sheet mobile ═══ */
 }
@@ -5717,3 +6036,390 @@ body.device-tablet .mobile-overlay {
         height: 18px;
     }
 }
+
+/* ============================================================
+   Mobile attachment preview polish
+   Keeps uploads readable in the chat composer and sent bubbles instead of
+   squeezing them into tiny square tiles.
+   ============================================================ */
+@media (max-width: 768px) {
+    .attachment-preview-tray {
+        width: min(100%, calc(100vw - 28px)) !important;
+        max-height: 184px !important;
+        margin: 0 auto 0.5rem !important;
+        padding: 0.45rem !important;
+        gap: 0.6rem !important;
+        align-items: stretch !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        scroll-snap-type: x proximity;
+    }
+
+    .attachment-preview-tray .file-preview-container {
+        flex: 0 0 min(72vw, 260px) !important;
+        width: min(72vw, 260px) !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        min-height: 76px !important;
+        margin: 0 !important;
+        padding: 0.6rem 2.25rem 0.6rem 0.7rem !important;
+        border-radius: 14px !important;
+        align-items: center !important;
+        gap: 0.65rem !important;
+        scroll-snap-align: start;
+    }
+
+    .attachment-preview-tray .file-preview-container.is-image {
+        flex-basis: min(76vw, 280px) !important;
+        width: min(76vw, 280px) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding: 0.5rem 2rem 0.55rem 0.5rem !important;
+        gap: 0.45rem !important;
+    }
+
+    .attachment-preview-tray .file-preview-container.is-file > i {
+        flex: 0 0 38px;
+        width: 38px;
+        text-align: center;
+        font-size: 26px !important;
+    }
+
+    .attachment-preview-tray img.composer-attachment-thumb {
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 4 / 3;
+        max-height: 156px;
+        object-fit: cover;
+        border-radius: 12px !important;
+    }
+
+    .attachment-preview-tray .file-name {
+        min-width: 0;
+        max-width: 100%;
+        margin: 0 !important;
+        font-size: 0.78rem !important;
+        line-height: 1.25 !important;
+        white-space: normal !important;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .attachment-preview-tray .file-name--image {
+        padding: 0 0.15rem;
+        opacity: 0.78;
+        font-size: 0.72rem !important;
+        -webkit-line-clamp: 1;
+    }
+
+    .attachment-preview-tray .close-button {
+        top: 0.45rem !important;
+        right: 0.45rem !important;
+        width: 28px !important;
+        height: 28px !important;
+        min-width: 28px !important;
+        min-height: 28px !important;
+        opacity: 1 !important;
+        font-size: 18px !important;
+        background: rgba(0, 0, 0, 0.45) !important;
+        color: rgba(255, 255, 255, 0.92) !important;
+    }
+
+    .attachment-preview-tray .file-preview-container.is-file .close-button {
+        background: color-mix(in srgb, var(--bg-hover, #2a2a2a) 82%, transparent) !important;
+        color: var(--text-primary, #fff) !important;
+    }
+
+    .attachment-preview-tray .upload-loading-overlay {
+        border-radius: 14px !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) {
+        gap: 0.65rem !important;
+    }
+
+    .message.user-message .message-attachments:not(.message-attachments--grid) {
+        justify-content: flex-end;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card {
+        width: min(100%, 300px) !important;
+        max-width: 300px !important;
+        border-radius: 14px !important;
+        transform: none !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card:not([data-file-type="image"]) {
+        flex-direction: row !important;
+        min-height: 78px;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card:not([data-file-type="image"]) .file-preview-card__thumb {
+        flex: 0 0 76px;
+        width: 76px !important;
+        height: 76px !important;
+        min-height: 76px;
+        aspect-ratio: auto !important;
+        max-height: none !important;
+        border-radius: 12px 0 0 12px !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card:not([data-file-type="image"]) .file-preview-card__info {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0.75rem !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card[data-file-type="image"] {
+        width: min(100%, 320px) !important;
+        max-width: 320px !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card[data-file-type="image"] .file-preview-card__thumb {
+        height: auto !important;
+        min-height: 170px;
+        max-height: 360px;
+        aspect-ratio: 4 / 3;
+        border-radius: 14px 14px 0 0 !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card__name {
+        font-size: 0.82rem !important;
+        line-height: 1.25;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card__meta {
+        font-size: 0.7rem !important;
+    }
+}
+
+@media (max-width: 420px) {
+    .attachment-preview-tray .file-preview-container,
+    .attachment-preview-tray .file-preview-container.is-image {
+        flex-basis: min(82vw, 260px) !important;
+        width: min(82vw, 260px) !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card[data-file-type="image"] .file-preview-card__thumb {
+        min-height: 150px;
+    }
+}
+
+@media (max-width: 768px) {
+    .message-attachments:not(.message-attachments--grid) .file-preview-card--pdf {
+        width: min(100%, 360px) !important;
+        max-width: 360px !important;
+        min-height: 96px !important;
+        background: rgba(255, 255, 255, 0.075) !important;
+        border: 1px solid rgba(255, 255, 255, 0.14) !important;
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card--pdf .file-preview-card__thumb {
+        flex: 0 0 82px !important;
+        width: 82px !important;
+        height: 100px !important;
+        min-height: 100px !important;
+        margin: 8px 0 8px 8px !important;
+        border-radius: 12px !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card--pdf .file-preview-card__name {
+        font-size: 0.86rem !important;
+        font-weight: 600 !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card--pdf .file-preview-card__meta {
+        font-size: 0.72rem !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card--pdf .file-preview-card__kind {
+        font-size: 0.72rem !important;
+        margin-bottom: 8px !important;
+    }
+}
+
+/* ============================================================
+   Mobile sidebar polish — phone drawer  (added 2026-06-07)
+   One row rhythm, one shared left gutter, a properly sized
+   header incognito button, and legible un-boxed section
+   headers. Scoped to body.device-phone so desktop/tablet are
+   untouched. This override-heavy file needs these to win on
+   specificity + load order; values verified against computed
+   styles + rendered screenshots.
+   ============================================================ */
+body.device-phone {
+    --sb-inset: 8px;     /* side breathing room so rounded rows don't touch edges */
+    --sb-gutter: 8px;    /* row padding-left; + inset => icons land ~16px in */
+    --sb-row-h: 44px;    /* iOS touch standard; matches project rows' natural height */
+    --sb-radius: 10px;
+}
+
+/* --- Header: logo left, incognito ghost flush-right & centered --- */
+body.device-phone .left-sidebar .sidebar-header {
+    box-sizing: border-box;   /* base rule uses content-box, which overflowed the drawer */
+    width: 100%;
+    height: 52px;
+    padding: 0 10px;
+    padding-top: env(safe-area-inset-top, 0px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+body.device-phone .left-sidebar .sidebar-header .sidebar-logo-link {
+    min-width: 0;
+    height: 40px;
+    padding: 0 4px;
+}
+body.device-phone .sidebar-header-ghost {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    padding: 0;
+    border-radius: var(--sb-radius);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+body.device-phone .sidebar-header-ghost svg {
+    flex: none;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+}
+body.device-phone .sidebar-header-ghost:active {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+/* --- Single 16px icon gutter ---------------------------------------------
+   The gutter was being summed across 4 nested paddings that differ per
+   section (.sidebar-content 6px, .sidebar-projects 10px, an icon margin-left
+   of -4px, etc.), so icons landed at 10/16/32. Neutralize every intermediate
+   padding and put the whole gutter on container(8) + row(8) => icons at 16
+   everywhere. !important because several bases use it. */
+body.device-phone .sidebar-content { padding-left: 0 !important; padding-right: 0 !important; }
+body.device-phone .sidebar-quick-actions { padding: 6px var(--sb-inset) 8px !important; }
+body.device-phone .sidebar-secondary-nav,
+body.device-phone .sidebar-section-recents,
+body.device-phone .sidebar-section-starred { padding-left: var(--sb-inset) !important; padding-right: var(--sb-inset) !important; }
+body.device-phone .sidebar-quick-actions-inner,
+body.device-phone .sidebar-projects,
+body.device-phone .sidebar-projects-list,
+body.device-phone #tab-list,
+body.device-phone .sidebar-section-list { padding-left: 0 !important; padding-right: 0 !important; }
+
+/* --- Interactive rows: one height, one gutter, one radius --- */
+body.device-phone .sidebar-action-btn,
+body.device-phone .sidebar-project-row,
+body.device-phone .chat-tab {
+    min-height: var(--sb-row-h);
+    border-radius: var(--sb-radius);
+}
+body.device-phone .sidebar-action-btn {
+    padding: 0 10px 0 var(--sb-gutter) !important;
+    gap: 12px;
+}
+body.device-phone .sidebar-action-icon { margin-left: 0 !important; }
+body.device-phone .chat-tab { padding: 0 32px 0 var(--sb-gutter) !important; }
+body.device-phone .chat-tab .tab-content { padding: 0; }
+/* Project rows set padding/min-height with a doubled class + !important in
+   projects.css — match that weight so they share the rhythm and gutter. */
+body.device-phone .sidebar-project-row.sidebar-project-row {
+    min-height: var(--sb-row-h) !important;
+    padding: 0 8px 0 var(--sb-gutter) !important;
+    gap: 12px;
+    border-radius: var(--sb-radius);
+}
+body.device-phone .sidebar-action-icon,
+body.device-phone .sidebar-project-row .folder-icon {
+    width: 20px;
+    min-width: 20px;
+    flex: 0 0 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* --- Section headers: consistent, legible, never boxed --- */
+body.device-phone .sidebar-projects-header,
+body.device-phone .sidebar-section-header {
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 16px var(--sb-gutter) 6px;
+    margin: 0;
+}
+body.device-phone .sidebar-projects-title,
+body.device-phone .sidebar-section-header {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-tertiary, #8c857a);
+}
+body.device-phone .sidebar-project-newbtn { box-shadow: none !important; }
+
+/* --- Active row: shared language (tinted bg + left accent bar) -------------
+   Active chat already gets a cream fill + rust (--text-link) bar; give the
+   active project the same structure in its own accent so the two read as one
+   system instead of two unrelated highlights. */
+body.device-phone .sidebar-project-row.is-active { position: relative; }
+body.device-phone .sidebar-project-row.is-active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 18px;
+    border-radius: 0 3px 3px 0;
+    background: var(--project-accent, var(--text-link, #b14e2f));
+}
+
+/* --- Touch press feedback so taps feel native, not desktop-shrunk --- */
+body.device-phone .sidebar-action-btn:active,
+body.device-phone .sidebar-project-row:active,
+body.device-phone .chat-tab:active {
+    background: var(--bg-hover, rgba(40, 30, 15, 0.05));
+}
+
+/* --- Footer profile row: comfortable, rounded --- */
+body.device-phone .sidebar-footer { padding: 8px var(--sb-inset); }
+body.device-phone .sidebar-footer .profile-header {
+    padding: 8px 10px;
+    gap: 10px;
+    border-radius: 12px;
+    min-height: 48px;
+}
+body.device-phone .sidebar-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.06);   /* separate footer from the scrolling list */
+}
+
+/* --- Snappier, more native drawer (was a sluggish 0.5s) ---
+   Keep the closed-state visibility delay matched to the new duration so the
+   panel stays visible through the slide-out instead of vanishing early. */
+body.device-phone .left-sidebar {
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+                visibility 0s linear 0.3s,
+                box-shadow 0.3s ease !important;
+}
+body.device-phone.mobile-sidebar-open .left-sidebar {
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+                visibility 0s linear 0s,
+                box-shadow 0.3s ease !important;
+}
+body.device-phone .mobile-overlay {
+    transition: opacity 0.3s ease, visibility 0s linear 0.3s !important;
+}
+body.device-phone .mobile-overlay.active {
+    transition: opacity 0.3s ease, visibility 0s linear 0s !important;
+}
+/* end mobile sidebar polish */
