@@ -6353,9 +6353,16 @@ body.device-phone .sidebar-projects-header,
 body.device-phone .sidebar-section-header {
     box-shadow: none !important;
     border: none !important;
-    background: transparent !important;
     padding: 16px var(--sb-gutter) 6px;
     margin: 0;
+}
+/* Projects header sits in normal flow — transparent is fine. */
+body.device-phone .sidebar-projects-header { background: transparent !important; }
+/* Recents/Starred headers are position:sticky (top:0) so chats scroll UNDER
+   them — they MUST keep an opaque background matching the drawer, or the
+   chat titles bleed through the label on scroll. */
+body.device-phone .sidebar-section-header {
+    background: var(--bg-secondary, #1a1a22) !important;
 }
 body.device-phone .sidebar-projects-title,
 body.device-phone .sidebar-section-header {
