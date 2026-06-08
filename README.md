@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/cloud%20run-deployed-4285F4?logo=googlecloud&logoColor=white" alt="Cloud Run" />
   <img src="https://img.shields.io/badge/models-10+-green" alt="10+ Models" />
-  <img src="https://img.shields.io/badge/license-proprietary-red" alt="Proprietary" />
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" />
 </p>
 
 <p align="center">
@@ -457,5 +457,5 @@ XelaSphere is containerized and deployed on **Google Cloud Run** with:
 </p>
 
 <p align="center">
-  <sub>This repository contains only documentation. Source code is proprietary.</sub>
+  <sub>Licensed under the MIT License — see <a href="LICENSE">LICENSE</a>.</sub>
 </p>

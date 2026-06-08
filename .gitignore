@@ -28,3 +28,7 @@ gcloud init/
 kokoro-onnx/
 claude-code
 .superpowers/
+
+# Coverage data
+.coverage
+.coverage.*
