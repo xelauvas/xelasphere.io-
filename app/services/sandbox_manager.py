@@ -6,6 +6,7 @@ Each user gets at most one container at a time. Containers are destroyed after u
 import docker
 import json
 import base64
+import sys
 import time
 import logging
 import re
@@ -39,6 +40,20 @@ PREINSTALLED = {
     'gzip', 'zipfile', 'tarfile', 'configparser', 'xml', 'html',
     'email', 'mimetypes', 'webbrowser', 'turtle', 'tkinter',
 }
+
+# Every stdlib module name for the running interpreter (Python 3.10+). This is
+# the real fix for "pip install curses" failing: the hand-maintained list above
+# only covered ~60 of ~300 stdlib modules, so curses/tty/select/etc. leaked into
+# the pip install list. Union with PREINSTALLED (which still covers third-party
+# packages baked into the image).
+STDLIB = set(getattr(sys, 'stdlib_module_names', ()))
+
+# Libraries that drive a full-screen terminal UI. They need a live TTY plus
+# keyboard input, which script mode (captured stdout, no stdin) can't provide,
+# so they no-op and exit 0 with a blank screen. Detected up front so we can tell
+# the user instead of silently running nothing.
+TUI_MODULES = {'curses', '_curses', 'urwid', 'blessed', 'prompt_toolkit',
+               'textual', 'npyscreen', 'asciimatics'}
 
 
 @dataclass
@@ -91,7 +106,21 @@ def detect_extra_packages(code: str, local_files: Optional[Dict[str, str]] = Non
     preinstalled_lower = {s.lower() for s in PREINSTALLED}
     return [p for p in imports
             if p.lower() not in preinstalled_lower
+            and p not in STDLIB
             and p.lower() not in local_modules]
+
+
+def requires_interactive_terminal(code: str) -> Optional[str]:
+    """Return the first TUI module imported, or None.
+
+    Terminal-interactive programs (curses and friends) need a live TTY and
+    keyboard input that script mode can't give them. We surface a clear message
+    instead of spinning up a container that exits 0 with a blank screen.
+    """
+    for match in re.finditer(r'(?:^|\n)\s*(?:import|from)\s+([a-zA-Z_][a-zA-Z0-9_]*)', code):
+        if match.group(1) in TUI_MODULES:
+            return match.group(1)
+    return None
 
 
 class SandboxManager:
@@ -223,6 +252,18 @@ class SandboxManager:
             return
 
         mode = detect_mode(code)
+
+        # Terminal-interactive programs (curses/TUI) can't run here: script mode
+        # captures stdout and has no stdin TTY, so they'd no-op and exit 0 with a
+        # blank screen. Tell the user instead of pretending to run it.
+        tui_lib = requires_interactive_terminal(code)
+        if tui_lib:
+            yield {"type": "error", "text": (
+                f"'{tui_lib}' needs an interactive terminal (live keyboard + TTY), "
+                f"which the Run sandbox doesn't provide. Terminal UI programs can't "
+                f"run here — try a script that prints output instead."
+            )}
+            return
 
         # Reuse existing container only when both the existing container and the
         # new run are plain 'script' mode. gui/app containers run their own
