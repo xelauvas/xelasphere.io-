@@ -225,11 +225,16 @@ class ChatSession:
             sessions = sessions_query.stream() if ungrouped else sessions_query.limit(page_size + 1).stream()
 
         if ungrouped and not project_id:
-            # Keep legacy sessions where project_id is absent as well as
-            # sessions where it is explicitly null.
+            # A chat is hidden from Recents only when it belongs to a project
+            # that still exists. Legacy/stale project_id values must not make
+            # otherwise normal chats disappear.
+            valid_project_ids = {
+                doc.id for doc in self.db.collection('users').document(user_id)
+                .collection('projects').stream()
+            }
             sessions = (
                 doc for doc in sessions
-                if not (doc.to_dict() or {}).get('project_id')
+                if self._is_visible_ungrouped(doc.to_dict() or {}, valid_project_ids)
             )
 
         chat_history = []
@@ -292,14 +297,26 @@ class ChatSession:
 
     def count_grouped(self, user_id: str) -> int:
         """Count visible sessions assigned to a project."""
+        valid_project_ids = {
+            doc.id for doc in self.db.collection('users').document(user_id)
+            .collection('projects').stream()
+        }
         sessions = self.db.collection('users').document(user_id).collection('chat_sessions').stream()
         count = 0
         for doc in sessions:
             data = doc.to_dict() or {}
             status = data.get('status', 'active')
-            if data.get('project_id') and status not in ('archived', 'temporary'):
+            if data.get('project_id') in valid_project_ids and status not in ('archived', 'temporary'):
                 count += 1
         return count
+
+    @staticmethod
+    def _is_visible_ungrouped(data: Dict[str, Any], valid_project_ids: set) -> bool:
+        """Return True for an active chat that is not in an existing project."""
+        status = data.get('status', 'active')
+        if status in ('archived', 'temporary') or data.get('is_temporary'):
+            return False
+        return data.get('project_id') not in valid_project_ids
 
     def list_metadata(self, user_id: str) -> List[Dict[str, Any]]:
         """Return flat metadata for ALL sessions of a user — no message bodies.
