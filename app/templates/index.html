@@ -179,7 +179,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=10">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=53">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=43">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=45">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
@@ -712,62 +712,45 @@
                       data-project-icon="{{ current_project.icon or 'code' }}"
                       style="--project-accent: {{ current_project.color }};">
                   <header class="project-page-header">
-                    <a href="/" class="project-page-back pp-hidden" aria-label="Back to chats">←</a>
-                    <button type="button" id="project-page-icon-btn" class="project-page-icon-btn"
-                            aria-label="Change icon and color" data-icon-trigger>
-                      <!-- Default {} glyph is inline so the header never renders
-                           empty; projectsPage.js swaps this for the project's
-                           saved icon (via data-project-icon) once PROJECT_ICONS
-                           is available. -->
+                    <div class="project-page-identity">
                       <span class="project-page-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/>
-                          <path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>
-                        </svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M2 10h20"/></svg>
                       </span>
-                    </button>
-                    <h1 class="project-page-title" id="project-title">{{ current_project.name }}</h1>
-                    <button type="button" id="project-rename" class="project-page-edit pp-hidden" aria-label="Rename project">Rename</button>
-                    <button type="button" id="project-menu" class="project-page-menu pp-hidden" aria-label="Project options">⋯</button>
+                      <div>
+                        <h1 class="project-page-title" id="project-title">{{ current_project.name }}</h1>
+                        <p class="project-page-subtitle">Chats, files and instructions in one place</p>
+                      </div>
+                    </div>
+                    <button type="button" id="project-menu" class="project-page-menu" aria-label="Project options">⋯</button>
                   </header>
 
-                  <!-- ChatGPT-style tabs. "Sources" is a placeholder for now. -->
-                  <div class="project-page-tabs" role="tablist" aria-label="Project sections">
-                    <button type="button" role="tab" class="project-page-tab is-active"
-                            data-tab="chats" aria-selected="true">Chats</button>
-                    <button type="button" role="tab" class="project-page-tab"
-                            data-tab="sources" aria-selected="false">Sources</button>
-                  </div>
+                  <button type="button" id="project-new-chat" class="project-new-chat-btn"><span aria-hidden="true">＋</span> New chat</button>
 
-                  <button type="button" id="project-new-chat" class="project-new-chat-btn">+ New chat in this project</button>
-
-                  <section class="project-section pp-hidden">
-                    <h2 class="project-section-title">Instructions</h2>
+                  <div class="project-page-settings-grid">
+                  <section class="project-section project-card">
+                    <h2 class="project-section-title">Project instructions</h2>
                     <textarea id="project-instructions" class="project-instructions"
-                              maxlength="8000" placeholder="How should the AI respond in this project?">{{ current_project.instructions or '' }}</textarea>
+                              maxlength="8000" placeholder="Add instructions to tailor responses in this project">{{ current_project.instructions or '' }}</textarea>
                     <div class="project-instructions-status" id="project-instructions-status" aria-live="polite"></div>
                   </section>
 
-                  <section class="project-section pp-hidden">
-                    <h2 class="project-section-title">Files</h2>
+                  <section class="project-section project-card">
+                    <h2 class="project-section-title">Project files</h2>
                     <div class="project-files-dropzone" id="project-files-dropzone">
                       <input type="file" id="project-file-input" multiple style="display:none" />
-                      <button type="button" class="project-add-files-btn" id="project-add-files-btn">+ Add files</button>
-                      <span class="project-files-hint">or drop files here (PDF, doc, image, text — 10 MB max each)</span>
+                      <button type="button" class="project-add-files-btn" id="project-add-files-btn">＋ Add files</button>
+                      <span class="project-files-hint">Add context for chats in this project</span>
                     </div>
                     <ul id="project-files" class="project-files" role="list"></ul>
                   </section>
+                  </div>
 
-                  <section class="project-section project-tab-panel" data-panel="chats" role="tabpanel">
+                  <section class="project-section project-conversations">
+                    <h2 class="project-conversations-title">Chats</h2>
                     <ul id="project-chats" class="project-chats" role="list"></ul>
                   </section>
-
-                  <section class="project-section project-tab-panel pp-hidden" data-panel="sources" role="tabpanel">
-                    <p class="project-sources-placeholder">Sources coming soon.</p>
-                  </section>
                 </main>
-                <script src="{{ url_for('static', filename='js/projectsPage.js') }}?v=5" defer></script>
+                <script src="{{ url_for('static', filename='js/projectsPage.js') }}?v=6" defer></script>
                 {% endif %}
                 <div class="chat-shell"{% if current_project %} style="display:none"{% endif %} role="region" aria-label="Chat workspace">
                     <header class="chat-shell__header">
@@ -1454,14 +1437,14 @@
         window.sharedSessionId = "{{ shared_session_id|default('', true) }}";
     </script>
     <script src="{{ url_for('static', filename='js/toast.js') }}?v=7"></script>
-    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=27"></script>
+    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=28"></script>
     <script src="{{ url_for('static', filename='js/chatsPage.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/artifactDiff.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=67"></script>
-    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=10" defer></script>
+    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=11" defer></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Dropdown Menu Logic ---
@@ -1654,14 +1637,15 @@
 {% include "_reminders_modal.html" %}
 <div id="project-create-modal" class="project-modal" hidden role="dialog" aria-modal="true" aria-labelledby="project-modal-title">
   <div class="project-modal-backdrop" data-dismiss="modal"></div>
-  <div class="project-modal-content">
+  <div class="project-modal-content" tabindex="-1">
     <h2 id="project-modal-title" class="project-modal-heading">Create project</h2>
     <label class="project-modal-label" for="project-name-input">Project name</label>
-    <input id="project-name-input" class="project-modal-input" type="text" maxlength="120" placeholder="Copenhagen Trip" autocomplete="off" />
-    <p class="project-modal-helper">Projects keep chats, files, and custom instructions in one place. Use them for ongoing work, or just to keep things tidy.</p>
+    <input id="project-name-input" class="project-modal-input" type="text" maxlength="120" placeholder="Copenhagen Trip" autocomplete="off" aria-describedby="project-modal-helper project-modal-error" />
+    <p id="project-modal-helper" class="project-modal-helper">Projects keep chats, files, and custom instructions in one place. Use them for ongoing work, or just to keep things tidy.</p>
+    <p id="project-modal-error" class="project-modal-error" role="alert" aria-live="polite" hidden></p>
     <div class="project-modal-actions">
       <button type="button" class="project-modal-cancel" data-dismiss="modal">Cancel</button>
-      <button type="button" id="project-modal-create" class="project-modal-create" disabled>Create project</button>
+      <button type="button" id="project-modal-create" class="project-modal-create" disabled data-default-label="Create project">Create project</button>
     </div>
   </div>
 </div>

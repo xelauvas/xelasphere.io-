@@ -1232,7 +1232,7 @@ async loadChatHistory(pageToken = null, limit = 30) {
         if (pageToken) {
             params.set('page_token', pageToken);
         }
-        const projectMatch = window.location.pathname.match(/^\/projects\/([^/?]+)/);
+        const projectMatch = window.location.pathname.match(/^\/p\/([^/?]+)/);
         if (projectMatch) {
             params.set('project_id', projectMatch[1]);
         } else {
@@ -4301,6 +4301,15 @@ async loadChatHistory(pageToken = null, limit = 30) {
                 });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const proj = projects.find((p) => p.id === projectId);
+                // Update Recents immediately, then reconcile with the server
+                // through the existing history refresh event.
+                const movedRow = document.querySelector(`.chat-tab[data-session-id="${CSS.escape(sessionId)}"]`);
+                if (movedRow) {
+                    movedRow.classList.add('chat-tab--moving-to-project');
+                    movedRow.addEventListener('animationend', () => movedRow.remove(), { once: true });
+                    setTimeout(() => movedRow.remove(), 240);
+                }
+                if (this.chatHistory?.[sessionId]) this.chatHistory[sessionId].project_id = projectId;
                 this.showNotification(`Added to ${proj?.name || 'project'}`, 'success');
                 window.dispatchEvent(new CustomEvent('projects:session-moved', { detail: { sessionId, projectId } }));
             } catch (err) {

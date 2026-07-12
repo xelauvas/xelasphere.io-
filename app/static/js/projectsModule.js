@@ -13,7 +13,7 @@
     </svg>
   `;
 
-  const state = { projects: [], loaded: false };
+  const state = { projects: [], loaded: false, creating: false, lastFocused: null };
   const els = {};
 
   function cache() {
@@ -24,12 +24,15 @@
     els.modal = document.getElementById('project-create-modal');
     els.modalInput = document.getElementById('project-name-input');
     els.modalCreate = document.getElementById('project-modal-create');
+    els.modalError = document.getElementById('project-modal-error');
+    els.modalContent = els.modal?.querySelector('.project-modal-content');
   }
 
   async function fetchProjects() {
     const resp = await fetch('/projects', { credentials: 'same-origin' });
     if (!resp.ok) throw new Error(`GET /projects ${resp.status}`);
-    return (await resp.json()).projects || [];
+    const body = await resp.json();
+    return Array.isArray(body.projects) ? body.projects : [];
   }
 
   function renderList() {
@@ -40,17 +43,26 @@
       const li = document.createElement('li');
       li.className = 'sidebar-project-row';
       li.dataset.projectId = project.id;
+      li.tabIndex = 0;
+      li.setAttribute('role', 'link');
+      li.setAttribute('aria-label', `Open project ${project.name}`);
       li.style.setProperty('--project-accent', project.color);
       li.innerHTML = `
         ${FOLDER_SVG}
         <span class="name">${escapeHtml(project.name)}</span>
-        <button type="button" class="sidebar-project-menu-btn" aria-label="Project options" data-project-menu>
+        <button type="button" class="sidebar-project-menu-btn" aria-label="Options for ${escapeHtml(project.name)}" data-project-menu>
           <i class="fas fa-ellipsis-h" aria-hidden="true"></i>
         </button>
       `;
       li.addEventListener('click', (e) => {
         if (e.target.closest('[data-project-menu]')) return;
         window.location.href = `/p/${encodeURIComponent(project.id)}`;
+      });
+      li.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === li) {
+          e.preventDefault();
+          window.location.href = `/p/${encodeURIComponent(project.id)}`;
+        }
       });
       li.querySelector('[data-project-menu]').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -75,8 +87,13 @@
     document.body.appendChild(m);
     const rect = anchor.getBoundingClientRect();
     m.style.position = 'fixed';
-    m.style.top = `${rect.bottom + 4}px`;
-    m.style.left = `${Math.max(8, rect.left - m.offsetWidth + rect.width)}px`;
+    const menuTop = Math.min(rect.bottom + 4, window.innerHeight - m.offsetHeight - 8);
+    const menuLeft = Math.min(
+      Math.max(8, rect.left - m.offsetWidth + rect.width),
+      window.innerWidth - m.offsetWidth - 8,
+    );
+    m.style.top = `${Math.max(8, menuTop)}px`;
+    m.style.left = `${Math.max(8, menuLeft)}px`;
     m.style.zIndex = '1500';
 
     m.addEventListener('click', (ev) => {
@@ -92,6 +109,13 @@
     setTimeout(() => {
       const close = (ev) => { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', close); } };
       document.addEventListener('click', close);
+      m.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') {
+          m.remove();
+          document.removeEventListener('click', close);
+          anchor.focus();
+        }
+      });
     }, 0);
   }
 
@@ -200,12 +224,16 @@
       window.toast?.error?.('No active chat to add');
       return;
     }
-    await fetch(`/chat/${encodeURIComponent(currentSessionId)}`, {
+    const resp = await fetch(`/chat/${encodeURIComponent(currentSessionId)}`, {
       method: 'PATCH',
       credentials: 'same-origin',
       headers: jsonHeaders(),
       body: JSON.stringify({ project_id: projectId }),
     });
+    if (!resp.ok) {
+      window.toast?.error?.('Could not add this chat to the project');
+      return;
+    }
     window.dispatchEvent(new CustomEvent('projects:session-moved', {
       detail: { sessionId: currentSessionId, projectId },
     }));
@@ -215,13 +243,52 @@
 
   /* ---------- Create modal ---------- */
   function openModal() {
+    if (!els.modal || !els.modalInput || state.creating) return;
+    state.lastFocused = document.activeElement;
     els.modal.hidden = false;
     els.modalInput.value = '';
     els.modalCreate.disabled = true;
-    els.modalInput.focus();
+    setModalError('');
+    document.body.classList.add('project-modal-open');
+    requestAnimationFrame(() => els.modalInput.focus());
   }
   function closeModal() {
+    if (!els.modal || state.creating) return;
     els.modal.hidden = true;
+    document.body.classList.remove('project-modal-open');
+    const focusTarget = state.lastFocused?.isConnected ? state.lastFocused : els.createBtn;
+    focusTarget?.focus?.();
+    state.lastFocused = null;
+  }
+
+  function setModalError(message) {
+    if (!els.modalError) return;
+    els.modalError.textContent = message;
+    els.modalError.hidden = !message;
+    els.modalInput?.setAttribute('aria-invalid', message ? 'true' : 'false');
+  }
+
+  function setCreating(creating) {
+    state.creating = creating;
+    els.modalInput.disabled = creating;
+    els.modalCreate.disabled = creating || !els.modalInput.value.trim();
+    els.modalCreate.textContent = creating ? 'Creating…' : (els.modalCreate.dataset.defaultLabel || 'Create project');
+    els.modalCreate.setAttribute('aria-busy', String(creating));
+  }
+
+  function trapModalFocus(e) {
+    if (e.key !== 'Tab' || els.modal.hidden) return;
+    const focusable = [...els.modalContent.querySelectorAll('input:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 
   function bindModal() {
@@ -232,6 +299,7 @@
     });
     els.modalInput.addEventListener('input', () => {
       els.modalCreate.disabled = !els.modalInput.value.trim();
+      setModalError('');
     });
     els.modalInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !els.modalCreate.disabled) {
@@ -242,12 +310,15 @@
       }
     });
     els.modalCreate.addEventListener('click', commit);
+    els.modal.addEventListener('keydown', trapModalFocus);
   }
 
   async function commit() {
+    if (state.creating) return;
     const name = els.modalInput.value.trim();
     if (!name) return;
-    els.modalCreate.disabled = true;
+    setModalError('');
+    setCreating(true);
     try {
       const resp = await fetch('/projects', {
         method: 'POST',
@@ -260,11 +331,16 @@
         throw new Error(err.error || `HTTP ${resp.status}`);
       }
       const { project } = await resp.json();
+      if (!project?.id) throw new Error('Server returned an invalid project');
+      state.creating = false;
       closeModal();
       window.location.href = `/p/${encodeURIComponent(project.id)}`;
     } catch (err) {
-      window.toast?.error?.(`Couldn't create project: ${err.message}`);
-      els.modalCreate.disabled = false;
+      setCreating(false);
+      const message = err?.message || 'Please try again.';
+      setModalError(message);
+      window.toast?.error?.(`Couldn't create project: ${message}`);
+      els.modalInput.focus();
     }
   }
 
@@ -281,12 +357,16 @@
       const sessionId = e.dataTransfer.getData('application/x-session-id');
       if (!sessionId) return;
       e.preventDefault();
-      await fetch(`/chat/${encodeURIComponent(sessionId)}`, {
+      const resp = await fetch(`/chat/${encodeURIComponent(sessionId)}`, {
         method: 'PATCH',
         headers: jsonHeaders(),
         credentials: 'same-origin',
         body: JSON.stringify({ project_id: projectId }),
       });
+      if (!resp.ok) {
+        window.toast?.error?.('Could not move this chat to the project');
+        return;
+      }
       window.dispatchEvent(new CustomEvent('projects:session-moved', { detail: { sessionId, projectId } }));
     });
   }
