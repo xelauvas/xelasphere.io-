@@ -36,15 +36,27 @@
   white-space: nowrap;
 }
 
-.sidebar-toggle-button {
+.sidebar-header-ghost {
   width: 32px;
   height: 32px;
   padding: 6px;
-  border-radius: var(--xs-sidebar-radius);
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
   color: var(--text-secondary);
 }
 
-.sidebar-toggle-button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sidebar-header-ghost:hover,
+.sidebar-header-ghost:focus,
+.sidebar-header-ghost:focus-visible,
+.sidebar-header-ghost:active {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-primary);
+  outline: none;
+}
+.sidebar-header-ghost::before { display: none !important; }
+.sidebar-header-ghost svg { width: 24px !important; height: 24px !important; }
 
 .sidebar-quick-actions {
   padding: 2px var(--xs-sidebar-inset) 6px;
@@ -69,7 +81,8 @@
 
 .sidebar-action-btn::before { border-radius: var(--xs-sidebar-radius); }
 .sidebar-action-btn:hover::before,
-.sidebar-action-btn.active::before { background: var(--bg-hover); }
+.sidebar-action-btn.active::before,
+.sidebar-action-btn.is-active::before { background: var(--bg-hover); }
 .sidebar-action-icon { width: 18px; height: 18px; margin: 0; color: currentColor; }
 .sidebar-action-icon svg { width: 18px; height: 18px; stroke-width: 1.8; }
 .shortcut-hint { margin-left: auto; color: var(--text-tertiary); font-size: 11px; opacity: 0; }

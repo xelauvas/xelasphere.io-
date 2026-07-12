@@ -2014,6 +2014,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
         if (!this.elements.chatsPage) return;
         if (this.imagesPageActive) this.hideImagesPage({ updateHistory: false });
         this.chatsPageActive = true;
+        this.elements.chatsButton?.classList.add('is-active');
+        this.elements.chatsButton?.setAttribute('aria-pressed', 'true');
         this.elements.chatsPage.hidden = false;
         this.elements.chatsPage.classList.add('is-visible');
         this.elements.chatsPage.setAttribute('aria-hidden', 'false');
@@ -2035,6 +2037,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
     hideChatsPage({ updateHistory = true } = {}) {
         if (!this.elements.chatsPage) return;
         this.chatsPageActive = false;
+        this.elements.chatsButton?.classList.remove('is-active');
+        this.elements.chatsButton?.setAttribute('aria-pressed', 'false');
         this.elements.chatsPage.hidden = true;
         this.elements.chatsPage.classList.remove('is-visible');
         this.elements.chatsPage.setAttribute('aria-hidden', 'true');

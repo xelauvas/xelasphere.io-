@@ -97,13 +97,10 @@ class SidebarManager {
     }
 
     bindUiEvents() {
-      const { toggleButton, sidebarToggleButton, mobileHeaderBurger, sourcesButton, closeSidebarButton } = this.elements;
+      const { toggleButton, mobileHeaderBurger, sourcesButton, closeSidebarButton } = this.elements;
 
       if (toggleButton) {
         toggleButton.addEventListener('click', () => this.toggleLeftSidebar());
-      }
-      if (sidebarToggleButton) {
-        sidebarToggleButton.addEventListener('click', () => this.toggleLeftSidebar());
       }
 
       // Mobile header burger button
@@ -177,7 +174,7 @@ class SidebarManager {
     }
 
     applySidebarState() {
-      const { leftSidebar, toggleButton, sidebarToggleButton, container, downArrow } = this.elements;
+      const { leftSidebar, toggleButton, container, downArrow } = this.elements;
       const shouldCollapse = this.isAutoCollapsed || this.isUserCollapsed;
 
       document.body.classList.toggle('sidebar-collapsed', shouldCollapse);
@@ -190,11 +187,6 @@ class SidebarManager {
         toggleButton.classList.toggle('open', !shouldCollapse);
         toggleButton.classList.toggle('closed', shouldCollapse);
         toggleButton.classList.toggle('closed-hover', shouldCollapse);
-      }
-      if (sidebarToggleButton) {
-        const label = shouldCollapse ? 'Open sidebar' : 'Close sidebar';
-        sidebarToggleButton.setAttribute('aria-label', label);
-        sidebarToggleButton.dataset.tooltip = label;
       }
 
       if (container) {

@@ -35,17 +35,18 @@ def test_project_workspace_consumes_all_history_pages():
 
 def test_sidebar_assets_have_fresh_cache_versions():
     template = _read('app/templates/index.html')
-    assert "startNewChatModule.js') }}?v=30" in template
+    assert "startNewChatModule.js') }}?v=31" in template
     assert "projectsModule.js') }}?v=12" in template
     assert "projectsPage.js') }}?v=7" in template
     assert "projects.css') }}?v=46" in template
-    assert "sidebar-chatgpt.css') }}?v=1" in template
-    assert "sidebarHandler.js') }}?v=4" in template
+    assert "sidebar-chatgpt.css') }}?v=2" in template
+    assert "sidebarHandler.js') }}?v=5" in template
 
 
-def test_sidebar_uses_chatgpt_style_sections_and_real_toggle():
+def test_sidebar_uses_chatgpt_style_sections_and_incognito_action():
     template = _read('app/templates/index.html')
-    handler = _read('app/static/js/sidebarHandler.js')
     assert '<div class="sidebar-section-header">Chats</div>' in template
-    assert 'id="sidebar-toggle-button"' in template
-    assert "sidebarToggleButton.addEventListener('click'" in handler
+    assert 'class="sidebar-header-ghost"' in template
+    assert 'temporary: true' in template
+    assert 'id="action-chats" aria-label="Chats" aria-pressed="false"' in template
+    assert "profileHeader.addEventListener('keydown'" in template
