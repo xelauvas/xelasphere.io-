@@ -39,3 +39,13 @@ def test_sidebar_assets_have_fresh_cache_versions():
     assert "projectsModule.js') }}?v=12" in template
     assert "projectsPage.js') }}?v=7" in template
     assert "projects.css') }}?v=46" in template
+    assert "sidebar-chatgpt.css') }}?v=1" in template
+    assert "sidebarHandler.js') }}?v=4" in template
+
+
+def test_sidebar_uses_chatgpt_style_sections_and_real_toggle():
+    template = _read('app/templates/index.html')
+    handler = _read('app/static/js/sidebarHandler.js')
+    assert '<div class="sidebar-section-header">Chats</div>' in template
+    assert 'id="sidebar-toggle-button"' in template
+    assert "sidebarToggleButton.addEventListener('click'" in handler
