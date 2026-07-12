@@ -35,10 +35,10 @@ def test_project_workspace_consumes_all_history_pages():
 
 def test_sidebar_assets_have_fresh_cache_versions():
     template = _read('app/templates/index.html')
-    assert "startNewChatModule.js') }}?v=31" in template
+    assert "startNewChatModule.js') }}?v=32" in template
     assert "projectsModule.js') }}?v=12" in template
     assert "projectsPage.js') }}?v=7" in template
-    assert "projects.css') }}?v=46" in template
+    assert "projects.css') }}?v=47" in template
     assert "sidebarContent.css') }}?v=54" in template
     assert "sidebar-chatgpt.css') }}?v=3" in template
     assert "sidebarHandler.js') }}?v=5" in template
@@ -51,3 +51,12 @@ def test_sidebar_uses_chatgpt_style_sections_and_incognito_action():
     assert 'temporary: true' in template
     assert 'id="action-chats" aria-label="Chats" aria-pressed="false"' in template
     assert "profileHeader.addEventListener('keydown'" in template
+
+
+def test_add_to_project_picker_is_accessible_and_viewport_aware():
+    source = _read('app/static/js/startNewChatModule.js')
+    assert "heading.textContent = 'Move to project'" in source
+    assert "create.innerHTML = '<span aria-hidden=\"true\">＋</span><span>New project</span>'" in source
+    assert "if (left + pickerRect.width > window.innerWidth - gap)" in source
+    assert "event.key === 'ArrowDown'" in source
+    assert "event.key === 'Escape'" in source
