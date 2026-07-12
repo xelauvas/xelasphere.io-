@@ -344,6 +344,11 @@
   }
 
   function trapModalFocus(e) {
+    if (e.key === 'Escape' && !els.modal.hidden) {
+      e.preventDefault();
+      closeModal();
+      return;
+    }
     if (e.key !== 'Tab' || els.modal.hidden) return;
     const focusable = [...els.modalContent.querySelectorAll('input:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex="-1"])')];
     if (!focusable.length) return;

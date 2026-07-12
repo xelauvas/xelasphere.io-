@@ -179,7 +179,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=10">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=54">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=47">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=48">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
@@ -1442,7 +1442,7 @@
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/artifactDiff.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=67"></script>
-    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=12" defer></script>
+    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=13" defer></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Dropdown Menu Logic ---
@@ -1646,10 +1646,21 @@
 <div id="project-create-modal" class="project-modal" hidden role="dialog" aria-modal="true" aria-labelledby="project-modal-title">
   <div class="project-modal-backdrop" data-dismiss="modal"></div>
   <div class="project-modal-content" tabindex="-1">
-    <h2 id="project-modal-title" class="project-modal-heading">Create project</h2>
+    <div class="project-modal-header">
+      <span class="project-modal-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M2 10h20"/></svg>
+      </span>
+      <div class="project-modal-heading-group">
+        <h2 id="project-modal-title" class="project-modal-heading">Create project</h2>
+        <p class="project-modal-subtitle">Keep related chats, files and instructions together.</p>
+      </div>
+      <button type="button" class="project-modal-close" data-dismiss="modal" aria-label="Close create project dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
     <label class="project-modal-label" for="project-name-input">Project name</label>
     <input id="project-name-input" class="project-modal-input" type="text" maxlength="120" placeholder="Copenhagen Trip" autocomplete="off" aria-describedby="project-modal-helper project-modal-error" />
-    <p id="project-modal-helper" class="project-modal-helper">Projects keep chats, files, and custom instructions in one place. Use them for ongoing work, or just to keep things tidy.</p>
+    <p id="project-modal-helper" class="project-modal-helper">You can rename it and add instructions or files later.</p>
     <p id="project-modal-error" class="project-modal-error" role="alert" aria-live="polite" hidden></p>
     <div class="project-modal-actions">
       <button type="button" class="project-modal-cancel" data-dismiss="modal">Cancel</button>

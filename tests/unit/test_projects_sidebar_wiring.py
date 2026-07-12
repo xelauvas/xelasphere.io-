@@ -36,9 +36,9 @@ def test_project_workspace_consumes_all_history_pages():
 def test_sidebar_assets_have_fresh_cache_versions():
     template = _read('app/templates/index.html')
     assert "startNewChatModule.js') }}?v=32" in template
-    assert "projectsModule.js') }}?v=12" in template
+    assert "projectsModule.js') }}?v=13" in template
     assert "projectsPage.js') }}?v=7" in template
-    assert "projects.css') }}?v=47" in template
+    assert "projects.css') }}?v=48" in template
     assert "sidebarContent.css') }}?v=54" in template
     assert "sidebar-chatgpt.css') }}?v=4" in template
     assert "sidebarHandler.js') }}?v=6" in template
@@ -70,3 +70,12 @@ def test_add_to_project_picker_is_accessible_and_viewport_aware():
     assert "if (left + pickerRect.width > window.innerWidth - gap)" in source
     assert "event.key === 'ArrowDown'" in source
     assert "event.key === 'Escape'" in source
+
+
+def test_new_project_modal_has_polished_header_and_global_escape():
+    template = _read('app/templates/index.html')
+    source = _read('app/static/js/projectsModule.js')
+    assert 'class="project-modal-icon"' in template
+    assert 'class="project-modal-subtitle"' in template
+    assert 'class="project-modal-close"' in template
+    assert "e.key === 'Escape' && !els.modal.hidden" in source
