@@ -13,7 +13,21 @@
     </svg>
   `;
 
-  const state = { projects: [], loaded: false, creating: false, lastFocused: null };
+  function iconSvgFor(project) {
+    const key = project.icon || 'code';
+    if (window.PROJECT_ICONS?.has?.(key)) {
+      return window.PROJECT_ICONS.svg(key).replace(
+        'aria-hidden="true"', 'aria-hidden="true" class="folder-icon"'
+      );
+    }
+    return FOLDER_SVG;
+  }
+
+  const MORE_THRESHOLD = 6;
+  const state = {
+    projects: [], loaded: false, creating: false, lastFocused: null,
+    activeProjectId: null, showAll: false,
+  };
   const els = {};
 
   function cache() {
@@ -37,9 +51,16 @@
 
   function renderList() {
     if (!els.list) return;
-    // Wipe only the project rows; the always-on "New project" newrow stays.
-    els.list.querySelectorAll('.sidebar-project-row').forEach((n) => n.remove());
-    state.projects.forEach((project) => {
+    els.list.querySelectorAll(
+      '.sidebar-project-row, .sidebar-project-chats, .sidebar-project-morerow'
+    ).forEach((n) => n.remove());
+    const overflow = state.projects.length > MORE_THRESHOLD;
+    const visibleProjects = overflow && !state.showAll
+      ? state.projects.filter((project, index) => (
+          index < MORE_THRESHOLD || project.id === state.activeProjectId
+        ))
+      : state.projects;
+    visibleProjects.forEach((project) => {
       const li = document.createElement('li');
       li.className = 'sidebar-project-row';
       li.dataset.projectId = project.id;
@@ -47,13 +68,12 @@
       li.setAttribute('role', 'link');
       li.setAttribute('aria-label', `Open project ${project.name}`);
       li.style.setProperty('--project-accent', project.color);
-      const currentProjectId = window.location.pathname.match(/^\/p\/([^/?]+)/)?.[1];
-      if (currentProjectId && decodeURIComponent(currentProjectId) === project.id) {
+      if (state.activeProjectId === project.id) {
         li.classList.add('is-active');
         li.setAttribute('aria-current', 'page');
       }
       li.innerHTML = `
-        ${FOLDER_SVG}
+        ${iconSvgFor(project)}
         <span class="name">${escapeHtml(project.name)}</span>
         <button type="button" class="sidebar-project-menu-btn" aria-label="Options for ${escapeHtml(project.name)}" data-project-menu>
           <i class="fas fa-ellipsis-h" aria-hidden="true"></i>
@@ -75,7 +95,51 @@
       });
       attachDropTarget(li, project.id);
       els.list.appendChild(li);
+      if (project.id === state.activeProjectId) {
+        const nested = document.createElement('li');
+        nested.className = 'sidebar-project-chats';
+        nested.innerHTML = '<div class="sidebar-project-chats-empty">Loading chats…</div>';
+        els.list.appendChild(nested);
+        loadNestedChats(project.id, nested);
+      }
     });
+    if (overflow && !state.showAll) {
+      const more = document.createElement('li');
+      more.className = 'sidebar-project-morerow';
+      more.innerHTML = '<button type="button" class="sidebar-project-morebtn"><span aria-hidden="true">•••</span><span>More</span></button>';
+      more.querySelector('button').addEventListener('click', () => {
+        state.showAll = true;
+        renderList();
+      });
+      els.list.appendChild(more);
+    }
+  }
+
+  async function loadNestedChats(projectId, container) {
+    try {
+      const chats = await fetchAllProjectChats(projectId);
+      if (!chats.length) {
+        container.innerHTML = '<div class="sidebar-project-chats-empty">No chats yet</div>';
+        return;
+      }
+      const list = document.createElement('ul');
+      chats.slice(0, 8).forEach((chat) => {
+        const row = document.createElement('li');
+        row.className = 'sidebar-project-chat';
+        row.tabIndex = 0;
+        row.textContent = chat.session_name || 'Chat';
+        row.title = chat.session_name || 'Chat';
+        const open = () => { window.location.href = `/c/${encodeURIComponent(chat.session_id)}`; };
+        row.addEventListener('click', open);
+        row.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+        });
+        list.appendChild(row);
+      });
+      container.replaceChildren(list);
+    } catch (_) {
+      container.innerHTML = '';
+    }
   }
 
   /* ---------- Project-row ⋯ menu (Share / Rename / Delete) ---------- */
@@ -445,9 +509,15 @@
   async function init() {
     cache();
     if (!els.section) return;
+    const page = document.querySelector('.project-page[data-project-id]');
+    state.activeProjectId = page?.dataset.projectId || null;
     bindModal();
     bindToggle();
     bindCollapsedExpand();
+    window.addEventListener('projects:icon-changed', (event) => {
+      const project = state.projects.find((item) => item.id === event.detail?.projectId);
+      if (project) { project.icon = event.detail.icon; renderList(); }
+    });
     try { await reload(); } catch (e) { console.warn('projects: load failed', e); }
   }
 
