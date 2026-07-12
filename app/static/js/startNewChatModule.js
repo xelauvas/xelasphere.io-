@@ -4303,11 +4303,10 @@ async loadChatHistory(pageToken = null, limit = 30) {
                 const proj = projects.find((p) => p.id === projectId);
                 // Update Recents immediately, then reconcile with the server
                 // through the existing history refresh event.
-                const movedRow = document.querySelector(`.chat-tab[data-session-id="${CSS.escape(sessionId)}"]`);
+                const movedRow = [...document.querySelectorAll('.chat-tab[data-session-id]')]
+                    .find((row) => row.dataset.sessionId === sessionId);
                 if (movedRow) {
-                    movedRow.classList.add('chat-tab--moving-to-project');
-                    movedRow.addEventListener('animationend', () => movedRow.remove(), { once: true });
-                    setTimeout(() => movedRow.remove(), 240);
+                    movedRow.remove();
                 }
                 if (this.chatHistory?.[sessionId]) this.chatHistory[sessionId].project_id = projectId;
                 this.showNotification(`Added to ${proj?.name || 'project'}`, 'success');
