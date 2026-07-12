@@ -47,6 +47,11 @@
       li.setAttribute('role', 'link');
       li.setAttribute('aria-label', `Open project ${project.name}`);
       li.style.setProperty('--project-accent', project.color);
+      const currentProjectId = window.location.pathname.match(/^\/p\/([^/?]+)/)?.[1];
+      if (currentProjectId && decodeURIComponent(currentProjectId) === project.id) {
+        li.classList.add('is-active');
+        li.setAttribute('aria-current', 'page');
+      }
       li.innerHTML = `
         ${FOLDER_SVG}
         <span class="name">${escapeHtml(project.name)}</span>
@@ -150,11 +155,7 @@
     // Count chats so the confirm copy reads naturally.
     let count = 0;
     try {
-      const r = await fetch(`/chat/history?project_id=${encodeURIComponent(project.id)}&page_size=500`, { credentials: 'same-origin' });
-      if (r.ok) {
-        const b = await r.json();
-        count = Object.values(b.categorized_history || {}).reduce((s, l) => s + l.length, 0);
-      }
+      count = (await fetchAllProjectChats(project.id)).length;
     } catch (_) {}
 
     let cascade;
@@ -218,8 +219,7 @@
   }
 
   async function addCurrentChatToProject(projectId) {
-    const sid = window.chatManager?.currentSessionId || window.chatManager?.sessionId;
-    const currentSessionId = typeof sid === 'function' ? sid() : sid;
+    const currentSessionId = window.chatManager?.activeSessionId;
     if (!currentSessionId) {
       window.toast?.error?.('No active chat to add');
       return;
@@ -233,6 +233,9 @@
     if (!resp.ok) {
       window.toast?.error?.('Could not add this chat to the project');
       return;
+    }
+    if (window.chatManager?.chatHistory?.[currentSessionId]) {
+      window.chatManager.chatHistory[currentSessionId].project_id = projectId;
     }
     window.dispatchEvent(new CustomEvent('projects:session-moved', {
       detail: { sessionId: currentSessionId, projectId },
@@ -369,6 +372,21 @@
       }
       window.dispatchEvent(new CustomEvent('projects:session-moved', { detail: { sessionId, projectId } }));
     });
+  }
+
+  async function fetchAllProjectChats(projectId) {
+    const chats = [];
+    let pageToken = null;
+    do {
+      const params = new URLSearchParams({ project_id: projectId, page_size: '200' });
+      if (pageToken) params.set('page_token', pageToken);
+      const resp = await fetch(`/chat/history?${params}`, { credentials: 'same-origin' });
+      if (!resp.ok) throw new Error(`GET /chat/history ${resp.status}`);
+      const body = await resp.json();
+      chats.push(...Object.values(body.categorized_history || {}).flat());
+      pageToken = body.next_page_token || null;
+    } while (pageToken);
+    return chats;
   }
 
   /* ---------- Helpers ---------- */

@@ -453,7 +453,7 @@ def get_unread_counts():
 def get_chat_history():
     """Get paginated chat history for the user, optionally filtered by project."""
     user_id = session['user']['uid']
-    page_size = request.args.get('page_size', default=10, type=int)
+    page_size = max(1, min(request.args.get('page_size', default=10, type=int) or 10, 200))
     page_token = request.args.get('page_token', default=None, type=str)
     project_id = request.args.get('project_id', default=None, type=str)
     ungrouped = request.args.get('ungrouped', default='0') == '1'

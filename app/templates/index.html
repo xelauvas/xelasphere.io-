@@ -179,7 +179,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=10">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=53">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=45">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=46">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
@@ -750,7 +750,7 @@
                     <ul id="project-chats" class="project-chats" role="list"></ul>
                   </section>
                 </main>
-                <script src="{{ url_for('static', filename='js/projectsPage.js') }}?v=6" defer></script>
+                <script src="{{ url_for('static', filename='js/projectsPage.js') }}?v=7" defer></script>
                 {% endif %}
                 <div class="chat-shell"{% if current_project %} style="display:none"{% endif %} role="region" aria-label="Chat workspace">
                     <header class="chat-shell__header">
@@ -1437,14 +1437,14 @@
         window.sharedSessionId = "{{ shared_session_id|default('', true) }}";
     </script>
     <script src="{{ url_for('static', filename='js/toast.js') }}?v=7"></script>
-    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=29"></script>
+    <script src="{{ url_for('static', filename='js/startNewChatModule.js') }}?v=30"></script>
     <script src="{{ url_for('static', filename='js/chatsPage.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/fetchMoreOptions.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/detectorCode.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/artifactDiff.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=67"></script>
-    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=11" defer></script>
+    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=12" defer></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Dropdown Menu Logic ---

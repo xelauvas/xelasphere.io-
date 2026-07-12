@@ -155,10 +155,11 @@ def delete_project(project_id):
     if cascade == 'delete' and child_ids:
         chat_session.bulk_delete_sessions(uid, child_ids)
     elif cascade == 'keep' and child_ids:
-        batch = db.batch()
-        for cid in child_ids:
-            batch.update(sessions_ref.document(cid), {'project_id': None})
-        batch.commit()
+        for offset in range(0, len(child_ids), 450):
+            batch = db.batch()
+            for cid in child_ids[offset:offset + 450]:
+                batch.update(sessions_ref.document(cid), {'project_id': None})
+            batch.commit()
 
     ok = _service().delete(uid, project_id)
     if not ok:

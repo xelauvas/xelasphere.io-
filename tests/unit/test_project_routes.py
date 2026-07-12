@@ -139,6 +139,24 @@ def test_delete_keep_cascade_clears_session_project_id(authenticated_client, moc
     assert resp.status_code == 204
 
 
+def test_delete_keep_chunks_large_projects(authenticated_client, mock_firestore):
+    sessions = []
+    for idx in range(451):
+        snap = MagicMock()
+        snap.id = f's{idx}'
+        sessions.append(snap)
+    mock_firestore.collection.return_value.document.return_value\
+        .collection.return_value.where.return_value.stream.return_value = sessions
+    mock_firestore.batch.reset_mock()
+
+    with _csrf_bypass(), \
+         patch("app.blueprints.project_routes.ProjectService.delete", return_value=True):
+        resp = authenticated_client.delete('/projects/p1?cascade=keep', headers=HEADERS)
+
+    assert resp.status_code == 204
+    assert mock_firestore.batch.call_count == 2
+
+
 def test_delete_cascade_delete_calls_bulk_delete(authenticated_client, mock_firestore):
     fake_session_a = MagicMock(); fake_session_a.id = 's1'
     mock_firestore.collection.return_value.document.return_value\

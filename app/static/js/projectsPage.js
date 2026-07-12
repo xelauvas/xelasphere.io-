@@ -76,13 +76,17 @@
 
   async function loadChats() {
     try {
-      const resp = await fetch(
-        `/chat/history?project_id=${encodeURIComponent(projectId)}&page_size=200`,
-        { credentials: 'same-origin' }
-      );
-      if (!resp.ok) return;
-      const body = await resp.json();
-      const all = Object.values(body.categorized_history || {}).flat();
+      const all = [];
+      let pageToken = null;
+      do {
+        const params = new URLSearchParams({ project_id: projectId, page_size: '200' });
+        if (pageToken) params.set('page_token', pageToken);
+        const resp = await fetch(`/chat/history?${params}`, { credentials: 'same-origin' });
+        if (!resp.ok) return;
+        const body = await resp.json();
+        all.push(...Object.values(body.categorized_history || {}).flat());
+        pageToken = body.next_page_token || null;
+      } while (pageToken);
       renderChats(all);
     } catch (_) { /* non-fatal */ }
   }
@@ -326,15 +330,17 @@
     // Count chats in the project so we can phrase the dialog right.
     let count = 0;
     try {
-      const r = await fetch(
-        `/chat/history?project_id=${encodeURIComponent(projectId)}&page_size=500`,
-        { credentials: 'same-origin' },
-      );
-      if (r.ok) {
+      let pageToken = null;
+      do {
+        const params = new URLSearchParams({ project_id: projectId, page_size: '200' });
+        if (pageToken) params.set('page_token', pageToken);
+        const r = await fetch(`/chat/history?${params}`, { credentials: 'same-origin' });
+        if (!r.ok) break;
         const body = await r.json();
-        count = Object.values(body.categorized_history || {})
+        count += Object.values(body.categorized_history || {})
           .reduce((sum, list) => sum + list.length, 0);
-      }
+        pageToken = body.next_page_token || null;
+      } while (pageToken);
     } catch (_) { /* count remains 0 */ }
 
     let cascade;

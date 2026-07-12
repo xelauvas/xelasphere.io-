@@ -1133,6 +1133,18 @@ class ChatManager {
         const li = document.createElement('li');
         li.className = 'chat-tab';
         li.dataset.sessionId = session.session_id;
+        li.draggable = true;
+        li.addEventListener('dragstart', (event) => {
+            if (event.target.closest('button, a, [role="menu"]')) {
+                event.preventDefault();
+                return;
+            }
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('application/x-session-id', session.session_id);
+            event.dataTransfer.setData('text/plain', session.session_id);
+            li.classList.add('chat-tab--dragging');
+        });
+        li.addEventListener('dragend', () => li.classList.remove('chat-tab--dragging'));
         if (session.session_id === this.activeSessionId) {
             li.classList.add('active-tab');
         }
@@ -1232,12 +1244,10 @@ async loadChatHistory(pageToken = null, limit = 30) {
         if (pageToken) {
             params.set('page_token', pageToken);
         }
-        const projectMatch = window.location.pathname.match(/^\/p\/([^/?]+)/);
-        if (projectMatch) {
-            params.set('project_id', projectMatch[1]);
-        } else {
-            params.set('ungrouped', '1');
-        }
+        // Recents has one invariant on every page: it contains only normal,
+        // non-project chats. Project chats are rendered by projectsPage.js in
+        // their project workspace, never repurposed into the Recents section.
+        params.set('ungrouped', '1');
         const url = `/chat/history?${params.toString()}`;
 
         const response = await this.fetchApi(url, 'GET');
@@ -1415,6 +1425,9 @@ async loadChatHistory(pageToken = null, limit = 30) {
     }
 
     getSortedSessionsArray() {
+        const validProjectIds = new Set(
+            (window.projects?.getList?.() || []).map((project) => project.id)
+        );
         return Object.entries(this.chatHistory)
             .map(([sessionId, session]) => {
                 // Use last_updated for sorting (most recent activity), fallback to created_at
@@ -1428,7 +1441,10 @@ async loadChatHistory(pageToken = null, limit = 30) {
                     pinnedDate
                 };
             })
-            .filter(session => session.status !== 'archived' && session.status !== 'temporary')
+            .filter(session => session.status !== 'archived'
+                && session.status !== 'temporary'
+                && !session.is_temporary
+                && !validProjectIds.has(session.project_id))
             .sort((a, b) => {
                 const aPinned = Boolean(a.pinnedDate);
                 const bPinned = Boolean(b.pinnedDate);
@@ -6019,12 +6035,29 @@ document.addEventListener('DOMContentLoaded', () => {
     setupGhostEyes('temp-chat-button-desktop');
 
     // Re-fetch sidebar history when a chat is moved into/out of a project
-    window.addEventListener('projects:session-moved', () => {
-        if (window.chatManager?.loadChatHistory) {
-            window.chatManager.loadChatHistory();
-        } else {
-            window.location.reload();
+    window.addEventListener('projects:session-moved', (event) => {
+        const manager = window.chatManager;
+        const sessionId = event.detail?.sessionId;
+        const projectId = event.detail?.projectId;
+        if (manager && sessionId && projectId) {
+            // Apply the successful move synchronously. A full ungrouped reload
+            // would erase the active session's local state because the server
+            // correctly no longer returns it in Recents.
+            const row = [...document.querySelectorAll('.chat-tab[data-session-id]')]
+                .find((candidate) => candidate.dataset.sessionId === sessionId);
+            row?.remove();
+            if (manager.chatHistory?.[sessionId]) {
+                manager.chatHistory[sessionId].project_id = projectId;
+                if (manager.activeSessionId === sessionId) {
+                    window.updateChatProjectTag?.(manager.chatHistory[sessionId]);
+                }
+            }
+            manager.groupedCount = Math.max(0, Number(manager.groupedCount || 0) + 1);
+            manager.renderChatTabs?.();
+            return;
         }
+        if (manager?.loadChatHistory) manager.loadChatHistory();
+        else window.location.reload();
     });
 
     // Update the in-header project context tag when the active session changes.
@@ -6059,6 +6092,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sessionData) {
             window.updateChatProjectTag(sessionData);
         }
+        manager.renderChatTabs?.();
     });
 });
 
