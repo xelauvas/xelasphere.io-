@@ -1133,6 +1133,18 @@ class ChatManager {
         const li = document.createElement('li');
         li.className = 'chat-tab';
         li.dataset.sessionId = session.session_id;
+        li.draggable = true;
+        li.addEventListener('dragstart', (event) => {
+            if (event.target.closest('button, a, [role="menu"]')) {
+                event.preventDefault();
+                return;
+            }
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('application/x-session-id', session.session_id);
+            event.dataTransfer.setData('text/plain', session.session_id);
+            li.classList.add('chat-tab--dragging');
+        });
+        li.addEventListener('dragend', () => li.classList.remove('chat-tab--dragging'));
         if (session.session_id === this.activeSessionId) {
             li.classList.add('active-tab');
         }
@@ -1232,12 +1244,10 @@ async loadChatHistory(pageToken = null, limit = 30) {
         if (pageToken) {
             params.set('page_token', pageToken);
         }
-        const projectMatch = window.location.pathname.match(/^\/p\/([^/?]+)/);
-        if (projectMatch) {
-            params.set('project_id', projectMatch[1]);
-        } else {
-            params.set('ungrouped', '1');
-        }
+        // Recents has one invariant on every page: it contains only normal,
+        // non-project chats. Project chats are rendered by projectsPage.js in
+        // their project workspace, never repurposed into the Recents section.
+        params.set('ungrouped', '1');
         const url = `/chat/history?${params.toString()}`;
 
         const response = await this.fetchApi(url, 'GET');
@@ -1415,6 +1425,9 @@ async loadChatHistory(pageToken = null, limit = 30) {
     }
 
     getSortedSessionsArray() {
+        const validProjectIds = new Set(
+            (window.projects?.getList?.() || []).map((project) => project.id)
+        );
         return Object.entries(this.chatHistory)
             .map(([sessionId, session]) => {
                 // Use last_updated for sorting (most recent activity), fallback to created_at
@@ -1428,7 +1441,10 @@ async loadChatHistory(pageToken = null, limit = 30) {
                     pinnedDate
                 };
             })
-            .filter(session => session.status !== 'archived' && session.status !== 'temporary')
+            .filter(session => session.status !== 'archived'
+                && session.status !== 'temporary'
+                && !session.is_temporary
+                && !validProjectIds.has(session.project_id))
             .sort((a, b) => {
                 const aPinned = Boolean(a.pinnedDate);
                 const bPinned = Boolean(b.pinnedDate);
@@ -1998,6 +2014,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
         if (!this.elements.chatsPage) return;
         if (this.imagesPageActive) this.hideImagesPage({ updateHistory: false });
         this.chatsPageActive = true;
+        this.elements.chatsButton?.classList.add('is-active');
+        this.elements.chatsButton?.setAttribute('aria-pressed', 'true');
         this.elements.chatsPage.hidden = false;
         this.elements.chatsPage.classList.add('is-visible');
         this.elements.chatsPage.setAttribute('aria-hidden', 'false');
@@ -2019,6 +2037,8 @@ async loadChatHistory(pageToken = null, limit = 30) {
     hideChatsPage({ updateHistory = true } = {}) {
         if (!this.elements.chatsPage) return;
         this.chatsPageActive = false;
+        this.elements.chatsButton?.classList.remove('is-active');
+        this.elements.chatsButton?.setAttribute('aria-pressed', 'false');
         this.elements.chatsPage.hidden = true;
         this.elements.chatsPage.classList.remove('is-visible');
         this.elements.chatsPage.setAttribute('aria-hidden', 'true');
@@ -4268,23 +4288,70 @@ async loadChatHistory(pageToken = null, limit = 30) {
 
         const picker = document.createElement('div');
         picker.className = 'session-project-picker';
-        picker.innerHTML = projects.map((p) => `
-            <button type="button" class="session-project-picker__item" data-project-id="${p.id}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:${p.color};flex-shrink:0" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M2 10h20"/></svg>
-                <span>${p.name.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</span>
-            </button>
-        `).join('');
+        picker.setAttribute('role', 'dialog');
+        picker.setAttribute('aria-label', 'Move chat to project');
+
+        const heading = document.createElement('div');
+        heading.className = 'session-project-picker__heading';
+        heading.textContent = 'Move to project';
+        picker.appendChild(heading);
+
+        const list = document.createElement('div');
+        list.className = 'session-project-picker__list';
+        list.setAttribute('role', 'listbox');
+        projects.forEach((project) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'session-project-picker__item';
+            item.dataset.projectId = project.id;
+            item.setAttribute('role', 'option');
+
+            const icon = document.createElement('span');
+            icon.className = 'session-project-picker__icon';
+            icon.style.setProperty('--picker-project-color', project.color || 'currentColor');
+            if (window.PROJECT_ICONS?.has?.(project.icon || 'code')) {
+                icon.innerHTML = window.PROJECT_ICONS.svg(project.icon || 'code');
+            } else {
+                icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M2 10h20"/></svg>';
+            }
+            const name = document.createElement('span');
+            name.className = 'session-project-picker__name';
+            name.textContent = project.name || 'Untitled project';
+            item.append(icon, name);
+            list.appendChild(item);
+        });
+        picker.appendChild(list);
+
+        const create = document.createElement('button');
+        create.type = 'button';
+        create.className = 'session-project-picker__create';
+        create.innerHTML = '<span aria-hidden="true">＋</span><span>New project</span>';
+        create.addEventListener('click', () => {
+            picker.remove();
+            document.getElementById('project-create-btn')?.click();
+        });
+        picker.appendChild(create);
 
         // Position near the session's menu trigger.
         const sessionRow = document.querySelector(`.chat-tab[data-session-id="${sessionId}"]`);
         const anchor = sessionRow?.querySelector('[data-actions-toggle]') || sessionRow;
         const rect = (anchor || document.body).getBoundingClientRect();
         picker.style.position = 'fixed';
-        picker.style.top = `${rect.bottom + 4}px`;
-        picker.style.left = `${Math.max(8, rect.left)}px`;
         // Must beat the sidebar (z-index 1100) and the create-project modal (1000).
         picker.style.zIndex = '1500';
         document.body.appendChild(picker);
+        const pickerRect = picker.getBoundingClientRect();
+        const gap = 8;
+        let left = rect.right + gap;
+        if (left + pickerRect.width > window.innerWidth - gap) {
+            left = rect.left - pickerRect.width - gap;
+        }
+        const top = Math.min(
+            Math.max(gap, rect.top - 8),
+            window.innerHeight - pickerRect.height - gap,
+        );
+        picker.style.left = `${Math.max(gap, left)}px`;
+        picker.style.top = `${top}px`;
 
         picker.addEventListener('click', async (e) => {
             const item = e.target.closest('[data-project-id]');
@@ -4303,11 +4370,10 @@ async loadChatHistory(pageToken = null, limit = 30) {
                 const proj = projects.find((p) => p.id === projectId);
                 // Update Recents immediately, then reconcile with the server
                 // through the existing history refresh event.
-                const movedRow = document.querySelector(`.chat-tab[data-session-id="${CSS.escape(sessionId)}"]`);
+                const movedRow = [...document.querySelectorAll('.chat-tab[data-session-id]')]
+                    .find((row) => row.dataset.sessionId === sessionId);
                 if (movedRow) {
-                    movedRow.classList.add('chat-tab--moving-to-project');
-                    movedRow.addEventListener('animationend', () => movedRow.remove(), { once: true });
-                    setTimeout(() => movedRow.remove(), 240);
+                    movedRow.remove();
                 }
                 if (this.chatHistory?.[sessionId]) this.chatHistory[sessionId].project_id = projectId;
                 this.showNotification(`Added to ${proj?.name || 'project'}`, 'success');
@@ -4317,6 +4383,23 @@ async loadChatHistory(pageToken = null, limit = 30) {
                 console.error(err);
             }
         });
+
+        const focusable = [...picker.querySelectorAll('button')];
+        picker.addEventListener('keydown', (event) => {
+            const current = focusable.indexOf(document.activeElement);
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                picker.remove();
+                anchor?.focus();
+            } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                focusable[(current + 1 + focusable.length) % focusable.length]?.focus();
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                focusable[(current - 1 + focusable.length) % focusable.length]?.focus();
+            }
+        });
+        focusable[0]?.focus({ preventScroll: true });
 
         // Close on outside click (deferred so this click doesn't immediately close it).
         setTimeout(() => {
@@ -6020,12 +6103,29 @@ document.addEventListener('DOMContentLoaded', () => {
     setupGhostEyes('temp-chat-button-desktop');
 
     // Re-fetch sidebar history when a chat is moved into/out of a project
-    window.addEventListener('projects:session-moved', () => {
-        if (window.chatManager?.loadChatHistory) {
-            window.chatManager.loadChatHistory();
-        } else {
-            window.location.reload();
+    window.addEventListener('projects:session-moved', (event) => {
+        const manager = window.chatManager;
+        const sessionId = event.detail?.sessionId;
+        const projectId = event.detail?.projectId;
+        if (manager && sessionId && projectId) {
+            // Apply the successful move synchronously. A full ungrouped reload
+            // would erase the active session's local state because the server
+            // correctly no longer returns it in Recents.
+            const row = [...document.querySelectorAll('.chat-tab[data-session-id]')]
+                .find((candidate) => candidate.dataset.sessionId === sessionId);
+            row?.remove();
+            if (manager.chatHistory?.[sessionId]) {
+                manager.chatHistory[sessionId].project_id = projectId;
+                if (manager.activeSessionId === sessionId) {
+                    window.updateChatProjectTag?.(manager.chatHistory[sessionId]);
+                }
+            }
+            manager.groupedCount = Math.max(0, Number(manager.groupedCount || 0) + 1);
+            manager.renderChatTabs?.();
+            return;
         }
+        if (manager?.loadChatHistory) manager.loadChatHistory();
+        else window.location.reload();
     });
 
     // Update the in-header project context tag when the active session changes.
@@ -6060,6 +6160,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sessionData) {
             window.updateChatProjectTag(sessionData);
         }
+        manager.renderChatTabs?.();
     });
 });
 

@@ -13,7 +13,21 @@
     </svg>
   `;
 
-  const state = { projects: [], loaded: false, creating: false, lastFocused: null };
+  function iconSvgFor(project) {
+    const key = project.icon || 'code';
+    if (window.PROJECT_ICONS?.has?.(key)) {
+      return window.PROJECT_ICONS.svg(key).replace(
+        'aria-hidden="true"', 'aria-hidden="true" class="folder-icon"'
+      );
+    }
+    return FOLDER_SVG;
+  }
+
+  const MORE_THRESHOLD = 6;
+  const state = {
+    projects: [], loaded: false, creating: false, lastFocused: null,
+    activeProjectId: null, showAll: false,
+  };
   const els = {};
 
   function cache() {
@@ -37,9 +51,16 @@
 
   function renderList() {
     if (!els.list) return;
-    // Wipe only the project rows; the always-on "New project" newrow stays.
-    els.list.querySelectorAll('.sidebar-project-row').forEach((n) => n.remove());
-    state.projects.forEach((project) => {
+    els.list.querySelectorAll(
+      '.sidebar-project-row, .sidebar-project-morerow'
+    ).forEach((n) => n.remove());
+    const overflow = state.projects.length > MORE_THRESHOLD;
+    const visibleProjects = overflow && !state.showAll
+      ? state.projects.filter((project, index) => (
+          index < MORE_THRESHOLD || project.id === state.activeProjectId
+        ))
+      : state.projects;
+    visibleProjects.forEach((project) => {
       const li = document.createElement('li');
       li.className = 'sidebar-project-row';
       li.dataset.projectId = project.id;
@@ -47,8 +68,12 @@
       li.setAttribute('role', 'link');
       li.setAttribute('aria-label', `Open project ${project.name}`);
       li.style.setProperty('--project-accent', project.color);
+      if (state.activeProjectId === project.id) {
+        li.classList.add('is-active');
+        li.setAttribute('aria-current', 'page');
+      }
       li.innerHTML = `
-        ${FOLDER_SVG}
+        ${iconSvgFor(project)}
         <span class="name">${escapeHtml(project.name)}</span>
         <button type="button" class="sidebar-project-menu-btn" aria-label="Options for ${escapeHtml(project.name)}" data-project-menu>
           <i class="fas fa-ellipsis-h" aria-hidden="true"></i>
@@ -71,6 +96,16 @@
       attachDropTarget(li, project.id);
       els.list.appendChild(li);
     });
+    if (overflow && !state.showAll) {
+      const more = document.createElement('li');
+      more.className = 'sidebar-project-morerow';
+      more.innerHTML = '<button type="button" class="sidebar-project-morebtn"><span aria-hidden="true">•••</span><span>More</span></button>';
+      more.querySelector('button').addEventListener('click', () => {
+        state.showAll = true;
+        renderList();
+      });
+      els.list.appendChild(more);
+    }
   }
 
   /* ---------- Project-row ⋯ menu (Share / Rename / Delete) ---------- */
@@ -150,11 +185,7 @@
     // Count chats so the confirm copy reads naturally.
     let count = 0;
     try {
-      const r = await fetch(`/chat/history?project_id=${encodeURIComponent(project.id)}&page_size=500`, { credentials: 'same-origin' });
-      if (r.ok) {
-        const b = await r.json();
-        count = Object.values(b.categorized_history || {}).reduce((s, l) => s + l.length, 0);
-      }
+      count = (await fetchAllProjectChats(project.id)).length;
     } catch (_) {}
 
     let cascade;
@@ -218,8 +249,7 @@
   }
 
   async function addCurrentChatToProject(projectId) {
-    const sid = window.chatManager?.currentSessionId || window.chatManager?.sessionId;
-    const currentSessionId = typeof sid === 'function' ? sid() : sid;
+    const currentSessionId = window.chatManager?.activeSessionId;
     if (!currentSessionId) {
       window.toast?.error?.('No active chat to add');
       return;
@@ -233,6 +263,9 @@
     if (!resp.ok) {
       window.toast?.error?.('Could not add this chat to the project');
       return;
+    }
+    if (window.chatManager?.chatHistory?.[currentSessionId]) {
+      window.chatManager.chatHistory[currentSessionId].project_id = projectId;
     }
     window.dispatchEvent(new CustomEvent('projects:session-moved', {
       detail: { sessionId: currentSessionId, projectId },
@@ -277,6 +310,11 @@
   }
 
   function trapModalFocus(e) {
+    if (e.key === 'Escape' && !els.modal.hidden) {
+      e.preventDefault();
+      closeModal();
+      return;
+    }
     if (e.key !== 'Tab' || els.modal.hidden) return;
     const focusable = [...els.modalContent.querySelectorAll('input:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex="-1"])')];
     if (!focusable.length) return;
@@ -371,6 +409,21 @@
     });
   }
 
+  async function fetchAllProjectChats(projectId) {
+    const chats = [];
+    let pageToken = null;
+    do {
+      const params = new URLSearchParams({ project_id: projectId, page_size: '200' });
+      if (pageToken) params.set('page_token', pageToken);
+      const resp = await fetch(`/chat/history?${params}`, { credentials: 'same-origin' });
+      if (!resp.ok) throw new Error(`GET /chat/history ${resp.status}`);
+      const body = await resp.json();
+      chats.push(...Object.values(body.categorized_history || {}).flat());
+      pageToken = body.next_page_token || null;
+    } while (pageToken);
+    return chats;
+  }
+
   /* ---------- Helpers ---------- */
   function jsonHeaders() {
     const h = { 'Content-Type': 'application/json' };
@@ -427,9 +480,15 @@
   async function init() {
     cache();
     if (!els.section) return;
+    const page = document.querySelector('.project-page[data-project-id]');
+    state.activeProjectId = page?.dataset.projectId || null;
     bindModal();
     bindToggle();
     bindCollapsedExpand();
+    window.addEventListener('projects:icon-changed', (event) => {
+      const project = state.projects.find((item) => item.id === event.detail?.projectId);
+      if (project) { project.icon = event.detail.icon; renderList(); }
+    });
     try { await reload(); } catch (e) { console.warn('projects: load failed', e); }
   }
 
