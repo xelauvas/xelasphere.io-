@@ -25,6 +25,7 @@
   min-width: 0;
   padding: 6px 4px;
   border-radius: var(--xs-sidebar-radius);
+  margin-right: auto;
 }
 
 .sidebar-brand-text {
@@ -73,6 +74,43 @@
   box-shadow: none !important;
 }
 .sidebar-header-ghost svg { width: 24px !important; height: 24px !important; }
+.sidebar-header-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.sidebar-header-collapse:hover,
+.sidebar-header-collapse:focus-visible { background: var(--bg-hover); color: var(--text-primary); outline: none; }
+.sidebar-header-collapse::after {
+  content: attr(data-tooltip);
+  position: fixed;
+  top: 48px;
+  left: 148px;
+  z-index: 2000;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 6px 20px rgba(0,0,0,.22);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+.sidebar-header-collapse:hover::after,
+.sidebar-header-collapse:focus-visible::after { opacity: 1; }
+.content-wrapper > .toggle-button { display: none !important; }
 
 .sidebar-quick-actions {
   padding: 2px var(--xs-sidebar-inset) 6px;
@@ -263,9 +301,30 @@
   font-weight: 500;
 }
 .sidebar-footer .profile-upgrade-btn:hover { background: var(--bg-hover); }
+.sidebar-footer .profile-header .dropdown-container {
+  left: 0;
+  width: 252px;
+  transform: translateY(6px);
+  border: 1px solid var(--border-primary);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  box-shadow: 0 14px 38px rgba(0,0,0,.3), 0 2px 8px rgba(0,0,0,.14);
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.sidebar-footer .profile-header .dropdown-container.active { transform: translateY(0); }
+.footer-dropdown .footer-profile-block { padding: 12px; }
+.footer-dropdown .footer-row,
+.dropdown-menu.footer-dropdown a.footer-row {
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.footer-dropdown .footer-divider { margin: 5px 8px; }
 
 body.sidebar-collapsed .left-sidebar { width: var(--xs-sidebar-rail); }
 body.sidebar-collapsed .left-sidebar .sidebar-header { padding: 8px 0 4px; gap: 4px; }
+body.sidebar-collapsed .sidebar-header-collapse::after { top: 86px; left: 58px; }
 body.sidebar-collapsed .left-sidebar .sidebar-content { padding: 0 8px 8px; }
 body.sidebar-collapsed .left-sidebar .sidebar-action-btn,
 body.sidebar-collapsed .sidebar-all-chats-btn {
@@ -279,6 +338,12 @@ body.sidebar-collapsed .sidebar-all-chats-btn {
 body.sidebar-collapsed .left-sidebar .sidebar-action-btn::before { border-radius: inherit; }
 body.sidebar-collapsed .left-sidebar .sidebar-footer { min-height: 56px; padding: 8px; }
 body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-header { width: 40px; height: 40px; padding: 4px; }
+body.sidebar-collapsed .sidebar-footer .profile-header .dropdown-container {
+  bottom: 0;
+  left: calc(100% + 12px);
+  transform: translateX(6px);
+}
+body.sidebar-collapsed .sidebar-footer .profile-header .dropdown-container.active { transform: translateX(0); }
 
 @media (max-width: 768px) {
   :root { --xs-sidebar-width: min(88vw, 320px); }

@@ -152,8 +152,11 @@ class SidebarManager {
         leftSidebar.classList.remove('closed');
       }
 
-      document.body.classList.remove('sidebar-collapsed');
-      this.isUserCollapsed = false;
+      try {
+        this.isUserCollapsed = localStorage.getItem('sidebar:collapsed') === '1';
+      } catch (_) {
+        this.isUserCollapsed = false;
+      }
 
       if (container) {
         container.style.marginLeft = '';
@@ -174,7 +177,7 @@ class SidebarManager {
     }
 
     applySidebarState() {
-      const { leftSidebar, toggleButton, container, downArrow } = this.elements;
+      const { leftSidebar, toggleButton, sidebarToggleButton, container, downArrow } = this.elements;
       const shouldCollapse = this.isAutoCollapsed || this.isUserCollapsed;
 
       document.body.classList.toggle('sidebar-collapsed', shouldCollapse);
@@ -187,6 +190,12 @@ class SidebarManager {
         toggleButton.classList.toggle('open', !shouldCollapse);
         toggleButton.classList.toggle('closed', shouldCollapse);
         toggleButton.classList.toggle('closed-hover', shouldCollapse);
+      }
+      if (sidebarToggleButton) {
+        const label = shouldCollapse ? 'Open sidebar' : 'Close sidebar';
+        sidebarToggleButton.setAttribute('aria-label', label);
+        sidebarToggleButton.dataset.tooltip = label;
+        sidebarToggleButton.setAttribute('aria-pressed', String(shouldCollapse));
       }
 
       if (container) {
@@ -482,6 +491,7 @@ class SidebarManager {
       }
 
       this.isUserCollapsed = nextState;
+      try { localStorage.setItem('sidebar:collapsed', nextState ? '1' : '0'); } catch (_) {}
       this.applySidebarState();
     }
   }

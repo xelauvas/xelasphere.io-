@@ -40,8 +40,8 @@ def test_sidebar_assets_have_fresh_cache_versions():
     assert "projectsPage.js') }}?v=7" in template
     assert "projects.css') }}?v=47" in template
     assert "sidebarContent.css') }}?v=54" in template
-    assert "sidebar-chatgpt.css') }}?v=3" in template
-    assert "sidebarHandler.js') }}?v=5" in template
+    assert "sidebar-chatgpt.css') }}?v=4" in template
+    assert "sidebarHandler.js') }}?v=6" in template
 
 
 def test_sidebar_uses_chatgpt_style_sections_and_incognito_action():
@@ -49,8 +49,18 @@ def test_sidebar_uses_chatgpt_style_sections_and_incognito_action():
     assert '<div class="sidebar-section-header">Chats</div>' in template
     assert 'class="sidebar-header-ghost"' in template
     assert 'temporary: true' in template
+    assert 'id="sidebar-toggle-button" class="sidebar-header-collapse"' in template
     assert 'id="action-chats" aria-label="Chats" aria-pressed="false"' in template
     assert "profileHeader.addEventListener('keydown'" in template
+
+
+def test_sidebar_collapse_state_is_persisted():
+    handler = _read('app/static/js/sidebarHandler.js')
+    chat = _read('app/static/js/startNewChatModule.js')
+    assert "localStorage.getItem('sidebar:collapsed')" in handler
+    assert "localStorage.setItem('sidebar:collapsed'" in handler
+    assert "sidebarToggleButton?.addEventListener('click'" in chat
+    assert "sidebarToggleButton.addEventListener('click'" not in handler
 
 
 def test_add_to_project_picker_is_accessible_and_viewport_aware():
