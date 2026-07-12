@@ -52,7 +52,7 @@
   function renderList() {
     if (!els.list) return;
     els.list.querySelectorAll(
-      '.sidebar-project-row, .sidebar-project-chats, .sidebar-project-morerow'
+      '.sidebar-project-row, .sidebar-project-morerow'
     ).forEach((n) => n.remove());
     const overflow = state.projects.length > MORE_THRESHOLD;
     const visibleProjects = overflow && !state.showAll
@@ -95,13 +95,6 @@
       });
       attachDropTarget(li, project.id);
       els.list.appendChild(li);
-      if (project.id === state.activeProjectId) {
-        const nested = document.createElement('li');
-        nested.className = 'sidebar-project-chats';
-        nested.innerHTML = '<div class="sidebar-project-chats-empty">Loading chats…</div>';
-        els.list.appendChild(nested);
-        loadNestedChats(project.id, nested);
-      }
     });
     if (overflow && !state.showAll) {
       const more = document.createElement('li');
@@ -112,33 +105,6 @@
         renderList();
       });
       els.list.appendChild(more);
-    }
-  }
-
-  async function loadNestedChats(projectId, container) {
-    try {
-      const chats = await fetchAllProjectChats(projectId);
-      if (!chats.length) {
-        container.innerHTML = '<div class="sidebar-project-chats-empty">No chats yet</div>';
-        return;
-      }
-      const list = document.createElement('ul');
-      chats.slice(0, 8).forEach((chat) => {
-        const row = document.createElement('li');
-        row.className = 'sidebar-project-chat';
-        row.tabIndex = 0;
-        row.textContent = chat.session_name || 'Chat';
-        row.title = chat.session_name || 'Chat';
-        const open = () => { window.location.href = `/c/${encodeURIComponent(chat.session_id)}`; };
-        row.addEventListener('click', open);
-        row.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
-        });
-        list.appendChild(row);
-      });
-      container.replaceChildren(list);
-    } catch (_) {
-      container.innerHTML = '';
     }
   }
 

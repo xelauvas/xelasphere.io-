@@ -364,3 +364,45 @@ body.sidebar-collapsed .sidebar-footer .profile-header .dropdown-container.activ
 @media (prefers-reduced-motion: reduce) {
   .left-sidebar, .left-sidebar * { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* Project workspace is the sole home for project conversations. */
+.project-page {
+  width: min(960px, calc(100% - 48px));
+  padding: 52px 0 88px;
+}
+.project-page-header { align-items: center; margin-bottom: 28px; }
+.project-page-title { font-size: 28px; line-height: 34px; font-weight: 650; }
+.project-new-chat-btn {
+  min-height: 48px;
+  margin-bottom: 22px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.project-page-settings-grid { gap: 14px; }
+.project-card { padding: 20px; border-radius: 16px; }
+.project-section.project-conversations {
+  margin-top: 18px;
+  padding: 8px;
+  border-radius: 16px;
+}
+.project-conversations-header { padding: 12px 12px 10px; }
+.project-conversations-title { margin: 0; color: var(--text-primary); font-size: 14px; font-weight: 600; }
+.project-conversations-subtitle { margin: 3px 0 0; color: var(--text-tertiary); font-size: 12px; line-height: 17px; }
+.project-chat-row {
+  min-height: 52px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 10px;
+}
+.project-chat-row + .project-chat-row { margin-top: 2px; }
+.project-chat-row:hover { background: var(--bg-hover); }
+.project-chat-row .title { font-size: 14px; font-weight: 450; }
+.project-chat-row .updated { font-size: 11px; }
+.project-chats-empty { margin: 0; padding: 26px 12px 30px; text-align: center; }
+
+@media (max-width: 700px) {
+  .project-page { width: auto; padding: 24px 16px 64px; }
+  .project-page-title { font-size: 23px; line-height: 29px; }
+}

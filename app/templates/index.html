@@ -179,7 +179,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ghost-model.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=10">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarContent.css') }}?v=54">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=48">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}?v=49">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebarToggle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deleteChat.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/onlineSearch.css') }}?v=2">
@@ -211,7 +211,7 @@
 
     <!-- Mobile Responsive -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=77">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar-chatgpt.css') }}?v=4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar-chatgpt.css') }}?v=5">
 
     <!-- Context Menu (long-press actions) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/context-menu.css') }}">
@@ -744,7 +744,12 @@
                   </div>
 
                   <section class="project-section project-conversations">
-                    <h2 class="project-conversations-title">Chats</h2>
+                    <div class="project-conversations-header">
+                      <div>
+                        <h2 class="project-conversations-title">Chats</h2>
+                        <p class="project-conversations-subtitle">Conversations that share this project's context.</p>
+                      </div>
+                    </div>
                     <ul id="project-chats" class="project-chats" role="list"></ul>
                   </section>
                 </main>
@@ -1442,7 +1447,7 @@
     <script src="{{ url_for('static', filename='js/ghostModel.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/artifactDiff.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=67"></script>
-    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=13" defer></script>
+    <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=14" defer></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Dropdown Menu Logic ---
