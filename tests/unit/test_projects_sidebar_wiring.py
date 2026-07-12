@@ -39,7 +39,7 @@ def test_sidebar_assets_have_fresh_cache_versions():
     assert "projectsModule.js') }}?v=12" in template
     assert "projectsPage.js') }}?v=7" in template
     assert "projects.css') }}?v=46" in template
-    assert "sidebar-chatgpt.css') }}?v=2" in template
+    assert "sidebar-chatgpt.css') }}?v=3" in template
     assert "sidebarHandler.js') }}?v=5" in template
 
 

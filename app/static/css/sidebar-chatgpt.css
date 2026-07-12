@@ -39,10 +39,20 @@
 .sidebar-header-ghost {
   width: 32px;
   height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   padding: 6px;
   border: 0;
   border-radius: 0;
   background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-appearance: none;
+  appearance: none;
+  filter: none !important;
   color: var(--text-secondary);
 }
 
@@ -55,7 +65,13 @@
   color: var(--text-primary);
   outline: none;
 }
-.sidebar-header-ghost::before { display: none !important; }
+.sidebar-header-ghost::before,
+.sidebar-header-ghost::after {
+  content: none !important;
+  display: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
 .sidebar-header-ghost svg { width: 24px !important; height: 24px !important; }
 
 .sidebar-quick-actions {
