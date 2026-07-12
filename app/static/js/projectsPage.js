@@ -97,14 +97,27 @@
     chats.forEach((c) => {
       const li = document.createElement('li');
       li.className = 'project-chat-row';
+      li.tabIndex = 0;
+      li.setAttribute('role', 'link');
       li.innerHTML = `<span class="title">${escapeHtml(c.session_name || 'Chat')}</span>
                       <span class="updated">${relTime(c.last_updated)}</span>`;
-      li.addEventListener('click', () => {
+      const openChat = () => {
         window.location.href = `/c/${encodeURIComponent(c.session_id)}`;
+      };
+      li.addEventListener('click', openChat);
+      li.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openChat();
+        }
       });
       els.chats.appendChild(li);
     });
   }
+
+  window.addEventListener('projects:session-moved', (event) => {
+    if (event.detail?.projectId === projectId) loadChats();
+  });
 
   /* ---------- Helpers ---------- */
   function jsonHeaders() {

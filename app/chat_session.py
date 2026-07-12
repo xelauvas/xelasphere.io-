@@ -195,7 +195,8 @@ class ChatSession:
             except Exception as fallback_err:
                 logger.error(f"Fallback save also failed for session {session_id}: {fallback_err}")
 
-    def get_history(self, user_id: str, page_size: int = 10, page_token: Optional[str] = None, project_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_history(self, user_id: str, page_size: int = 10, page_token: Optional[str] = None,
+                    project_id: Optional[str] = None, ungrouped: bool = False) -> Dict[str, Any]:
         if project_id:
             # Filter-by-project_id query. Avoid combining where(project_id) with
             # order_by(last_updated) — that requires a composite index. Instead
@@ -217,7 +218,19 @@ class ChatSession:
             sessions = iter(all_docs[:page_size + 1])
         else:
             sessions_query = self._get_sessions_query(user_id, page_token)
-            sessions = sessions_query.limit(page_size + 1).stream()
+            # Ungrouped filtering is client-side to include legacy documents
+            # with no project_id field. Stream until enough visible rows are
+            # found; limiting before filtering can return an empty Recents page
+            # when the newest sessions all belong to projects.
+            sessions = sessions_query.stream() if ungrouped else sessions_query.limit(page_size + 1).stream()
+
+        if ungrouped and not project_id:
+            # Keep legacy sessions where project_id is absent as well as
+            # sessions where it is explicitly null.
+            sessions = (
+                doc for doc in sessions
+                if not (doc.to_dict() or {}).get('project_id')
+            )
 
         chat_history = []
         next_token = None
@@ -276,6 +289,17 @@ class ChatSession:
             })
 
         return {'chat_history': chat_history, 'next_page_token': next_token}
+
+    def count_grouped(self, user_id: str) -> int:
+        """Count visible sessions assigned to a project."""
+        sessions = self.db.collection('users').document(user_id).collection('chat_sessions').stream()
+        count = 0
+        for doc in sessions:
+            data = doc.to_dict() or {}
+            status = data.get('status', 'active')
+            if data.get('project_id') and status not in ('archived', 'temporary'):
+                count += 1
+        return count
 
     def list_metadata(self, user_id: str) -> List[Dict[str, Any]]:
         """Return flat metadata for ALL sessions of a user — no message bodies.
