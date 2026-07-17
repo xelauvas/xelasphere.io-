@@ -455,6 +455,7 @@
     padding: 4px 10px;
     border-radius: 6px;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .crypto-chart-price .price-change.positive {

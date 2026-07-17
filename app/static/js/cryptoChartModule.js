@@ -372,12 +372,19 @@ const CryptoChartModule = (function() {
         const badge = cardElement.querySelector('.data-source-badge');
         if (!badge) return;
 
-        if (dataSource === 'live') {
+        // Anything that isn't an explicit cache hit is live data — this
+        // covers CoinGecko ('live'), Binance fallback ('binance'), and
+        // any future provider. Without this, ALL range (which uses
+        // Binance because CoinGecko free tier can't do max) renders as
+        // 'CACHED 0s ago', whose extra width wraps the price row and
+        // shifts the action bar below it down.
+        const isCache = dataSource === 'cache' || dataSource === 'stale_cache';
+
+        if (!isCache) {
             badge.className = 'data-source-badge live';
             badge.innerHTML = 'LIVE';
         } else {
             badge.className = 'data-source-badge cache';
-            // Format cache age
             let ageText;
             if (cacheAgeSeconds < 60) {
                 ageText = `${cacheAgeSeconds}s`;
