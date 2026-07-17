@@ -461,6 +461,7 @@ h1 {
     margin: 0;
     text-align: left;
     text-justify: var(--text-justify);
+    animation: contentFadeIn 0.3s ease-out;
     -webkit-font-smoothing: var(--font-smoothing-webkit);
     -moz-osx-font-smoothing: var(--font-smoothing-moz);
     text-rendering: var(--text-rendering);
@@ -494,6 +495,13 @@ h1 {
     background: #f3efe7;
     color: var(--text-primary, #1f1d1a);
 }
+/* Assistant messages are intentionally UNBOUNDED — raw text flowing into the
+   chat canvas, matching Claude Desktop's asymmetric message styling (user
+   message = bounded card, AI message = borderless). This rule nullifies the
+   token-based padding / radius / background from the generic .text-message
+   rule above. If you later want to introduce an AI bubble, that is a design
+   philosophy change (not a proportion tweak) — retract this zero-out
+   explicitly rather than adding !important elsewhere. */
 .ai-message .text-message {
     background: transparent;
     border-radius: 0;
@@ -639,14 +647,31 @@ h1 {
 
 .ai-message .text-message h1,
 .ai-message .text-message h2,
-.ai-message .text-message h3 {
+.ai-message .text-message h3,
+.ai-message .text-message h4,
+.ai-message .text-message h5,
+.ai-message .text-message h6 {
     color: var(--text-primary, #fdfdfd);
+    /* Balance heading text across lines so 2-line headings don't leave
+       an orphan word on the second line. Modern browsers only (Safari
+       17.4+, Chrome 114+); unsupported browsers silently ignore. */
+    text-wrap: balance;
 }
 
-.ai-message .text-message h3 + p,
-.ai-message .text-message h2 + p {
-    margin-top: 0.1rem;
+/* Reduce last-line widows in AI message paragraphs — modern browsers
+   (Safari 17.4+, Chrome 117+) use a more intelligent line-break
+   algorithm to avoid single-word last lines. Unsupported browsers
+   silently fall back to normal wrapping. */
+.ai-message .text-message p {
+    text-wrap: pretty;
 }
+
+/* Removed: .ai-message .text-message h2/h3 + p adjacent-sibling rule.
+   Dead since the StreamRenderer migration — prose.js wraps each block
+   in its own <div class="stream-block">, so adjacent headings and
+   paragraphs are never raw siblings; the h2+p / h3+p combinators never
+   match. Inter-block spacing is now handled by
+   .stream-block + .stream-block rules in stream-blocks.css. */
 
 .ai-message .text-message ul,
 .ai-message .text-message ol {
@@ -1287,7 +1312,12 @@ h1 {
     font-weight: 500;
 }
 
-/* Override Prism overflow in messages - pre scrolls, code doesn't */
+/* Override Prism overflow in messages — pre scrolls horizontally, code
+   inside doesn't independently scroll. These !important declarations are
+   required because prism.css sets overflow on pre[class*="language-"] at
+   the same specificity (0,0,1,1); without !important the source-order
+   cascade would be brittle (order depends on link order in base.html).
+   DO NOT REMOVE without also removing the competing Prism defaults. */
 .text-message pre[class*="language-"] {
     overflow: auto !important;
 }
@@ -2248,10 +2278,7 @@ h1 {
     }
 }
 
-/* Message appear animation */
-.text-message {
-    animation: contentFadeIn 0.3s ease-out;
-}
+/* Message appear animation defined inline on .text-message (line 440+) */
 
 /* Heading hover effect */
 /* Headings are passive content — no hover effect. */

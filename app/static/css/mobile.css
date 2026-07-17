@@ -3021,17 +3021,6 @@ body.is-ios .arrow-down {
         font-size: 0.8rem;
     }
 
-    /* Lists on mobile */
-    .message.ai-message .text-message ul,
-    .message.ai-message .text-message ol {
-        padding-left: 1.25rem;
-        margin: 0.5rem 0;
-    }
-
-    .message.ai-message .text-message li {
-        margin-bottom: 0.3rem;
-    }
-
     /* Attachments alignment */
     .message.user-message .message-attachments {
         justify-content: flex-end;
@@ -3738,16 +3727,6 @@ body.is-ios .arrow-down {
     .message.ai-message .text-message h2:first-child,
     .message.ai-message .text-message h3:first-child {
         margin-top: 0;
-    }
-
-    .message.ai-message .text-message ul,
-    .message.ai-message .text-message ol {
-        margin: 8px 0;
-        padding-left: 20px;
-    }
-
-    .message.ai-message .text-message li {
-        margin-bottom: 4px;
     }
 
     .message.ai-message .text-message strong {

@@ -166,18 +166,18 @@
    specific compound selectors.
    --------------------------------------------------------------------------- */
 
-/* Critical #1, #2, #5, #6: pre/ul/ol at the stream-block level.
+/* Critical #1, #2, #5, #6: ul/ol at the stream-block level.
    Zero their OWN margins — all spacing is owned by .stream-block + .stream-block
    above. Higher-specificity variants cover .ai-message and .message.ai-message
    chains that would otherwise re-impose margins (message-styles.css:637-641,
-   message-styles.css:1131-1142, message-styles.css:715-720). */
-.text-message pre.stream-block,
+   message-styles.css:1131-1142, message-styles.css:715-720).
+   Only ul/ol get the class directly (list.js). <pre> is wrapped in a parent
+   div (code.js: `<div class="stream-block block-code"><pre>...</pre></div>`),
+   so pre.stream-block would never match and is omitted. */
 .text-message ul.stream-block,
 .text-message ol.stream-block,
-.ai-message .text-message pre.stream-block,
 .ai-message .text-message ul.stream-block,
 .ai-message .text-message ol.stream-block,
-.message.ai-message .text-message pre.stream-block,
 .message.ai-message .text-message ul.stream-block,
 .message.ai-message .text-message ol.stream-block {
     margin-top: 0;
@@ -190,10 +190,12 @@
    pragmatic choice: some mobile rules use compound chains specific enough
    to tie with us and win on source-order in older Safari. */
 @media (max-width: 768px) {
-    .message .text-message pre.stream-block,
+    /* pre.stream-block omitted — code.js wraps pre in a parent div; the
+       pre element itself never has the stream-block class, so that
+       selector never matched. Keep only ul/ol (list.js sets class on
+       the list element directly). */
     .message .text-message ul.stream-block,
     .message .text-message ol.stream-block,
-    .message.ai-message .text-message pre.stream-block,
     .message.ai-message .text-message ul.stream-block,
     .message.ai-message .text-message ol.stream-block {
         margin-top: 0 !important;
