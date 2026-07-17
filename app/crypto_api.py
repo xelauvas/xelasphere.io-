@@ -276,10 +276,17 @@ def _fetch_from_binance(coin_id: str, currency: str = 'usd') -> dict | None:
         return None
 
 
-def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
+def _fetch_chart_from_binance(coin_id: str, days: str = '1', before_ms: int | None = None) -> dict | None:
     """
     Fetch chart data from Binance klines API as fallback.
     Returns normalized data structure matching CoinGecko chart response.
+
+    When ``before_ms`` is provided, returns a single page of klines ending
+    at that timestamp (used by the lazy-load history feature: as the user
+    pans left past the loaded window, the frontend asks for one chunk at
+    a time using the previous chunk's earliest timestamp). The interval
+    is still derived from ``days`` so each timeframe paginates at its own
+    resolution (1D → 5m, 1W → 1h, etc.).
     """
     symbol = COINGECKO_TO_BINANCE.get(coin_id)
     if not symbol:
@@ -319,7 +326,24 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
         # the limit (= reached the start of trading) or we hit a safety
         # cap. Single-page case takes the regular path.
         klines = None
-        if days == 'max' and interval == '1d':
+        if before_ms is not None:
+            # Lazy-load historical chunk. One page ending at before_ms.
+            response = requests.get(
+                f'{BINANCE_BASE}/klines',
+                params={
+                    'symbol': symbol,
+                    'interval': interval,
+                    'limit': min(limit, 1000),
+                    'endTime': before_ms,
+                },
+                timeout=15
+            )
+            if response.status_code != 200:
+                print(f'[Binance] Chart API error (before): {response.status_code}')
+                return None
+            klines = response.json()
+            print(f'[Binance] History chunk for {coin_id} before {before_ms}: {len(klines)} bars')
+        elif days == 'max' and interval == '1d':
             klines = []
             end_time_ms = int(time.time() * 1000)
             PAGE_LIMIT = 1000
@@ -382,6 +406,24 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
                 color = 'rgba(34, 197, 94, 0.4)' if close_price >= prev_close else 'rgba(239, 68, 68, 0.4)'
                 volume_data.append({'time': ts, 'value': vol_usd, 'color': color})
 
+            # Empty historical chunk = reached start of asset's trading
+            # history. Return a successful empty result so the frontend
+            # can mark "no more history" without treating it as an error.
+            if before_ms is not None and len(chart_data) == 0:
+                base_symbol = symbol.replace('USDT', '')
+                return {
+                    'success': True,
+                    'coin_id': coin_id,
+                    'symbol': base_symbol,
+                    'currency': 'USD',
+                    'days': days,
+                    'data': [],
+                    'volume_data': [],
+                    'historical_chunk': True,
+                    'history_exhausted': True,
+                    'data_source': 'binance',
+                }
+
             # Reject empty/single-point responses. Binance can return a
             # valid 200 with [] klines for symbols that don't trade or
             # for ranges that exceed available history. Without this
@@ -411,6 +453,13 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
                 'is_positive': change_pct >= 0,
                 'data_source': 'binance'
             }
+            if before_ms is not None:
+                # Mark this as a historical chunk so the frontend knows
+                # to prepend rather than replace the loaded series.
+                result['historical_chunk'] = True
+                # If the chunk came back short, we've reached the start
+                # of trading — flag so the frontend stops asking.
+                result['history_exhausted'] = len(klines) < min(limit, 1000)
             print(f'[Binance] Successfully fetched chart for {coin_id}: {len(chart_data)} points')
             return result
 
@@ -1877,12 +1926,16 @@ def get_crypto_chart():
         - coin: Coin symbol or ID
         - days: Time range (1, 7, 30, 90, 365, max)
         - currency: Target currency (default: usd)
+        - before: Optional Unix-ms timestamp; when set, returns one
+          historical chunk of klines ending at this time (used for the
+          lazy-load-on-pan history extension on every timeframe).
     """
     global _chart_cache
 
     coin_query = request.args.get('coin', '').strip()
     days = request.args.get('days', '1')
     currency = request.args.get('currency', 'usd').lower()
+    before_raw = request.args.get('before', '').strip()
 
     if not coin_query:
         return jsonify({'error': 'Missing coin parameter'}), 400
@@ -1901,6 +1954,33 @@ def get_crypto_chart():
         except (ValueError, TypeError):
             days = '1'
 
+    # Lazy-load historical chunk path: when 'before' is set, skip
+    # CoinGecko (free tier doesn't accept arbitrary endTime) and go
+    # straight to Binance with that endTime. The interval still derives
+    # from `days`, so each timeframe paginates at its own resolution.
+    if before_raw:
+        try:
+            before_ms = int(before_raw)
+            if before_ms <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid before parameter'}), 400
+
+        chunk_cache_key = f"{coin_id}_{days}_{currency}_before_{before_ms}"
+        cached = _chart_cache_get(chunk_cache_key)
+        if cached:
+            cache_age = time.time() - cached['timestamp']
+            result = cached['data'].copy()
+            result['data_source'] = 'cache'
+            result['cache_age_seconds'] = round(cache_age)
+            return jsonify(result)
+
+        result = _fetch_chart_from_binance(coin_id, days, before_ms=before_ms)
+        if result:
+            _chart_cache_set(chunk_cache_key, result)
+            return jsonify(result)
+        return jsonify({'error': 'Failed to fetch historical chunk'}), 502
+
     # Check cache first (Redis-backed; survives Flask restarts and is
     # shared across gunicorn workers — eliminates the cold-start race
     # that previously returned 'Unknown cryptocurrency: vechain' until
@@ -1916,6 +1996,20 @@ def get_crypto_chart():
             result['data_source'] = 'cache'
             result['cache_age_seconds'] = round(cache_age)
             return jsonify(result)
+
+    # Prefer Binance for any coin with a Binance mapping. CoinGecko's
+    # total_volumes is rolling-24h cumulative, NOT per-bar volume —
+    # which makes the volume histogram on 1D / 1W / 1M look uniform
+    # ('ugly equal bars'). Binance klines return true per-bar volume
+    # with natural variance. CoinGecko remains the fallback for coins
+    # not listed on Binance.
+    if currency == 'usd' and coin_id in COINGECKO_TO_BINANCE:
+        binance_first = _fetch_chart_from_binance(coin_id, days)
+        if binance_first:
+            _chart_cache_set(cache_key, binance_first)
+            return jsonify(binance_first)
+        # Fall through to CoinGecko if Binance failed.
+        print(f'[CryptoAPI] Binance preferred path failed for {coin_id}, trying CoinGecko')
 
     try:
         # Determine interval - use 'daily' for ranges > 1 day (reduces data points)
