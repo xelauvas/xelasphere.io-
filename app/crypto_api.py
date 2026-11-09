@@ -276,10 +276,17 @@ def _fetch_from_binance(coin_id: str, currency: str = 'usd') -> dict | None:
         return None
 
 
-def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
+def _fetch_chart_from_binance(coin_id: str, days: str = '1', before_ms: int | None = None) -> dict | None:
     """
     Fetch chart data from Binance klines API as fallback.
     Returns normalized data structure matching CoinGecko chart response.
+
+    When ``before_ms`` is provided, returns a single page of klines ending
+    at that timestamp (used by the lazy-load history feature: as the user
+    pans left past the loaded window, the frontend asks for one chunk at
+    a time using the previous chunk's earliest timestamp). The interval
+    is still derived from ``days`` so each timeframe paginates at its own
+    resolution (1D → 5m, 1W → 1h, etc.).
     """
     symbol = COINGECKO_TO_BINANCE.get(coin_id)
     if not symbol:
@@ -319,7 +326,24 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
         # the limit (= reached the start of trading) or we hit a safety
         # cap. Single-page case takes the regular path.
         klines = None
-        if days == 'max' and interval == '1d':
+        if before_ms is not None:
+            # Lazy-load historical chunk. One page ending at before_ms.
+            response = requests.get(
+                f'{BINANCE_BASE}/klines',
+                params={
+                    'symbol': symbol,
+                    'interval': interval,
+                    'limit': min(limit, 1000),
+                    'endTime': before_ms,
+                },
+                timeout=15
+            )
+            if response.status_code != 200:
+                print(f'[Binance] Chart API error (before): {response.status_code}')
+                return None
+            klines = response.json()
+            print(f'[Binance] History chunk for {coin_id} before {before_ms}: {len(klines)} bars')
+        elif days == 'max' and interval == '1d':
             klines = []
             end_time_ms = int(time.time() * 1000)
             PAGE_LIMIT = 1000
@@ -382,6 +406,24 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
                 color = 'rgba(34, 197, 94, 0.4)' if close_price >= prev_close else 'rgba(239, 68, 68, 0.4)'
                 volume_data.append({'time': ts, 'value': vol_usd, 'color': color})
 
+            # Empty historical chunk = reached start of asset's trading
+            # history. Return a successful empty result so the frontend
+            # can mark "no more history" without treating it as an error.
+            if before_ms is not None and len(chart_data) == 0:
+                base_symbol = symbol.replace('USDT', '')
+                return {
+                    'success': True,
+                    'coin_id': coin_id,
+                    'symbol': base_symbol,
+                    'currency': 'USD',
+                    'days': days,
+                    'data': [],
+                    'volume_data': [],
+                    'historical_chunk': True,
+                    'history_exhausted': True,
+                    'data_source': 'binance',
+                }
+
             # Reject empty/single-point responses. Binance can return a
             # valid 200 with [] klines for symbols that don't trade or
             # for ranges that exceed available history. Without this
@@ -411,6 +453,13 @@ def _fetch_chart_from_binance(coin_id: str, days: str = '1') -> dict | None:
                 'is_positive': change_pct >= 0,
                 'data_source': 'binance'
             }
+            if before_ms is not None:
+                # Mark this as a historical chunk so the frontend knows
+                # to prepend rather than replace the loaded series.
+                result['historical_chunk'] = True
+                # If the chunk came back short, we've reached the start
+                # of trading — flag so the frontend stops asking.
+                result['history_exhausted'] = len(klines) < min(limit, 1000)
             print(f'[Binance] Successfully fetched chart for {coin_id}: {len(chart_data)} points')
             return result
 
@@ -1877,12 +1926,16 @@ def get_crypto_chart():
         - coin: Coin symbol or ID
         - days: Time range (1, 7, 30, 90, 365, max)
         - currency: Target currency (default: usd)
+        - before: Optional Unix-ms timestamp; when set, returns one
+          historical chunk of klines ending at this time (used for the
+          lazy-load-on-pan history extension on every timeframe).
     """
     global _chart_cache
 
     coin_query = request.args.get('coin', '').strip()
     days = request.args.get('days', '1')
     currency = request.args.get('currency', 'usd').lower()
+    before_raw = request.args.get('before', '').strip()
 
     if not coin_query:
         return jsonify({'error': 'Missing coin parameter'}), 400
@@ -1901,6 +1954,33 @@ def get_crypto_chart():
         except (ValueError, TypeError):
             days = '1'
 
+    # Lazy-load historical chunk path: when 'before' is set, skip
+    # CoinGecko (free tier doesn't accept arbitrary endTime) and go
+    # straight to Binance with that endTime. The interval still derives
+    # from `days`, so each timeframe paginates at its own resolution.
+    if before_raw:
+        try:
+            before_ms = int(before_raw)
+            if before_ms <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid before parameter'}), 400
+
+        chunk_cache_key = f"{coin_id}_{days}_{currency}_before_{before_ms}"
+        cached = _chart_cache_get(chunk_cache_key)
+        if cached:
+            cache_age = time.time() - cached['timestamp']
+            result = cached['data'].copy()
+            result['data_source'] = 'cache'
+            result['cache_age_seconds'] = round(cache_age)
+            return jsonify(result)
+
+        result = _fetch_chart_from_binance(coin_id, days, before_ms=before_ms)
+        if result:
+            _chart_cache_set(chunk_cache_key, result)
+            return jsonify(result)
+        return jsonify({'error': 'Failed to fetch historical chunk'}), 502
+
     # Check cache first (Redis-backed; survives Flask restarts and is
     # shared across gunicorn workers — eliminates the cold-start race
     # that previously returned 'Unknown cryptocurrency: vechain' until
@@ -1916,6 +1996,20 @@ def get_crypto_chart():
             result['data_source'] = 'cache'
             result['cache_age_seconds'] = round(cache_age)
             return jsonify(result)
+
+    # Prefer Binance for any coin with a Binance mapping. CoinGecko's
+    # total_volumes is rolling-24h cumulative, NOT per-bar volume —
+    # which makes the volume histogram on 1D / 1W / 1M look uniform
+    # ('ugly equal bars'). Binance klines return true per-bar volume
+    # with natural variance. CoinGecko remains the fallback for coins
+    # not listed on Binance.
+    if currency == 'usd' and coin_id in COINGECKO_TO_BINANCE:
+        binance_first = _fetch_chart_from_binance(coin_id, days)
+        if binance_first:
+            _chart_cache_set(cache_key, binance_first)
+            return jsonify(binance_first)
+        # Fall through to CoinGecko if Binance failed.
+        print(f'[CryptoAPI] Binance preferred path failed for {coin_id}, trying CoinGecko')
 
     try:
         # Determine interval - use 'daily' for ranges > 1 day (reduces data points)
@@ -2334,6 +2428,25 @@ def get_stock_price():
         return jsonify({'error': str(e)}), 500
 
 
+# Per-interval pagination window for stocks. Each value is the seconds
+# of history we ask Yahoo for in one historical chunk; chosen to stay
+# within Yahoo's interval-vs-range constraints (intraday intervals are
+# capped — 5m/15m/30m: 60 days max; 1h: 730 days max; daily and coarser
+# are unconstrained). The numbers below are conservative so a single
+# pagination request never trips Yahoo's "Data doesn't exist for
+# startDate" error.
+_STOCK_PAGE_WINDOW_SECONDS = {
+    '5m':  30 * 86400,        # 30 days/page
+    '15m': 60 * 86400,        # 60 days (Yahoo's hard cap for 15m)
+    '30m': 60 * 86400,
+    '1h':  365 * 86400,       # 1 year/page
+    '60m': 365 * 86400,
+    '1d':  5 * 365 * 86400,   # 5 years/page
+    '1wk': 10 * 365 * 86400,  # 10 years/page
+    '1mo': 30 * 365 * 86400,  # 30 years/page (covers most listed equities)
+}
+
+
 @crypto_bp.route('/api/stock/chart', methods=['GET'])
 def get_stock_chart():
     """
@@ -2342,10 +2455,15 @@ def get_stock_chart():
 
     Query params:
         - symbol: Stock ticker symbol
-        - range: Time range (1d, 5d, 1mo, 3mo, 6mo, 1y, 5y)
+        - range: Time range (1d, 5d, 1mo, 3mo, 6mo, 1y, 5y, max)
+        - before: Optional Unix-ms timestamp; when set, returns one
+          historical chunk of bars ending at this time. Interval is
+          derived from `range` so each timeframe paginates at its own
+          resolution (parallels the crypto endpoint's contract).
     """
     symbol = request.args.get('symbol', '').strip().upper()
     range_param = request.args.get('range', '1d')
+    before_raw = request.args.get('before', '').strip()
 
     if not symbol:
         return jsonify({'error': 'Missing symbol parameter'}), 400
@@ -2376,6 +2494,90 @@ def get_stock_chart():
     }
 
     config = range_config.get(range_param, range_config['1d'])
+
+    # Lazy-load historical chunk path: when `before` is set, fetch one
+    # window of older bars ending at that timestamp. Uses Yahoo's
+    # period1/period2 (epoch seconds) instead of the range/interval
+    # shortcut, since `range` doesn't allow arbitrary endpoints.
+    if before_raw:
+        try:
+            before_ms = int(before_raw)
+            if before_ms <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid before parameter'}), 400
+
+        interval = config['interval']
+        window_seconds = _STOCK_PAGE_WINDOW_SECONDS.get(interval, 365 * 86400)
+        period2 = before_ms // 1000
+        period1 = max(0, period2 - window_seconds)
+
+        try:
+            url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
+            params = {
+                'interval': interval,
+                'period1': period1,
+                'period2': period2,
+            }
+            response = requests.get(url, params=params, timeout=15, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            })
+
+            if response.status_code != 200:
+                # Yahoo returns 400 ("Data doesn't exist for startDate")
+                # or 422 when period1 is past the symbol's IPO/listing
+                # date. That's a clean "nothing older" signal, not an
+                # error — tell the frontend to stop paginating.
+                if response.status_code in (400, 422):
+                    return jsonify({
+                        'success': True,
+                        'symbol': symbol,
+                        'range': range_param,
+                        'data': [],
+                        'volume_data': [],
+                        'history_exhausted': True,
+                        'asset_type': 'stock',
+                    })
+                print(f'[StockAPI] Chart history error: {response.status_code}')
+                return jsonify({'error': 'Failed to fetch historical chunk'}), 502
+
+            data = response.json()
+            result = data.get('chart', {}).get('result', [])
+            if not result:
+                return jsonify({
+                    'success': True,
+                    'symbol': symbol,
+                    'range': range_param,
+                    'data': [],
+                    'volume_data': [],
+                    'history_exhausted': True,
+                    'asset_type': 'stock',
+                })
+
+            quote = result[0]
+            timestamps = quote.get('timestamp') or []
+            indicators = quote.get('indicators', {}).get('quote', [{}])[0]
+            closes = indicators.get('close') or []
+
+            chart_data = []
+            for i, ts in enumerate(timestamps):
+                if i < len(closes) and closes[i] is not None:
+                    chart_data.append({'time': ts, 'value': round(closes[i], 2)})
+
+            # If Yahoo returned no usable bars in this window, we've
+            # walked past the listing date — stop paginating.
+            return jsonify({
+                'success': True,
+                'symbol': symbol,
+                'range': range_param,
+                'data': chart_data,
+                'volume_data': [],
+                'history_exhausted': len(chart_data) == 0,
+                'asset_type': 'stock',
+            })
+        except Exception as e:
+            print(f'[StockAPI] History chunk error: {e}')
+            return jsonify({'error': str(e)}), 500
 
     try:
         url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'

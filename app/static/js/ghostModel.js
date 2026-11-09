@@ -113,7 +113,9 @@
 
             // Restore locked model from localStorage
             const saved = localStorage.getItem('ghostLockedModel_v2');
-            if (saved && MODELS.some(m => m.id === saved)) {
+            const known = MODELS.some(m => m.id === saved) ||
+                (Array.isArray(window.XELA_MODELS) && window.XELA_MODELS.some(m => m && m.id === saved));
+            if (saved && known) {
                 this.lockedModel = saved;
             }
 
@@ -421,22 +423,13 @@
         attr.className = 'message-model-attribution';
         attr.textContent = text;
 
-        // Try to append inline at the end of the last text element
-        const textMsg = messageDiv.querySelector('.text-message');
-        if (textMsg) {
-            // Find the last block-level child (p, li, h1-h6, div, etc.).
-            // Skip anything inside a code chrome — its <div class="code-header">
-            // would otherwise be picked as the last <div> and the attribution
-            // would land in the code-window's title bar.
-            const blocks = Array.from(
-                textMsg.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, div, blockquote')
-            ).filter(el => !el.closest('.code-window, .stream-block.block-code'));
-            const lastBlock = blocks.length ? blocks[blocks.length - 1] : null;
-            if (lastBlock) {
-                lastBlock.appendChild(document.createTextNode(' '));
-                lastBlock.appendChild(attr);
-                return;
-            }
+        // Own line under the answer (the streamed blocks may still be rendering when this
+        // runs, so "the last paragraph" is not reliably the end of the message).
+        const container = messageDiv.querySelector('.text-message-container');
+        const textMsg = container && container.querySelector('.text-message');
+        if (container && textMsg) {
+            textMsg.insertAdjacentElement('afterend', attr);
+            return;
         }
 
         // Fallback: append to message div

@@ -21,6 +21,23 @@ class TitleGenerator:
             'for', 'of', 'with', 'by'
         }
 
+    @staticmethod
+    def _sentence_case(text: str) -> str:
+        """Sentence case like 'Reverse SSH tunnel for Ollama': keep acronyms and names,
+        lower Title-Cased words after the first, capitalize the first letter."""
+        text = (text or "").strip()
+        if not text:
+            return text
+        words = text.split()
+        letters = [c for c in text if c.isalpha()]
+        if letters and all(c.isupper() for c in letters) and len(letters) > 4:
+            words = [w.lower() for w in words]
+        elif len(words) > 1 and sum(1 for w in words if w[:1].isupper()) >= max(2, len(words) - 1):
+            # Title Case from the model: lower plain capitalized words, keep ACRONYMS and MixedCase
+            words = [words[0]] + [w.lower() if (w[:1].isupper() and w[1:].islower()) else w for w in words[1:]]
+        out = " ".join(words)
+        return out[:1].upper() + out[1:]
+
     def _clean_text(self, text: str) -> str:
         """Clean text by removing special characters and extra spaces."""
         text = re.sub(r'[^\w\s-]', ' ', text)
@@ -48,6 +65,7 @@ class TitleGenerator:
             "- 3 to 6 words\n"
             "- Focus on nouns/key subjects (no filler like 'help me')\n"
             "- No punctuation, emojis, or quotes\n"
+            "- Sentence case: capitalize only the first word, names and acronyms\n"
             "- Title should capture the topic, not the solution steps\n"
             "Return ONLY the final title text.\n\n"
             f"User intent snippets:\n{text}\n\nTitle:"
@@ -59,7 +77,7 @@ class TitleGenerator:
         if not keywords or len(keywords) < min_words:
             self.logger.warning("Keyword extraction failed. Returning 'Untitled'.")
             return "Untitled"
-        return " ".join(keywords).title()
+        return self._sentence_case(" ".join(keywords))
 
     def _local_title(self, text: str, max_words: int = 8) -> str:
         """
@@ -78,7 +96,7 @@ class TitleGenerator:
         title = " ".join(title_words).strip()
         if not title or len(title_words) < 3:
             return "Untitled"
-        return title[:self.MAX_TITLE_LENGTH].title()
+        return self._sentence_case(title[:self.MAX_TITLE_LENGTH])
 
     def _generate_llm_title(self, text: str) -> Optional[str]:
         """Craft a high-quality title via the metadata model stack."""
@@ -108,8 +126,7 @@ class TitleGenerator:
             if not candidate:
                 return None
 
-            candidate = candidate[:self.MAX_TITLE_LENGTH].lower()
-            return candidate.capitalize()
+            return self._sentence_case(candidate[:self.MAX_TITLE_LENGTH])
         except Exception as exc:
             self.logger.warning(f"LLM title generation failed: {exc}")
             return None
@@ -123,7 +140,7 @@ class TitleGenerator:
             max_length (int): Maximum length of the title in characters
 
         Returns:
-            str: Generated title in Title Case
+            str: Generated title in sentence case
         """
         if not response_text:
             self.logger.warning("Input text is empty. Returning 'Untitled'.")
@@ -149,7 +166,7 @@ class TitleGenerator:
         except Exception as e:
             self.logger.error(f"Error generating title: {e}")
             # Fall back to a simple cleaned truncation of the input text
-            return self._clean_text(response_text)[:max_length].title()
+            return self._sentence_case(self._clean_text(response_text)[:max_length])
 
 
 # Singleton instance for reuse

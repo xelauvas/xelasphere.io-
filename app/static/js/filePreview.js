@@ -141,6 +141,90 @@ const FilePreview = (function() {
     const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp']);
 
     let modalElement = null;
+    let currentObjectUrl = null;
+    const pdfThumbnailCache = new Map();
+
+    function clearObjectUrl() {
+        if (currentObjectUrl) {
+            URL.revokeObjectURL(currentObjectUrl);
+            currentObjectUrl = null;
+        }
+    }
+
+    function setPdfPageCount(card, meta, pageCount) {
+        if (!card || !meta || !pageCount) return;
+        card.dataset.pdfPages = String(pageCount);
+        let pageEl = meta.querySelector('.file-preview-card__pages');
+        if (!pageEl) {
+            pageEl = document.createElement('span');
+            pageEl.className = 'file-preview-card__pages';
+            const actionEl = meta.querySelector('.file-preview-card__action');
+            meta.insertBefore(pageEl, actionEl || null);
+        }
+        pageEl.textContent = `${pageCount} page${pageCount === 1 ? '' : 's'}`;
+    }
+
+    function renderPdfThumbnail(url, thumb, card = null, meta = null) {
+        if (!url || !thumb || !window.pdfjsLib || !window.pdfjsLib.getDocument) return;
+
+        const applyResult = (result) => {
+            const src = typeof result === 'string' ? result : result?.dataUrl;
+            if (!src || !thumb.isConnected) return;
+            const img = document.createElement('img');
+            img.className = 'file-preview-card__pdf-thumb-img';
+            img.src = src;
+            img.alt = 'PDF preview';
+            thumb.querySelector('.file-preview-card__icon')?.remove();
+            thumb.querySelectorAll('.file-preview-card__pdf-lines, .file-preview-card__pdf-ribbon').forEach(el => el.remove());
+            thumb.appendChild(img);
+            thumb.classList.add('loaded', 'has-pdf-thumbnail');
+            card?.classList.add('has-pdf-thumbnail');
+            setPdfPageCount(card, meta, result?.pageCount);
+        };
+
+        if (pdfThumbnailCache.has(url)) {
+            const cached = pdfThumbnailCache.get(url);
+            if (typeof cached === 'string' || cached?.dataUrl) {
+                applyResult(cached);
+            } else if (cached && typeof cached.then === 'function') {
+                cached.then(applyResult).catch(() => {});
+            }
+            return;
+        }
+
+        const task = fetch(url, { credentials: 'same-origin' })
+            .then(response => {
+                if (!response.ok) throw new Error('PDF thumbnail fetch failed');
+                return response.arrayBuffer();
+            })
+            .then(async buffer => {
+                const pdf = await window.pdfjsLib.getDocument({
+                    data: buffer,
+                    disableWorker: true
+                }).promise;
+                const pageCount = pdf.numPages || 0;
+                const page = await pdf.getPage(1);
+                const baseViewport = page.getViewport({ scale: 1 });
+                const targetWidth = 140;
+                const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+                const cssScale = targetWidth / baseViewport.width;
+                const viewport = page.getViewport({ scale: cssScale * pixelRatio });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.width = Math.floor(viewport.width);
+                canvas.height = Math.floor(viewport.height);
+                await page.render({ canvasContext: context, viewport }).promise;
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                const result = { dataUrl, pageCount };
+                pdfThumbnailCache.set(url, result);
+                return result;
+            });
+
+        pdfThumbnailCache.set(url, task);
+        task.then(applyResult).catch(() => {
+            pdfThumbnailCache.delete(url);
+        });
+    }
 
     /**
      * Get file extension from filename
@@ -174,6 +258,16 @@ const FilePreview = (function() {
         if (mimeType && mimeType.startsWith('image/')) return true;
         const ext = getExtension(filename);
         return IMAGE_EXTENSIONS.has(ext);
+    }
+
+    function isPdf(filename, mimeType, url) {
+        if (mimeType && mimeType.toLowerCase().includes('pdf')) return true;
+        if (getExtension(filename) === 'pdf') return true;
+        if (typeof url === 'string') {
+            const cleanUrl = url.split('?')[0].split('#')[0];
+            return /\.pdf$/i.test(cleanUrl);
+        }
+        return false;
     }
 
     /**
@@ -215,9 +309,11 @@ const FilePreview = (function() {
         const fileSize = attachment.file_size || attachment.size;
         const url = resolveUrl(attachment);
         const isImg = isImage(filename, attachment.mime_type);
+        const isPdfFile = isPdf(filename, attachment.mime_type, url);
 
         const card = document.createElement('div');
         card.className = 'file-preview-card';
+        if (isPdfFile) card.classList.add('file-preview-card--pdf');
         card.dataset.fileType = category;
         card.dataset.filename = filename;
         card.dataset.url = url || '';
@@ -251,6 +347,22 @@ const FilePreview = (function() {
             iconDiv.className = 'file-preview-card__icon';
             iconDiv.innerHTML = `<i class="${icon}"></i>`;
             thumb.appendChild(iconDiv);
+            if (isPdfFile) {
+                thumb.classList.add('file-preview-card__thumb--pdf-fallback');
+                iconDiv.classList.add('file-preview-card__pdf-mark');
+                const lines = document.createElement('div');
+                lines.className = 'file-preview-card__pdf-lines';
+                lines.innerHTML = '<span></span><span></span><span></span><span></span>';
+                thumb.appendChild(lines);
+                const ribbon = document.createElement('span');
+                ribbon.className = 'file-preview-card__pdf-ribbon';
+                ribbon.textContent = 'PDF';
+                thumb.appendChild(ribbon);
+                const badge = document.createElement('span');
+                badge.className = 'file-preview-card__pdf-badge';
+                badge.innerHTML = '<i class="fas fa-file-pdf" aria-hidden="true"></i><span>PDF</span>';
+                thumb.appendChild(badge);
+            }
         }
 
         // Hover overlay
@@ -272,6 +384,13 @@ const FilePreview = (function() {
             name.title = filename;
             info.appendChild(name);
 
+            if (isPdfFile) {
+                const kind = document.createElement('div');
+                kind.className = 'file-preview-card__kind';
+                kind.textContent = 'PDF document';
+                info.appendChild(kind);
+            }
+
             const meta = document.createElement('div');
             meta.className = 'file-preview-card__meta';
 
@@ -289,8 +408,19 @@ const FilePreview = (function() {
                 meta.appendChild(size);
             }
 
+            if (isPdfFile) {
+                const action = document.createElement('span');
+                action.className = 'file-preview-card__action';
+                action.textContent = 'Preview';
+                meta.appendChild(action);
+            }
+
             info.appendChild(meta);
             card.appendChild(info);
+
+            if (isPdfFile) {
+                renderPdfThumbnail(url, thumb, card, meta);
+            }
         }
 
         // Click handler
@@ -347,6 +477,9 @@ const FilePreview = (function() {
                         <button class="file-preview-modal__btn file-preview-modal__download" title="Download">
                             <i class="fas fa-download"></i>
                         </button>
+                        <button class="file-preview-modal__btn file-preview-modal__open" title="Open in new tab">
+                            <i class="fas fa-arrow-up-right-from-square"></i>
+                        </button>
                         <button class="file-preview-modal__btn file-preview-modal__close" title="Close">
                             <i class="fas fa-times"></i>
                         </button>
@@ -381,6 +514,13 @@ const FilePreview = (function() {
             }
         });
 
+        modalElement.querySelector('.file-preview-modal__open').addEventListener('click', () => {
+            const url = modalElement.dataset.currentUrl;
+            if (url) {
+                window.open(url, '_blank', 'noopener');
+            }
+        });
+
         // ESC key to close
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && modalElement.classList.contains('open')) {
@@ -408,10 +548,21 @@ const FilePreview = (function() {
         const icon = getFileIcon(filename);
         const url = resolveUrl(attachment);
         const mimeType = attachment.mime_type || '';
+        const pdfPreview = isPdf(filename, mimeType, url);
+        const imagePreview = isImage(filename, mimeType) && url;
+        const openButton = modal.querySelector('.file-preview-modal__open');
+        clearObjectUrl();
 
         // Store for download
         modal.dataset.currentUrl = url || '';
         modal.dataset.currentFilename = filename;
+        modal.dataset.previewKind = pdfPreview ? 'pdf' : (imagePreview ? 'image' : 'file');
+        modal.classList.toggle('file-preview-modal--pdf', pdfPreview);
+        modal.classList.toggle('file-preview-modal--image', !!imagePreview);
+        modal.classList.toggle('file-preview-modal--unsupported', !pdfPreview && !imagePreview && !isTextPreviewable(filename));
+        if (openButton) {
+            openButton.style.display = url ? '' : 'none';
+        }
 
         // Update header
         titleIcon.className = 'file-preview-modal__title-icon ' + icon;
@@ -425,18 +576,90 @@ const FilePreview = (function() {
         content.innerHTML = '';
 
         // Render content based on file type
-        if (isImage(filename, mimeType) && url) {
+        if (imagePreview) {
             const img = document.createElement('img');
             img.className = 'file-preview-modal__image';
             img.src = url;
             img.alt = filename;
             content.appendChild(img);
-        } else if (ext === 'pdf' && url) {
-            // PDF preview - use object/embed for better compatibility
-            const iframe = document.createElement('iframe');
-            iframe.className = 'file-preview-modal__pdf';
-            iframe.src = url;
-            content.appendChild(iframe);
+        } else if (pdfPreview && url) {
+            const pdfShell = document.createElement('div');
+            pdfShell.className = 'file-preview-modal__pdf-shell';
+
+            const pdfPages = document.createElement('div');
+            pdfPages.className = 'file-preview-modal__pdf-pages';
+
+            const hint = document.createElement('div');
+            hint.className = 'file-preview-modal__pdf-hint';
+            const hintText = document.createElement('span');
+            hintText.textContent = 'Loading PDF preview...';
+            const openLink = document.createElement('a');
+            openLink.href = url;
+            openLink.target = '_blank';
+            openLink.rel = 'noopener';
+            openLink.textContent = 'Open in browser';
+            hint.appendChild(hintText);
+            hint.appendChild(openLink);
+
+            pdfShell.appendChild(pdfPages);
+            pdfShell.appendChild(hint);
+            content.appendChild(pdfShell);
+
+            fetch(url, { credentials: 'same-origin' })
+                .then(response => {
+                    if (!response.ok) throw new Error('PDF fetch failed');
+                    return response.arrayBuffer();
+                })
+                .then(async buffer => {
+                    if (!window.pdfjsLib || !window.pdfjsLib.getDocument) {
+                        throw new Error('PDF.js unavailable');
+                    }
+
+                    pdfPages.innerHTML = '';
+                    const loadingTask = window.pdfjsLib.getDocument({
+                        data: buffer,
+                        disableWorker: true
+                    });
+                    const pdf = await loadingTask.promise;
+                    const maxPages = Math.min(pdf.numPages || 0, 20);
+
+                    for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
+                        const page = await pdf.getPage(pageNumber);
+                        const baseViewport = page.getViewport({ scale: 1 });
+                        const availableWidth = Math.max(280, Math.min(920, pdfPages.clientWidth - 24));
+                        const cssScale = availableWidth / baseViewport.width;
+                        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+                        const viewport = page.getViewport({ scale: cssScale * pixelRatio });
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.className = 'file-preview-modal__pdf-page';
+                        canvas.width = Math.floor(viewport.width);
+                        canvas.height = Math.floor(viewport.height);
+                        canvas.style.width = `${Math.floor(baseViewport.width * cssScale)}px`;
+                        canvas.style.height = `${Math.floor(baseViewport.height * cssScale)}px`;
+                        pdfPages.appendChild(canvas);
+                        await page.render({ canvasContext: context, viewport }).promise;
+                    }
+
+                    if (pdf.numPages > maxPages) {
+                        const more = document.createElement('div');
+                        more.className = 'file-preview-modal__pdf-more';
+                        more.textContent = `Showing first ${maxPages} of ${pdf.numPages} pages`;
+                        pdfPages.appendChild(more);
+                    }
+
+                    hintText.textContent = `${pdf.numPages || maxPages} page${(pdf.numPages || maxPages) === 1 ? '' : 's'}`;
+                })
+                .catch(() => {
+                    pdfPages.innerHTML = '';
+                    const iframe = document.createElement('iframe');
+                    iframe.className = 'file-preview-modal__pdf';
+                    iframe.src = url;
+                    iframe.title = filename;
+                    iframe.loading = 'lazy';
+                    pdfPages.appendChild(iframe);
+                    hintText.textContent = 'If the preview does not load, open it in the browser.';
+                });
         } else if (isTextPreviewable(filename) && url) {
             // Fetch and display text content
             content.innerHTML = '<div class="file-preview-modal__code" style="opacity:0.5">Loading...</div>';
@@ -484,9 +707,11 @@ const FilePreview = (function() {
      * Close the preview modal
      */
     function closePreviewModal() {
-        if (modalElement) {
-            modalElement.classList.remove('open');
-            document.body.style.overflow = '';
+            if (modalElement) {
+                modalElement.classList.remove('open');
+                modalElement.classList.remove('file-preview-modal--pdf', 'file-preview-modal--image', 'file-preview-modal--unsupported');
+                clearObjectUrl();
+                document.body.style.overflow = '';
             // Clear content after animation
             setTimeout(() => {
                 const content = modalElement.querySelector('.file-preview-modal__content');

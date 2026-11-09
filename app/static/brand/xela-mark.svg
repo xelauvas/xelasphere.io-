@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Xela">
+  <defs>
+    <linearGradient id="xm-a" gradientUnits="userSpaceOnUse" x1="10" y1="6" x2="56" y2="60">
+      <stop offset="0" stop-color="#ffd0a6"/>
+      <stop offset=".42" stop-color="#f0865b"/>
+      <stop offset="1" stop-color="#bd472b"/>
+    </linearGradient>
+    <linearGradient id="xm-b" gradientUnits="userSpaceOnUse" x1="56" y1="6" x2="8" y2="60">
+      <stop offset="0" stop-color="#ffdcbc"/>
+      <stop offset=".5" stop-color="#f39367"/>
+      <stop offset="1" stop-color="#cc593b"/>
+    </linearGradient>
+  </defs>
+  <g transform="rotate(45 32 32)">
+    <path fill="url(#xm-a)" d="M3 32C15 22.5 35 23.5 61 32C46 40.5 25 41.5 3 32Z"/>
+    <path fill="url(#xm-b)" d="M32 25.2C25.8 18.5 26.6 9.5 33.2 2.8C38.6 10 38.4 18.8 32 25.2Z"/>
+    <path fill="url(#xm-b)" d="M32 38.8C38.2 45.5 37.4 54.5 30.8 61.2C25.4 54 25.6 45.2 32 38.8Z"/>
+    <circle cx="44.5" cy="19.5" r="4.6" fill="url(#xm-a)"/>
+  </g>
+</svg>

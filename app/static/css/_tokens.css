@@ -38,6 +38,8 @@
     --hairline-2: rgba(255, 255, 255, 0.12);  /* stronger divider */
 
     /* ===== Type tokens ===== */
+    /* (light overrides for color tokens live below, after the type/spacing
+     * blocks — keeps the dark palette + scale tokens together.) */
 
     --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
@@ -79,4 +81,41 @@
     --dur-fast: 120ms;
     --dur-base: 220ms;
     --dur-slow: 320ms;
+}
+
+/* ============================================================
+   Light theme overrides — flip surfaces ↔ text and shift gold
+   into AA range on cream. Hairlines invert from white-on-dark to
+   dark-on-cream. Aligns with the warm cream palette in
+   design-tokens.css (#faf9f5 / #f3efe7 / #1f1d1a).
+   ============================================================ */
+[data-theme="light"] {
+    /* Surfaces — was dark inks → now cream papers. Mirrors the
+       dark scale: 1=page, 2=surface, 3=surface-2, 4=raised, deep=sidebar. */
+    --ink-1: #faf9f5;        /* page background — matches --bg-primary */
+    --ink-2: #f7f3ea;        /* surface — between primary and tertiary */
+    --ink-3: #f3efe7;        /* surface-2 — matches --bg-tertiary */
+    --ink-4: #ebe4d0;        /* raised surface — warm beige */
+    --ink-deep: #f0ece4;     /* sidebar bg — slightly darker than page for separation */
+
+    /* Text — was warm cream → now warm near-black hierarchy. */
+    --paper-1: #1f1d1a;      /* strongest text — matches --text-primary */
+    --paper-2: #2a2620;      /* body text */
+    --paper-3: rgba(40, 30, 15, 0.72);   /* secondary text */
+    --paper-4: rgba(40, 30, 15, 0.55);   /* tertiary */
+    --paper-5: rgba(40, 30, 15, 0.35);   /* quaternary */
+    --paper-faint: rgba(40, 30, 15, 0.10); /* faintest hint */
+
+    /* Gold — shifted deeper for AA contrast on cream (#faf9f5).
+       Original dark-mode gold (#d4b075) sits at ~2.7:1 on cream — fails AA.
+       Deeper variants put the primary accent at 4.5:1+. */
+    --gold-1: #a5874f;       /* bright accent (hover) */
+    --gold-2: #8c702f;       /* primary accent (links, copy) — AA on cream */
+    --gold-3: #735c20;       /* deep accent (gradients) */
+    --gold-soft: rgba(140, 112, 47, 0.12);
+    --gold-line: rgba(140, 112, 47, 0.32);
+
+    /* Hairlines — invert white-on-dark to dark-on-cream. */
+    --hairline:   rgba(40, 30, 15, 0.08);
+    --hairline-2: rgba(40, 30, 15, 0.14);
 }

@@ -1,0 +1,464 @@
+/* ==========================================================================
+   xela-pages.css: standalone pages (profile dashboard, upgrade) in the Xela look.
+   Loaded after the page's own stylesheet and xela-claude.css (tokens).
+   ========================================================================== */
+
+/* ---------- shared ---------- */
+body.dashboard-page,
+body.upgrade-body,
+body.xc-page {
+  background: var(--xc-bg) !important;
+  background-image: none !important;
+  color: var(--xc-text-body) !important;
+  font-family: var(--xc-sans) !important;
+}
+
+.ambient-orbs,
+.orb,
+.icon-sheen {
+  display: none !important;
+}
+
+.glass-panel {
+  background: var(--xc-menu) !important;
+  border: 0 !important;
+  box-shadow: var(--xc-shadow-pop) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.xc-page-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none !important;
+  color: var(--xc-text) !important;
+  font-family: var(--xc-serif);
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.xc-page-brand img {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+/* ---------- dashboard ---------- */
+.dashboard-page .top-nav {
+  background: transparent !important;
+  border-bottom: 1px solid var(--xc-hair-soft) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.dashboard-page .logo,
+.dashboard-page .logo-link {
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: var(--xc-text) !important;
+}
+
+.dashboard-page .profile-name,
+.dashboard-page .dropdown-name {
+  color: var(--xc-text) !important;
+}
+
+.dashboard-page .dropdown-email,
+.dashboard-page .dropdown-label {
+  color: var(--xc-text-3) !important;
+}
+
+.dashboard-page .dropdown-links a,
+.dashboard-page .quick-action {
+  color: var(--xc-text-body) !important;
+  background: transparent !important;
+  border-radius: var(--xc-r-row) !important;
+}
+
+.dashboard-page .dropdown-links a:hover,
+.dashboard-page .quick-action:hover {
+  background: var(--xc-hover) !important;
+}
+
+.dashboard-page .dashboard-header,
+.dashboard-page .dashboard-hero,
+.dashboard-page .panel,
+.dashboard-page .quick-card,
+.dashboard-page .highlight-card,
+.dashboard-page .hero-visual {
+  background: var(--xc-surface) !important;
+  background-image: none !important;
+  border: 1px solid var(--xc-hair-soft) !important;
+  border-radius: 16px !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  color: var(--xc-text-body) !important;
+}
+
+.dashboard-page .hero-visual {
+  background: var(--xc-bg) !important;
+}
+
+.dashboard-page .hero-eyebrow {
+  color: var(--xc-text-3) !important;
+  letter-spacing: 0.08em !important;
+  font: 500 11.5px/1.4 var(--xc-sans) !important;
+}
+
+.dashboard-page .dashboard-title {
+  font-family: var(--xc-serif) !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.015em !important;
+  color: var(--xc-text) !important;
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.dashboard-page .dashboard-subtitle,
+.dashboard-page .quick-desc,
+.dashboard-page .session-meta,
+.dashboard-page .file-meta,
+.dashboard-page .empty {
+  color: var(--xc-text-3) !important;
+}
+
+.dashboard-page .pill,
+.dashboard-page .model-chip {
+  background: var(--xc-hover) !important;
+  border: 1px solid var(--xc-hair-soft) !important;
+  color: var(--xc-text-2) !important;
+}
+
+.dashboard-page .pill i,
+.dashboard-page .model-chip i,
+.dashboard-page .quick-icon,
+.dashboard-page .quick-icon i {
+  color: var(--xc-accent) !important;
+}
+
+.dashboard-page .quick-icon {
+  background: var(--xc-accent-soft) !important;
+  border: 0 !important;
+}
+
+.dashboard-page .hero-btn,
+.dashboard-page .hero-btn.primary,
+.dashboard-page .primary {
+  background: var(--xc-text) !important;
+  color: var(--xc-bg) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 10px !important;
+}
+
+.dashboard-page .spark-dot {
+  background: var(--xc-accent) !important;
+  box-shadow: none !important;
+}
+
+.dashboard-page .panel-header h2,
+.dashboard-page .panel-header h3,
+.dashboard-page .quick-title,
+.dashboard-page h2,
+.dashboard-page h3 {
+  color: var(--xc-text) !important;
+}
+
+.dashboard-page a {
+  color: inherit;
+}
+
+.dashboard-page .panel-header a {
+  color: var(--xc-accent) !important;
+}
+
+.dashboard-page .recent-sessions > *,
+.dashboard-page .files-feed > *,
+.dashboard-page .notifications-feed > * {
+  background: transparent !important;
+  border-color: var(--xc-hair-soft) !important;
+}
+
+.dashboard-page .highlight-card strong,
+.dashboard-page .highlight-card .value {
+  color: var(--xc-text) !important;
+}
+
+/* ---------- upgrade ---------- */
+.upgrade-body .upgrade-frame {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.upgrade-body .eyebrow {
+  color: var(--xc-text-3) !important;
+}
+
+.upgrade-body h1 {
+  font-family: var(--xc-serif) !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.015em !important;
+  color: var(--xc-text) !important;
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.upgrade-body .back-link {
+  background: transparent !important;
+  border: 1px solid var(--xc-hair) !important;
+  border-radius: 10px !important;
+  color: var(--xc-text) !important;
+  box-shadow: none !important;
+}
+
+.upgrade-body .back-link-icon {
+  background: var(--xc-hover) !important;
+  color: var(--xc-text-2) !important;
+}
+
+.upgrade-body .billing-toggle-row {
+  background: var(--xc-surface) !important;
+  border: 1px solid var(--xc-hair-soft) !important;
+  box-shadow: none !important;
+}
+
+.upgrade-body .toggle-label {
+  color: var(--xc-text-3) !important;
+}
+
+.upgrade-body .toggle-label.active {
+  color: var(--xc-text) !important;
+}
+
+.upgrade-body .toggle-hint {
+  color: var(--xc-accent) !important;
+}
+
+.upgrade-body .slider {
+  background: var(--xc-hover) !important;
+  border: 1px solid var(--xc-hair) !important;
+}
+
+.upgrade-body .slider::before {
+  background: var(--xc-text) !important;
+}
+
+.upgrade-body input:checked + .slider {
+  background: var(--xc-accent) !important;
+  border-color: transparent !important;
+}
+
+.upgrade-body .pricing-card,
+.upgrade-body .pricing-card.business-card,
+.upgrade-body .pricing-card.plus-card,
+.upgrade-body .pricing-card.free-card {
+  background: var(--xc-surface) !important;
+  background-image: none !important;
+  border: 1px solid var(--xc-hair-soft) !important;
+  border-radius: 18px !important;
+  box-shadow: none !important;
+  color: var(--xc-text-body) !important;
+  transform: none !important;
+}
+
+.upgrade-body .pricing-card.plus-card {
+  border-color: var(--xc-accent) !important;
+  box-shadow: 0 0 0 1px var(--xc-accent), 0 12px 32px rgba(201, 100, 66, 0.12) !important;
+}
+
+.upgrade-body .card-title-row h2,
+.upgrade-body .card-title-row h3,
+.upgrade-body .pricing-card h2,
+.upgrade-body .pricing-card h3 {
+  font-family: var(--xc-serif) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: var(--xc-text) !important;
+}
+
+.upgrade-body .card-description,
+.upgrade-body .subline,
+.upgrade-body .price-period {
+  color: var(--xc-text-3) !important;
+}
+
+.upgrade-body .price-value,
+.upgrade-body .price {
+  color: var(--xc-text) !important;
+}
+
+.upgrade-body .plan-tag,
+.upgrade-body .recommended-pill {
+  background: var(--xc-hover) !important;
+  border: 1px solid var(--xc-hair-soft) !important;
+  color: var(--xc-text-2) !important;
+}
+
+.upgrade-body .plus-card .plan-tag {
+  background: var(--xc-accent-soft) !important;
+  border-color: transparent !important;
+  color: var(--xc-accent) !important;
+}
+
+.upgrade-body .card-list li {
+  color: var(--xc-text-body) !important;
+}
+
+.upgrade-body .card-list .fa-check {
+  color: var(--xc-accent) !important;
+}
+
+.upgrade-body .card-btn {
+  background: transparent !important;
+  border: 1px solid var(--xc-hair) !important;
+  color: var(--xc-text) !important;
+  box-shadow: none !important;
+  border-radius: 12px !important;
+}
+
+.upgrade-body .card-btn:hover {
+  background: var(--xc-hover) !important;
+}
+
+.upgrade-body .plus-card .card-btn,
+.upgrade-body .card-btn.primary,
+.upgrade-body .card-btn.solid {
+  background: var(--xc-accent) !important;
+  border-color: transparent !important;
+  color: var(--xc-on-accent) !important;
+}
+
+.upgrade-body .free-card .card-btn[disabled],
+.upgrade-body .card-btn:disabled {
+  background: var(--xc-hover) !important;
+  border-color: transparent !important;
+  color: var(--xc-text-3) !important;
+}
+
+/* leftover green glows */
+body.dashboard-page::before,
+body.dashboard-page::after,
+.dashboard-page .dashboard-hero::before,
+.dashboard-page .dashboard-hero::after {
+  content: none !important;
+  display: none !important;
+}
+
+.dashboard-page .model-chip strong,
+.dashboard-page .hero-visual strong,
+.dashboard-page .hero-visual [class*="model"] {
+  color: var(--xc-accent) !important;
+}
+
+/* upgrade header: a simple "Back to chat" pill, the toggle as its own pill */
+.upgrade-body .billing-toggle-row {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.upgrade-body .plan-toggle {
+  background: var(--xc-surface) !important;
+  border: 1px solid var(--xc-hair-soft) !important;
+  box-shadow: none !important;
+}
+
+.upgrade-body .back-link {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  height: 38px !important;
+  min-height: 0 !important;
+  padding: 0 14px 0 6px !important;
+}
+
+.upgrade-body .back-link::after,
+.upgrade-body .back-link::before,
+.upgrade-body .back-link-label {
+  display: none !important;
+  content: none !important;
+}
+
+.upgrade-body .back-link-icon {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 8px !important;
+  display: inline-grid !important;
+  place-items: center !important;
+}
+
+.upgrade-body .back-link-text {
+  font: 500 14px/1 var(--xc-sans) !important;
+  color: var(--xc-text) !important;
+}
+
+.upgrade-body .header-actions {
+  border: 0 !important;
+}
+
+.upgrade-body .header-actions::after,
+.upgrade-body .header-actions::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* ---------- shared artifact page ---------- */
+.shared-header {
+  background: var(--xc-bg) !important;
+  border-bottom: 1px solid var(--xc-hair-soft) !important;
+}
+
+.xc-shared-tile {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 8px !important;
+}
+
+.xc-shared-word {
+  font-family: var(--xc-serif) !important;
+  font-weight: 500 !important;
+  font-size: 20px !important;
+  color: var(--xc-text) !important;
+}
+
+.shared-header__artifact-title {
+  font-family: var(--xc-serif) !important;
+  font-weight: 500 !important;
+  color: var(--xc-text) !important;
+}
+
+.shared-footer a {
+  color: var(--xc-text) !important;
+}
+
+/* ---------- API keys / profile edit ---------- */
+body.api-keys-page,
+body.profile-edit-page {
+  background: var(--xc-bg) !important;
+  background-image: none !important;
+  color: var(--xc-text-body) !important;
+  font-family: var(--xc-sans) !important;
+}
+
+.api-keys-wrapper,
+.profile-edit-page .profile-edit-card,
+.profile-edit-page .card {
+  background: var(--xc-surface) !important;
+  background-image: none !important;
+  border: 1px solid var(--xc-hair-soft) !important;
+  box-shadow: none !important;
+}
+
+.api-keys-header h1,
+.profile-edit-page h1 {
+  font-family: var(--xc-serif) !important;
+  font-weight: 400 !important;
+  color: var(--xc-text) !important;
+}

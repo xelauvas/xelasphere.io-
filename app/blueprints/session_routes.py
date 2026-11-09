@@ -476,7 +476,9 @@ def get_chat_history():
     }
     if ungrouped and not project_id:
         payload['grouped_count'] = chat_session.count_grouped(user_id)
-    return make_etag_response(payload)
+    response = make_etag_response(payload)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @session_bp.route('/chat/list-metadata', methods=['GET'])

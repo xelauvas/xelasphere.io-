@@ -29,6 +29,13 @@
     overflow-y: scroll;
     overflow-x: hidden;
     padding-bottom: 96px;
+    /* Prevent pull-to-refresh: when the user scrolls down at the top
+       of the list, the browser would otherwise trigger a page refresh.
+       `overscroll-behavior-y: contain` keeps the scroll inside this
+       container — no refresh gesture, no bounce-chaining to the body. */
+    overscroll-behavior-y: contain;
+    overscroll-behavior-x: none;
+    -webkit-overflow-scrolling: touch;
     /* Hidden scrollbar — Firefox + WebKit + Edge */
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -40,15 +47,29 @@
     display: none;
 }
 
+/* Server renders <body data-initial-surface="chats"> when the request is
+   for /chats — match this BEFORE JS runs so we never flash the home
+   chat-shell during the initial paint. After JS boots, .chats-page-open
+   is added on body and these rules continue to apply. */
 body.chats-page-open .chat-shell__header,
 body.chats-page-open .chat-shell__messages,
-body.chats-page-open .chat-shell__composer {
+body.chats-page-open .chat-shell__composer,
+body[data-initial-surface="chats"] .chat-shell__header,
+body[data-initial-surface="chats"] .chat-shell__messages,
+body[data-initial-surface="chats"] .chat-shell__composer {
     display: none !important;
 }
 
-body.chats-page-open .chat-shell {
+body.chats-page-open .chat-shell,
+body[data-initial-surface="chats"] .chat-shell {
     overflow: hidden;
     min-height: 0;
+}
+
+/* Show the chats surface immediately on initial paint — JS still adds
+   .is-visible later but this prevents the empty-flash before that. */
+body[data-initial-surface="chats"] .chats-page {
+    display: flex;
 }
 
 /* ── Header (fixed at top of chats-page, no scroll) ────────────── */

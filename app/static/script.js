@@ -64,6 +64,7 @@ const attachmentStore = (() => {
                 previewUrl: isImageFile(file) ? null : URL.createObjectURL(file),
                 dataUrl: null,
                 extractedText: null,
+                uploadError: null,
                 uploadPromise,
                 resolveUpload
             };
@@ -101,6 +102,10 @@ const attachmentStore = (() => {
             }
 
             for (const item of pending) {
+                if (item.uploadError) {
+                    throw new Error(item.uploadError);
+                }
+
                 let finalDataUrl = item.dataUrl;
                 if (item.isImage && !finalDataUrl && item.file && typeof toDataUrl === 'function') {
                     try {
@@ -2705,6 +2710,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function markUploadFailed(attachmentId, message = 'Upload failed') {
+        const container = document.querySelector(`.file-preview-container[data-attachment-id="${attachmentId}"]`);
+        if (!container) return;
+        container.classList.remove('uploading');
+        container.classList.add('upload-failed');
+        const overlay = container.querySelector('.upload-loading-overlay');
+        if (overlay) {
+            overlay.innerHTML = '<div class="upload-progress-container upload-progress-container--failed"><div class="upload-progress-status"></div></div>';
+            const status = overlay.querySelector('.upload-progress-status');
+            if (status) status.textContent = message;
+        }
+    }
+
     function createCloseButton(container, attachmentId) {
         const button = document.createElement('button');
         button.innerHTML = '&times;';
@@ -3174,8 +3192,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target.closest('.close-button')) return; // allow closing without opening
             const url = getUrl();
             if (url) {
-                // Use FilePreview for text/code files, lightbox for others
-                if (typeof FilePreview !== 'undefined' && FilePreview.isTextPreviewable(attachment.name)) {
+                const isPdf = attachment.type === 'application/pdf' || /\.pdf$/i.test(attachment.name || '');
+                // Use FilePreview for PDF/text/code files, lightbox for images.
+                if (typeof FilePreview !== 'undefined' && (isPdf || FilePreview.isTextPreviewable(attachment.name))) {
                     FilePreview.openPreviewModal({
                         original_filename: attachment.name,
                         name: attachment.name,
@@ -3246,9 +3265,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateUploadProgress(att.id, 100);
             });
 
-            if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                    const data = JSON.parse(xhr.responseText);
+	            if (xhr.status >= 200 && xhr.status < 300) {
+	                try {
+	                    const data = JSON.parse(xhr.responseText);
                     if (data?.files && Array.isArray(data.files)) {
                         data.files.forEach(fileData => {
                             const originalName = fileData?.original_filename;
@@ -3268,34 +3287,57 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         });
                     }
-                } catch (err) {
-                    console.error('Failed to parse upload response:', err);
-                }
-            } else {
-                console.error('Upload failed with status:', xhr.status);
-            }
+	                } catch (err) {
+	                    console.error('Failed to parse upload response:', err);
+	                }
+	            } else {
+	                let message = xhr.status === 413
+	                    ? 'Upload failed: file is over 50MB'
+	                    : `Upload failed (${xhr.status})`;
+	                try {
+	                    const data = JSON.parse(xhr.responseText);
+	                    if (data?.error) message = data.error;
+	                } catch (err) {
+	                    // Nginx errors are often HTML, not JSON.
+	                }
+	                console.error('Upload failed with status:', xhr.status, message);
+	                addedAttachments.forEach(att => {
+	                    att.uploadError = message;
+	                    markUploadFailed(att.id, message);
+	                });
+	                if (window.Toast && typeof window.Toast.error === 'function') {
+	                    window.Toast.error(message, 5000);
+	                }
+	            }
 
-            // Small delay to show 100%, then mark complete
-            setTimeout(() => {
-                addedAttachments.forEach(att => {
-                    markUploadComplete(att.id);
-                    if (typeof att.resolveUpload === 'function') {
-                        att.resolveUpload();
-                    }
-                });
-            }, 300);
+	            // Small delay to show 100%, then mark complete
+	            setTimeout(() => {
+	                addedAttachments.forEach(att => {
+	                    if (!att.uploadError) {
+	                        markUploadComplete(att.id);
+	                    }
+	                    if (typeof att.resolveUpload === 'function') {
+	                        att.resolveUpload();
+	                    }
+	                });
+	            }, 300);
         });
 
-        xhr.addEventListener('error', () => {
-            if (processingInterval) clearInterval(processingInterval);
-            console.error('Upload failed: network error');
-            addedAttachments.forEach(att => {
-                markUploadComplete(att.id);
-                if (typeof att.resolveUpload === 'function') {
-                    att.resolveUpload();
-                }
-            });
-        });
+	        xhr.addEventListener('error', () => {
+	            if (processingInterval) clearInterval(processingInterval);
+	            const message = 'Upload failed: network error';
+	            console.error(message);
+	            addedAttachments.forEach(att => {
+	                att.uploadError = message;
+	                markUploadFailed(att.id, message);
+	                if (typeof att.resolveUpload === 'function') {
+	                    att.resolveUpload();
+	                }
+	            });
+	            if (window.Toast && typeof window.Toast.error === 'function') {
+	                window.Toast.error(message, 5000);
+	            }
+	        });
 
         xhr.open('POST', '/upload');
         xhr.setRequestHeader('X-CSRFToken', csrfToken);

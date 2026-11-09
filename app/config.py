@@ -12,7 +12,7 @@ class Config:
     # Use environment variables for sensitive keys and secrets
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
     UPLOAD_FOLDER = 'uploads'
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB; keep aligned with FileValidator
     APP_BASE_URL = os.getenv('APP_BASE_URL', 'http://localhost:5000').rstrip('/')
     GROQ_API_KEY = os.getenv('GROQ_API_KEY')
     API_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -45,6 +45,16 @@ class Config:
     # Ollama local model configuration (no API key required)
     OLLAMA_API_URL = os.getenv('OLLAMA_API_URL', 'http://127.0.0.1:11434/v1/chat/completions')
     OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma4:e2b')
+    # Sent as Bearer when the local server requires it (llama-server --api-key)
+    OLLAMA_API_KEY = os.getenv('OLLAMA_API_KEY')
+    # Qwen thinks before it answers: ~20-40 s of silence in the chat before the first
+    # visible word. Off by default so the answer starts streaming at once; set
+    # OLLAMA_THINKING=true to trade speed for more deliberate answers.
+    OLLAMA_THINKING = os.getenv('OLLAMA_THINKING', 'false').lower() == 'true'
+    # Xela Code (CLI) link: public API host, and the pre-device-flow static key that
+    # /api/cli/verify keeps accepting for older clients
+    XELA_API_BASE_URL = os.getenv('XELA_API_BASE_URL', 'https://api.xelasphere.com').rstrip('/')
+    XELA_API_LEGACY_KEY = os.getenv('XELA_API_LEGACY_KEY')
     ALLOWED_ORIGINS = [
         origin.strip() for origin in os.getenv(
             'ALLOWED_ORIGINS',
@@ -145,10 +155,6 @@ class Config:
     REMINDERS_ENABLED = os.getenv('REMINDERS_ENABLED', 'false').lower() == 'true'
     REMINDERS_RECURRENCE_ENABLED = os.getenv('REMINDERS_RECURRENCE_ENABLED', 'false').lower() == 'true'
     REMINDERS_SNOOZE_ENABLED = os.getenv('REMINDERS_SNOOZE_ENABLED', 'false').lower() == 'true'
-    PUSH_ENABLED = os.getenv('PUSH_ENABLED', 'false').lower() == 'true'
-    VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
-    VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
-    VAPID_CLAIMS_SUB = os.getenv('VAPID_CLAIMS_SUB', 'mailto:noreply@xelasphere.com')
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
     SENDGRID_FROM_EMAIL = os.getenv('SENDGRID_FROM_EMAIL', 'noreply@xelasphere.io')
     SENDGRID_FROM_NAME = os.getenv('SENDGRID_FROM_NAME', 'XelaSphere Reminders')

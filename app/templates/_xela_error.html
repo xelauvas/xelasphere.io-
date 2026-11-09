@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{% block title %}Xela{% endblock %} · Xela</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='brand/xela-tile.svg') }}">
+    <script>
+        // Follow the saved theme (light / dark) or the system setting, without loading the app.
+        (function () {
+            var t = null;
+            try { t = localStorage.getItem('xelasphere-theme'); } catch (e) {}
+            if (t !== 'light' && t !== 'dark') {
+                t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+            }
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400&display=swap" rel="stylesheet">
+    <style>
+        :root, :root[data-theme="dark"] {
+            --bg: #262624; --text: #faf9f5; --text-2: #c2c0b6; --text-3: #9c9a92; --hair: rgba(222, 220, 209, .15);
+        }
+        :root[data-theme="light"] {
+            --bg: #faf9f5; --text: #141413; --text-2: #3d3d3a; --text-3: #73726c; --hair: rgba(31, 30, 29, .14);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            min-height: 100vh; min-height: 100dvh;
+            display: flex; align-items: center; justify-content: center;
+            padding: 32px 20px;
+            background: var(--bg); color: var(--text-2);
+            font: 400 15px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        main { width: 100%; max-width: 440px; text-align: center; }
+        .brand { display: inline-flex; align-items: center; gap: 9px; margin-bottom: 36px; text-decoration: none; color: var(--text);
+                 font: 500 22px/1 "Source Serif 4", Georgia, serif; letter-spacing: -.01em; }
+        .brand img { width: 30px; height: 30px; border-radius: 9px; box-shadow: 0 4px 14px rgba(201, 100, 66, .25); }
+        .code { font: 500 13px/1 Inter, sans-serif; letter-spacing: .08em; color: var(--text-3); margin-bottom: 14px; }
+        h1 { font: 400 34px/1.15 "Source Serif 4", Georgia, serif; letter-spacing: -.015em; color: var(--text); margin-bottom: 12px; }
+        p { margin-bottom: 8px; }
+        .detail { font-size: 13px; color: var(--text-3); word-break: break-all; }
+        .detail code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-2); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 20px; margin-top: 22px;
+               border-radius: 12px; background: var(--text); color: var(--bg); text-decoration: none; font: 500 15px/1 Inter, sans-serif; }
+        .btn:hover { opacity: .88; }
+    </style>
+</head>
+<body>
+    <main>
+        <a class="brand" href="/"><img src="{{ url_for('static', filename='brand/xela-tile.svg') }}" alt="">Xela</a>
+        <div class="code">{% block code %}{% endblock %}</div>
+        <h1>{% block heading %}{% endblock %}</h1>
+        {% block body %}{% endblock %}
+        <a href="/" class="btn">Back to Xela</a>
+    </main>
+</body>
+</html>

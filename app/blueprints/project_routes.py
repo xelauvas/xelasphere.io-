@@ -29,6 +29,17 @@ COLOR_PALETTE = [
     '#0891b2', '#16a34a', '#ca8a04', '#475569', '#737373',
 ]
 
+# Allowed icon keys for projects. Must stay in lockstep with the
+# PROJECT_ICONS map in app/static/js/projectIcons.js.
+ALLOWED_ICONS = frozenset({
+    'folder', 'dollar', 'book', 'graduation', 'pencil',
+    'pin', 'code', 'film', 'music', 'trash',
+    'scissors', 'language', 'stethoscope', 'wand', 'hand',
+    'monitor', 'chart', 'user', 'sliders', 'document',
+    'scale', 'mic', 'plane', 'globe', 'wrench',
+    'bot', 'flask', 'contrast', 'heart', 'gift',
+})
+
 
 def _service() -> ProjectService:
     return ProjectService(db)
@@ -115,6 +126,10 @@ def patch_project(project_id):
         if not _validate_color(body['color']):
             return jsonify({'error': 'color must be valid hex starting with #'}), 400
         cleaned['color'] = body['color']
+    if 'icon' in body:
+        if not isinstance(body['icon'], str) or body['icon'] not in ALLOWED_ICONS:
+            return jsonify({'error': 'icon must be one of the allowed keys'}), 400
+        cleaned['icon'] = body['icon']
     if 'instructions' in body:
         if body['instructions'] is None:
             cleaned['instructions'] = ''

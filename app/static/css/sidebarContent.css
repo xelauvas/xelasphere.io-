@@ -1536,13 +1536,38 @@ body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-image {
     height: 32px;
 }
 
+/* Incognito in the sidebar header is a bare glyph, never a button tile. */
+.left-sidebar .sidebar-header .sidebar-header-ghost,
+.left-sidebar .sidebar-header .sidebar-header-ghost:hover,
+.left-sidebar .sidebar-header .sidebar-header-ghost:focus,
+.left-sidebar .sidebar-header .sidebar-header-ghost:focus-visible,
+.left-sidebar .sidebar-header .sidebar-header-ghost:active {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    filter: none !important;
+}
+
+.left-sidebar .sidebar-header .sidebar-header-ghost::before,
+.left-sidebar .sidebar-header .sidebar-header-ghost::after {
+    content: none !important;
+    display: none !important;
+}
+
 /* --- Chat Tab Components --- */
 .chat-tab {
     position: relative;
     padding: 0.4rem 2.25rem 0.4rem 0.625rem;
     border: none;
     border-radius: 0.5rem;
-    margin-bottom: 0.0625rem;
+    margin-bottom: 0.1875rem;        /* 3px — rows read as discrete, not one block */
     cursor: pointer;
     background: transparent;
     transition: none;
@@ -1607,6 +1632,23 @@ body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-image {
     background: var(--bg-tertiary, #22222e);
 }
 
+/* Accent bar on the selected chat — unmistakable "this one is active"
+   signal that reads clearly apart from the faint hover fill. Sits in the
+   row's left padding (text starts at 10px), so it never overlaps the title. */
+.chat-tab.active-tab::after {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 1.125rem;                /* ~18px pill */
+    border-radius: 99px;
+    background: var(--text-link, #c9a672);   /* warm theme accent (gold/coral), not the purple identity accent */
+    pointer-events: none;
+    z-index: 0;
+}
+
 .tab-content {
     display: flex;
     align-items: center;
@@ -1650,7 +1692,7 @@ body.sidebar-collapsed .left-sidebar .sidebar-footer .profile-image {
 .chat-tab.active-tab .tab-name {
     position: relative;
     color: var(--text-primary, #f3eee5);
-    font-weight: 500;             /* slightly heavier when active */
+    font-weight: 600;             /* bold when active — pairs with the accent bar */
 }
 
 /* Rename animation is JS-driven (see typewriteTitle in codeWindow.js).

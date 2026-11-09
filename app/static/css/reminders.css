@@ -1,8 +1,8 @@
-/* Reminders M0 — inline card + kebab dropdown + edit modal + Schedules tab.
-   Aesthetic: ChatGPT-style dark task chip. Tone-stepping for elevation
-   (#000 → #1A1A1A → #2A2A2A), no borders, one semantic accent (red on
-   destructive icon only). Hardcoded dark values — the card is always-dark
-   regardless of page theme, matching how ChatGPT renders these cards. */
+/* Reminders — inline card + kebab dropdown + edit modal + Schedules tab.
+   Aesthetic: ChatGPT-style task chip. Tone-stepping for elevation, one
+   semantic accent (red on destructive icon only). Theme-aware: surfaces,
+   text, borders and shadows pull from design-tokens.css, so the card and
+   modal adapt to light/dark via the [data-theme] attribute on <html>. */
 
 /* ============================================================
    Inline card (the "task chip")
@@ -13,10 +13,11 @@
   gap: 12px;
   padding: 14px 16px;
   margin: 8px 0;
-  border: 0;
+  border: 1px solid var(--border-primary);
   border-radius: 12px;
-  background: #1A1A1A;
-  color: #ECECEC;
+  box-sizing: border-box;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
   font: 14px/1.3 -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text",
         "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   text-align: left;
@@ -26,13 +27,13 @@
   max-width: 100%;
   position: relative;
 }
-.reminder-card:hover { background: #222222; }
+.reminder-card:hover { background: var(--bg-elevated); }
 
 .reminder-card__icon {
   flex: 0 0 auto;
   width: 18px; height: 18px;
   display: inline-flex; align-items: center; justify-content: center;
-  color: #ECECEC;
+  color: var(--text-primary);
 }
 .reminder-card__icon svg { width: 18px; height: 18px; stroke-width: 1.75; flex: 0 0 auto; }
 
@@ -44,13 +45,13 @@
 .reminder-card__name {
   font-size: 15px;
   font-weight: 600;
-  color: #ECECEC;
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 .reminder-card__when {
   font-size: 13px;
   font-weight: 400;
-  color: #9A9A9A;
+  color: var(--text-secondary);
 }
 
 /* Kebab (3-dot) button */
@@ -59,17 +60,17 @@
   width: 28px; height: 28px;
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent; border: 0; border-radius: 6px;
-  color: #C0C0C0;
+  color: var(--text-secondary);
   cursor: pointer;
   margin-left: 4px;
   transition: background 120ms ease, color 120ms ease;
 }
-.reminder-card__kebab:hover { background: #2A2A2A; color: #ECECEC; }
+.reminder-card__kebab:hover { background: var(--bg-hover); color: var(--text-primary); }
 .reminder-card__kebab:focus-visible {
-  outline: 2px solid rgba(236, 236, 236, 0.7);
+  outline: 2px solid var(--border-focus);
   outline-offset: 2px;
-  background: #2A2A2A;
-  color: #ECECEC;
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 .reminder-card__kebab svg { width: 18px; height: 18px; stroke-width: 1.75; flex: 0 0 auto; }
 
@@ -93,11 +94,13 @@
   position: absolute;
   z-index: 100;
   min-width: 200px;
-  background: #2A2A2A;
-  color: #ECECEC;
+  box-sizing: border-box;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 12px;
   padding: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
   font: 14px/1.3 -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text",
         "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
@@ -108,25 +111,25 @@
   width: 100%;
   padding: 10px 14px;
   background: transparent; border: 0; border-radius: 8px;
-  color: #ECECEC;
+  color: var(--text-primary);
   font: inherit; text-align: left;
   cursor: pointer;
   transition: background 100ms ease;
 }
-.reminder-dropdown__item:hover { background: #3A3A3A; }
+.reminder-dropdown__item:hover { background: var(--bg-hover); }
 .reminder-dropdown__item:focus-visible {
   outline: none;
-  background: #3A3A3A;
-  box-shadow: inset 0 0 0 2px rgba(236, 236, 236, 0.7);
+  background: var(--bg-hover);
+  box-shadow: inset 0 0 0 2px var(--border-focus);
 }
 .reminder-dropdown__item svg { width: 16px; height: 16px; stroke-width: 1.75; flex: 0 0 auto; }
 .reminder-dropdown__item--danger svg { color: #EF4444; }
-/* The "Delete" label itself stays white — only the icon carries the red. */
+/* The "Delete" label itself stays default — only the icon carries the red. */
 
 .reminder-dropdown__divider {
   height: 1px;
   margin: 4px 0;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--border-secondary);
 }
 
 /* ============================================================
@@ -139,17 +142,19 @@
 .reminders-modal[hidden] { display: none; }
 .reminders-modal__backdrop {
   position: absolute; inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--bg-overlay);
 }
 .reminders-modal__panel {
   position: relative;
-  background: #1A1A1A;
-  color: #ECECEC;
+  box-sizing: border-box;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 14px;
   padding: 20px 24px;
   width: min(560px, 95vw);
   max-height: 90vh; overflow-y: auto;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-xl);
 }
 .reminders-modal__header {
   display: flex; align-items: center; justify-content: space-between;
@@ -158,37 +163,61 @@
 .reminders-modal__header h2 { margin: 0; font-size: 16px; font-weight: 600; }
 .reminders-modal__close {
   background: transparent; border: 0; font-size: 16px; cursor: pointer;
-  color: #9A9A9A; padding: 4px;
+  color: var(--text-secondary); padding: 4px;
 }
-.reminders-modal__close:hover { color: #ECECEC; }
+.reminders-modal__close:hover { color: var(--text-primary); }
 .reminders-modal__field { display: block; margin: 14px 0; }
 .reminders-modal__label {
   display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px;
-  color: #ECECEC;
+  color: var(--text-primary);
 }
 .reminders-modal__field input[type="text"],
 .reminders-modal__field textarea,
 .reminders-modal__field input[type="date"],
 .reminders-modal__field input[type="time"] {
   width: 100%; padding: 10px 12px;
-  border: 1px solid #333333; border-radius: 8px;
+  border: 1px solid var(--border-primary); border-radius: 8px;
   font: inherit; box-sizing: border-box;
-  background: #0E0E0E; color: #ECECEC;
+  background: var(--bg-input); color: var(--text-primary);
 }
 .reminders-modal__field input:focus,
-.reminders-modal__field textarea:focus {
-  outline: none; border-color: #555555;
+.reminders-modal__field textarea:focus,
+.reminders-modal__field select:focus {
+  outline: none; border-color: var(--border-focus);
+}
+
+/* Repeat dropdown — the native <select> ships unstyled, so theme it to match
+   the inputs above: same surface, custom chevron, no OS chrome. The chevron
+   SVG can't read CSS vars, so it uses a neutral grey that reads on both
+   themes. */
+.reminders-modal__field select {
+  width: 100%;
+  padding: 10px 36px 10px 12px;
+  border: 1px solid var(--border-primary); border-radius: 8px;
+  font: inherit; box-sizing: border-box;
+  color: var(--text-primary);
+  background-color: var(--bg-input);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239A9A9A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+.reminders-modal__field select:hover { border-color: var(--text-tertiary); }
+/* Option popup — respected on Chromium/Win; harmless elsewhere. */
+.reminders-modal__field select option {
+  background: var(--bg-elevated); color: var(--text-primary);
 }
 .reminders-modal__when {
   border: 0; padding: 0; margin: 14px 0;
   display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
 }
 .reminders-modal__when input { flex: 0 0 auto; width: auto; }
-.reminders-modal__tz { color: #9A9A9A; font-size: 13px; }
+.reminders-modal__tz { color: var(--text-tertiary); font-size: 13px; }
+/* Disabled state inherits the base select theming above — only dim the text. */
 .reminders-modal__field--disabled select {
-  width: 100%; padding: 10px 12px;
-  border: 1px solid #333333; border-radius: 8px;
-  background: #0E0E0E; color: #7E7E7E;
+  color: var(--text-disabled); cursor: not-allowed;
 }
 .reminders-modal__footer {
   display: flex; justify-content: space-between; align-items: center;
@@ -200,20 +229,21 @@
   padding: 8px 16px; border-radius: 8px; border: 1px solid transparent;
   cursor: pointer; font: inherit; font-size: 14px;
 }
+/* Primary — neutral inverted button: bright on dark theme, dark on light. */
 .reminders-modal .btn--primary {
-  background: #ECECEC; color: #1A1A1A; font-weight: 600;
+  background: var(--text-primary); color: var(--text-inverse); font-weight: 600;
 }
-.reminders-modal .btn--primary:hover { background: #ffffff; }
+.reminders-modal .btn--primary:hover { opacity: 0.88; }
 .reminders-modal .btn--ghost {
-  background: transparent; color: #ECECEC;
-  border-color: #333333;
+  background: transparent; color: var(--text-primary);
+  border-color: var(--border-primary);
 }
-.reminders-modal .btn--ghost:hover { background: #2A2A2A; }
+.reminders-modal .btn--ghost:hover { background: var(--bg-hover); }
 .reminders-modal .btn--danger {
-  background: transparent; color: #EF4444;
-  border-color: #553333;
+  background: transparent; color: var(--color-error-500, #ef4444);
+  border-color: var(--border-primary);
 }
-.reminders-modal .btn--danger:hover { background: rgba(239, 68, 68, 0.1); }
+.reminders-modal .btn--danger:hover { background: rgba(239, 68, 68, 0.12); }
 
 /* ============================================================
    Schedules tab — sits on the page's theme, not always-dark
@@ -284,10 +314,11 @@
 .reminders-toast {
   position: fixed; bottom: 24px; right: 24px; z-index: 9001;
   padding: 12px 16px;
-  background: #2A2A2A;
-  color: #ECECEC;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
   max-width: 360px;
   font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text",
         "Segoe UI", Roboto, Helvetica, Arial, sans-serif;

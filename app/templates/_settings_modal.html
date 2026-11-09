@@ -213,7 +213,7 @@
                     <div class="settings-row settings-row--with-helper">
                         <div class="settings-row-text">
                             <strong>Separate Voice</strong>
-                            <p class="settings-row-helper">Keep XelaSphere Voice in a separate full screen, without real-time transcripts and visuals.</p>
+                            <p class="settings-row-helper">Keep Xela Voice in a separate full screen, without real-time transcripts and visuals.</p>
                         </div>
                         <button type="button" class="settings-toggle" role="switch" aria-checked="true" data-pref-toggle="separate_voice">
                             <span class="settings-toggle-slider"></span>
@@ -251,7 +251,7 @@
 
                 <section class="settings-pane" data-pane="notifications">
                     <h2 class="settings-pane-title">Notifications</h2>
-                    {% include "_settings_notifications_pane.html" %}
+                    <p class="settings-pane-empty">Coming Soon.</p>
                 </section>
 
                 <section class="settings-pane" data-pane="personalization">
@@ -261,7 +261,7 @@
                     <div class="settings-row settings-row--with-helper">
                         <div class="settings-row-text">
                             <strong>Base style and tone</strong>
-                            <p class="settings-row-helper">Set the style and tone of how XelaSphere responds to you. This doesn't impact XelaSphere's capabilities.</p>
+                            <p class="settings-row-helper">Set the style and tone of how Xela responds to you. This doesn't impact Xela's capabilities.</p>
                         </div>
                         <div class="settings-dropdown" data-dropdown="p-base-style">
                             <button type="button" class="settings-dropdown-trigger" data-dropdown-trigger>
@@ -313,7 +313,7 @@
                         <div class="settings-row settings-row--with-helper">
                             <div class="settings-row-text">
                                 <strong>Fast answers</strong>
-                                <p class="settings-row-helper">XelaSphere can sometimes use its general knowledge to give fast, in-depth answers. These aren't personalized and don't use your memory.</p>
+                                <p class="settings-row-helper">Xela can sometimes use its general knowledge to give fast, in-depth answers. These aren't personalized and don't use your memory.</p>
                             </div>
                             <button type="button" class="settings-toggle" role="switch" aria-checked="true" data-personalization-toggle="p-fast-answers">
                                 <span class="settings-toggle-slider"></span>
@@ -335,7 +335,7 @@
                         <div class="settings-input-group">
                             <label class="settings-input-label">
                                 <span>Nickname</span>
-                                <input type="text" class="settings-input" placeholder="What should XelaSphere call you?"
+                                <input type="text" class="settings-input" placeholder="What should Xela call you?"
                                        data-personalization-input="p-nickname">
                             </label>
                             <label class="settings-input-label">
@@ -356,7 +356,7 @@
                         <div class="settings-pane-subhead-row">
                             <h3 class="settings-pane-subhead">
                                 Memory
-                                <i class="fas fa-circle-question settings-help-icon" aria-hidden="true" title="What XelaSphere remembers and uses across conversations"></i>
+                                <i class="fas fa-circle-question settings-help-icon" aria-hidden="true" title="What Xela remembers and uses across conversations"></i>
                             </h3>
                             <button type="button" class="btn-pill" data-action="open-memory-modal">Manage</button>
                         </div>
@@ -374,7 +374,7 @@
                         <div class="settings-row settings-row--with-helper">
                             <div class="settings-row-text">
                                 <strong>Reference saved memories</strong>
-                                <p class="settings-row-helper">Let XelaSphere save and use memories when responding.</p>
+                                <p class="settings-row-helper">Let Xela save and use memories when responding.</p>
                             </div>
                             <button type="button" class="settings-toggle" role="switch" aria-checked="false" data-memory-toggle="ref_v2">
                                 <span class="settings-toggle-slider"></span>
@@ -384,7 +384,7 @@
                         <div class="settings-row settings-row--with-helper">
                             <div class="settings-row-text">
                                 <strong>Reference chat history</strong>
-                                <p class="settings-row-helper">Let XelaSphere reference all previous conversations when responding.</p>
+                                <p class="settings-row-helper">Let Xela reference all previous conversations when responding.</p>
                             </div>
                             <button type="button" class="settings-toggle" role="switch" aria-checked="false" data-memory-toggle="ref_mempalace">
                                 <span class="settings-toggle-slider"></span>
@@ -401,7 +401,7 @@
                         <div class="settings-row settings-row--with-helper">
                             <div class="settings-row-text">
                                 <strong>Reference record history</strong>
-                                <p class="settings-row-helper">Let XelaSphere reference all previous recording transcripts and notes when responding.</p>
+                                <p class="settings-row-helper">Let Xela reference all previous recording transcripts and notes when responding.</p>
                             </div>
                             <button type="button" class="settings-toggle" role="switch" aria-checked="false" data-personalization-toggle="p-record-history">
                                 <span class="settings-toggle-slider"></span>
@@ -418,11 +418,11 @@
                         </button>
                         <div class="settings-collapsible-panel" id="personalization-advanced-panel" data-collapsible-panel>
                             {% for t in [
-                                ('p-web-search', 'Web search', 'Let XelaSphere automatically search the web for answers.'),
-                                ('p-canvas', 'Canvas', 'Collaborate with XelaSphere on text and code.'),
-                                ('p-voice', 'XelaSphere Voice', 'Enable Voice in XelaSphere.'),
+                                ('p-web-search', 'Web search', 'Let Xela automatically search the web for answers.'),
+                                ('p-canvas', 'Canvas', 'Collaborate with Xela on text and code.'),
+                                ('p-voice', 'Xela Voice', 'Enable Voice in Xela.'),
                                 ('p-advanced-voice', 'Advanced voice', 'Have more natural conversations in Voice.'),
-                                ('p-connector-search', 'Connector search', 'Let XelaSphere automatically search connected sources for answers.'),
+                                ('p-connector-search', 'Connector search', 'Let Xela automatically search connected sources for answers.'),
                             ] %}
                             <div class="settings-row settings-row--with-helper">
                                 <div class="settings-row-text">

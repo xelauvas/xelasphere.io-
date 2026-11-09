@@ -177,7 +177,7 @@ def create_app():
         return Markup(cleaned)
 
     # Configure file upload size and extensions
-    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
+    app.config['MAX_CONTENT_LENGTH'] = Config.MAX_CONTENT_LENGTH
     app.config['UPLOAD_EXTENSIONS'] = ['.jpg', '.png', '.pdf']  # Allowed extensions
 
     # Import blueprints after app is created to avoid circular imports
@@ -213,7 +213,30 @@ def create_app():
 
     from app.blueprints.sandbox_routes import sandbox_bp
     app.register_blueprint(sandbox_bp)
+
+    @app.context_processor
+    def _xela_model_menu():
+        """Selectable models for the composer's model menu (templates/index.html)."""
+        try:
+            from app.model_catalog import MODEL_CATALOG
+            models = [
+                {
+                    'id': key,
+                    'label': spec.get('label', key),
+                    'provider': spec.get('provider'),
+                    'speed': spec.get('speed'),
+                    'reasoning': bool(spec.get('reasoning')),
+                }
+                for key, spec in MODEL_CATALOG.items() if spec.get('selectable')
+            ]
+        except Exception:  # never break page rendering over the menu
+            models = []
+        return {'xela_models': models}
+    from .blueprints.cli_routes import cli_bp, cli_api_bp  # Xela Code sign-in + API keys
+    app.register_blueprint(cli_bp)
+    app.register_blueprint(cli_api_bp)
     csrf.exempt(sandbox_bp)
+    csrf.exempt(cli_api_bp)
 
     # Configure logging
     if not os.path.exists('logs'):

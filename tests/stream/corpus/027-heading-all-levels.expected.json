@@ -1,8 +1,0 @@
-[
-  { "type": "heading", "text": "# H1\n", "meta": { "level": 1 } },
-  { "type": "heading", "text": "## H2\n", "meta": { "level": 2 } },
-  { "type": "heading", "text": "### H3\n", "meta": { "level": 3 } },
-  { "type": "heading", "text": "#### H4\n", "meta": { "level": 4 } },
-  { "type": "heading", "text": "##### H5\n", "meta": { "level": 5 } },
-  { "type": "heading", "text": "###### H6\n", "meta": { "level": 6 } }
-]

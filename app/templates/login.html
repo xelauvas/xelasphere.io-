@@ -9,14 +9,14 @@
         <!-- Brand Header -->
         <div class="login-brand">
             <a href="/" title="Go to Home">
-                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="xelaSphere" class="brand-logo-img">
+                <img src="{{ url_for('static', filename='brand/xela-tile.svg') }}" alt="" class="brand-logo-img xc-auth-tile" width="40" height="40"><span class="xc-auth-word">Xela</span>
             </a>
         </div>
 
         <!-- Page Header -->
         <div class="login-header">
             <h2 class="login-title">Welcome back</h2>
-            <p class="login-subtitle">Sign in to continue</p>
+            <p class="login-subtitle">Sign in to keep thinking with Xela</p>
         </div>
 
         <!-- Flash Messages -->
@@ -55,17 +55,21 @@
         <!-- Social Login Options -->
         <div class="social-login-section">
             <div class="social-buttons">
-                <a href="{{ url_for('auth_routes.discord_login') }}" class="social-btn{% if not oauth_status.discord %} disabled{% endif %}" aria-label="Sign in with Discord" title="Sign in with Discord">
-                    <img src="{{ url_for('static', filename='images/discord.svg') }}" alt="" width="20" height="20">
+                <a href="{{ url_for('auth_routes.google_login') }}" class="social-btn{% if not oauth_status.google %} disabled{% endif %}" aria-label="Sign in with Google">
+                    <img src="{{ url_for('static', filename='images/google.svg') }}" alt="" width="18" height="18">
+                    <span class="social-btn__label">Continue with Google</span>
                 </a>
-                <a href="{{ url_for('auth_routes.google_login') }}" class="social-btn{% if not oauth_status.google %} disabled{% endif %}" aria-label="Sign in with Google" title="Sign in with Google">
-                    <img src="{{ url_for('static', filename='images/google.svg') }}" alt="" width="20" height="20">
+                <a href="{{ url_for('auth_routes.microsoft_login') }}" class="social-btn{% if not oauth_status.microsoft %} disabled{% endif %}" aria-label="Sign in with Microsoft">
+                    <img src="{{ url_for('static', filename='images/microsoft.svg') }}" alt="" width="18" height="18">
+                    <span class="social-btn__label">Continue with Microsoft</span>
                 </a>
-                <a href="{{ url_for('auth_routes.microsoft_login') }}" class="social-btn{% if not oauth_status.microsoft %} disabled{% endif %}" aria-label="Sign in with Microsoft" title="Sign in with Microsoft">
-                    <img src="{{ url_for('static', filename='images/microsoft.svg') }}" alt="" width="20" height="20">
+                <a href="{{ url_for('auth_routes.discord_login') }}" class="social-btn{% if not oauth_status.discord %} disabled{% endif %}" aria-label="Sign in with Discord">
+                    <img src="{{ url_for('static', filename='images/discord.svg') }}" alt="" width="18" height="18">
+                    <span class="social-btn__label">Continue with Discord</span>
                 </a>
-                <a href="{{ url_for('auth_routes.facebook_login') }}" class="social-btn{% if not oauth_status.facebook %} disabled{% endif %}" aria-label="Sign in with Facebook" title="Sign in with Facebook">
-                    <img src="{{ url_for('static', filename='images/facebook.svg') }}" alt="" width="20" height="20">
+                <a href="{{ url_for('auth_routes.facebook_login') }}" class="social-btn{% if not oauth_status.facebook %} disabled{% endif %}" aria-label="Sign in with Facebook">
+                    <img src="{{ url_for('static', filename='images/facebook.svg') }}" alt="" width="18" height="18">
+                    <span class="social-btn__label">Continue with Facebook</span>
                 </a>
             </div>
         </div>

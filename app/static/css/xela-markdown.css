@@ -1,0 +1,496 @@
+/* ==========================================================================
+   Xela markdown — typography for assistant answers (.text-message.xmd)
+   Loaded last. One rhythm for every answer: no per-message layout variants.
+   Structure comes from stream/markdownEngine.js:
+     .text-message.xmd > .stream-block.block-<type> > real markdown elements
+   ========================================================================== */
+
+/* wrappers are transparent: all spacing lives on the markdown elements */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd > .stream-block {
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  max-width: none !important;
+  width: auto !important;
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
+  list-style: none !important;
+  text-align: left !important;
+  counter-reset: none !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd {
+  animation: none !important;
+  font-family: var(--xc-serif) !important;
+  font-size: 17px !important;
+  line-height: 1.65 !important;
+  color: var(--xc-text-body) !important;
+  overflow-wrap: anywhere;
+  text-align: left !important;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- paragraphs ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd p {
+  margin: 0 0 16px !important;
+  padding: 0 !important;
+  font-size: 17px !important;
+  line-height: 1.65 !important;
+  text-align: left !important;
+  text-indent: 0 !important;
+}
+
+/* ---------- headings ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--xc-serif) !important;
+  font-weight: 600 !important;
+  color: var(--xc-text) !important;
+  letter-spacing: -0.012em !important;
+  text-transform: none !important;
+  font-variant: normal !important;
+  font-style: normal !important;
+  text-align: left !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  text-wrap: balance;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd h1 { font-size: 26px !important; line-height: 1.25 !important; margin: 34px 0 14px !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd h2 { font-size: 22px !important; line-height: 1.3 !important; margin: 32px 0 12px !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd h3 { font-size: 19px !important; line-height: 1.35 !important; margin: 26px 0 10px !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(h4, h5, h6) { font-size: 17px !important; line-height: 1.45 !important; margin: 22px 0 8px !important; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(h1, h2, h3, h4, h5, h6)::before,
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(h1, h2, h3, h4, h5, h6)::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* ---------- lists: native markers, real numbering ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(ul, ol) {
+  margin: 0 0 16px !important;
+  padding: 0 0 0 28px !important;
+  display: block !important;
+  counter-reset: none !important;
+  background: none !important;
+  border: 0 !important;
+  gap: 0 !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd ul { list-style: disc outside !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd ul ul { list-style: circle outside !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd ul ul ul { list-style: square outside !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd ol { list-style: decimal outside !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd ol ol { list-style: lower-alpha outside !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd ol ol ol { list-style: lower-roman outside !important; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li {
+  display: list-item !important;
+  list-style: inherit !important;
+  margin: 0 0 7px !important;
+  padding: 0 0 0 4px !important;
+  font-size: 17px !important;
+  line-height: 1.65 !important;
+  position: static !important;
+  background: none !important;
+  border: 0 !important;
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
+  counter-increment: none !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li::before,
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li::after {
+  content: none !important;
+  display: none !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li::marker {
+  color: var(--xc-text-3);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--xc-serif);
+  font-weight: 400;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd ol > li::marker { color: var(--xc-text-2); }
+
+/* nested lists hug their parent item */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li > :is(ul, ol) {
+  margin: 7px 0 2px !important;
+}
+
+/* paragraphs and blocks inside an item */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li > p { margin: 0 0 10px !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li > :last-child { margin-bottom: 0 !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li > p + :is(ul, ol) { margin-top: -3px !important; }
+/* items that carry paragraphs or code (a "loose" list) get a little more air */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li:has(> p) { margin-bottom: 12px !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li:last-child { margin-bottom: 0 !important; }
+
+/* task lists */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li.task-list-item {
+  list-style: none !important;
+  position: relative !important;
+  text-decoration: none !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li.task-list-item * { text-decoration-line: none; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd input.xmd-task {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  left: -24px;
+  top: 0.38em;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--xc-text-3);
+  border-radius: 4px;
+  background: transparent;
+  opacity: 1;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd input.xmd-task:checked {
+  border-color: var(--xc-accent, #d97757);
+  background: var(--xc-accent, #d97757) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6.5'/%3E%3C/svg%3E") center / 12px no-repeat;
+}
+
+/* ---------- inline ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd strong {
+  font-weight: 600 !important;
+  color: var(--xc-text) !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd em { font-style: italic !important; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(s, del) {
+  text-decoration: line-through !important;
+  color: var(--xc-text-3) !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd a:not(.citation-pill):not(.sources-btn) {
+  color: inherit !important;
+  text-decoration: underline !important;
+  text-decoration-thickness: 1px !important;
+  text-decoration-color: color-mix(in srgb, currentColor 38%, transparent) !important;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd a:not(.citation-pill):not(.sources-btn):hover {
+  text-decoration-color: currentColor !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :not(pre) > code {
+  font-family: var(--xc-mono) !important;
+  font-size: 0.84em !important;
+  padding: 0.14em 0.38em !important;
+  border-radius: 5px !important;
+  background: var(--xc-inline-code) !important;
+  border: 1px solid var(--xc-hair-soft) !important;
+  color: var(--xc-text) !important;
+  white-space: break-spaces;
+  overflow-wrap: anywhere;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(h1, h2, h3, h4) code { font-size: 0.86em !important; }
+
+/* ---------- block quote ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd blockquote {
+  margin: 4px 0 18px !important;
+  padding: 2px 0 2px 18px !important;
+  border: 0 !important;
+  border-left: 3px solid var(--xc-hair) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--xc-text-2) !important;
+  font-style: normal !important;
+  box-shadow: none !important;
+  quotes: none !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd blockquote::before,
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd blockquote::after { content: none !important; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd blockquote :is(p, li) { color: var(--xc-text-2) !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd blockquote > p { margin: 0 0 10px !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd blockquote > :last-child { margin-bottom: 0 !important; }
+
+/* ---------- rule ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd hr {
+  border: 0 !important;
+  height: 1px !important;
+  background: var(--xc-hair) !important;
+  margin: 30px 0 !important;
+}
+
+/* ---------- tables ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-table {
+  margin: 4px 0 20px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd table {
+  display: table !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(th, td) {
+  padding: 10px 18px 10px 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--xc-hair-soft) !important;
+  background: transparent !important;
+  vertical-align: top !important;
+  line-height: 1.5 !important;
+  min-width: 72px;
+  max-width: 340px;
+  white-space: normal !important;
+}
+
+/* up to four columns fit the text column; wider tables keep readable cells and scroll sideways */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-table:has(th:nth-child(5)) table {
+  width: max-content !important;
+  min-width: 100% !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-table:has(th:nth-child(5)) td:first-child:not(:has(br)) { white-space: nowrap !important; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(th, td):last-child { padding-right: 0 !important; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd th {
+  font-family: var(--xc-sans) !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: var(--xc-text) !important;
+  border-bottom-color: var(--xc-hair) !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  white-space: nowrap;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd th:not([style]) { text-align: left !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd td { font-size: 15.5px !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd tbody tr:last-child td { border-bottom: 0 !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd tr { background: transparent !important; }
+
+/* ---------- code blocks (same chrome everywhere, also inside lists) ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .code-window {
+  margin: 4px 0 20px !important;
+  border: 1px solid var(--xc-hair-soft) !important;
+  border-radius: 12px !important;
+  background: var(--xc-code) !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+  max-width: 100% !important;
+  width: auto !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd li > .code-window { margin: 10px 0 12px !important; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .code-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  height: 36px !important;
+  min-height: 0 !important;
+  padding: 0 8px 0 14px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .code-header::before,
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .code-header::after { content: none !important; display: none !important; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .language-indicator {
+  font: 400 12.5px/1 var(--xc-sans) !important;
+  color: var(--xc-text-3) !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  background: none !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .copy-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  height: 26px !important;
+  padding: 0 8px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  color: var(--xc-text-3) !important;
+  font: 400 12.5px/1 var(--xc-sans) !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  transform: none !important;
+  position: static !important;
+  opacity: 1 !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .copy-button:hover {
+  background: var(--xc-hover) !important;
+  color: var(--xc-text) !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .code-window pre {
+  margin: 0 !important;
+  padding: 2px 16px 15px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow-x: auto !important;
+  max-height: none !important;
+  white-space: pre !important;
+  tab-size: 4;
+  scrollbar-width: thin;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .code-window pre code {
+  display: block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  font-family: var(--xc-mono) !important;
+  font-size: 13.5px !important;
+  line-height: 1.6 !important;
+  color: var(--xc-text) !important;
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  text-shadow: none !important;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .diff-line { display: inline-block; width: 100%; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .diff-added { background: color-mix(in srgb, #2ea043 18%, transparent); }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .diff-removed { background: color-mix(in srgb, #f85149 18%, transparent); }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(.diff-meta, .diff-hunk) { color: var(--xc-text-3); }
+
+/* ---------- math ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-math .katex { font-size: 1.06em; color: var(--xc-text); }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-math--block,
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-math--display {
+  display: block;
+  margin: 6px 0 20px;
+  padding: 4px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+  scrollbar-width: thin;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-math--block .katex-display { margin: 0; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-math-raw {
+  font-family: var(--xc-mono);
+  font-size: 0.84em;
+  color: var(--xc-text-2);
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-math--block.is-pending {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 0;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-math--block.is-pending span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--xc-text-3);
+  animation: xmd-dot 1.1s ease-in-out infinite;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-math--block.is-pending span:nth-child(2) { animation-delay: 0.15s; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-math--block.is-pending span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes xmd-dot {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+
+/* ---------- images, diagrams ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd img.prose-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  cursor: zoom-in;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-mermaid {
+  margin: 4px 0 20px;
+  overflow-x: auto;
+  text-align: center;
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .xmd-mermaid pre {
+  text-align: left;
+  font: 13px/1.6 var(--xc-mono);
+  color: var(--xc-text-2);
+}
+
+/* ---------- edges: no stray space above the first or below the last element ---------- */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd > .stream-block:first-child > :first-child { margin-top: 0 !important; }
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd > .stream-block:last-of-type > :last-child { margin-bottom: 0 !important; }
+/* a heading right after a heading sits closer */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd > .block-heading + .block-heading > :is(h1, h2, h3, h4) { margin-top: 4px !important; }
+
+@media (max-width: 768px) {
+  :root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd,
+  :root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(p, li) { font-size: 16.5px !important; line-height: 1.62 !important; }
+  :root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd h1 { font-size: 23px !important; margin-top: 28px !important; }
+  :root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd h2 { font-size: 20px !important; margin-top: 26px !important; }
+  :root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd h3 { font-size: 18px !important; margin-top: 22px !important; }
+  :root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd :is(ul, ol) { padding-left: 24px !important; }
+  :root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd .code-window pre code { font-size: 12.5px !important; }
+  :root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd td { font-size: 14.5px !important; }
+}
+
+/* the streaming cursor is a custom element so the DOM differ never mistakes it for content */
+xela-cursor.stream-cursor { display: inline-block; }
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd kbd {
+  font: 500 0.8em/1 var(--xc-sans);
+  padding: 2px 6px;
+  border: 1px solid var(--xc-hair);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--xc-hover);
+  color: var(--xc-text);
+}
+
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd mark {
+  background: color-mix(in srgb, var(--xc-accent, #d97757) 26%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+/* a model that switches bullet character mid-list ("-" then "*") still reads as one list */
+:root:is([data-theme], :not([data-theme])) .ai-message .text-message.xmd > .block-list-ul + .block-list-ul > ul { margin-top: -9px !important; }

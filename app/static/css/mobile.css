@@ -3707,7 +3707,10 @@ body.is-ios .arrow-down {
         box-shadow: none;
     }
 
-    /* AI message text formatting */
+    /* AI message text formatting.
+       Plain user/assistant text keeps a compact mobile rhythm; streamed
+       markdown blocks are governed by stream-blocks.css so structured
+       answers retain proper hierarchy instead of being compressed. */
     .message.ai-message .text-message p {
         margin: 0 0 12px 0;
     }
@@ -3717,21 +3720,24 @@ body.is-ios .arrow-down {
     }
 
     .message.ai-message .text-message h1 {
-        font-size: 1.2rem;
+        font-size: 1.4rem;
         margin: 12px 0 6px 0;
         font-weight: 600;
+        letter-spacing: 0;
     }
 
     .message.ai-message .text-message h2 {
-        font-size: 1.05rem;
+        font-size: 1.18rem;
         margin: 12px 0 6px 0;
         font-weight: 600;
+        letter-spacing: 0;
     }
 
     .message.ai-message .text-message h3 {
-        font-size: 0.95rem;
+        font-size: 1.02rem;
         margin: 10px 0 4px 0;
         font-weight: 600;
+        letter-spacing: 0;
     }
 
     .message.ai-message .text-message h1:first-child,
@@ -6229,6 +6235,31 @@ body.device-tablet .mobile-overlay {
         min-height: 100px !important;
         margin: 8px 0 8px 8px !important;
         border-radius: 12px !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card--pdf .file-preview-card__icon {
+        width: 42px !important;
+        height: 42px !important;
+        font-size: 1.28rem !important;
+        border-radius: 14px !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card--pdf .file-preview-card__pdf-lines {
+        top: 55px !important;
+        left: 12px !important;
+        right: 12px !important;
+        gap: 4px !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card--pdf .file-preview-card__pdf-ribbon {
+        top: 17px !important;
+        right: -24px !important;
+    }
+
+    .message-attachments:not(.message-attachments--grid) .file-preview-card--pdf .file-preview-card__pdf-badge {
+        left: 7px !important;
+        bottom: 7px !important;
+        padding: 4px 6px !important;
     }
 
     .message-attachments:not(.message-attachments--grid) .file-preview-card--pdf .file-preview-card__name {

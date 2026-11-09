@@ -210,7 +210,7 @@ class ChatManager {
     updatePageTitle(sessionId = null) {
         if (typeof document === 'undefined') return;
 
-        const defaultTitle = 'XelaSphere';
+        const defaultTitle = 'Xela';
 
         if (!sessionId) {
             document.title = defaultTitle;
@@ -1958,6 +1958,7 @@ async loadChatHistory(pageToken = null, limit = 30) {
 
     showImagesPage({ updateHistory = true } = {}) {
         if (!this.elements.imagesPage) return;
+        if (this.chatsPageActive) this.hideChatsPage({ updateHistory: false });
         this.imagesPageActive = true;
         this.elements.imagesPage.hidden = false;
         this.elements.imagesPage.classList.add('is-visible');
@@ -4268,23 +4269,70 @@ async loadChatHistory(pageToken = null, limit = 30) {
 
         const picker = document.createElement('div');
         picker.className = 'session-project-picker';
-        picker.innerHTML = projects.map((p) => `
-            <button type="button" class="session-project-picker__item" data-project-id="${p.id}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:${p.color};flex-shrink:0" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M2 10h20"/></svg>
-                <span>${p.name.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</span>
-            </button>
-        `).join('');
+        picker.setAttribute('role', 'dialog');
+        picker.setAttribute('aria-label', 'Move chat to project');
+
+        const heading = document.createElement('div');
+        heading.className = 'session-project-picker__heading';
+        heading.textContent = 'Move to project';
+        picker.appendChild(heading);
+
+        const list = document.createElement('div');
+        list.className = 'session-project-picker__list';
+        list.setAttribute('role', 'listbox');
+        projects.forEach((project) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'session-project-picker__item';
+            item.dataset.projectId = project.id;
+            item.setAttribute('role', 'option');
+
+            const icon = document.createElement('span');
+            icon.className = 'session-project-picker__icon';
+            icon.style.setProperty('--picker-project-color', project.color || 'currentColor');
+            if (window.PROJECT_ICONS?.has?.(project.icon || 'code')) {
+                icon.innerHTML = window.PROJECT_ICONS.svg(project.icon || 'code');
+            } else {
+                icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M2 10h20"/></svg>';
+            }
+            const name = document.createElement('span');
+            name.className = 'session-project-picker__name';
+            name.textContent = project.name || 'Untitled project';
+            item.append(icon, name);
+            list.appendChild(item);
+        });
+        picker.appendChild(list);
+
+        const create = document.createElement('button');
+        create.type = 'button';
+        create.className = 'session-project-picker__create';
+        create.innerHTML = '<span aria-hidden="true">＋</span><span>New project</span>';
+        create.addEventListener('click', () => {
+            picker.remove();
+            document.getElementById('project-create-btn')?.click();
+        });
+        picker.appendChild(create);
 
         // Position near the session's menu trigger.
         const sessionRow = document.querySelector(`.chat-tab[data-session-id="${sessionId}"]`);
         const anchor = sessionRow?.querySelector('[data-actions-toggle]') || sessionRow;
         const rect = (anchor || document.body).getBoundingClientRect();
         picker.style.position = 'fixed';
-        picker.style.top = `${rect.bottom + 4}px`;
-        picker.style.left = `${Math.max(8, rect.left)}px`;
         // Must beat the sidebar (z-index 1100) and the create-project modal (1000).
         picker.style.zIndex = '1500';
         document.body.appendChild(picker);
+        const pickerRect = picker.getBoundingClientRect();
+        const gap = 8;
+        let left = rect.right + gap;
+        if (left + pickerRect.width > window.innerWidth - gap) {
+            left = rect.left - pickerRect.width - gap;
+        }
+        const top = Math.min(
+            Math.max(gap, rect.top - 8),
+            window.innerHeight - pickerRect.height - gap,
+        );
+        picker.style.left = `${Math.max(gap, left)}px`;
+        picker.style.top = `${top}px`;
 
         picker.addEventListener('click', async (e) => {
             const item = e.target.closest('[data-project-id]');
@@ -4303,11 +4351,10 @@ async loadChatHistory(pageToken = null, limit = 30) {
                 const proj = projects.find((p) => p.id === projectId);
                 // Update Recents immediately, then reconcile with the server
                 // through the existing history refresh event.
-                const movedRow = document.querySelector(`.chat-tab[data-session-id="${CSS.escape(sessionId)}"]`);
+                const movedRow = [...document.querySelectorAll('.chat-tab[data-session-id]')]
+                    .find((row) => row.dataset.sessionId === sessionId);
                 if (movedRow) {
-                    movedRow.classList.add('chat-tab--moving-to-project');
-                    movedRow.addEventListener('animationend', () => movedRow.remove(), { once: true });
-                    setTimeout(() => movedRow.remove(), 240);
+                    movedRow.remove();
                 }
                 if (this.chatHistory?.[sessionId]) this.chatHistory[sessionId].project_id = projectId;
                 this.showNotification(`Added to ${proj?.name || 'project'}`, 'success');
@@ -4317,6 +4364,23 @@ async loadChatHistory(pageToken = null, limit = 30) {
                 console.error(err);
             }
         });
+
+        const focusable = [...picker.querySelectorAll('button')];
+        picker.addEventListener('keydown', (event) => {
+            const current = focusable.indexOf(document.activeElement);
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                picker.remove();
+                anchor?.focus();
+            } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                focusable[(current + 1 + focusable.length) % focusable.length]?.focus();
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                focusable[(current - 1 + focusable.length) % focusable.length]?.focus();
+            }
+        });
+        focusable[0]?.focus({ preventScroll: true });
 
         // Close on outside click (deferred so this click doesn't immediately close it).
         setTimeout(() => {

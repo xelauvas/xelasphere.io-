@@ -89,15 +89,15 @@ class TestStyleCharters:
         from app.services.response_style import STYLE_CHARTERS, ResponseStyle
         assert set(STYLE_CHARTERS.keys()) == set(ResponseStyle)
 
-    def test_charter_mentions_its_style_name(self):
-        from app.services.response_style import STYLE_CHARTERS, ResponseStyle
+    def test_no_charter_contains_or_invites_emoji(self):
+        # The old charters told the model to prefix headings and bullets with emoji,
+        # which made every answer look like a cartoon. Every style now forbids them.
+        import re
+        from app.services.response_style import STYLE_CHARTERS
+        emoji = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
         for style, charter in STYLE_CHARTERS.items():
-            # Charter should name-drop the style so the model has a label
-            # to ground its behaviour against.
-            assert style.value.upper().replace("_", " ") in charter.upper() or \
-                   style.value.upper() in charter.upper(), (
-                       f"{style.value} charter does not reference its name"
-                   )
+            assert not emoji.search(charter), f"{style.value} charter contains an emoji"
+            assert "no emoji" in charter.lower(), f"{style.value} charter does not forbid emoji"
 
     def test_charter_size_under_3000_chars(self):
         # Charters are appended to the existing ~3000-line dev instructions.

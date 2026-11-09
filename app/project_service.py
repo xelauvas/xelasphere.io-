@@ -14,7 +14,8 @@ from google.cloud import firestore as gc_firestore
 
 MAX_FILES_PER_PROJECT = 20
 PER_FILE_TEXT_CAP = 200_000  # storage cap, chars
-ALLOWED_FIELDS = {'name', 'color', 'instructions', 'position'}
+ALLOWED_FIELDS = {'name', 'color', 'icon', 'instructions', 'position'}
+DEFAULT_ICON = 'code'  # curly braces — matches ChatGPT's default project glyph
 
 
 class ProjectService:
@@ -50,13 +51,14 @@ class ProjectService:
     def count(self, uid: str) -> int:
         return sum(1 for _ in self._coll(uid).stream())
 
-    def create(self, uid: str, *, name: str, color: str) -> Dict[str, Any]:
+    def create(self, uid: str, *, name: str, color: str, icon: str = DEFAULT_ICON) -> Dict[str, Any]:
         existing = self.list(uid)
         position = (existing[-1]['position'] + 1) if existing else 0
         now = datetime.utcnow()
         payload = {
             'name': name,
             'color': color,
+            'icon': icon,
             'instructions': '',
             'files': [],
             'position': position,
@@ -152,6 +154,9 @@ def _normalize(doc: Dict[str, Any]) -> Dict[str, Any]:
         v = doc.get(k)
         if isinstance(v, datetime):
             doc[k] = v.isoformat()
+    # Back-fill icon for projects created before the field existed.
+    if 'icon' not in doc or not doc.get('icon'):
+        doc['icon'] = DEFAULT_ICON
     files = doc.get('files')
     if isinstance(files, list):
         for f in files:

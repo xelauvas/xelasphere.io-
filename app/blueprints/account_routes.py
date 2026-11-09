@@ -115,7 +115,7 @@ def upgrade():
     plans = [
         {
             "name": "Free",
-            "description": "Experiment, prototype, and chat with the core models we ship inside XelaSphere.",
+            "description": "Experiment, prototype, and chat with the core models we ship inside Xela.",
             "button_label": "Your current plan",
             "button_style": "disabled",
             "tag": "Current plan",

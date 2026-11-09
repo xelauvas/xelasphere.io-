@@ -125,6 +125,39 @@
     margin-top: 1.5em;
 }
 
+/* Document-like answers should read like a composed ChatGPT response:
+   headings are section markers, paragraphs sit close to the heading they
+   explain, and the rhythm adapts only when the content has structure. */
+.text-message .stream-block.block-heading > h1,
+.text-message .stream-block.block-heading > h2,
+.text-message .stream-block.block-heading > h3,
+.text-message .stream-block.block-heading > h4,
+.text-message .stream-block.block-heading > h5,
+.text-message .stream-block.block-heading > h6 {
+    margin: 0;
+    letter-spacing: 0;
+    line-height: 1.3;
+}
+
+[data-ctx="structured"] .text-message .stream-block.block-heading + .stream-block,
+[data-ctx="long-prose"] .text-message .stream-block.block-heading + .stream-block,
+[data-ctx="prose"] .text-message .stream-block.block-heading + .stream-block,
+[data-ctx="technical"] .text-message .stream-block.block-heading + .stream-block {
+    margin-top: 0.55em;
+}
+
+[data-ctx="structured"] .text-message .stream-block.block-paragraph + .stream-block.block-heading,
+[data-ctx="structured"] .text-message .stream-block.block-list-ul + .stream-block.block-heading,
+[data-ctx="structured"] .text-message .stream-block.block-list-ol + .stream-block.block-heading,
+[data-ctx="long-prose"] .text-message .stream-block.block-paragraph + .stream-block.block-heading,
+[data-ctx="long-prose"] .text-message .stream-block.block-list-ul + .stream-block.block-heading,
+[data-ctx="long-prose"] .text-message .stream-block.block-list-ol + .stream-block.block-heading,
+[data-ctx="technical"] .text-message .stream-block.block-paragraph + .stream-block.block-heading,
+[data-ctx="technical"] .text-message .stream-block.block-list-ul + .stream-block.block-heading,
+[data-ctx="technical"] .text-message .stream-block.block-list-ol + .stream-block.block-heading {
+    margin-top: 1.65em;
+}
+
 .text-message .stream-block > p,
 .text-message .stream-block > h1,
 .text-message .stream-block > h2,
@@ -314,4 +347,37 @@
 /* --- Structured --- */
 [data-ctx="structured"] .stream-block + .stream-block {
     margin-top: 1em;
+}
+
+@media (max-width: 768px) {
+    .message.ai-message .text-message .stream-block.block-heading > h1 {
+        font-size: 1.55rem;
+        line-height: 1.25;
+        margin: 0;
+        letter-spacing: 0;
+    }
+
+    .message.ai-message .text-message .stream-block.block-heading > h2 {
+        font-size: 1.28rem;
+        line-height: 1.28;
+        margin: 0;
+        letter-spacing: 0;
+    }
+
+    .message.ai-message .text-message .stream-block.block-heading > h3 {
+        font-size: 1.08rem;
+        line-height: 1.32;
+        margin: 0;
+        letter-spacing: 0;
+    }
+
+    .message.ai-message .text-message .stream-block.block-heading + .stream-block {
+        margin-top: 0.55em;
+    }
+
+    .message.ai-message .text-message .stream-block.block-paragraph + .stream-block.block-heading,
+    .message.ai-message .text-message .stream-block.block-list-ul + .stream-block.block-heading,
+    .message.ai-message .text-message .stream-block.block-list-ol + .stream-block.block-heading {
+        margin-top: 1.45em;
+    }
 }

@@ -77,6 +77,11 @@ const VoiceModeModule = (function() {
     let _preferredVoice = (typeof window.getPreferredVoice === 'function')
         ? (window.getPreferredVoice() || 'auto')
         : 'auto';
+    // Tracks whether the user explicitly chose a voice via voice-shortcut
+    // ("switch to British voice"). When true, the per-stream reset and the
+    // server's tts_voice lock are both bypassed so the user's choice persists
+    // across turns until they say "default voice" or "reset voice".
+    let _userOverrodeVoice = false;
     let _detectedLang = 'en';
 
     // ── Streaming TTS Pipeline ──
@@ -110,7 +115,20 @@ const VoiceModeModule = (function() {
     }
 
     function _ensureVoiceBar() {
-        if (_voiceBarRow && _voiceBarRow.parentElement === _textareaContainer) return;
+        // Bail only if our cached row is BOTH still in the document AND
+        // attached to the current textarea container. Adding .isConnected
+        // guards against the case where the composer was re-rendered and
+        // _voiceBarRow is now a detached node (Bug #6) — without this,
+        // subsequent label/transcript writes silently no-op'd.
+        if (_voiceBarRow && _voiceBarRow.isConnected
+            && _voiceBarRow.parentElement === _textareaContainer) return;
+
+        // Drop any stale refs so the build below starts clean.
+        _voiceBarRow = null;
+        _voiceBarLabel = null;
+        _canvas = null;
+        _voiceBarEnd = null;
+        _transcriptOverlay = null;
 
         // Build: [Label] [Canvas] [End button]
         _voiceBarRow = document.createElement('div');
@@ -530,20 +548,76 @@ const VoiceModeModule = (function() {
     // Used by interrupt detection to open the mic during speaking state.
     let _startListeningSilent = false;
 
+    // Virtual / software audio inputs that often capture silence on
+    // Windows + macOS. Voice mode used to silently bind to whichever
+    // device the OS marked as default — when that default is Voicemod
+    // or VB-Audio Cable, the user sees the UI but no audio is ever
+    // captured. Dictation already filters these out (dictationModule.js
+    // VIRTUAL_DEVICE_KEYWORDS); we mirror the same list here so both
+    // entry points behave the same way.
+    const VOICEMODE_VIRTUAL_DEVICE_KEYWORDS = [
+        'voicemod', 'virtual', 'vb-audio', 'cable input', 'cable output',
+        'stereo mix', 'what u hear', 'wave out', 'loopback',
+        'soundflower', 'blackhole', 'obs'
+    ];
+
+    async function _findHardwareMic() {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioInputs = devices.filter(d => d.kind === 'audioinput');
+            const hardwareMic = audioInputs.find(d => {
+                const label = (d.label || '').toLowerCase();
+                const id = (d.deviceId || '').toLowerCase();
+                if (id === 'default' || id === 'communications') return false;
+                return !VOICEMODE_VIRTUAL_DEVICE_KEYWORDS.some(kw => label.includes(kw));
+            });
+            if (hardwareMic) {
+                console.log('[VoiceMode] Selected hardware mic:', hardwareMic.label);
+                return hardwareMic.deviceId;
+            }
+        } catch (e) {
+            console.warn('[VoiceMode] Could not enumerate audio devices:', e);
+        }
+        return null;
+    }
+
     async function startListening() {
         try {
+            // Match dictation: prefer a real hardware mic, fall back to
+            // the OS default. Without this, voice mode can bind to a
+            // virtual capture device (Voicemod, VB-Audio, etc.) that
+            // returns silence — the UI looks alive but the user never
+            // gets transcribed.
+            const hwDeviceId = await _findHardwareMic();
+            const audioConstraints = {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 16000,
+            };
+            if (hwDeviceId) {
+                audioConstraints.deviceId = { exact: hwDeviceId };
+            }
+
             stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    // echoCancellation ON: without it, the AI's speaker output
-                    // leaks into the mic and triggers false interrupts
-                    // constantly. With it on, user voice is somewhat suppressed
-                    // during TTS but still detectable above the low echo floor.
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                    sampleRate: 16000,
-                }
+                audio: audioConstraints
             });
+
+            // Diagnostic: log which mic + whether the OS muted it.
+            const track = stream.getAudioTracks()[0];
+            if (track) {
+                const settings = track.getSettings();
+                console.log('[VoiceMode] Audio track:', {
+                    label: track.label,
+                    enabled: track.enabled,
+                    muted: track.muted,
+                    readyState: track.readyState,
+                    sampleRate: settings.sampleRate,
+                });
+                if (track.muted) {
+                    console.warn('[VoiceMode] Audio track is muted by the system!');
+                }
+            }
             audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
 
             const micSource = audioContext.createMediaStreamSource(stream);
@@ -707,7 +781,21 @@ const VoiceModeModule = (function() {
         try {
             // 1. Transcribe
             const transcript = await transcribeVoice(audioBlob);
-            if (!transcript || !transcript.trim() || transcript.trim() === '.') {
+            if (transcript === null) {
+                // STT call failed (most likely 429 rate-limit; toast surfaced
+                // by transcribeVoice). Back off 3s before re-listening so we
+                // don't stampede the limit; otherwise a noisy room can lock
+                // voice mode out for a full minute (Bug #4).
+                await new Promise(r => setTimeout(r, 3000));
+                if (isActive) {
+                    await startListening(); startRecording(); startSilenceDetection();
+                }
+                return;
+            }
+            if (!transcript.trim() || transcript.trim() === '.') {
+                // Pure noise — Whisper succeeded but returned empty/dot.
+                // Immediate re-record is fine (no rate-limit cost beyond the
+                // request that already happened).
                 await startListening(); startRecording(); startSilenceDetection();
                 return;
             }
@@ -759,7 +847,16 @@ const VoiceModeModule = (function() {
         const resp = await fetch('/speech-to-text/groq', {
             method: 'POST', body: formData, headers, credentials: 'same-origin'
         });
-        if (!resp.ok) return null;
+        if (!resp.ok) {
+            // Surface 429 explicitly — caller backs off rather than re-recording
+            // immediately and burning more of the rate budget (Bug #4).
+            if (resp.status === 429 && window.Toast) {
+                window.Toast.warning('Voice service is busy — pausing briefly');
+            } else if (window.Toast) {
+                window.Toast.error('Speech recognition failed');
+            }
+            return null;
+        }
         const data = await resp.json();
         if (data.language) _detectedLang = data.language;
         return data.text || null;
@@ -806,6 +903,9 @@ const VoiceModeModule = (function() {
                 const matches = patterns.some(p => t === p || t === p + '.' || t === p + '!');
                 if (matches || t === phrase) {
                     _preferredVoice = voice;
+                    // 'auto' / 'default' / 'reset' clear the override and let
+                    // the server's tts_voice lock control voice again.
+                    _userOverrodeVoice = (voice !== 'auto');
                     const label = voice === 'auto' ? 'default' : phrase;
                     if (window.Toast) window.Toast.success(`Switched to ${label} voice`);
                     return true;
@@ -1145,7 +1245,10 @@ const VoiceModeModule = (function() {
         _streamDone = false;
         // Wait for the context primer (if any) so the first LLM chunk is faster
         await PredictivePipeline.onTranscriptReady();
-        _preferredVoice = 'auto';
+        // Only reset to 'auto' when the user hasn't explicitly chosen a voice
+        // via voice-shortcut. This keeps "switch to British voice" persistent
+        // across turns until "default voice" / "reset voice" / module exit.
+        if (!_userOverrodeVoice) _preferredVoice = 'auto';
 
         const csrfMeta = document.querySelector('meta[name="csrf-token"]');
         const chatHeaders = { 'Content-Type': 'application/x-www-form-urlencoded' };
@@ -1225,9 +1328,12 @@ const VoiceModeModule = (function() {
                     try {
                         const parsed = JSON.parse(line.slice(6));
                         if (parsed.type === 'tts_voice') {
-                            _preferredVoice = parsed.voice;
+                            // Server lock — but defer to the user's explicit
+                            // voice-shortcut override (Bug #3). Language tracks
+                            // the server's detection regardless.
+                            if (!_userOverrodeVoice) _preferredVoice = parsed.voice;
                             _responseLang = parsed.lang || _detectedLang;
-                            console.log('[VoiceMode] tts_voice locked:', _preferredVoice, 'lang:', _responseLang);
+                            console.log('[VoiceMode] tts_voice', _userOverrodeVoice ? 'ignored (user override)' : 'locked:', _preferredVoice, 'lang:', _responseLang);
                             continue;
                         }
                         if (parsed.type === 'content' && parsed.text) {
@@ -1464,6 +1570,17 @@ const VoiceModeModule = (function() {
             _textareaContainer.dataset.voiceState = state;
         }
 
+        // Toggle .recording on the voice-mode button so chat-shell.css's
+        // gold-soft + gold-line + glow .recording treatment activates while
+        // voice mode is live (Bug #1 — was completely dead before).
+        if (_voiceModeButton) {
+            if (state === 'idle') {
+                _voiceModeButton.classList.remove('recording');
+            } else {
+                _voiceModeButton.classList.add('recording');
+            }
+        }
+
         // Update voice bar label
         if (_voiceBarLabel) {
             _voiceBarLabel.textContent = STATE_LABELS[state] || '';
@@ -1533,8 +1650,16 @@ const VoiceModeModule = (function() {
                     startRecording();
                     startSilenceDetection();
                 } catch (e) {
-                    console.warn('[VoiceMode] mic denied');
-                    setState('idle');
+                    // Mic permission denied / unavailable / iOS gesture-chain
+                    // broken. Show feedback + tear down the voice UI; otherwise
+                    // .voice-active stays on the textarea container forever and
+                    // the composer is left visually broken (Bug #2).
+                    console.warn('[VoiceMode] mic unavailable:', e && e.name);
+                    const reason = (e && e.name === 'NotAllowedError')
+                        ? 'Microphone access denied'
+                        : 'Microphone unavailable';
+                    if (window.Toast) window.Toast.error(reason);
+                    exit();
                 }
             }
         }, 300);

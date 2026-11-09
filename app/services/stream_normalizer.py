@@ -162,3 +162,23 @@ def normalize_paragraph_breaks(text: str) -> str:
     - Already-doubled \\n\\n
     """
     return _PARA_BREAK_RE.sub('\n\n', text)
+
+
+class FenceAwareParagraphNormalizer:
+    """Pass-through: the stream now carries the model's text exactly as written.
+
+    This used to turn every single newline outside code fences into a blank line so
+    that prose got paragraph spacing. It also put a blank line between table rows,
+    between the lines of a list item and between the lines of a poem, so the live
+    answer rendered differently from the same message after a reload (the stored
+    text was never rewritten). The client renderer now treats a single newline as a
+    line break, so nothing needs rewriting on the way out.
+
+    The feed()/flush() interface stays so the stream route does not change shape.
+    """
+
+    def feed(self, text: str) -> str:
+        return text or ''
+
+    def flush(self) -> str:
+        return ''

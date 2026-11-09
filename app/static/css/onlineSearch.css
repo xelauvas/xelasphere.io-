@@ -636,3 +636,42 @@
         background: var(--bg-elevated, rgba(20, 20, 20, 0.85));
     }
 }
+
+/* ============================================================
+   In-app reader overlay (built imperatively in searchResults.js).
+   Tokens declared here so the JS can read them via CSS variables —
+   inline styles bypass the theme system, but CSS variables in
+   inline styles still resolve against the cascade and respond
+   to [data-theme] flips.
+   ============================================================ */
+:root {
+    --inapp-overlay-bg: #0d0d0d;
+    --inapp-overlay-text: rgba(255, 255, 255, 0.92);
+    --inapp-overlay-text-muted: rgba(255, 255, 255, 0.6);
+    --inapp-overlay-text-subtle: rgba(255, 255, 255, 0.4);
+    --inapp-overlay-border: rgba(255, 255, 255, 0.08);
+    --inapp-overlay-btn-bg: rgba(255, 255, 255, 0.08);
+    --inapp-overlay-btn-bg-hover: rgba(255, 255, 255, 0.14);
+    --inapp-overlay-btn-text: rgba(255, 255, 255, 0.7);
+    --inapp-overlay-spinner-track: rgba(255, 255, 255, 0.1);
+    --inapp-overlay-spinner-head: rgba(255, 255, 255, 0.6);
+    --inapp-overlay-progress: #7eb8ff;
+    --inapp-overlay-cta-bg: #7eb8ff;
+    --inapp-overlay-cta-text: #000;
+}
+
+[data-theme="light"] {
+    --inapp-overlay-bg: #faf9f5;
+    --inapp-overlay-text: #1f1d1a;
+    --inapp-overlay-text-muted: rgba(40, 30, 15, 0.65);
+    --inapp-overlay-text-subtle: rgba(40, 30, 15, 0.45);
+    --inapp-overlay-border: rgba(40, 30, 15, 0.10);
+    --inapp-overlay-btn-bg: rgba(40, 30, 15, 0.06);
+    --inapp-overlay-btn-bg-hover: rgba(40, 30, 15, 0.10);
+    --inapp-overlay-btn-text: rgba(40, 30, 15, 0.70);
+    --inapp-overlay-spinner-track: rgba(40, 30, 15, 0.12);
+    --inapp-overlay-spinner-head: rgba(40, 30, 15, 0.55);
+    --inapp-overlay-progress: #1e6fd9;
+    --inapp-overlay-cta-bg: #1e6fd9;
+    --inapp-overlay-cta-text: #ffffff;
+}
