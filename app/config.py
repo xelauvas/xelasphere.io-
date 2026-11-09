@@ -45,6 +45,12 @@ class Config:
     # Ollama local model configuration (no API key required)
     OLLAMA_API_URL = os.getenv('OLLAMA_API_URL', 'http://127.0.0.1:11434/v1/chat/completions')
     OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma4:e2b')
+    # Sent as Bearer when the local server requires it (llama-server --api-key)
+    OLLAMA_API_KEY = os.getenv('OLLAMA_API_KEY')
+    # Xela Code (CLI) link: public API host, and the pre-device-flow static key that
+    # /api/cli/verify keeps accepting for older clients
+    XELA_API_BASE_URL = os.getenv('XELA_API_BASE_URL', 'https://api.xelasphere.com').rstrip('/')
+    XELA_API_LEGACY_KEY = os.getenv('XELA_API_LEGACY_KEY')
     ALLOWED_ORIGINS = [
         origin.strip() for origin in os.getenv(
             'ALLOWED_ORIGINS',

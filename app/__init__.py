@@ -213,7 +213,11 @@ def create_app():
 
     from app.blueprints.sandbox_routes import sandbox_bp
     app.register_blueprint(sandbox_bp)
+    from .blueprints.cli_routes import cli_bp, cli_api_bp  # Xela Code sign-in + API keys
+    app.register_blueprint(cli_bp)
+    app.register_blueprint(cli_api_bp)
     csrf.exempt(sandbox_bp)
+    csrf.exempt(cli_api_bp)
 
     # Configure logging
     if not os.path.exists('logs'):
