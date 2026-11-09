@@ -227,7 +227,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-styles.css') }}?v=4">
 
     <!-- Final skin: claude.ai-style layout with the Xela brand (must stay last) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-claude.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-claude.css') }}?v=2">
 
     <!-- Lightweight Charts (TradingView) — v5 introduces breaking series-creation API
          (addAreaSeries → addSeries(AreaSeries, ...)) handled in cryptoChartModule.js -->
@@ -473,6 +473,24 @@
                         <span class="sidebar-action-text">Search</span>
                         <span class="shortcut-hint"></span>
                     </button>
+                    <button type="button" class="sidebar-action-btn" id="action-projects" aria-label="Projects" data-tooltip="Projects" aria-pressed="false" data-xc-surface="projects">
+                        <span class="sidebar-action-icon" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                        </span>
+                        <span class="sidebar-action-text">Projects</span>
+                    </button>
+                    <button type="button" class="sidebar-action-btn" id="action-artifacts" aria-label="Artifacts" data-tooltip="Artifacts" aria-pressed="false" data-xc-surface="artifacts">
+                        <span class="sidebar-action-icon" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h11a2 2 0 0 0 2-2V8"/></svg>
+                        </span>
+                        <span class="sidebar-action-text">Artifacts</span>
+                    </button>
+                    <button type="button" class="sidebar-action-btn" id="action-scheduled" aria-label="Scheduled" data-tooltip="Scheduled" aria-pressed="false" data-xc-surface="scheduled">
+                        <span class="sidebar-action-icon" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                        </span>
+                        <span class="sidebar-action-text">Scheduled</span>
+                    </button>
                     <button type="button" class="sidebar-action-btn has-shortcut" id="action-images" aria-label="Images" data-tooltip="Images" data-shortcut-win="Ctrl+Shift+I" data-shortcut-mac="⌘+Shift+I">
                         <span class="sidebar-action-icon" aria-hidden="true">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -503,6 +521,12 @@
                             </svg>
                         </span>
                         <span class="sidebar-action-text">Chats</span>
+                    </button>
+                    <button type="button" class="sidebar-action-btn" id="action-customize-xc" aria-label="Customize" data-tooltip="Customize" data-settings-trigger="personalization">
+                        <span class="sidebar-action-icon" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                        </span>
+                        <span class="sidebar-action-text">Customize</span>
                     </button>
                 </div>
             </div>
@@ -809,6 +833,7 @@
                 </main>
                 <script src="{{ url_for('static', filename='js/projectsPage.js') }}?v=6" defer></script>
                 {% endif %}
+                <section class="xc-surface" id="xc-surface" aria-live="polite" hidden></section>
                 <div class="chat-shell"{% if current_project %} style="display:none"{% endif %} role="region" aria-label="Chat workspace">
                     <header class="chat-shell__header">
 
@@ -1497,7 +1522,8 @@
     <script src="{{ url_for('static', filename='js/artifactDiff.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=67"></script>
     <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=14" defer></script>
-    <script src="{{ url_for('static', filename='js/xela-claude.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='js/xela-claude.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/xela-pages.js') }}?v=1"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Dropdown Menu Logic ---

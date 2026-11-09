@@ -54,8 +54,8 @@ def seed(db, uid):
         ("Reverse SSH tunnel explained", [("What is a reverse SSH tunnel? Give me an example command.", RICH_RESPONSE)], 0),
         ("Rename photos by date in Python", [("Write a Python script that renames my photos by date.", PY_RESPONSE)], 1),
         ("Weekly meal plan on a budget", [("Plan my meals for the week, cheap and healthy.", "Here's a simple plan built around **five base ingredients**: rice, lentils, eggs, frozen vegetables and chicken thighs.\n\n- **Monday:** lentil soup\n- **Tuesday:** fried rice with eggs\n- **Wednesday:** chicken and vegetables\n\nWant a shopping list too?")], 2),
-        ("WSL disk attach access denied", [("WSL says access denied when attaching the disk.", "The `.vhdx` file belongs to the old account. Run `takeown` on the folder, then start WSL again.")], 26),
-        ("Nevo marketing ideas for winter", [("Give me winter marketing ideas for Nevo.", "Three quick ideas: a winter recipes series, a delivery-time guarantee, and a referral bonus for December.")], 30),
+        ("Wsl Disk Attach Access Denied", [("WSL says access denied when attaching the disk.", "The `.vhdx` file belongs to the old account. Run `takeown` on the folder, then start WSL again.")], 26),
+        ("Planifică O Sesiune De Lucru Creativă", [("Give me winter marketing ideas for Nevo.", "Three quick ideas: a winter recipes series, a delivery-time guarantee, and a referral bonus for December.")], 30),
         ("Restaurant revenue dashboard", [("Build a revenue dashboard for my restaurant.", "Sure. Which numbers matter most: daily covers, average ticket or food cost?")], 50),
         ("Cover letter for a backend role", [("Help me write a cover letter.", "Happy to. Paste the job description and a few lines about your experience.")], 80),
     ]
@@ -72,4 +72,28 @@ def seed(db, uid):
             "is_temporary": False, "is_pinned": False, "pinned_at": None, "project_id": None,
             "unread_count": 0, "last_read_at": t,
         })
+    user = db.collection("users").document(uid)
+    # pinned chat + chats with artifacts
+    user.collection("chat_sessions").document("session_demo_5").update({"is_pinned": True, "pinned_at": now})
+    arts = [("session_demo_0", "a1", "Tunnel status page", "index.html", 2, 1),
+            ("session_demo_1", "a2", "Photo Renamer Script", "rename.py", 1, 5),
+            ("session_demo_2", "a3", "Weekly meal plan", "plan.md", 3, 30),
+            ("session_demo_5", "a4", "Revenue dashboard", "index.html", 4, 52)]
+    for sid, aid, title, entry, versions, hours in arts:
+        t = now - dt.timedelta(hours=hours)
+        user.collection("chat_sessions").document(sid).update({"has_artifact": True, "msg_count": 2, "has_attachment": False})
+        user.collection("chat_sessions").document(sid).collection("artifacts").document(aid).set({
+            "conversationId": sid, "title": title, "type": "project", "entrypointPath": entry,
+            "createdAt": t, "updatedAt": t, "versionCount": versions, "activeVersionId": "v1", "isActive": True})
+    for i, (name, color) in enumerate([("Nevo launch", "#d97757"), ("RatePulse", "#5b8def"), ("Xela Code", "#8b6ff0")]):
+        t = now - dt.timedelta(days=i * 3 + 1)
+        user.collection("projects").document(f"proj_{i}").set({
+            "name": name, "color": color, "icon": "code", "position": i, "instructions": "",
+            "created_at": t, "updated_at": t})
+    rems = [("Drink water", "DAILY", 3, "scheduled"), ("Send the weekly report", "WEEKLY", 50, "scheduled"), ("Call the accountant", None, -20, "sent")]
+    for i, (name, rec, hours, status) in enumerate(rems):
+        t = (now + dt.timedelta(hours=hours)).replace(tzinfo=dt.timezone.utc)
+        user.collection("reminders").document(f"rem_{i}").set({
+            "id": f"rem_{i}", "userId": uid, "name": name, "instructions": "", "fireAt": t.isoformat(),
+            "timezone": "Europe/Bucharest", "status": status, "recurrence": rec, "createdAt": now.isoformat()})
     return len(sessions)

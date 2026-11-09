@@ -39,7 +39,7 @@ for k, v in {
     "DISCORD_REDIRECT_URI": "https://dev.invalid/auth/discord/callback",
     "OLLAMA_MODEL": "qwen3.6-27b",
     "MEMPALACE_MODE": "off",
-    "REMINDERS_ENABLED": "false",
+    "REMINDERS_ENABLED": "true",
     "PUSH_ENABLED": "false",
 }.items():
     os.environ.setdefault(k, v)

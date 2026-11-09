@@ -240,6 +240,31 @@ def _render_home(initial_surface='chat', current_project=None):
         return jsonify({'error': 'Failed to load the index page.'}), 500
 
 
+def _signed_in_surface(name):
+    """Projects / Artifacts / Scheduled pages: the home template with that surface open."""
+    if 'user' not in session:
+        return redirect(url_for('auth_routes.login'))
+    return _render_home(initial_surface=name)
+
+
+@pages_bp.route('/all-projects', methods=['GET'])
+@error_handler
+def projects_surface():
+    return _signed_in_surface('projects')
+
+
+@pages_bp.route('/artifacts', methods=['GET'])
+@error_handler
+def artifacts_surface():
+    return _signed_in_surface('artifacts')
+
+
+@pages_bp.route('/scheduled', methods=['GET'])
+@error_handler
+def scheduled_surface():
+    return _signed_in_surface('scheduled')
+
+
 @pages_bp.route('/c/<session_id>', methods=['GET'])
 @error_handler
 @guest_allowed
