@@ -1,44 +1,26 @@
-"""FenceAwareParagraphNormalizer: paragraph breaks outside code, code untouched, any chunking."""
-import random
-
-from app.services.stream_normalizer import FenceAwareParagraphNormalizer, normalize_paragraph_breaks
-
-TEXT = (
-    "Here is code:\n```python\ndef f(n):\n    if n < 2:\n        return False\n    return True\n```\n"
-    "It returns `True` for primes.\nSecond line."
-)
+"""The stream must carry the model text unchanged (live view == reloaded view)."""
+from app.services.stream_normalizer import FenceAwareParagraphNormalizer
 
 
-def run(chunks):
-    norm = FenceAwareParagraphNormalizer()
-    return "".join(norm.feed(c) for c in chunks) + norm.flush()
+def _run(chunks):
+    n = FenceAwareParagraphNormalizer()
+    return "".join(n.feed(c) for c in chunks) + n.flush()
 
 
-def code_block(text):
-    start = text.index("```python")
-    return text[start:text.index("```", start + 3)]
+def test_table_rows_stay_on_consecutive_lines():
+    table = "| a | b |\\n| --- | --- |\\n| 1 | 2 |\\n"
+    assert _run([table]) == table
 
 
-def test_code_is_not_double_spaced_for_any_chunking():
-    rng = random.Random(7)
-    for _ in range(500):
-        cuts = sorted(rng.sample(range(1, len(TEXT)), rng.randint(1, 14)))
-        chunks = [TEXT[a:b] for a, b in zip([0] + cuts, cuts + [len(TEXT)])]
-        out = run(chunks)
-        assert "\n\n" not in code_block(out), chunks
-        assert "`True`" in out
+def test_code_is_untouched_even_when_the_fence_is_split_across_chunks():
+    chunks = ["intro\\n``", "`py\\nx = 1\\ny = 2\\n`", "``\\nafter\\n"]
+    assert _run(chunks) == "".join(chunks)
 
 
-def test_prose_outside_code_still_gets_paragraph_breaks():
-    out = run(["Para one.\nPara two.\n", "```py\nx=1\ny=2\n``", "`\nAfter."])
-    assert out == "Para one.\n\nPara two.\n\n```py\nx=1\ny=2\n```\n\nAfter."
+def test_list_continuation_lines_and_verse_keep_single_newlines():
+    text = "1. Step\\n   detail line\\n2. Next\\n\\nRoses are red,\\nViolets are blue.\\n"
+    assert _run(list(text)) == text
 
 
-def test_trailing_inline_backtick_is_flushed():
-    out = run(["Use `True`"])
-    assert out.endswith("`True`")
-
-
-def test_same_as_plain_normalizer_without_code():
-    text = "One.\nTwo.\n- item\n- item\n# Head\nThree."
-    assert run([text]) == normalize_paragraph_breaks(text)
+def test_empty_chunks_are_harmless():
+    assert _run(["", None, "x"]) == "x"

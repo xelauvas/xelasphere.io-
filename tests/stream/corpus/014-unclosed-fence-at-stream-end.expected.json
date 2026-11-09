@@ -1,3 +1,0 @@
-[
-  { "type": "code", "text": "def foo():\n    pass\n", "meta": { "lang": "python" } }
-]

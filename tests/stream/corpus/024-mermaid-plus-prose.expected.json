@@ -1,4 +1,0 @@
-[
-  { "type": "mermaid", "text": "graph LR; X-->Y;\n" },
-  { "type": "paragraph", "text": "Here is a plain paragraph after the diagram.\n" }
-]

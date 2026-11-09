@@ -75,8 +75,7 @@
         setTimeout(_foucReveal, 3000);
     </script>
 
-    <!-- markdown-it (task-list rendering is reimplemented in stream/renderers/list.js
-         because parseItems strips the leading "- " before any plugin can see it). -->
+    <!-- markdown-it: configured for assistant answers in js/stream/markdownEngine.js -->
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.0.0/dist/markdown-it.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
     <script>
@@ -138,7 +137,7 @@
             window._streamRendererReadyResolve = resolve;
         });
     </script>
-    <script type="module" src="{{ url_for('static', filename='js/streamRenderer.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/streamRenderer.js') }}?v=8"></script>
 
     <!-- Mermaid Diagrams -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -228,6 +227,7 @@
 
     <!-- Final skin: claude.ai-style layout with the Xela brand (must stay last) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-claude.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-markdown.css') }}?v=3">
 
     <!-- Lightweight Charts (TradingView) — v5 introduces breaking series-creation API
          (addAreaSeries → addSeries(AreaSeries, ...)) handled in cryptoChartModule.js -->

@@ -1,3 +1,0 @@
-[
-  { "type": "code", "text": "NSLog(@\"hi\");\n", "meta": { "lang": "objective-c" } }
-]

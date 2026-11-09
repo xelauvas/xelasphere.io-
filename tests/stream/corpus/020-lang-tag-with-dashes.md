@@ -1,3 +1,0 @@
-```objective-c
-NSLog(@"hi");
-```

@@ -165,37 +165,20 @@ def normalize_paragraph_breaks(text: str) -> str:
 
 
 class FenceAwareParagraphNormalizer:
-    """normalize_paragraph_breaks for a stream, leaving fenced code untouched.
+    """Pass-through: the stream now carries the model's text exactly as written.
 
-    normalize_paragraph_breaks works on one chunk at a time and cannot see code
-    fences, so every newline inside a ``` block was doubled (code rendered with an
-    empty line between all lines). This tracks fences across chunks; a chunk that
-    ends in one or two backticks is held back until the next chunk (or flush()) so
-    a fence split across chunks is still recognized.
+    This used to turn every single newline outside code fences into a blank line so
+    that prose got paragraph spacing. It also put a blank line between table rows,
+    between the lines of a list item and between the lines of a poem, so the live
+    answer rendered differently from the same message after a reload (the stored
+    text was never rewritten). The client renderer now treats a single newline as a
+    line break, so nothing needs rewriting on the way out.
+
+    The feed()/flush() interface stays so the stream route does not change shape.
     """
 
-    _PARTIAL_FENCE_RE = re.compile(r'(?<!`)`{1,2}$')
-
-    def __init__(self):
-        self.in_code = False
-        self._carry = ''
-
     def feed(self, text: str) -> str:
-        text = self._carry + (text or '')
-        self._carry = ''
-        m = self._PARTIAL_FENCE_RE.search(text)
-        if m:
-            self._carry = m.group(0)
-            text = text[:m.start()]
-        parts = text.split('```')
-        out = []
-        for i, part in enumerate(parts):
-            if i:
-                out.append('```')
-                self.in_code = not self.in_code
-            out.append(part if self.in_code else normalize_paragraph_breaks(part))
-        return ''.join(out)
+        return text or ''
 
     def flush(self) -> str:
-        rest, self._carry = self._carry, ''
-        return rest
+        return ''
