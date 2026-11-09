@@ -1,35 +1,37 @@
 {% extends "base.html" %}
 
-{% block title %}Connect Xela Code · XelaSphere{% endblock %}
+{% block title %}Connect Xela Code · Xela{% endblock %}
 
 {% block content %}
 <div class="login-page-background"></div>
 <style>
-  .cli-code { font: 600 26px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .14em;
-              text-align: center; padding: 14px; border-radius: 12px; background: rgba(255,255,255,.06);
-              border: 1px solid rgba(255,255,255,.14); margin: 18px 0; color: #fff; width: 100%; box-sizing: border-box; }
-  .cli-meta { color: rgba(255,255,255,.65); font-size: 14px; text-align: center; margin: 0 0 16px; line-height: 1.5; }
+  .cli-code { font: 600 24px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .14em;
+              text-align: center; padding: 14px; border-radius: 12px; background: var(--xc-surface);
+              border: 1px solid var(--xc-hair); margin: 18px 0; color: var(--xc-text); width: 100%; box-sizing: border-box; }
+  .cli-meta { color: var(--xc-text-3); font: 400 14px/1.5 var(--xc-sans); text-align: center; margin: 0 0 16px; }
+  .cli-meta strong { color: var(--xc-text-2); font-weight: 500; }
   .cli-actions { display: flex; gap: 10px; margin-top: 6px; }
-  .cli-actions .submit-btn { flex: 1; margin: 0; }
-  .cli-secondary { flex: 1; background: transparent; border: 1px solid rgba(255,255,255,.22); color: #fff;
-                   border-radius: 10px; padding: 12px; cursor: pointer; font: inherit; }
-  .cli-secondary:hover { background: rgba(255,255,255,.08); }
-  .cli-ok { color: #4ade80; text-align: center; font-size: 15px; margin: 14px 0 6px; }
-  .cli-link { display: block; text-align: center; text-decoration: none; }
+  .cli-actions .submit-btn { flex: 1; margin: 0 !important; }
+  .cli-secondary { flex: 1; height: 46px; background: transparent; border: 1px solid var(--xc-hair); color: var(--xc-text);
+                   border-radius: 12px; cursor: pointer; font: 500 15px/1 var(--xc-sans); }
+  .cli-secondary:hover { background: var(--xc-hover); }
+  .cli-ok { color: #4caf7d; text-align: center; font: 500 15px/1.5 var(--xc-sans); margin: 14px 0 6px; }
+  .cli-link { display: flex !important; text-decoration: none !important; }
+  .cli-meta code { font-family: var(--xc-mono); font-size: 13px; color: var(--xc-text-2); }
 </style>
 
 <div class="login-page-container">
   <div class="login-card">
     <div class="login-brand">
-      <a href="/" title="XelaSphere">
-        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="XelaSphere" class="brand-logo-img">
+      <a href="/" title="Xela">
+        <img src="{{ url_for('static', filename='brand/xela-tile.svg') }}" alt="" class="brand-logo-img xc-auth-tile" width="40" height="40"><span class="xc-auth-word">Xela</span>
       </a>
     </div>
 
     {% if state == 'login' %}
       <div class="login-header">
         <h2 class="login-title">Connect Xela Code</h2>
-        <p class="login-subtitle">Xela Code on your computer wants to use your XelaSphere account.</p>
+        <p class="login-subtitle">Xela Code on your computer wants to use your Xela account.</p>
       </div>
       {% if code %}<div class="cli-code">{{ code }}</div>{% endif %}
       <a class="submit-btn cli-link" href="{{ login_url }}">Sign in to continue</a>

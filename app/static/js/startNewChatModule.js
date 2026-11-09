@@ -210,7 +210,7 @@ class ChatManager {
     updatePageTitle(sessionId = null) {
         if (typeof document === 'undefined') return;
 
-        const defaultTitle = 'XelaSphere';
+        const defaultTitle = 'Xela';
 
         if (!sessionId) {
             document.title = defaultTitle;
@@ -1958,6 +1958,7 @@ async loadChatHistory(pageToken = null, limit = 30) {
 
     showImagesPage({ updateHistory = true } = {}) {
         if (!this.elements.imagesPage) return;
+        if (this.chatsPageActive) this.hideChatsPage({ updateHistory: false });
         this.imagesPageActive = true;
         this.elements.imagesPage.hidden = false;
         this.elements.imagesPage.classList.add('is-visible');

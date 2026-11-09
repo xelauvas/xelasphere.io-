@@ -60,7 +60,7 @@
     }).then((r) => {
       if (r.ok) {
         els.title.textContent = next.trim();
-        document.title = `${next.trim()} · XelaSphere`;
+        document.title = `${next.trim()} · Xela`;
       }
     });
   });
@@ -477,7 +477,7 @@
     }).then((r) => {
       if (r.ok) {
         els.title.textContent = next.trim();
-        document.title = `${next.trim()} · XelaSphere`;
+        document.title = `${next.trim()} · Xela`;
       } else {
         window.toast?.error?.(`Rename failed (${r.status})`);
       }

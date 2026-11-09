@@ -3,11 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XelaSphere Dashboard</title>
+    <title>Profile · Xela</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='brand/xela-tile.svg') }}">
+    <script src="{{ url_for('static', filename='js/themeManager.js') }}"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap" rel="stylesheet">
+
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-claude.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-pages.css') }}?v=1">
 </head>
 <body class="dashboard-page">
 
@@ -95,7 +101,7 @@
     <!-- Top Navigation (Header) -->
     <nav class="top-nav" role="navigation" aria-label="Main navigation">
         <div class="logo">
-            <a href="/" aria-label="Go to Home - XelaSphere Chat" class="logo-link">XelaSphere</a>
+            <a href="/" aria-label="Back to Xela" class="logo-link xc-page-brand"><img src="{{ url_for('static', filename='brand/xela-tile.svg') }}" alt="">Xela</a>
         </div>
         <div class="user-menu">
             {% if user_data %}

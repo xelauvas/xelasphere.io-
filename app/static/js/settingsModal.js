@@ -489,7 +489,7 @@
     };
     const KOKORO_GENDER_NAMES = { f: 'female', m: 'male' };
 
-    const FALLBACK_PREVIEW_TEXT = "Hi, I'm your XelaSphere voice assistant.";
+    const FALLBACK_PREVIEW_TEXT = "Hi, I'm Xela, your voice assistant.";
 
     /**
      * Generate a friendly intro line for any Kokoro voice id (e.g. "bm_lewis"

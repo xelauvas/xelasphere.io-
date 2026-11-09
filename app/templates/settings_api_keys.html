@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>API Keys · XelaSphere</title>
+    <title>API keys · Xela</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/api-keys.css') }}">
     <style>
@@ -144,6 +144,11 @@
         .conv-delete-btn:hover { color: #f55; }
         .conv-delete-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     </style>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='brand/xela-tile.svg') }}">
+    <script src="{{ url_for('static', filename='js/themeManager.js') }}"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-claude.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-pages.css') }}?v=1">
 </head>
 <body class="api-keys-page">
     <div class="api-keys-wrapper">

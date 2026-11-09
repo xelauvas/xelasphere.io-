@@ -1,0 +1,386 @@
+/* ==========================================================================
+   xela-auth.css: sign-in, sign-up, password reset, CLI authorization.
+   Loaded after login.css / register.css in base.html; uses the --xc-* tokens
+   from xela-claude.css, so the pages follow light / dark / system.
+   ========================================================================== */
+
+body:has(.login-page-container) {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--xc-bg) !important;
+  color: var(--xc-text-body) !important;
+  font-family: var(--xc-sans) !important;
+}
+
+.login-page-background {
+  display: none !important;
+}
+
+.login-page-container {
+  min-height: 100vh !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 48px 16px 40px !important;
+  background: transparent !important;
+  box-sizing: border-box;
+}
+
+.login-page-container .login-card {
+  width: 100% !important;
+  max-width: 400px !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  animation: xc-auth-in 360ms var(--xc-ease) both;
+}
+
+@keyframes xc-auth-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-page-container .login-card { animation: none; }
+}
+
+/* brand */
+.login-page-container .login-brand {
+  display: flex !important;
+  justify-content: center !important;
+  margin: 0 0 30px !important;
+}
+
+.login-page-container .login-brand a {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  text-decoration: none !important;
+}
+
+.login-page-container .xc-auth-tile {
+  width: 40px !important;
+  height: 40px !important;
+  max-width: none !important;
+  border-radius: 11px !important;
+  box-shadow: 0 4px 14px rgba(201, 100, 66, 0.28) !important;
+  filter: none !important;
+}
+
+.login-page-container .xc-auth-word {
+  font-family: var(--xc-serif);
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--xc-text);
+}
+
+/* heading */
+.login-page-container .login-header {
+  text-align: center !important;
+  margin: 0 0 28px !important;
+}
+
+.login-page-container .login-title {
+  margin: 0 !important;
+  font-family: var(--xc-serif) !important;
+  font-weight: 400 !important;
+  font-size: 36px !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.015em !important;
+  color: var(--xc-text) !important;
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.login-page-container .login-subtitle {
+  margin: 10px 0 0 !important;
+  font: 400 15px/1.5 var(--xc-sans) !important;
+  color: var(--xc-text-3) !important;
+}
+
+/* providers */
+.login-page-container .social-login-section {
+  margin: 0 !important;
+}
+
+.login-page-container .social-buttons {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+
+.login-page-container .social-btn {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 46px !important;
+  min-width: 0 !important;
+  padding: 0 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  flex: none !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--xc-hair) !important;
+  background: var(--xc-surface) !important;
+  color: var(--xc-text) !important;
+  font: 500 15px/1 var(--xc-sans) !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+  transition: background-color 120ms var(--xc-ease), border-color 120ms var(--xc-ease);
+}
+
+.login-page-container .social-btn:hover {
+  background: var(--xc-surface-2) !important;
+  border-color: var(--xc-hair) !important;
+}
+
+.login-page-container .social-btn img {
+  width: 18px !important;
+  height: 18px !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+/* providers that are not configured on the server are not offered */
+.login-page-container .social-btn.disabled {
+  display: none !important;
+}
+
+/* "or" */
+.login-page-container .login-separator {
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+  margin: 22px 0 !important;
+  color: var(--xc-text-3) !important;
+  font: 500 12px/1 var(--xc-sans) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.login-page-container .login-separator::before,
+.login-page-container .login-separator::after {
+  content: "" !important;
+  flex: 1 !important;
+  height: 1px !important;
+  background: var(--xc-hair-soft) !important;
+  position: static !important;
+  width: auto !important;
+}
+
+.login-page-container .login-separator span {
+  background: transparent !important;
+  padding: 0 !important;
+  color: inherit !important;
+  position: static !important;
+}
+
+/* form */
+.login-page-container .login-form {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.login-page-container .form-group {
+  position: relative;
+  margin: 0 !important;
+}
+
+.login-page-container .form-label:not(.visually-hidden) {
+  display: block;
+  margin: 0 0 6px !important;
+  font: 500 13px/1.3 var(--xc-sans) !important;
+  color: var(--xc-text-2) !important;
+}
+
+.login-page-container .form-input,
+.login-page-container input[type="email"],
+.login-page-container input[type="password"],
+.login-page-container input[type="text"] {
+  width: 100% !important;
+  height: 46px !important;
+  padding: 0 14px !important;
+  box-sizing: border-box !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--xc-hair) !important;
+  background: var(--xc-surface) !important;
+  color: var(--xc-text) !important;
+  font: 400 15px/1.4 var(--xc-sans) !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transition: border-color 120ms var(--xc-ease), box-shadow 120ms var(--xc-ease);
+}
+
+.login-page-container .form-input::placeholder,
+.login-page-container input::placeholder {
+  color: var(--xc-text-3) !important;
+  opacity: 1 !important;
+}
+
+.login-page-container .form-input:focus,
+.login-page-container input:focus {
+  border-color: var(--xc-accent) !important;
+  box-shadow: 0 0 0 3px var(--xc-accent-soft) !important;
+}
+
+.login-page-container .form-input.invalid {
+  border-color: #e5675a !important;
+}
+
+.login-page-container .password-toggle {
+  color: var(--xc-text-3) !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.login-page-container .forgot-password-link {
+  display: block !important;
+  margin: 8px 2px 0 auto !important;
+  width: fit-content;
+  color: var(--xc-text-3) !important;
+  font: 400 13px/1.4 var(--xc-sans) !important;
+  text-decoration: none !important;
+}
+
+.login-page-container .forgot-password-link:hover {
+  color: var(--xc-text) !important;
+  text-decoration: underline !important;
+}
+
+.login-page-container .submit-btn {
+  width: 100% !important;
+  height: 46px !important;
+  margin-top: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: var(--xc-text) !important;
+  color: var(--xc-bg) !important;
+  font: 500 15px/1 var(--xc-sans) !important;
+  box-shadow: none !important;
+  transform: none !important;
+  cursor: pointer;
+  transition: opacity 120ms var(--xc-ease);
+}
+
+.login-page-container .submit-btn:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.login-page-container .submit-btn:disabled {
+  opacity: 0.6;
+}
+
+.login-page-container .submit-btn .submit-arrow {
+  width: 14px;
+  height: 14px;
+}
+
+/* footer */
+.login-page-container .login-footer {
+  margin-top: 26px !important;
+  text-align: center !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+
+.login-page-container .legal-text {
+  margin: 0 0 14px !important;
+  font: 400 12.5px/1.55 var(--xc-sans) !important;
+  color: var(--xc-text-3) !important;
+}
+
+.login-page-container .legal-text a {
+  color: var(--xc-text-2) !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+}
+
+.login-page-container .register-link-container {
+  font: 400 14px/1.5 var(--xc-sans) !important;
+  color: var(--xc-text-3) !important;
+}
+
+.login-page-container .register-prompt {
+  color: var(--xc-text-3) !important;
+}
+
+.login-page-container .register-link {
+  margin-left: 4px;
+  color: var(--xc-text) !important;
+  font-weight: 500 !important;
+  text-decoration: underline !important;
+  text-underline-offset: 3px;
+}
+
+/* flash messages */
+.login-page-container .flash-messages-container {
+  margin: 0 0 18px !important;
+}
+
+.login-page-container .flash-alert {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 10px !important;
+  padding: 12px 14px !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--xc-hair) !important;
+  background: var(--xc-surface) !important;
+  color: var(--xc-text-body) !important;
+  font: 400 14px/1.45 var(--xc-sans) !important;
+  box-shadow: none !important;
+}
+
+.login-page-container .flash-alert-danger,
+.login-page-container .flash-alert-error {
+  border-color: rgba(229, 103, 90, 0.45) !important;
+}
+
+.login-page-container .flash-alert-danger .flash-icon,
+.login-page-container .flash-alert-error .flash-icon {
+  color: #e5675a !important;
+}
+
+.login-page-container .flash-alert-success .flash-icon {
+  color: #4caf7d !important;
+}
+
+.login-page-container .flash-close {
+  margin-left: auto !important;
+  background: transparent !important;
+  border: 0 !important;
+  color: var(--xc-text-3) !important;
+}
+
+@media (max-width: 480px) {
+  .login-page-container {
+    align-items: flex-start !important;
+    padding-top: 56px !important;
+  }
+
+  .login-page-container .login-title {
+    font-size: 31px !important;
+  }
+}
+
+/* no provider configured: no empty section and no lone "or" */
+.login-page-container .social-login-section:not(:has(.social-btn:not(.disabled))) {
+  display: none !important;
+}
+
+.login-page-container .social-login-section:not(:has(.social-btn:not(.disabled))) + .login-separator {
+  display: none !important;
+}

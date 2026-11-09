@@ -850,9 +850,9 @@ function getGuestBannerThreshold() {
 
 function formatGuestComposerPlaceholder(remaining) {
     if (window.matchMedia?.('(max-width: 480px)').matches) {
-        return 'Try XelaSphere';
+        return 'Try Xela';
     }
-    return `Try XelaSphere (${remaining} message${remaining !== 1 ? 's' : ''} left)`;
+    return `Try Xela (${remaining} message${remaining !== 1 ? 's' : ''} left)`;
 }
 
 function updateGuestMessageCount(count) {

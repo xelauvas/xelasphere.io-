@@ -486,9 +486,9 @@ function appendActionButtons(container, messageId, { skipSourcesRefresh = false 
     };
 
     const _resetBoth = () => {
-        buttonLike.querySelector('i').className = 'fa-regular fa-face-smile';
+        buttonLike.querySelector('i').className = 'fa-regular fa-thumbs-up';
         buttonLike.style.color = '';
-        buttonDislike.querySelector('i').className = 'fa-regular fa-face-frown';
+        buttonDislike.querySelector('i').className = 'fa-regular fa-thumbs-down';
         buttonDislike.style.color = '';
     };
 
@@ -502,28 +502,28 @@ function appendActionButtons(container, messageId, { skipSourcesRefresh = false 
         }).catch(err => console.warn('Feedback failed:', err));
     };
 
-    const buttonLike = createIconButton('fa-regular fa-face-smile', 'Good response', () => {
+    const buttonLike = createIconButton('fa-regular fa-thumbs-up', 'Good response', () => {
         const current = messageElement.dataset.feedback;
         _resetBoth();
         if (current === 'positive') {
             // Toggle off — clear feedback
             _persistFeedback('');
         } else {
-            buttonLike.querySelector('i').className = 'fa-solid fa-face-smile';
+            buttonLike.querySelector('i').className = 'fa-solid fa-thumbs-up';
             buttonLike.style.color = 'var(--accent-color, #4CAF50)';
             _sendFeedback('positive');
             _persistFeedback('positive');
         }
     });
 
-    const buttonDislike = createIconButton('fa-regular fa-face-frown', 'Bad response', () => {
+    const buttonDislike = createIconButton('fa-regular fa-thumbs-down', 'Bad response', () => {
         const current = messageElement.dataset.feedback;
         _resetBoth();
         if (current === 'negative') {
             // Toggle off — clear feedback
             _persistFeedback('');
         } else {
-            buttonDislike.querySelector('i').className = 'fa-solid fa-face-frown';
+            buttonDislike.querySelector('i').className = 'fa-solid fa-thumbs-down';
             buttonDislike.style.color = 'var(--error-color, #f44336)';
             _sendFeedback('negative');
             _persistFeedback('negative');
@@ -533,10 +533,10 @@ function appendActionButtons(container, messageId, { skipSourcesRefresh = false 
     // Restore feedback state from previous session data
     const _existingFeedback = messageElement.dataset.feedback;
     if (_existingFeedback === 'positive') {
-        buttonLike.querySelector('i').className = 'fa-solid fa-face-smile';
+        buttonLike.querySelector('i').className = 'fa-solid fa-thumbs-up';
         buttonLike.style.color = 'var(--accent-color, #4CAF50)';
     } else if (_existingFeedback === 'negative') {
-        buttonDislike.querySelector('i').className = 'fa-solid fa-face-frown';
+        buttonDislike.querySelector('i').className = 'fa-solid fa-thumbs-down';
         buttonDislike.style.color = 'var(--error-color, #f44336)';
     }
 

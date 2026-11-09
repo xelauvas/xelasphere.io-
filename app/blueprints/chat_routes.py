@@ -65,7 +65,7 @@ from app.artifacts import (
     apply_patches, ArtifactStore,
 )
 from app.context.action_parser import ActionParser, StreamingActionBuffer
-from app.services.stream_normalizer import StreamNormalizer, get_model_family, normalize_paragraph_breaks
+from app.services.stream_normalizer import StreamNormalizer, get_model_family, normalize_paragraph_breaks, FenceAwareParagraphNormalizer
 from app.context.context_builder import ContextBuilder, extract_turn_metadata
 from app.context.artifact_state_tracker import get_tracker, ArtifactStateTracker
 from app.file_processor import (
@@ -1378,6 +1378,7 @@ def chat_stream():
                 _first_content_yielded['done'] = True
             return cleaned
         normalizer = StreamNormalizer(model_family=get_model_family(stream_model))
+        _paragraphs = FenceAwareParagraphNormalizer()  # paragraph breaks outside ``` code only
         _search_second_pass_done = False  # True after 2nd LLM call completes
         _search_synthesis_content = []  # Collects 2nd pass content for chat_summary
 
@@ -1504,6 +1505,7 @@ def chat_stream():
                     return ''.join(f'[{n}]' for n in valid)
                 return _cite_any_re.sub(_repl, s)
 
+            _syn_paragraphs = FenceAwareParagraphNormalizer()
             try:
                 for chunk in stream_deepseek_response(synthesis_prompt, stream_model, system_prompt_override=_sys_prompt):
                     if _client_disconnected():
@@ -1513,7 +1515,7 @@ def chat_stream():
                     if ct == 'content':
                         text = chunk.get('text', '')
                         _search_synthesis_content.append(text)
-                        _cleaned = _sanitize_content(normalize_paragraph_breaks(text))
+                        _cleaned = _sanitize_content(_syn_paragraphs.feed(text))
                         _cleaned = _strip_invalid_citations(_cleaned)
                         yield f"data: {json.dumps({'type': 'content', 'text': _cleaned})}\n\n"
                     elif ct == 'reasoning':
@@ -1523,6 +1525,9 @@ def chat_stream():
                     elif ct == 'error':
                         logger.warning(f"[Stream] Search synthesis error: {chunk.get('text')}")
                         break
+                _syn_tail = _syn_paragraphs.flush()
+                if _syn_tail:
+                    yield f"data: {json.dumps({'type': 'content', 'text': _strip_invalid_citations(_sanitize_content(_syn_tail))})}\n\n"
             except GeneratorExit:
                 logger.info('[Stream] GeneratorExit during search synthesis — client disconnected')
                 return
@@ -1752,7 +1757,7 @@ def chat_stream():
 
                             # Forward remainder after the ACTION line (skip if search did 2nd pass)
                             if not _search_second_pass_done and action_buffer.remainder:
-                                yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(normalize_paragraph_breaks(action_buffer.remainder))})}\n\n"
+                                yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(_paragraphs.feed(action_buffer.remainder))})}\n\n"
                         # If not resolved yet, keep buffering (no yield)
                         if not action_resolved:
                             continue
@@ -1766,9 +1771,12 @@ def chat_stream():
                     if just_resolved:
                         continue
 
-                    yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(normalize_paragraph_breaks(text))})}\n\n"
+                    yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(_paragraphs.feed(text))})}\n\n"
 
                 elif chunk_type == 'done':
+                    _para_tail = _paragraphs.flush()
+                    if _para_tail and not _search_second_pass_done:
+                        yield f"data: {json.dumps({'type': 'content', 'text': _sanitize_content(_para_tail)})}\n\n"
                     # Flush normalizer for models that don't emit trailing \n
                     if not action_resolved:
                         for normalized_chunk in normalizer.flush():

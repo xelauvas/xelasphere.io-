@@ -9,80 +9,50 @@
     // Greeting pools organized by time of day
     const greetings = {
         morning: [
-            "Good morning, {name}. What's on the agenda?",
-            "Morning, {name}! Ready to dive in?",
-            "Rise and shine, {name}. Where should we begin?",
-            "Hey {name}, coffee's ready. What are we building?",
-            "Good morning, {name}. Let's make today count.",
-            "Morning, {name}. What's first on your list?",
-            "Hey {name}, fresh start today. What's the plan?",
-            "Good morning, {name}. Ready when you are.",
-            "Morning, {name}! What can I help you with?",
-            "Hey {name}, let's get things rolling."
+            "Good morning, {name}",
+            "Morning, {name}",
+            "Coffee and Xela time, {name}?",
+            "Hello, {name}"
         ],
         afternoon: [
-            "Good afternoon, {name}. What are you working on?",
-            "Hey {name}, how can I help this afternoon?",
-            "Afternoon, {name}. Let's get things done.",
-            "Good afternoon, {name}. What's next?",
-            "Hey {name}, making progress?",
-            "Afternoon, {name}. What's on your mind?",
-            "Good afternoon, {name}. Ready to continue?",
-            "Hey {name}, let's keep the momentum going.",
-            "Afternoon, {name}. What can I do for you?",
-            "Good afternoon, {name}. Where were we?"
+            "Good afternoon, {name}",
+            "Afternoon, {name}",
+            "Back at it, {name}",
+            "Hello, {name}"
         ],
         evening: [
-            "Good evening, {name}. What's on your mind?",
-            "Evening, {name}. Wrapping up or just getting started?",
-            "{name}, still going strong. What's next?",
-            "Good evening, {name}. How can I help?",
-            "Evening, {name}. What are we working on?",
-            "Hey {name}, winding down or pushing through?",
-            "Good evening, {name}. Let's finish strong.",
-            "Evening, {name}. What's left on the list?",
-            "{name}, hope your day went well. What's up?",
-            "Good evening, {name}. Ready when you are."
+            "Good evening, {name}",
+            "Evening, {name}",
+            "How was your day, {name}?",
+            "Hello, {name}"
         ],
         night: [
-            "Burning the midnight oil, {name}?",
-            "Late night session, {name}? Let's do this.",
-            "Night owl mode, {name}. What are we tackling?",
-            "Hey {name}, quiet hours. What's on your mind?",
-            "Still at it, {name}? How can I help?",
-            "Late night, {name}. Let's make it productive.",
-            "{name}, the night is young. What's the plan?",
-            "Midnight thoughts, {name}? Let's explore.",
-            "Hey {name}, burning bright tonight.",
-            "Night shift, {name}. What are we building?"
+            "Hello, night owl",
+            "Still up, {name}?",
+            "Late night thinking, {name}?",
+            "Good evening, {name}"
         ],
         monday: [
-            "Monday momentum, {name}! Let's crush it.",
-            "New week, new possibilities, {name}.",
-            "Happy Monday, {name}. Fresh start ahead.",
-            "Monday's here, {name}. What's the game plan?",
-            "Hey {name}, let's kick off the week right."
+            "Happy Monday, {name}",
+            "New week, {name}"
         ],
         friday: [
-            "Happy Friday, {name}! Almost there.",
-            "TGIF, {name}. What's the final push?",
-            "Friday vibes, {name}. Let's finish strong.",
-            "Hey {name}, weekend's calling. Last stretch!",
-            "Friday, {name}! What's left to tackle?"
+            "Happy Friday, {name}",
+            "Friday at last, {name}"
         ],
         weekend: [
-            "Weekend vibes, {name}. What's the project?",
-            "Relaxed weekend mode, {name}. How can I help?",
-            "Hey {name}, weekend warrior. What's up?",
-            "Weekend coding, {name}? Let's build something.",
-            "{name}, taking it easy or going hard?"
+            "Happy weekend, {name}",
+            "Weekend mode, {name}"
         ],
         guest: [
-            "Incognito mode. No history saved.",
-            "You're incognito. Chat freely.",
-            "Private session. Nothing stored.",
-            "Incognito. Your chat stays private.",
-            "Ghost mode. No traces left."
+            "How can I help you today?",
+            "What's on your mind?",
+            "Let's think it through together"
+        ],
+        incognito: [
+            "Incognito chat. Nothing is saved.",
+            "You're incognito. This chat won't be saved.",
+            "Private chat. No history is kept."
         ]
     };
 
@@ -242,21 +212,14 @@
         document.body.classList.remove('is-daytime', 'is-nighttime');
         document.body.classList.add(isDay ? 'is-daytime' : 'is-nighttime');
 
-        // Mobile: typewriter (first sentence only)
-        if (isMobile()) {
-            const sentenceEnd = greeting.search(/[.!?]/);
-            const mobileGreeting = sentenceEnd > -1 ? greeting.substring(0, sentenceEnd + 1) : greeting;
-            typewriterEffect(textEl, mobileGreeting);
-        } else {
-            // Desktop: smooth fade in
-            textEl.textContent = greeting;
-            textEl.classList.add('greeting-fade-in');
-        }
+        // Same calm fade on every device (no typewriter)
+        textEl.textContent = greeting;
+        textEl.classList.add('greeting-fade-in');
 
-        // Set incognito label (always use guest/incognito greetings)
+        // Incognito label above the composer
         const tempLabel = document.querySelector('.temp-composer-label');
         if (tempLabel) {
-            tempLabel.textContent = pickRandom(greetings.guest);
+            tempLabel.textContent = pickRandom(greetings.incognito);
         }
 
         // Add visible class for animation (only if server didn't hide it)

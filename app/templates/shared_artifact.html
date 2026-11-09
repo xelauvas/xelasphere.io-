@@ -408,13 +408,18 @@
             }
         }
     </style>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='brand/xela-tile.svg') }}">
+    <script src="{{ url_for('static', filename='js/themeManager.js') }}"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-claude.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-pages.css') }}?v=1">
 </head>
 <body>
     <header class="shared-header">
         <div class="shared-header__inner">
             <div class="shared-header__branding">
-                <i class="fas fa-code shared-header__logo"></i>
-                <span class="shared-header__brand-name">XelaSphere</span>
+                <img class="shared-header__logo xc-shared-tile" src="{{ url_for('static', filename='brand/xela-tile.svg') }}" alt="" width="28" height="28">
+                <span class="shared-header__brand-name xc-shared-word">Xela</span>
             </div>
             <div class="shared-header__title">
                 <h1 class="shared-header__artifact-title">{{ artifact.title }}</h1>
@@ -489,7 +494,7 @@
     </main>
 
     <footer class="shared-footer">
-        <p>Powered by <a href="/">XelaSphere</a> - AI-powered chat with artifacts</p>
+        <p>Made with <a href="/">Xela</a></p>
     </footer>
 
     <script>

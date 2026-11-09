@@ -13,14 +13,22 @@
     <meta name="twitter:title" content="XelaSphere — Multi-Model AI Chat Platform">
     <meta name="twitter:description" content="10+ AI models. Artifacts with versioning. Memory. Web search. File processing.">
     <meta name="twitter:image" content="https://xelasphere.com/static/images/og-image-v2.png">
-    <title>{% block title %}XelaSphere{% endblock %}</title>
+    <title>{% block title %}Xela{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='brand/xela-tile.svg') }}">
+    <meta name="theme-color" content="#262624" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#faf9f5" media="(prefers-color-scheme: light)">
+    <!-- Theme first (light / dark / system), so the page never flashes the wrong colors -->
+    <script src="{{ url_for('static', filename='js/themeManager.js') }}"></script>
     <!-- Responsive Foundation (load first) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-foundation.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/register.css') }}">
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
+    <!-- Xela skin: tokens + auth pages (must stay last) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-claude.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-auth.css') }}?v=1">
 </head>
 <body class="bg-dark text-white">
     <!-- Main content -->
