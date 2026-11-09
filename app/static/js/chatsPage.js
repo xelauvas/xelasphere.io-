@@ -100,9 +100,17 @@
     /* ─── Model list (populated from sessions) ─────────────────── */
     let availableModels = [];
     function populateModelFilter() {
-        availableModels = Array.from(new Set(
-            state.sessions.map(s => s.model).filter(Boolean)
-        )).sort();
+        // Use the per-session 'models' array (every model the chat has
+        // ever used) so the dropdown surfaces every option, not just the
+        // latest model of each chat.
+        const all = new Set();
+        state.sessions.forEach(s => {
+            const list = Array.isArray(s.models) && s.models.length
+                ? s.models
+                : (s.model ? [s.model] : []);
+            list.forEach(m => { if (m) all.add(m); });
+        });
+        availableModels = Array.from(all).sort();
         // If currently-selected model isn't in the list anymore, clear it
         if (state.filters.model && !availableModels.includes(state.filters.model)) {
             state.filters.model = '';
@@ -160,9 +168,24 @@
         const q = state.search.trim().toLowerCase();
         let filtered = state.sessions.filter(s => {
             if (state.filters.starred && !s.starred) return false;
-            if (state.filters.model && s.model !== state.filters.model) return false;
-            if (state.filters.hasArtifact && !s.has_artifact) return false;
-            if (state.filters.hasAttachment && !s.has_attachment) return false;
+            if (state.filters.model) {
+                // Match against the full models list when present (chat may
+                // have been used with several models); fall back to the
+                // single 'model' field for older payloads.
+                const list = Array.isArray(s.models) && s.models.length
+                    ? s.models
+                    : (s.model ? [s.model] : []);
+                if (!list.includes(state.filters.model)) return false;
+            }
+            // Content-type filters (hasArtifact, hasAttachment) combine as OR.
+            // They're alternative kinds of rich content — when both are toggled
+            // the user is asking for chats that have ANY rich content, not
+            // chats that happen to have BOTH (a much rarer case).
+            if (state.filters.hasArtifact || state.filters.hasAttachment) {
+                const passesArtifact = state.filters.hasArtifact && s.has_artifact;
+                const passesAttachment = state.filters.hasAttachment && s.has_attachment;
+                if (!passesArtifact && !passesAttachment) return false;
+            }
             if (state.filters.dateFrom && (s.last_updated || '') < state.filters.dateFrom) return false;
             if (state.filters.dateTo && (s.last_updated || '') > state.filters.dateTo + 'T23:59:59') return false;
             if (q && !(s.title || '').toLowerCase().includes(q)) return false;
@@ -194,6 +217,12 @@
     /* ─── render ──────────────────────────────────────────────── */
 
     function render() {
+        // BAIL OUT if the user is mid-rename — re-rendering would replace
+        // the live contenteditable node and silently commit whatever they've
+        // typed so far via the blur listener firing on a detached element.
+        if (els.list && els.list.querySelector('.chats-row__title.is-editing')) {
+            return;
+        }
         if (state.error) {
             els.list.innerHTML = '';
             els.empty.hidden = true;
@@ -442,11 +471,25 @@
         const visibleIds = getVisibleSessions().map(s => s.session_id);
         const visibleCount = visibleIds.length;
         const allVisibleSelected = visibleCount > 0 && visibleIds.every(id => state.selected.has(id));
+        // DOM construction (no innerHTML) — values are integers today, but
+        // building this with text nodes makes it impossible to stop being safe
+        // if a future caller injects a label string into the count.
         const countText = els.bulkCount.querySelector('.chats-bulk__count-text') || els.bulkCount;
-        // Two formats — CSS picks one based on viewport (full on desktop, short on mobile).
-        countText.innerHTML =
-            `<span class="chats-bulk__count-full">${count} of ${visibleCount} selected</span>`
-          + `<span class="chats-bulk__count-short" aria-hidden="true">${count}<span class="chats-bulk__count-sep">/</span>${visibleCount}</span>`;
+        countText.replaceChildren();
+        const full = document.createElement('span');
+        full.className = 'chats-bulk__count-full';
+        full.textContent = `${count} of ${visibleCount} selected`;
+        const short = document.createElement('span');
+        short.className = 'chats-bulk__count-short';
+        short.setAttribute('aria-hidden', 'true');
+        short.textContent = String(count);
+        const sep = document.createElement('span');
+        sep.className = 'chats-bulk__count-sep';
+        sep.textContent = '/';
+        short.appendChild(sep);
+        short.appendChild(document.createTextNode(String(visibleCount)));
+        countText.appendChild(full);
+        countText.appendChild(short);
         els.bulkSelectAll.textContent = allVisibleSelected ? 'Deselect all' : 'Select all';
     }
 
@@ -503,8 +546,12 @@
                 'Delete ' + ids.length + ' chat' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.'
             );
             if (!confirmed) return;
-            // Optimistic remove
+            // Optimistic remove. Snapshot BOTH the rows and the selection
+            // so a failure leaves the user looking at the same UI they
+            // started from — rows back, checkboxes still ticked, bulk bar
+            // still showing the count.
             const removed = state.sessions.filter(s => ids.includes(s.session_id));
+            const snapshotSelected = new Set(state.selected);
             state.sessions = state.sessions.filter(s => !ids.includes(s.session_id));
             state.selected.clear();
             updateBulkToolbar();
@@ -520,9 +567,11 @@
                 });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
             } catch (_) {
-                // Revert
+                // Revert: rows AND selection.
                 state.sessions = state.sessions.concat(removed);
+                state.selected = snapshotSelected;
                 saveCache(state.sessions);
+                updateBulkToolbar();
                 showToast('Bulk delete failed. Restored.');
                 render();
             }
@@ -586,7 +635,12 @@
         sel.removeAllRanges();
         sel.addRange(range);
 
+        // Idempotent — Escape calls finish(false) AND triggers blur which
+        // would otherwise fire finish(true) and commit anyway.
+        let done = false;
         const finish = async (commit) => {
+            if (done) return;
+            done = true;
             titleEl.contentEditable = 'false';
             titleEl.classList.remove('is-editing');
             const next = (titleEl.textContent || '').trim();
@@ -702,6 +756,7 @@
         bindControls();
         bindBulkActions();
         bindLongPress();
+        bindPullToRefreshGuard();
         const cached = loadCache();
         if (cached) {
             state.sessions = cached;
@@ -711,6 +766,74 @@
         } else {
             fetchSessions();
         }
+    }
+
+    /**
+     * Kill the browser's pull-to-refresh on /chats. CSS
+     * `overscroll-behavior` is inconsistent on iOS Safari and Chrome
+     * Android, so we add an explicit touch guard: if the user starts
+     * a vertical drag at the top of the chat-list scroll container
+     * (or anywhere outside any scrollable area), we preventDefault on
+     * the downward-direction touchmove. The browser never sees a
+     * "pull-down-at-top" gesture so it can't trigger a reload.
+     */
+    function bindPullToRefreshGuard() {
+        const scroller = document.getElementById('chats-scroll');
+        if (!scroller) return;
+
+        let startY = 0;
+        let startScrollTop = 0;
+        let armed = false;
+
+        scroller.addEventListener('touchstart', (e) => {
+            if (e.touches.length !== 1) { armed = false; return; }
+            startY = e.touches[0].clientY;
+            startScrollTop = scroller.scrollTop;
+            armed = startScrollTop <= 0;
+        }, { passive: true });
+
+        scroller.addEventListener('touchmove', (e) => {
+            if (!armed || e.touches.length !== 1) return;
+            const deltaY = e.touches[0].clientY - startY;
+            // Pulling down (positive deltaY) while at scrollTop 0:
+            // block the gesture so the browser can't initiate refresh.
+            if (deltaY > 0 && scroller.scrollTop <= 0) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // Document-level safety net: if any touch happens OUTSIDE a
+        // scrollable container and would cause a pull-down at the
+        // page edge, block it too. Cheap to install and removes the
+        // last edge case (e.g., dragging a non-scrollable bit of the
+        // chrome at the top of the page).
+        if (window.__chatsPullToRefreshDocGuard) return;
+        window.__chatsPullToRefreshDocGuard = true;
+        let docStartY = 0;
+        document.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) docStartY = e.touches[0].clientY;
+        }, { passive: true });
+        document.addEventListener('touchmove', (e) => {
+            // Only block when on the chats page AND the target isn't
+            // inside a scrollable element that's still scrolled away
+            // from the top.
+            if (!document.body.classList.contains('chats-page-open')) return;
+            if (e.touches.length !== 1) return;
+            const deltaY = e.touches[0].clientY - docStartY;
+            if (deltaY <= 0) return;
+            // Walk up from target finding a scrollable ancestor.
+            let el = e.target;
+            while (el && el !== document.body) {
+                const cs = el.scrollHeight > el.clientHeight &&
+                    /(auto|scroll)/.test(getComputedStyle(el).overflowY);
+                if (cs) {
+                    if (el.scrollTop > 0) return; // scrolled inside — let it work
+                    break;
+                }
+                el = el.parentElement;
+            }
+            e.preventDefault();
+        }, { passive: false });
     }
 
     function bindControls() {
@@ -986,14 +1109,29 @@
 
     /* ─── background refresh (30s while page is visible) ─────── */
     let refreshTimer = null;
+    let isActive = false;  // gates the visibility listener too
+
     function startBackgroundRefresh() {
+        if (isActive) return;
+        isActive = true;
         clearInterval(refreshTimer);
         refreshTimer = setInterval(() => {
             if (document.visibilityState === 'visible') fetchSessions();
         }, 30_000);
     }
+
+    function stopBackgroundRefresh() {
+        isActive = false;
+        clearInterval(refreshTimer);
+        refreshTimer = null;
+    }
+
+    // The visibility listener stays bound for the page lifetime, but it
+    // only acts when the chats surface is currently active — otherwise
+    // we'd be hitting /chat/list-metadata every tab focus from any other
+    // surface in the app.
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') fetchSessions();
+        if (isActive && document.visibilityState === 'visible') fetchSessions();
     });
 
     if (document.readyState === 'loading') {
@@ -1003,6 +1141,10 @@
         startBackgroundRefresh();
     }
 
-    // Expose for later tasks
-    window.__chatsPage = { state, render, fetchSessions, invalidateCache };
+    // Expose for SPA show/hide hooks in startNewChatModule.
+    window.__chatsPage = {
+        state, render, fetchSessions, invalidateCache,
+        start: startBackgroundRefresh,
+        stop: stopBackgroundRefresh,
+    };
 })();

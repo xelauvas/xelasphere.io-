@@ -76,17 +76,13 @@
 
   async function loadChats() {
     try {
-      const all = [];
-      let pageToken = null;
-      do {
-        const params = new URLSearchParams({ project_id: projectId, page_size: '200' });
-        if (pageToken) params.set('page_token', pageToken);
-        const resp = await fetch(`/chat/history?${params}`, { credentials: 'same-origin' });
-        if (!resp.ok) return;
-        const body = await resp.json();
-        all.push(...Object.values(body.categorized_history || {}).flat());
-        pageToken = body.next_page_token || null;
-      } while (pageToken);
+      const resp = await fetch(
+        `/chat/history?project_id=${encodeURIComponent(projectId)}&page_size=200`,
+        { credentials: 'same-origin' }
+      );
+      if (!resp.ok) return;
+      const body = await resp.json();
+      const all = Object.values(body.categorized_history || {}).flat();
       renderChats(all);
     } catch (_) { /* non-fatal */ }
   }
@@ -95,32 +91,180 @@
     if (!els.chats) return;
     els.chats.innerHTML = '';
     if (!chats.length) {
-      els.chats.innerHTML = '<li class="project-chats-empty">No chats yet — start one above.</li>';
+      els.chats.innerHTML = '<li class="project-chats-empty">No chats yet.</li>';
       return;
     }
     chats.forEach((c) => {
       const li = document.createElement('li');
       li.className = 'project-chat-row';
-      li.tabIndex = 0;
-      li.setAttribute('role', 'link');
-      li.innerHTML = `<span class="title">${escapeHtml(c.session_name || 'Chat')}</span>
-                      <span class="updated">${relTime(c.last_updated)}</span>`;
-      const openChat = () => {
+      // Preview text isn't returned by /chat/history yet — leave empty,
+      // CSS hides the row gracefully. We can fill this in once the
+      // backend includes a last-message snippet.
+      const preview = c.preview ? escapeHtml(c.preview) : '';
+      li.innerHTML = `
+        <div class="pcr-text">
+          <span class="pcr-title">${escapeHtml(c.session_name || 'Chat')}</span>
+          ${preview ? `<span class="pcr-preview">${preview}</span>` : ''}
+        </div>
+        <span class="pcr-date">${shortDate(c.last_updated)}</span>
+      `;
+      li.addEventListener('click', () => {
         window.location.href = `/c/${encodeURIComponent(c.session_id)}`;
-      };
-      li.addEventListener('click', openChat);
-      li.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          openChat();
-        }
       });
       els.chats.appendChild(li);
     });
   }
 
-  window.addEventListener('projects:session-moved', (event) => {
-    if (event.detail?.projectId === projectId) loadChats();
+  /* ---------- Tabs ---------- */
+  document.querySelectorAll('.project-page-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const name = tab.dataset.tab;
+      document.querySelectorAll('.project-page-tab').forEach((t) => {
+        const active = t === tab;
+        t.classList.toggle('is-active', active);
+        t.setAttribute('aria-selected', String(active));
+      });
+      document.querySelectorAll('.project-tab-panel').forEach((p) => {
+        p.classList.toggle('pp-hidden', p.dataset.panel !== name);
+      });
+    });
+  });
+
+  /* ---------- Header icon (renders from data-project-icon) ---------- */
+  function renderHeaderIcon() {
+    const slot = document.querySelector('.project-page-icon');
+    if (!slot) return;
+    const key = root.dataset.projectIcon || 'code';
+    const svg = (window.PROJECT_ICONS && window.PROJECT_ICONS.svg(key)) || '';
+    slot.innerHTML = svg;
+  }
+  renderHeaderIcon();
+
+  /* ---------- Icon + color picker popover ----------
+     8 color swatches + 5×6 icon grid. Anchored under the header
+     icon button. Clicking a swatch/icon PATCHes the project and
+     updates header + sidebar live. */
+  const ICP_PALETTE = [
+    '#ffffff', '#e74c3c', '#e67e22', '#f1c40f',
+    '#2ecc71', '#3b82f6', '#9b59b6', '#ec4899',
+  ];
+
+  function currentColor() {
+    // The accent var is set inline on .project-page; cheaper than re-parsing.
+    return root.style.getPropertyValue('--project-accent').trim() || ICP_PALETTE[5];
+  }
+
+  function openPicker(anchor) {
+    closePicker();
+    const popover = document.createElement('div');
+    popover.className = 'icon-color-picker';
+    popover.setAttribute('role', 'dialog');
+    popover.setAttribute('aria-label', 'Choose icon and color');
+
+    const sel = currentColor().toLowerCase();
+    const selIcon = root.dataset.projectIcon || 'code';
+
+    const swatchesHtml = ICP_PALETTE.map((c) => {
+      const active = c.toLowerCase() === sel ? ' is-selected' : '';
+      return `<button type="button" class="icp-swatch${active}" data-color="${c}" style="background:${c}" aria-label="${c}"></button>`;
+    }).join('');
+
+    const iconKeys = (window.PROJECT_ICONS && window.PROJECT_ICONS.ORDER) || [];
+    const iconsHtml = iconKeys.map((k) => {
+      const active = k === selIcon ? ' is-selected' : '';
+      return `<button type="button" class="icp-icon-cell${active}" data-icon="${k}" aria-label="${k}">${window.PROJECT_ICONS.svg(k)}</button>`;
+    }).join('');
+
+    popover.innerHTML = `
+      <div class="icp-colors" role="group" aria-label="Color">${swatchesHtml}</div>
+      <div class="icp-divider"></div>
+      <div class="icp-icons" role="group" aria-label="Icon">${iconsHtml}</div>
+      <div class="icp-footer"><button type="button" class="icp-close">Close menu</button></div>
+    `;
+    document.body.appendChild(popover);
+
+    // Anchor below the icon button.
+    const rect = anchor.getBoundingClientRect();
+    popover.style.top = `${rect.bottom + 6 + window.scrollY}px`;
+    popover.style.left = `${rect.left + window.scrollX}px`;
+
+    popover.addEventListener('click', (ev) => {
+      const swatch = ev.target.closest('[data-color]');
+      const icon = ev.target.closest('[data-icon]');
+      const close = ev.target.closest('.icp-close');
+      if (swatch) {
+        const color = swatch.dataset.color;
+        applyColor(color);
+        popover.querySelectorAll('.icp-swatch').forEach((b) =>
+          b.classList.toggle('is-selected', b === swatch));
+        savePatch({ color });
+      } else if (icon) {
+        const key = icon.dataset.icon;
+        applyIcon(key);
+        popover.querySelectorAll('.icp-icon-cell').forEach((b) =>
+          b.classList.toggle('is-selected', b === icon));
+        savePatch({ icon: key });
+      } else if (close) {
+        closePicker();
+      }
+    });
+
+    // Click-outside-to-close. Defer so the opening click doesn't immediately close.
+    setTimeout(() => {
+      const handler = (ev) => {
+        if (!popover.contains(ev.target) && !anchor.contains(ev.target)) {
+          closePicker();
+          document.removeEventListener('click', handler);
+        }
+      };
+      document.addEventListener('click', handler);
+      popover._closeHandler = handler;
+    }, 0);
+  }
+
+  function closePicker() {
+    document.querySelectorAll('.icon-color-picker').forEach((p) => {
+      if (p._closeHandler) document.removeEventListener('click', p._closeHandler);
+      p.remove();
+    });
+  }
+
+  function applyColor(color) {
+    root.style.setProperty('--project-accent', color);
+    // Sidebar row uses the same --project-accent var via inline style; we
+    // also need to update that row so the folder/icon picks up the new color.
+    const row = document.querySelector(`.sidebar-project-row[data-project-id="${root.dataset.projectId}"]`);
+    if (row) row.style.setProperty('--project-accent', color);
+  }
+
+  function applyIcon(key) {
+    root.dataset.projectIcon = key;
+    renderHeaderIcon();
+    // Tell projectsModule to re-render so the sidebar row icon updates.
+    window.dispatchEvent(new CustomEvent('projects:icon-changed', {
+      detail: { projectId: root.dataset.projectId, icon: key },
+    }));
+  }
+
+  async function savePatch(body) {
+    try {
+      const resp = await fetch(`/projects/${encodeURIComponent(projectId)}`, {
+        method: 'PATCH',
+        headers: jsonHeaders(),
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    } catch (err) {
+      window.toast?.error?.(`Couldn't save: ${err.message}`);
+    }
+  }
+
+  const iconBtn = document.getElementById('project-page-icon-btn');
+  iconBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (document.querySelector('.icon-color-picker')) closePicker();
+    else openPicker(iconBtn);
   });
 
   /* ---------- Helpers ---------- */
@@ -145,6 +289,20 @@
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return d.toLocaleDateString();
+  }
+
+  /* ChatGPT-style short date: "May 23" for current year, "May 23, 2024"
+     for older. Falls back to relTime for things in the last 24h to keep
+     them feeling fresh. */
+  function shortDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 86400) return relTime(iso);
+    const now = new Date();
+    const fmt = { month: 'short', day: 'numeric' };
+    if (d.getFullYear() !== now.getFullYear()) fmt.year = 'numeric';
+    return d.toLocaleDateString(undefined, fmt);
   }
 
   /* ---------- Files (upload, list, remove) ---------- */
@@ -330,17 +488,15 @@
     // Count chats in the project so we can phrase the dialog right.
     let count = 0;
     try {
-      let pageToken = null;
-      do {
-        const params = new URLSearchParams({ project_id: projectId, page_size: '200' });
-        if (pageToken) params.set('page_token', pageToken);
-        const r = await fetch(`/chat/history?${params}`, { credentials: 'same-origin' });
-        if (!r.ok) break;
+      const r = await fetch(
+        `/chat/history?project_id=${encodeURIComponent(projectId)}&page_size=500`,
+        { credentials: 'same-origin' },
+      );
+      if (r.ok) {
         const body = await r.json();
-        count += Object.values(body.categorized_history || {})
+        count = Object.values(body.categorized_history || {})
           .reduce((sum, list) => sum + list.length, 0);
-        pageToken = body.next_page_token || null;
-      } while (pageToken);
+      }
     } catch (_) { /* count remains 0 */ }
 
     let cascade;

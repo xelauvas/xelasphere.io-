@@ -170,7 +170,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/code-window.css') }}?v=5">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal-window.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tree-view.css') }}?v=1.1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/message-styles.css') }}?v=14">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/message-styles.css') }}?v=16">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/recipe-card.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/prism.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
@@ -210,7 +210,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/email-edit-toolbar.css') }}">
 
     <!-- Mobile Responsive -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=77">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}?v=79">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar-chatgpt.css') }}?v=5">
 
     <!-- Context Menu (long-press actions) -->
@@ -220,8 +220,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/crypto-chart.css') }}?v=3">
 
     <!-- Stream Blocks -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-blocks.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-styles.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-blocks.css') }}?v=9">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-styles.css') }}?v=4">
 
     <!-- Lightweight Charts (TradingView) — v5 introduces breaking series-creation API
          (addAreaSeries → addSeries(AreaSeries, ...)) handled in cryptoChartModule.js -->
@@ -403,12 +403,21 @@
                     <span class="sidebar-brand-text">Xelasphere</span>
                 </a>
                 <button type="button" class="sidebar-header-ghost" aria-label="Start incognito chat" data-tooltip="Go Incognito" onclick="window.chatManager?.createNewChat(null, { temporary: true, notifySuccess: false })">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-                            <path d="M12 5.4c-3.55 0-6.4 2.85-6.4 6.4v6l1.85-1.25 1.85 1.25 1.85-1.25L13 17.8l1.85-1.25 1.85 1.25v-6c0-3.55-2.85-6.4-6.4-6.4z"
-                                  fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" stroke-linecap="round"/>
-                            <circle class="sidebar-ghost-eye" cx="10.55" cy="12.05" r="0.72" fill="currentColor"/>
-                            <circle class="sidebar-ghost-eye" cx="13.45" cy="12.05" r="0.72" fill="currentColor"/>
-                        </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="34" height="34" aria-hidden="true">
+                        <path
+                            d="M12 5.4
+                               c-3.55 0-6.4 2.85-6.4 6.4v6.0
+                               l1.85-1.25 1.85 1.25 1.85-1.25 1.85 1.25 1.85-1.25 1.85 1.25v-6.0
+                               c0-3.55-2.85-6.4-6.4-6.4z"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.25"
+                            stroke-linejoin="round"
+                            stroke-linecap="round"
+                        />
+                        <circle class="sidebar-ghost-eye" cx="10.55" cy="12.05" r="0.75" fill="currentColor"/>
+                        <circle class="sidebar-ghost-eye" cx="13.45" cy="12.05" r="0.75" fill="currentColor"/>
+                    </svg>
                 </button>
                 <button type="button" id="sidebar-toggle-button" class="sidebar-header-collapse" aria-label="Close sidebar" data-tooltip="Close sidebar">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -745,15 +754,12 @@
 
                   <section class="project-section project-conversations">
                     <div class="project-conversations-header">
-                      <div>
-                        <h2 class="project-conversations-title">Chats</h2>
-                        <p class="project-conversations-subtitle">Conversations that share this project's context.</p>
-                      </div>
+                      <div><h2 class="project-conversations-title">Chats</h2><p class="project-conversations-subtitle">Conversations that share this project context.</p></div>
                     </div>
                     <ul id="project-chats" class="project-chats" role="list"></ul>
                   </section>
                 </main>
-                <script src="{{ url_for('static', filename='js/projectsPage.js') }}?v=7" defer></script>
+                <script src="{{ url_for('static', filename='js/projectsPage.js') }}?v=6" defer></script>
                 {% endif %}
                 <div class="chat-shell"{% if current_project %} style="display:none"{% endif %} role="region" aria-label="Chat workspace">
                     <header class="chat-shell__header">
@@ -1385,11 +1391,11 @@
     <script src="{{ url_for('static', filename='js/dictationModule.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/voiceModeModule.js') }}?v=40"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="{{ url_for('static', filename='js/filePreview.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='js/filePreview.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/scrollState.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='js/recipeDetector.js') }}"></script>
     <script src="{{ url_for('static', filename='js/codeWindow.js') }}?v=69"></script>
-    <script src="{{ url_for('static', filename='script.js') }}?v=8"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/styleManager.js') }}?v=4"></script>
     <script>
     // Patch: intercept FormData append to inject image files for vision API
@@ -1463,16 +1469,17 @@
                         const isOpen = dropdownContainer.classList.contains('active');
                         profileHeader.setAttribute('aria-expanded', isOpen.toString());
                     });
-                    profileHeader.addEventListener('keydown', (event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
+                    profileHeader.addEventListener("keydown", (event) => {
+                        if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
                             profileHeader.click();
-                        } else if (event.key === 'Escape') {
-                            dropdownContainer.classList.remove('active');
-                            profileHeader.setAttribute('aria-expanded', 'false');
+                        } else if (event.key === "Escape") {
+                            dropdownContainer.classList.remove("active");
+                            profileHeader.setAttribute("aria-expanded", "false");
                             profileHeader.focus();
                         }
                     });
+
 
                     document.addEventListener('click', (event) => {
                         if (dropdownContainer.classList.contains('active') &&
@@ -1652,16 +1659,9 @@
   <div class="project-modal-backdrop" data-dismiss="modal"></div>
   <div class="project-modal-content" tabindex="-1">
     <div class="project-modal-header">
-      <span class="project-modal-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M2 10h20"/></svg>
-      </span>
-      <div class="project-modal-heading-group">
-        <h2 id="project-modal-title" class="project-modal-heading">Create project</h2>
-        <p class="project-modal-subtitle">Keep related chats, files and instructions together.</p>
-      </div>
-      <button type="button" class="project-modal-close" data-dismiss="modal" aria-label="Close create project dialog">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
-      </button>
+      <span class="project-modal-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M2 10h20"/></svg></span>
+      <div class="project-modal-heading-group"><h2 id="project-modal-title" class="project-modal-heading">Create project</h2><p class="project-modal-subtitle">Keep related chats, files and instructions together.</p></div>
+      <button type="button" class="project-modal-close" data-dismiss="modal" aria-label="Close create project dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
     <label class="project-modal-label" for="project-name-input">Project name</label>
     <input id="project-name-input" class="project-modal-input" type="text" maxlength="120" placeholder="Copenhagen Trip" autocomplete="off" aria-describedby="project-modal-helper project-modal-error" />

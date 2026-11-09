@@ -74,23 +74,24 @@
             faviconUrl = 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=32';
         } catch (e) { domain = url; }
 
-        // Overlay
+        // Overlay — paint via CSS vars (defined in onlineSearch.css) so the
+        // overlay flips with [data-theme] instead of staying hardcoded dark.
         var overlay = document.createElement('div');
         overlay.id = 'inapp-browser';
-        overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:#0d0d0d;display:flex;flex-direction:column;';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:var(--inapp-overlay-bg);display:flex;flex-direction:column;';
 
         // Progress bar
         var progress = document.createElement('div');
-        progress.style.cssText = 'height:3px;background:#7eb8ff;width:0%;transition:width 0.1s;flex-shrink:0;';
+        progress.style.cssText = 'height:3px;background:var(--inapp-overlay-progress);width:0%;transition:width 0.1s;flex-shrink:0;';
 
         // Header
         var header = document.createElement('div');
-        header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:12px 16px;background:#0d0d0d;flex-shrink:0;padding-top:calc(12px + env(safe-area-inset-top,0px));border-bottom:1px solid rgba(255,255,255,0.08);';
+        header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--inapp-overlay-bg);flex-shrink:0;padding-top:calc(12px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--inapp-overlay-border);';
 
         var closeBtn = document.createElement('button');
         closeBtn.setAttribute('aria-label', 'Close reader');
         closeBtn.innerHTML = '&#10005;';
-        closeBtn.style.cssText = 'width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.8);font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
+        closeBtn.style.cssText = 'width:34px;height:34px;border-radius:50%;border:none;background:var(--inapp-overlay-btn-bg);color:var(--inapp-overlay-text);font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
         closeBtn.onclick = function () { _closeReader(); };
 
         var favEl = document.createElement('img');
@@ -101,17 +102,17 @@
 
         var domainEl = document.createElement('span');
         domainEl.textContent = domain;
-        domainEl.style.cssText = 'flex:1;font-size:0.78rem;color:rgba(255,255,255,0.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        domainEl.style.cssText = 'flex:1;font-size:0.78rem;color:var(--inapp-overlay-text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
 
         var aaBtn = document.createElement('button');
         aaBtn.setAttribute('aria-label', 'Change text size');
         aaBtn.textContent = 'Aa';
-        aaBtn.style.cssText = 'border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:0.8rem;padding:6px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;';
+        aaBtn.style.cssText = 'border:none;background:var(--inapp-overlay-btn-bg);color:var(--inapp-overlay-btn-text);font-size:0.8rem;padding:6px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;';
 
         var extBtn = document.createElement('button');
         extBtn.setAttribute('aria-label', 'Open in browser');
         extBtn.innerHTML = '&#8599;';
-        extBtn.style.cssText = 'width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
+        extBtn.style.cssText = 'width:34px;height:34px;border-radius:50%;border:none;background:var(--inapp-overlay-btn-bg);color:var(--inapp-overlay-btn-text);font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
         extBtn.onclick = function () { window.open(url, '_blank'); };
 
         header.appendChild(closeBtn);
@@ -166,19 +167,19 @@
             icon.style.fontSize = '2.5rem';
             icon.innerHTML = '&#128196;';
             var label = document.createElement('div');
-            label.style.cssText = 'color:rgba(255,255,255,0.6);font-size:0.95rem;text-align:center;';
+            label.style.cssText = 'color:var(--inapp-overlay-text-muted);font-size:0.95rem;text-align:center;';
             label.textContent = msg;
 
             var btnRow = document.createElement('div');
             btnRow.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center;';
 
             var retryBtn = document.createElement('button');
-            retryBtn.style.cssText = 'background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);border:1px solid rgba(255,255,255,0.12);padding:12px 20px;border-radius:10px;font-size:0.9rem;font-weight:500;cursor:pointer;';
+            retryBtn.style.cssText = 'background:var(--inapp-overlay-btn-bg);color:var(--inapp-overlay-text);border:1px solid var(--inapp-overlay-border);padding:12px 20px;border-radius:10px;font-size:0.9rem;font-weight:500;cursor:pointer;';
             retryBtn.textContent = 'Try again';
             retryBtn.onclick = function () { _fetchArticle(); };
 
             var btn = document.createElement('button');
-            btn.style.cssText = 'background:#7eb8ff;color:#000;border:none;padding:12px 24px;border-radius:10px;font-size:0.9rem;font-weight:600;cursor:pointer;';
+            btn.style.cssText = 'background:var(--inapp-overlay-cta-bg);color:var(--inapp-overlay-cta-text);border:none;padding:12px 24px;border-radius:10px;font-size:0.9rem;font-weight:600;cursor:pointer;';
             btn.textContent = 'Open in Browser \u2192';
             btn.onclick = function () { window.open(url, '_blank'); };
 
@@ -192,8 +193,8 @@
 
         // Loading state (re-usable so retry can restore it).
         var loadingHtml = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;">'
-            + '<div style="width:36px;height:36px;border:2px solid rgba(255,255,255,0.1);border-top-color:rgba(255,255,255,0.6);border-radius:50%;animation:reader-spin 0.8s linear infinite;"></div>'
-            + '<span style="color:rgba(255,255,255,0.4);font-size:0.85rem;">Fetching article...</span>'
+            + '<div style="width:36px;height:36px;border:2px solid var(--inapp-overlay-spinner-track);border-top-color:var(--inapp-overlay-spinner-head);border-radius:50%;animation:reader-spin 0.8s linear infinite;"></div>'
+            + '<span style="color:var(--inapp-overlay-text-subtle);font-size:0.85rem;">Fetching article...</span>'
             + '</div>';
 
         function _fetchArticle() {
@@ -253,7 +254,7 @@
                 if (data.image) {
                     articleHtml += '<div style="position:relative;width:100%;height:240px;overflow:hidden;flex-shrink:0;">'
                         + '<img src="' + _escHtml(data.image) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentNode.style.display=\'none\'">'
-                        + '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,#0d0d0d);"></div>'
+                        + '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,var(--inapp-overlay-bg));"></div>'
                         + '</div>';
                 }
 
@@ -262,17 +263,17 @@
 
                 // Article title (new — was missing before)
                 if (title) {
-                    articleHtml += '<h1 style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;font-size:1.55rem;font-weight:700;line-height:1.25;margin:0 0 14px;color:rgba(255,255,255,0.95);">' + _escHtml(title) + '</h1>';
+                    articleHtml += '<h1 style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;font-size:1.55rem;font-weight:700;line-height:1.25;margin:0 0 14px;color:var(--inapp-overlay-text);">' + _escHtml(title) + '</h1>';
                 }
 
                 articleHtml += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
                     + '<div style="display:flex;align-items:center;gap:6px;min-width:0;">'
                     + '<img src="' + _escHtml(faviconUrl) + '" style="width:14px;height:14px;border-radius:3px;flex-shrink:0;" onerror="this.style.display=\'none\'" alt="">'
-                    + '<span style="font-size:0.78rem;color:rgba(255,255,255,0.45);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _escHtml(domain) + '</span>'
+                    + '<span style="font-size:0.78rem;color:var(--inapp-overlay-text-subtle);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _escHtml(domain) + '</span>'
                     + '</div>'
-                    + '<span style="font-size:0.75rem;color:rgba(255,255,255,0.35);flex-shrink:0;margin-left:12px;">' + readTime + ' min read</span>'
+                    + '<span style="font-size:0.75rem;color:var(--inapp-overlay-text-subtle);flex-shrink:0;margin-left:12px;">' + readTime + ' min read</span>'
                     + '</div>'
-                    + '<div style="height:1px;background:rgba(255,255,255,0.07);"></div>'
+                    + '<div style="height:1px;background:var(--inapp-overlay-border);"></div>'
                     + '</div>';
 
                 // Article body. Padding bottom covers iOS home indicator.
@@ -770,7 +771,7 @@
                 card.style.borderRadius = '8px';
                 card.style.scrollSnapAlign = 'start';
                 card.style.overflow = 'hidden';
-                card.style.border = '1px solid rgba(255,255,255,0.08)';
+                card.style.border = '1px solid var(--border-primary, rgba(255,255,255,0.08))';
                 card.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))';
                 card.style.textDecoration = 'none';
                 card.style.color = 'inherit';
@@ -848,7 +849,7 @@
             wrap.appendChild(track);
 
             Array.from(track.children).forEach(function (item) {
-                item.style.cssText = 'flex: 0 0 120px; height: 85px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); position: relative;';
+                item.style.cssText = 'flex: 0 0 120px; height: 85px; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid var(--border-primary, rgba(255,255,255,0.08)); position: relative;';
                 item.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))';
             });
 
@@ -1173,7 +1174,7 @@
 
                     // Mobile: compact pill with name, touch-friendly
                     if (window.innerWidth <= 640) {
-                        pill.style.cssText = 'display: inline-flex; align-items: center; padding: 3px 8px; min-height: 26px; border-radius: 12px; background: rgba(255,255,255,0.08); font-size: 0.65rem; font-weight: 500; color: rgba(255,255,255,0.6); margin: 0 2px; cursor: pointer; user-select: none; white-space: nowrap;';
+                        pill.style.cssText = 'display: inline-flex; align-items: center; padding: 3px 8px; min-height: 26px; border-radius: 12px; background: var(--bg-hover, rgba(255,255,255,0.08)); font-size: 0.65rem; font-weight: 500; color: var(--text-secondary, rgba(255,255,255,0.6)); margin: 0 2px; cursor: pointer; user-select: none; white-space: nowrap;';
                     }
 
                     // Click → open sources sidebar
@@ -1248,7 +1249,7 @@
 
         // Mobile: larger touch-friendly pill
         if (window.innerWidth <= 640) {
-            btn.style.cssText = 'display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 6px; border-radius: 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; font-size: 0.8rem; color: rgba(255,255,255,0.7); font-weight: 500;';
+            btn.style.cssText = 'display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 6px; border-radius: 18px; background: var(--bg-hover, rgba(255,255,255,0.06)); border: 1px solid var(--border-primary, rgba(255,255,255,0.1)); cursor: pointer; font-size: 0.8rem; color: var(--text-secondary, rgba(255,255,255,0.7)); font-weight: 500;';
         }
 
         return btn;
@@ -1308,7 +1309,7 @@
 
         // Mobile: convert sidebar to bottom sheet
         if (window.innerWidth <= 640) {
-            sidebar.style.cssText = 'position: fixed; bottom: 0; left: 0; right: 0; top: auto; width: 100%; max-height: 70vh; height: auto; border-radius: 16px 16px 0 0; border-left: none; border-top: 1px solid rgba(255,255,255,0.1); transform: translateY(0); z-index: 1000; background: #1a1a1a; display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: contain;';
+            sidebar.style.cssText = 'position: fixed; bottom: 0; left: 0; right: 0; top: auto; width: 100%; max-height: 70vh; height: auto; border-radius: 16px 16px 0 0; border-left: none; border-top: 1px solid var(--border-primary, rgba(255,255,255,0.1)); transform: translateY(0); z-index: 1000; background: var(--bg-elevated, #1a1a1a); display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: contain;';
             // Prevent pull-to-refresh on the scrollable body
             var sidebarBody = document.getElementById('sources-sidebar-body');
             if (sidebarBody) {
@@ -1321,7 +1322,7 @@
             if (!handle) {
                 handle = document.createElement('div');
                 handle.className = 'sources-sidebar__drag-handle';
-                handle.style.cssText = 'width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); margin: 8px auto 4px; flex-shrink: 0;';
+                handle.style.cssText = 'width: 36px; height: 4px; border-radius: 2px; background: var(--text-tertiary, rgba(255,255,255,0.2)); margin: 8px auto 4px; flex-shrink: 0;';
                 sidebar.insertBefore(handle, sidebar.firstChild);
             }
             // Add overlay backdrop

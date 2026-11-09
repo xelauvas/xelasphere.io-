@@ -1,329 +1,113 @@
 /* app/static/css/stream-styles.css
  *
- * SIX DISTINCT VOICES. Each per-style block uses !important on a few
- * key tokens so it WINS over the message-styles.css ChatGPT-aligned
- * defaults. The organism's whole point is visible per-question identity,
- * not a homogenised look.
+ * Per-style STRUCTURAL cues. The unified visual system (typography,
+ * color, spacing) is defined in _tokens.css and consumed by
+ * message-styles.css. The rules here only adjust LAYOUT in
+ * style-specific ways: italic ledes, verdict callouts, centered
+ * titles, collapsed-headings, narrative indents.
  *
- * Scoped by [data-style="..."] which the streamRenderer sets on
- * .text-message-container and .text-message after the server's stream-meta
- * SSE chunk arrives.
+ * Aesthetic (font/color/size) is identical across all six styles.
+ * Only structure differs.
  *
- * See docs/superpowers/specs/2026-05-01-content-aware-formatting-organism-design.md
+ * Phase 2 of the streaming text polish project. Replaces the previous
+ * six-aesthetic-override implementation.
+ *
+ * Spec: docs/superpowers/specs/2026-05-02-streaming-text-polish-design.md
  */
 
 
-/* ===== Diagnostic badge — temporary, shows the chosen style on the
-   message wrapper. Remove once we trust the wiring is reaching the DOM. */
-.text-message-container[data-style]::before {
-    content: attr(data-style);
-    display: inline-block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    opacity: 0.45;
-    background: rgba(127, 127, 127, 0.12);
-    padding: 1px 7px;
-    border-radius: 3px;
-    margin-bottom: 6px;
-    align-self: flex-start;
-}
-
-
 /* ============================================================
- * EDITORIAL — magazine voice. Serif throughout. Italic lede.
- * Tiny uppercase section labels, NOT regular ## headings.
- * Generous line-height. Slightly cream/warm tint.
+ * CHAT — friendly text-message style.
+ * Structural cue: compact only when the content is genuinely conversational.
+ * If a model emits real markdown structure, keep the document hierarchy intact.
  * ============================================================ */
-[data-style="editorial"] .text-message {
-    font-family: 'Georgia', 'Iowan Old Style', 'Palatino', serif !important;
-    line-height: 1.7 !important;
-    color: var(--text-primary, rgba(255, 245, 230, 0.95)) !important;
-}
-[data-style="editorial"] .text-message p {
-    font-size: 1.06rem !important;
-    line-height: 1.75 !important;
-    margin-bottom: 1.1em !important;
-}
-[data-style="editorial"] .text-message .stream-block.block-paragraph:first-of-type p,
-[data-style="editorial"] .text-message > p:first-of-type {
-    font-style: italic;
-    font-size: 1.15rem !important;
-    line-height: 1.65 !important;
-    border-left: 3px solid rgba(255, 200, 120, 0.55);
-    padding-left: 16px;
-    opacity: 0.92;
-    margin-bottom: 1.4em !important;
-}
-[data-style="editorial"] .text-message h2 {
-    font-family: 'Inter', sans-serif !important;
-    font-size: 0.78rem !important;
-    text-transform: uppercase;
-    letter-spacing: 0.18em !important;
-    font-weight: 700 !important;
-    opacity: 0.6;
-    margin-top: 2.2rem !important;
-    margin-bottom: 0.8rem !important;
-    color: var(--text-secondary, rgba(255, 220, 180, 0.7)) !important;
-}
-[data-style="editorial"] .text-message h3 {
-    font-family: 'Georgia', serif !important;
-    font-style: italic !important;
-    font-weight: 400 !important;
-    font-size: 1.25rem !important;
-    margin-top: 1.6rem !important;
-    color: rgba(255, 230, 200, 0.92) !important;
-}
-[data-style="editorial"] .text-message strong,
-[data-style="editorial"] .text-message b {
-    font-weight: 700 !important;
-    color: rgba(255, 220, 170, 1) !important;
-}
-[data-style="editorial"] .text-message blockquote {
-    background: transparent !important;
-    border-left: 2px solid rgba(255, 200, 120, 0.4) !important;
-    padding: 4px 0 4px 18px !important;
-    font-style: italic;
-    font-size: 1.08em;
-    opacity: 0.88;
-}
-
-
-/* ============================================================
- * MODERN_BLOG — Substack tech-blog energy. Bold sans headings.
- * Punchy, scannable. Cyan callouts. Big bold weight on H1/H2.
- * ============================================================ */
-[data-style="modern_blog"] .text-message {
-    font-family: 'Inter', system-ui, sans-serif !important;
-    line-height: 1.6 !important;
-}
-[data-style="modern_blog"] .text-message h1,
-[data-style="modern_blog"] .text-message h2 {
-    font-weight: 800 !important;
-    letter-spacing: -0.025em !important;
-    line-height: 1.2 !important;
-    margin-top: 1.8rem !important;
-}
-[data-style="modern_blog"] .text-message h2 {
-    font-size: 1.6rem !important;
-    background: linear-gradient(180deg, rgba(140, 200, 255, 1) 0%, rgba(100, 180, 255, 1) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-[data-style="modern_blog"] .text-message h3 {
-    font-weight: 700 !important;
-    font-size: 1.2rem !important;
-    letter-spacing: -0.015em !important;
-    margin-top: 1.4rem !important;
-}
-[data-style="modern_blog"] .text-message strong,
-[data-style="modern_blog"] .text-message b {
-    font-weight: 700 !important;
-    color: rgba(180, 220, 255, 1) !important;
-}
-[data-style="modern_blog"] .text-message blockquote {
-    background: linear-gradient(90deg, rgba(100, 200, 255, 0.12), rgba(100, 200, 255, 0.04)) !important;
-    border-left: 4px solid rgba(100, 200, 255, 0.7) !important;
-    padding: 12px 16px !important;
-    border-radius: 8px !important;
-    margin: 14px 0 !important;
-    font-size: 0.98em;
-}
-[data-style="modern_blog"] .text-message ul {
-    list-style: none !important;
-    padding-left: 0 !important;
-}
-[data-style="modern_blog"] .text-message ul > li {
-    position: relative;
-    padding-left: 1.6rem;
-}
-[data-style="modern_blog"] .text-message ul > li::before {
-    content: '▸';
-    position: absolute;
-    left: 0.3rem;
-    top: 0;
-    color: rgba(100, 200, 255, 0.85);
-    font-weight: 700;
-}
-
-
-/* ============================================================
- * TECHNICAL — engineering reference. Mono accent EVERYWHERE.
- * Tight spacing. Dimmed prose. Code blocks dominate.
- * ============================================================ */
-[data-style="technical"] .text-message {
-    font-family: 'Inter', system-ui, sans-serif !important;
-    font-size: 0.95rem !important;
-    line-height: 1.55 !important;
-}
-[data-style="technical"] .text-message h2,
-[data-style="technical"] .text-message h3 {
-    font-family: 'JetBrains Mono', 'SF Mono', monospace !important;
-    font-weight: 600 !important;
-    letter-spacing: -0.01em !important;
-    color: rgba(150, 220, 255, 0.95) !important;
-}
-[data-style="technical"] .text-message h2::before {
-    content: '$ ';
-    opacity: 0.4;
-    font-weight: 400;
-}
-[data-style="technical"] .text-message h3::before {
-    content: '> ';
-    opacity: 0.4;
-    font-weight: 400;
-}
-[data-style="technical"] .text-message pre {
-    border-left: 3px solid rgba(120, 200, 255, 0.7) !important;
-    background: rgba(10, 14, 22, 0.95) !important;
-}
-[data-style="technical"] .text-message blockquote {
-    background: rgba(255, 200, 80, 0.06) !important;
-    border-left: 3px solid rgba(255, 200, 80, 0.5) !important;
-    padding: 8px 14px !important;
-    border-radius: 4px !important;
-    font-size: 0.92em;
-    color: rgba(255, 230, 180, 0.92);
-}
-[data-style="technical"] .text-message :not(pre) > code {
-    background: rgba(120, 200, 255, 0.12) !important;
-    color: rgba(180, 230, 255, 1) !important;
-    border: 1px solid rgba(120, 200, 255, 0.2) !important;
-}
-
-
-/* ============================================================
- * CHAT — friendly text-message. NO headings. Compact. Casual font.
- * ============================================================ */
-[data-style="chat"] .text-message {
-    font-family: 'Inter', system-ui, sans-serif !important;
-    font-size: 0.97rem !important;
-    line-height: 1.55 !important;
-}
-[data-style="chat"] .text-message h1,
-[data-style="chat"] .text-message h2,
-[data-style="chat"] .text-message h3,
-[data-style="chat"] .text-message h4 {
-    /* Charter forbids headings — collapse any rogue heading to inline bold. */
+[data-style="chat"][data-ctx="conversational"] .text-message h1,
+[data-style="chat"][data-ctx="conversational"] .text-message h2,
+[data-style="chat"][data-ctx="conversational"] .text-message h3,
+[data-style="chat"][data-ctx="conversational"] .text-message h4,
+[data-style="chat"] .text-message[data-ctx="conversational"] h1,
+[data-style="chat"] .text-message[data-ctx="conversational"] h2,
+[data-style="chat"] .text-message[data-ctx="conversational"] h3,
+[data-style="chat"] .text-message[data-ctx="conversational"] h4 {
     font-size: 1em !important;
     font-weight: 600 !important;
     margin: 0 !important;
     display: inline !important;
 }
-[data-style="chat"] .text-message p {
+[data-style="chat"][data-ctx="conversational"] .text-message p,
+[data-style="chat"] .text-message[data-ctx="conversational"] p {
     margin-bottom: 0.6rem !important;
 }
-[data-style="chat"] .text-message ul,
-[data-style="chat"] .text-message ol {
+[data-style="chat"][data-ctx="conversational"] .text-message ul,
+[data-style="chat"][data-ctx="conversational"] .text-message ol,
+[data-style="chat"] .text-message[data-ctx="conversational"] ul,
+[data-style="chat"] .text-message[data-ctx="conversational"] ol {
     margin: 0.4rem 0 !important;
     padding-left: 1.3rem !important;
 }
 
 
 /* ============================================================
- * COMPARISON — verdict callout + monospace-feel comparison table.
- * Strong table emphasis. First-paragraph "Verdict" highlight.
+ * COMPARISON — verdict-callout first paragraph + accent table header.
+ * Structural cue: bold first paragraph reads as the verdict.
  * ============================================================ */
-[data-style="comparison"] .text-message {
-    font-family: 'Inter', system-ui, sans-serif !important;
-    line-height: 1.55 !important;
-}
-[data-style="comparison"] .text-message .stream-block.block-paragraph:first-of-type p,
-[data-style="comparison"] .text-message > p:first-of-type {
-    background: linear-gradient(90deg, rgba(120, 255, 180, 0.14), rgba(120, 255, 180, 0.02)) !important;
-    border-left: 4px solid rgba(120, 255, 180, 0.65) !important;
-    padding: 12px 16px !important;
-    border-radius: 6px !important;
-    font-size: 1.02em !important;
+[data-style="comparison"] .text-message > p:first-of-type,
+[data-style="comparison"] .text-message .stream-block.block-paragraph:first-of-type p {
+    background: var(--gold-soft);
+    border-left: 3px solid var(--gold-line);
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
     margin-bottom: 18px !important;
+    font-size: 1.02em;
 }
-[data-style="comparison"] .text-message table {
-    width: 100%;
-    border-collapse: separate !important;
-    border-spacing: 0;
-    margin: 14px 0 !important;
-    border: 1px solid rgba(120, 255, 180, 0.2);
-    border-radius: 8px;
-    overflow: hidden;
-}
-[data-style="comparison"] .text-message thead {
-    background: rgba(120, 255, 180, 0.08) !important;
-}
-[data-style="comparison"] .text-message th {
-    text-align: left;
+[data-style="comparison"] .text-message thead th {
+    color: var(--gold-2) !important;
+    border-bottom: 1px solid var(--gold-line) !important;
     text-transform: uppercase;
-    letter-spacing: 0.08em !important;
-    font-size: 0.74rem !important;
-    font-weight: 700 !important;
-    opacity: 0.85;
-    padding: 10px 14px !important;
-    border-bottom: 1px solid rgba(120, 255, 180, 0.25) !important;
-    color: rgba(180, 255, 220, 0.95) !important;
-}
-[data-style="comparison"] .text-message td {
-    padding: 10px 14px !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
-    font-size: 0.95rem !important;
-}
-[data-style="comparison"] .text-message tbody tr:last-child td {
-    border-bottom: none !important;
-}
-[data-style="comparison"] .text-message tbody tr:hover {
-    background: rgba(120, 255, 180, 0.04);
+    letter-spacing: 0.08em;
+    font-size: 0.74rem;
+    font-weight: 700;
 }
 
 
 /* ============================================================
- * CREATIVE — narrative. Pure serif. Italics. Centered title.
- * NO emoji clutter (CSS can't strip emoji from text but charter forbids them).
- * Generous line-height. Soft prose treatment.
+ * EDITORIAL — italic lede + small-caps section markers.
+ * Structural cue: first paragraph is the magazine lede.
  * ============================================================ */
-[data-style="creative"] .text-message {
-    font-family: 'Iowan Old Style', 'Palatino', 'Georgia', serif !important;
-    font-size: 1.05rem !important;
-    line-height: 1.85 !important;
-    color: rgba(245, 235, 220, 0.94) !important;
+[data-style="editorial"] .text-message > p:first-of-type,
+[data-style="editorial"] .text-message .stream-block.block-paragraph:first-of-type p {
+    font-style: italic;
+    font-size: 1.1em;
+    line-height: 1.65;
+    border-left: 2px solid var(--gold-line);
+    padding-left: 16px;
+    margin-bottom: 1.4em !important;
 }
+[data-style="editorial"] .text-message h2 {
+    font-size: 0.78rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-weight: 700 !important;
+    color: var(--paper-3) !important;
+    margin-top: 2.2rem !important;
+    margin-bottom: 0.8rem !important;
+}
+
+
+/* ============================================================
+ * CREATIVE — narrative typography. Centered italic titles.
+ * Structural cue: prose with indented paragraphs, calligraphic divider.
+ * ============================================================ */
 [data-style="creative"] .text-message h1,
 [data-style="creative"] .text-message h2 {
-    font-family: 'Georgia', serif !important;
-    font-style: italic !important;
+    font-style: italic;
     font-weight: 400 !important;
     text-align: center !important;
-    font-size: 1.85rem !important;
-    letter-spacing: 0.02em !important;
+    letter-spacing: 0.02em;
     margin: 1.6em 0 1.2em !important;
-    opacity: 0.92;
-    color: rgba(255, 240, 215, 1) !important;
-}
-[data-style="creative"] .text-message h3 {
-    font-family: 'Georgia', serif !important;
-    font-style: italic !important;
-    font-weight: 400 !important;
-    text-align: center !important;
-    font-size: 1.2rem !important;
-    margin: 1.2em 0 0.6em !important;
-    opacity: 0.85;
-}
-[data-style="creative"] .text-message p {
-    text-indent: 1.4em;
-    margin-bottom: 0.4em !important;
-}
-[data-style="creative"] .text-message p:first-of-type,
-[data-style="creative"] .text-message h2 + p,
-[data-style="creative"] .text-message h3 + p,
-[data-style="creative"] .text-message hr + p {
-    text-indent: 0;
 }
 [data-style="creative"] .text-message em {
-    opacity: 0.92;
-    color: rgba(255, 245, 225, 0.95);
-}
-[data-style="creative"] .text-message strong {
-    font-weight: 700 !important;
-    font-style: normal;
+    color: var(--paper-1) !important;
 }
 [data-style="creative"] .text-message hr {
     border: none !important;
@@ -354,13 +138,3 @@
  * code-first answers, ### sub-headings) come from the model's markdown
  * output. The unified visual system renders that markdown beautifully —
  * no extra CSS required per style. */
-    opacity: 0.45;
-    font-size: 1rem;
-}
-[data-style="creative"] .text-message ul,
-[data-style="creative"] .text-message ol {
-    /* Lists are jarring in narrative prose — narrow + italic if model emits them */
-    font-style: italic;
-    opacity: 0.92;
-    padding-left: 2rem !important;
-}

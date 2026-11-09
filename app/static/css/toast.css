@@ -227,6 +227,50 @@
   text-shadow: 0 0 10px rgba(74,222,128,0.5);
 }
 
+/* ============================================================
+   Light theme — flip glass card from dark-tint to cream-tint and
+   swap white text for warm near-black. White-on-cream is invisible.
+   ============================================================ */
+[data-theme="light"] .toast {
+  --_accent: rgba(40, 30, 15, 0.40);
+  --_tint-border: rgba(40, 30, 15, 0.10);
+  background:
+    radial-gradient(ellipse at 30% -20%, rgba(255, 255, 255, 0.45) 0%, transparent 50%),
+    var(--_tint),
+    rgba(255, 253, 248, 0.78);
+  box-shadow:
+    0 0 30px -10px var(--_glow),
+    0 1px  1px rgba(40, 30, 15, 0.05),
+    0 2px  4px rgba(40, 30, 15, 0.06),
+    0 6px 16px rgba(40, 30, 15, 0.08),
+    0 20px 50px rgba(40, 30, 15, 0.06),
+    inset 0  1px  0 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px  0 0 rgba(40, 30, 15, 0.04),
+    inset 1px 0   0 0 rgba(255, 255, 255, 0.3),
+    inset -1px 0  0 0 rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="light"] .toast__msg {
+  color: var(--text-primary, #1f1d1a);
+}
+
+[data-theme="light"] .toast__btn {
+  color: rgba(40, 30, 15, 0.40);
+}
+[data-theme="light"] .toast__btn:hover {
+  color: rgba(40, 30, 15, 0.85);
+  background: rgba(40, 30, 15, 0.06);
+  border-color: rgba(40, 30, 15, 0.10);
+  box-shadow: 0 0 12px rgba(40, 30, 15, 0.04);
+}
+[data-theme="light"] .toast__btn:active {
+  background: rgba(40, 30, 15, 0.10);
+}
+[data-theme="light"] .toast__btn--done {
+  color: #16a34a !important;
+  text-shadow: 0 0 10px rgba(22, 163, 74, 0.30);
+}
+
 /* ================================================================
    Type variants
    ================================================================ */

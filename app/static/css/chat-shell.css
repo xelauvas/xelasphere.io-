@@ -605,3 +605,44 @@ body.composer-animating-to-bottom .chat-shell__composer {
 .chat-shell__composer .chat-input:focus-visible {
     outline: none;
 }
+
+/* ============================================================
+ * ChatGPT-style composer pass (2026-05-24).
+ *
+ * Targeted overrides to bring the input bar closer to ChatGPT's
+ * look without flipping the global Claude-warm theme:
+ *   - 32px send button as a clean circle (bumped from 30px)
+ *   - Send button hover stays light (no gold wash)
+ *   - Mic + Actions hover stays neutral (no gold)
+ *
+ * Earlier rules in this file paint gold tints on hover; these
+ * declarations appear later, so they win by source-order.
+ * ============================================================ */
+.chat-shell__composer .send-button {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    right: 10px !important;
+    bottom: 4px !important;  /* align with .microphone-button / .voice-mode-button (both bottom:4px) */
+    border-radius: 50% !important;
+}
+.chat-shell__composer .send-button:hover:not(:disabled) {
+    background-color: var(--paper-1) !important;
+    border-color: var(--paper-1) !important;
+    transform: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+}
+
+.chat-shell__composer .actions-toggle:hover,
+.chat-shell__composer .actions-toggle:focus-visible,
+.chat-shell__composer .microphone-button:hover {
+    background: var(--bg-hover) !important;
+    border-color: var(--hairline-2) !important;
+    color: var(--paper-1) !important;
+}
+.chat-shell__composer .actions-menu.open .actions-toggle {
+    background: var(--bg-hover) !important;
+    border-color: var(--hairline-2) !important;
+    color: var(--paper-1) !important;
+}

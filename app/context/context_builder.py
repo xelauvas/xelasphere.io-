@@ -373,7 +373,20 @@ class ContextBuilder:
         return total
 
     def _format_artifact_context(self, files: List[Dict[str, Any]]) -> str:
-        parts = ["CURRENT ARTIFACT FILES (for reference when fixing/updating):"]
+        parts = [
+            "ACTIVE ARTIFACT — the user is currently working on this artifact; its "
+            "files are shown below.\n"
+            "If the user's message asks to change, fix, update, add to, remove from, "
+            "modify, refactor, rename, restyle, extend, or improve this code IN ANY "
+            "WAY, you MUST respond with `ACTION: patch_artifact` (targeted edits) or "
+            "`ACTION: create_artifact` (full rewrite). Do NOT answer a code-change "
+            "request with `ACTION: chat` — that leaves the artifact unchanged, which "
+            "is wrong. Use `ACTION: chat` ONLY when the user is asking a question and "
+            "does not want the code itself modified.\n"
+            "When patching, copy old_string VERBATIM from the files below (exact "
+            "whitespace and indentation) so the patch applies cleanly.\n",
+            "CURRENT ARTIFACT FILES:",
+        ]
         for f in files:
             path = f.get("path", "unknown")
             lang = f.get("language", "text")

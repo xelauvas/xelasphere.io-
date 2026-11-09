@@ -65,8 +65,6 @@ def send_transactional_email(
     except _SGHTTPError as exc:
         # SendGrid SDK raises HTTPError for any non-2xx instead of returning
         # a Response object — classify by status code, not exception class.
-        # Caught live in M0 prod deploy: a 403 (unverified domain) was being
-        # routed through the generic-Exception branch and marked retryable.
         status = getattr(exc, "status_code", 0)
         body = getattr(exc, "body", b"")
         retryable = 500 <= status < 600

@@ -1597,3 +1597,78 @@ body.sidebar-collapsed .sidebar-footer .profile-header .dropdown-container {
     font-size: 0.9rem;
     color: var(--text-secondary, rgba(255, 255, 255, 0.7));
 }
+
+/* ============================================================
+   Light theme — dashboard.css uses warm-dark hardcoded gradients
+   and white-tinted glass surfaces that go invisible on cream.
+   Flip dashboard-scoped vars + paint cards with dark-tint overlays
+   that match the warm cream palette in design-tokens.css.
+   ============================================================ */
+[data-theme="light"] .dashboard-page {
+    --dashboard-glass-border: rgba(40, 30, 15, 0.10);
+    --dashboard-shadow: rgba(40, 30, 15, 0.08);
+    --dashboard-gradient-start: #faf9f5;
+    --dashboard-gradient-end: #f3efe7;
+}
+
+[data-theme="light"] .dashboard-page {
+    background-image:
+        radial-gradient(circle at top, rgba(16, 163, 127, 0.06), transparent 45%),
+        radial-gradient(circle at 20% 20%, rgba(91, 70, 214, 0.06), transparent 35%),
+        linear-gradient(135deg, var(--dashboard-gradient-start), var(--dashboard-gradient-end));
+}
+
+[data-theme="light"] .dashboard-page::before {
+    background-image:
+        radial-gradient(circle at 10% 20%, rgba(16, 163, 127, 0.05), transparent 55%),
+        radial-gradient(circle at 80% 0%, rgba(91, 70, 214, 0.06), transparent 55%);
+}
+
+[data-theme="light"] .ambient-orbs .orb {
+    opacity: 0.18;
+    background: radial-gradient(circle, rgba(16, 163, 127, 0.35), transparent 70%);
+}
+[data-theme="light"] .ambient-orbs .orb-two {
+    background: radial-gradient(circle, rgba(91, 70, 214, 0.30), transparent 70%);
+}
+[data-theme="light"] .ambient-orbs .orb-three {
+    background: radial-gradient(circle, rgba(30, 111, 217, 0.28), transparent 70%);
+}
+
+/* Glass cards / dropdowns / hover surfaces — flip white-tint to dark-tint
+   so they actually paint visibly on cream. */
+[data-theme="light"] .dropdown-menu.glass-panel {
+    background: rgba(255, 255, 255, 0.96);
+    border-color: rgba(40, 30, 15, 0.10);
+    box-shadow: 0 20px 45px rgba(40, 30, 15, 0.12);
+}
+
+[data-theme="light"] .profile-tag,
+[data-theme="light"] .quick-action,
+[data-theme="light"] .logout-button {
+    background: rgba(40, 30, 15, 0.04);
+    border-color: rgba(40, 30, 15, 0.08);
+}
+[data-theme="light"] .quick-action:hover,
+[data-theme="light"] .dropdown-links a:hover,
+[data-theme="light"] .logout-button:hover {
+    background: rgba(40, 30, 15, 0.08);
+}
+[data-theme="light"] .dropdown-links {
+    border-top-color: rgba(40, 30, 15, 0.08);
+    border-bottom-color: rgba(40, 30, 15, 0.08);
+}
+
+/* Hero banner — was warm-dark gradient with white border. */
+[data-theme="light"] .dashboard-hero {
+    background: linear-gradient(135deg,
+        rgba(255, 255, 255, 0.85),
+        rgba(243, 239, 231, 0.92));
+    box-shadow: 0 20px 55px rgba(40, 30, 15, 0.10);
+}
+[data-theme="light"] .dashboard-hero::before {
+    background: radial-gradient(circle at 20% 20%, rgba(16, 163, 127, 0.10), transparent 60%);
+}
+[data-theme="light"] .dashboard-hero::after {
+    border-color: rgba(40, 30, 15, 0.04);
+}

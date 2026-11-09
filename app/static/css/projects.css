@@ -89,8 +89,10 @@
 .sidebar-projects-header:hover { color: var(--text-primary); }
 
 .sidebar-projects-title {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   color: inherit;
   user-select: none;
 }
@@ -157,11 +159,12 @@
   gap: 10px;
   width: 100% !important;
   min-width: 0 !important;
-  min-height: 0 !important;
-  padding: 6px 8px 6px 0 !important;
+  min-height: 34px !important;
+  margin: 2px 0;
+  padding: 0 8px !important;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font: inherit;
   font-size: 14px;
@@ -178,6 +181,16 @@
   background: var(--bg-hover);
   outline: 2px solid var(--text-secondary) !important;
   outline-offset: 1px;
+}
+
+/* Active row — sidebar row matching the project page you're viewing.
+   Set by projectsModule.renderList() when the URL is /p/<id>. */
+.sidebar-project-row.is-active {
+  background: var(--bg-hover);
+  min-height: 36px !important;
+}
+.sidebar-project-row.is-active .name {
+  font-weight: 500;
 }
 
 /* The New-project entry is a CTA, not a real project — read as muted */
@@ -220,6 +233,81 @@
   font-size: 12px;
   font-style: italic;
   color: var(--text-tertiary);
+}
+
+/* --- Nested chats under the active project ----------------------- */
+/* Indented chat rows that appear beneath .is-active project row.
+   Mirrors ChatGPT's pattern: 32px tall, 28px indent, no icon. */
+.sidebar-project-chats {
+  list-style: none;
+  margin: 2px 0 4px;
+  padding: 0;
+}
+.sidebar-project-chat {
+  display: flex !important;
+  align-items: center;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 32px !important;
+  margin: 2px 0;
+  padding: 0 8px 0 28px !important;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-primary);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 120ms ease, color 120ms ease;
+}
+.sidebar-project-chat:hover {
+  background: var(--bg-hover);
+}
+.sidebar-project-chats-empty {
+  padding: 4px 8px 4px 28px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-tertiary);
+}
+
+/* --- "More" overflow row ---------------------------------------- */
+/* Same geometry as project rows but muted, no folder icon. The
+   three dots are typographic, not an icon — fewer SVGs to manage. */
+.sidebar-project-morebtn {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 34px !important;
+  margin: 2px 0;
+  padding: 0 8px !important;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-secondary);
+  transition: background 120ms ease, color 120ms ease;
+}
+.sidebar-project-morebtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.sidebar-project-morebtn .more-dots {
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
 }
 
 /* ==================================================================
@@ -489,20 +577,110 @@ body.project-modal-open { overflow: hidden; }
   text-decoration: none;
 }
 .project-context-tag .folder-icon { width: 12px; height: 12px; }
+/* display:inline-flex above overrides the UA [hidden] rule, so honor the
+   hidden attribute explicitly — otherwise the tag shows (empty name, accent
+   background) on every chat that has no project. */
+.project-context-tag[hidden] { display: none; }
 
 /* ---------- Project landing page ---------- */
+/* ChatGPT-pure look: header (icon + name) + tabs + chats list.
+   Auxiliary buttons/sections (rename, menu, "+ New chat", Instructions,
+   Files) are hidden via .pp-hidden — code stays for future use. */
+.pp-hidden { display: none !important; }
+
 .project-page {
-  max-width: 860px;
+  max-width: 640px;
   margin: 0 auto;
-  padding: 32px 24px;
+  padding: 60px 24px 32px;
   color: var(--text-primary);
-  background: var(--bg-primary);
-  min-height: 100vh;
+  background: transparent;
+  /* No min-height: the page sizes to content. The parent .chat-stage
+     already provides the visual frame. */
 }
 .project-page-header {
-  display: flex; align-items: center; gap: 12px;
-  margin-bottom: 24px;
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 20px;
 }
+
+/* {} icon button — clickable, opens the icon/color picker.
+   Glyph stays neutral (text-primary) like ChatGPT; the project's
+   accent color shows up on the sidebar row, not here. */
+.project-page-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.project-page-icon-btn:hover { background: var(--bg-hover); }
+.project-page-icon-btn .project-page-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+}
+.project-page-icon-btn .project-page-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.project-page-title {
+  flex: 1;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin: 0;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+/* --- Tabs (Chats / Sources) ------------------------------------- */
+.project-page-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+  height: 36px;
+  border-bottom: 1px solid var(--border-primary);
+  margin: 4px 0 16px;
+}
+.project-page-tab {
+  background: transparent;
+  border: none;
+  padding: 0 0 8px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;  /* overlap parent border so active underline sits on the line */
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.project-page-tab:hover { color: var(--text-primary); }
+.project-page-tab.is-active {
+  color: var(--text-primary);
+  font-weight: 500;
+  border-bottom-color: var(--text-primary);
+}
+
+.project-sources-placeholder {
+  padding: 24px 4px;
+  font-size: 14px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* Legacy auxiliary controls kept for forward-compat; hidden by .pp-hidden. */
 .project-page-back {
   font-size: 18px;
   text-decoration: none;
@@ -515,8 +693,6 @@ body.project-modal-open { overflow: hidden; }
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-.project-page-folder { width: 28px; height: 28px; color: var(--project-accent, var(--accent)); }
-.project-page-title { flex: 1; font-size: 24px; font-weight: 600; margin: 0; color: var(--text-primary); }
 .project-page-edit,
 .project-page-menu {
   background: transparent;
@@ -531,21 +707,30 @@ body.project-modal-open { overflow: hidden; }
 .project-page-edit:hover,
 .project-page-menu:hover { background: var(--bg-hover); }
 
-/* Primary action — same inverse high-contrast pattern as modal Create */
+/* Compact New-chat row that lives below the tabs. Less visual weight
+   than the previous full-bleed CTA; the standard chat input in the
+   sidebar already covers "start any chat", so this is just the
+   in-project shortcut. */
 .project-new-chat-btn {
-  width: 100%;
-  padding: 14px 18px;
-  background: var(--text-primary);
-  color: var(--bg-primary);
-  border: 1px solid var(--text-primary);
-  border-radius: 12px;
-  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin: 12px 0 0;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  margin-bottom: 32px;
-  transition: opacity 120ms ease;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
-.project-new-chat-btn:hover { opacity: 0.88; }
+.project-new-chat-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}
 
 .project-section { margin: 28px 0; }
 .project-section-title {
@@ -589,21 +774,62 @@ body.project-modal-open { overflow: hidden; }
 }
 
 .project-chats { list-style: none; padding: 0; margin: 0; }
+
+/* ChatGPT-style chat row: 64px tall, divider line, title + preview + date.
+   The row is flex; left column stacks title over preview, date pins right. */
 .project-chat-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border-primary);
+  border-radius: 0;
   cursor: pointer;
   color: var(--text-primary);
   transition: background 120ms ease;
 }
-.project-chat-row:hover { background: var(--bg-hover); }
-.project-chat-row .title { flex: 1; font-size: 14px; }
-.project-chat-row .updated { font-size: 12px; color: var(--text-tertiary); }
+.project-chat-row:hover {
+  background: var(--bg-hover);
+  border-radius: 8px;
+  border-bottom-color: transparent;
+}
+.project-chat-row .pcr-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+.project-chat-row .pcr-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.project-chat-row .pcr-preview {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.project-chat-row .pcr-date {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
 
 .project-chats-empty {
-  padding: 14px;
-  font-size: 13px;
+  padding: 24px 4px;
+  font-size: 14px;
   color: var(--text-tertiary);
   font-style: italic;
 }
@@ -659,6 +885,91 @@ body.project-modal-open { overflow: hidden; }
   color: var(--border-error);
   background: var(--bg-hover);
 }
+
+/* ---------- Icon + color picker popover ---------- */
+/* Triggered by clicking .project-page-icon-btn in the project header.
+   Layout: color swatches row → divider → 5-col icon grid → footer. */
+.icon-color-picker {
+  position: absolute;
+  z-index: 1500;
+  width: 224px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  padding: 12px;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.icp-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 10px;
+}
+.icp-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 100ms ease;
+}
+.icp-swatch:hover { transform: scale(1.08); }
+.icp-swatch.is-selected {
+  /* Inner gap + 2px white ring, per spec. */
+  box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 4px var(--text-primary);
+}
+
+.icp-divider {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 8px 0;
+}
+
+.icp-icons {
+  display: grid;
+  grid-template-columns: repeat(5, 36px);
+  gap: 4px;
+}
+.icp-icon-cell {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+.icp-icon-cell svg { width: 18px; height: 18px; }
+.icp-icon-cell:hover { background: var(--bg-hover); }
+.icp-icon-cell.is-selected {
+  background: var(--bg-hover);
+  border-color: var(--border-secondary);
+}
+
+.icp-footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-primary);
+}
+.icp-close {
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+.icp-close:hover { color: var(--text-primary); }
 
 /* ---------- Project page ⋯ menu popover + color picker ---------- */
 .project-page-menu-popover {
@@ -1016,164 +1327,4 @@ body.project-modal-open { overflow: hidden; }
   .project-page-title { font-size: 22px; }
   .project-page-icon { flex-basis: 42px; width: 42px; height: 42px; border-radius: 12px; }
   .project-new-chat-btn { width: 100%; }
-}
-
-/* =====================================================================
-   2026 sidebar/project refresh — compact, quiet ChatGPT-style hierarchy
-   ===================================================================== */
-.sidebar-projects {
-  margin: 10px 0 4px;
-  padding: 0 8px 8px;
-  border: 0;
-}
-
-.sidebar-projects-header,
-.sidebar-projects-header.sidebar-projects-header {
-  min-height: 28px !important;
-  margin: 0 0 2px !important;
-  padding: 4px 8px !important;
-  border-radius: 8px;
-  color: var(--text-tertiary);
-}
-
-.sidebar-projects-header:hover { background: var(--bg-hover); }
-.sidebar-projects-title { font-size: 12px; font-weight: 600; }
-.sidebar-projects-chevron { margin-left: auto; }
-
-.sidebar-project-newbtn,
-.sidebar-project-row,
-.sidebar-project-newbtn.sidebar-project-newbtn,
-.sidebar-project-row.sidebar-project-row {
-  min-height: 36px !important;
-  padding: 7px 8px !important;
-  gap: 10px;
-  border-radius: 8px;
-  color: var(--text-secondary);
-}
-
-.sidebar-project-row:hover,
-.sidebar-project-row.is-active,
-.sidebar-project-newbtn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.sidebar-project-row.is-active { font-weight: 500; }
-.sidebar-project-newbtn .folder-icon,
-.sidebar-project-row .folder-icon { width: 17px; height: 17px; flex-basis: 17px; }
-.sidebar-project-row .folder-icon { color: var(--text-secondary); }
-.sidebar-project-row.is-active .folder-icon { color: var(--project-accent, var(--text-primary)); }
-.sidebar-project-newbtn .name,
-.sidebar-project-row .name { font-size: 13.5px; line-height: 20px; }
-.sidebar-projects-more-hint { margin: 0 16px 8px; padding: 2px 0; font-style: normal; }
-.sidebar-project-morerow,
-.sidebar-project-chats { list-style: none; margin: 0; padding: 0; }
-.sidebar-project-morebtn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 34px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 13.5px;
-  cursor: pointer;
-}
-.sidebar-project-morebtn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.sidebar-project-chats { padding: 2px 0 5px 27px; }
-.sidebar-project-chats ul { list-style: none; margin: 0; padding: 0; }
-.sidebar-project-chat {
-  min-height: 30px;
-  padding: 5px 8px;
-  border-radius: 7px;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 20px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.sidebar-project-chat:hover { background: var(--bg-hover); color: var(--text-primary); }
-.sidebar-project-chats-empty { padding: 5px 8px; color: var(--text-tertiary); font-size: 12px; }
-
-.chat-tab[draggable='true'] { cursor: pointer; }
-.chat-tab--dragging { opacity: .45; }
-.sidebar-project-row[data-drag-over='true'] {
-  background: color-mix(in srgb, var(--project-accent, var(--text-primary)) 14%, var(--bg-hover));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--project-accent, var(--text-primary)) 35%, transparent);
-}
-
-.project-page {
-  width: min(960px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 52px 0 88px;
-}
-
-.project-page-header { margin-bottom: 28px; align-items: center; }
-.project-page-identity { gap: 14px; }
-.project-page-icon {
-  width: 46px;
-  height: 46px;
-  flex-basis: 46px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--project-accent) 14%, var(--bg-secondary));
-  border: 1px solid color-mix(in srgb, var(--project-accent) 20%, var(--border-secondary));
-  box-shadow: none;
-}
-.project-page-title { font-size: 28px; font-weight: 650; line-height: 34px; }
-.project-page-subtitle { font-size: 13px; }
-.project-page-menu { border-radius: 9px; }
-.project-new-chat-btn {
-  width: 100%;
-  min-height: 48px;
-  justify-content: flex-start;
-  border-radius: 14px;
-  margin-bottom: 22px;
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  background: var(--text-primary);
-  color: var(--bg-primary);
-  border: 0;
-  box-shadow: none;
-}
-.project-new-chat-btn:hover { opacity: .9; transform: none; }
-.project-page-settings-grid { gap: 14px; }
-.project-card,
-.project-section.project-conversations {
-  border: 1px solid var(--border-secondary);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
-  box-shadow: none;
-}
-.project-card { padding: 20px; }
-.project-section-title,
-.project-conversations-title { font-size: 14px; font-weight: 600; }
-.project-instructions { border-radius: 10px; }
-.project-section.project-conversations { margin-top: 18px; padding: 8px; }
-.project-conversations-header { padding: 12px 12px 10px; }
-.project-conversations-title { margin: 0; color: var(--text-primary); }
-.project-conversations-subtitle { margin: 3px 0 0; color: var(--text-tertiary); font-size: 12px; line-height: 17px; }
-.project-chat-row {
-  min-height: 52px;
-  padding: 11px 12px;
-  border: 0;
-  border-radius: 10px;
-  color: var(--text-primary);
-}
-.project-chat-row + .project-chat-row { margin-top: 2px; }
-.project-chat-row:hover { background: var(--bg-hover); }
-.project-chat-row .title { font-size: 14px; font-weight: 450; }
-.project-chat-row .updated { font-size: 11px; }
-.project-chats-empty { margin: 0; padding: 26px 12px 30px; text-align: center; }
-
-@media (max-width: 700px) {
-  .project-page { width: auto; padding: 24px 16px 64px; }
-  .project-page-header { align-items: flex-start; }
-  .project-page-subtitle { display: none; }
 }

@@ -215,17 +215,7 @@ class ChatSession:
                     return lu.timestamp()
                 return 0
             all_docs.sort(key=_last_updated_sort_key, reverse=True)
-            all_docs = [
-                doc for doc in all_docs
-                if self._is_active_history_session(doc.to_dict() or {})
-            ]
-            start_index = 0
-            if page_token:
-                start_index = next(
-                    (idx + 1 for idx, doc in enumerate(all_docs) if doc.id == page_token),
-                    0,
-                )
-            sessions = iter(all_docs[start_index:start_index + page_size + 1])
+            sessions = iter(all_docs[:page_size + 1])
         else:
             sessions_query = self._get_sessions_query(user_id, page_token)
             # Ungrouped filtering is client-side to include legacy documents
@@ -249,14 +239,10 @@ class ChatSession:
 
         chat_history = []
         next_token = None
-        last_returned_id = None
 
         for idx, session_doc in enumerate(sessions):
             if idx >= page_size:
-                # The cursor must identify the last returned document because
-                # Firestore resumes *after* it. Using the look-ahead document
-                # here silently dropped one chat on every subsequent page.
-                next_token = last_returned_id
+                next_token = session_doc.id
                 break
 
             session_data = session_doc.to_dict()
@@ -306,7 +292,6 @@ class ChatSession:
                 'is_temporary': is_temporary,
                 'project_id': session_data.get('project_id'),
             })
-            last_returned_id = session_doc.id
 
         return {'chat_history': chat_history, 'next_page_token': next_token}
 
@@ -320,24 +305,18 @@ class ChatSession:
         count = 0
         for doc in sessions:
             data = doc.to_dict() or {}
-            if (
-                data.get('project_id') in valid_project_ids
-                and self._is_active_history_session(data)
-            ):
+            status = data.get('status', 'active')
+            if data.get('project_id') in valid_project_ids and status not in ('archived', 'temporary'):
                 count += 1
         return count
 
     @staticmethod
     def _is_visible_ungrouped(data: Dict[str, Any], valid_project_ids: set) -> bool:
         """Return True for an active chat that is not in an existing project."""
-        if not ChatSession._is_active_history_session(data):
+        status = data.get('status', 'active')
+        if status in ('archived', 'temporary') or data.get('is_temporary'):
             return False
         return data.get('project_id') not in valid_project_ids
-
-    @staticmethod
-    def _is_active_history_session(data: Dict[str, Any]) -> bool:
-        status = data.get('status', 'active')
-        return status not in ('archived', 'temporary') and not data.get('is_temporary')
 
     def list_metadata(self, user_id: str) -> List[Dict[str, Any]]:
         """Return flat metadata for ALL sessions of a user — no message bodies.
@@ -502,7 +481,7 @@ class ChatSession:
         return True
 
     def bulk_delete_sessions(self, user_id: str, session_ids: List[str]) -> int:
-        """Delete multiple sessions in Firestore-safe batches.
+        """Delete multiple sessions in a single Firestore batch.
 
         Returns count of sessions deleted. Sessions that do not exist
         are silently skipped (the count reflects only existing ones).
@@ -511,19 +490,13 @@ class ChatSession:
             return 0
         batch = self.db.batch()
         deleted = 0
-        pending = 0
         for session_id in session_ids:
             ref = self._get_session_ref(user_id, session_id)
             snap = ref.get()
             if snap.exists:
                 batch.delete(ref)
                 deleted += 1
-                pending += 1
-                if pending == 450:
-                    batch.commit()
-                    batch = self.db.batch()
-                    pending = 0
-        if pending:
+        if deleted > 0:
             batch.commit()
         return deleted
 

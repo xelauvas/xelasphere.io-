@@ -1,0 +1,3 @@
+/* esm.sh - zustand@5.0.2 */
+var a=t=>{let e,o=new Set,c=(n,u)=>{let s=typeof n=="function"?n(e):n;if(!Object.is(s,e)){let g=e;e=u??(typeof s!="object"||s===null)?s:Object.assign({},e,s),o.forEach(m=>m(e,g))}},r=()=>e,i={setState:c,getState:r,getInitialState:()=>f,subscribe:n=>(o.add(n),()=>o.delete(n))},f=e=t(c,r,i);return i},S=t=>t?a(t):a;import b from"react";var p=t=>t;function x(t,e=p){let o=b.useSyncExternalStore(t.subscribe,()=>e(t.getState()),()=>e(t.getInitialState()));return b.useDebugValue(o),o}var l=t=>{let e=S(t),o=c=>x(e,c);return Object.assign(o,e),o},E=t=>t?l(t):l;export{E as create,S as createStore,x as useStore};
+//# sourceMappingURL=zustand.bundle.mjs.map
