@@ -647,22 +647,33 @@
 
   // ----------------------------------------------------------------- sidebar
   function initSidebar() {
-    const list = $('#tab-list');
-    if (!list) return;
-    const header = list.closest('.sidebar-section') && $('.sidebar-section-header', list.closest('.sidebar-section'));
-    let busy = false;
+    const first = $('#tab-list');
+    if (!first) return;
+    // Watch the section, not the list: the app re-renders rows in several passes and
+    // may swap the list element itself.
+    const root = first.closest('.sidebar-section') || first.parentElement;
+    const options = { childList: true, subtree: true };
+    let queued = false;
+    let observer = null;
 
     const tidy = () => {
-      if (busy) return;
-      busy = true;
+      queued = false;
+      const list = $('#tab-list');
+      if (!list) return;
+      const header = $('.sidebar-section-header', root);
+      observer.disconnect();
       try {
         list.querySelectorAll('.xc-list-label').forEach((n) => n.remove());
         const tabs = [...list.querySelectorAll('li.chat-tab')];
         tabs.forEach((tab) => {
           const name = $('.tab-name', tab);
           if (!name || name.isContentEditable) return;
-          const next = sentenceCase(name.textContent);
-          if (next && next !== name.textContent) name.textContent = next;
+          const raw = name.textContent;
+          // A title that is still being typed out ends in a space now and then;
+          // rewriting it at that moment would swallow the space.
+          if (raw !== raw.trim()) return;
+          const next = sentenceCase(raw);
+          if (next && next !== raw) name.textContent = next;
         });
         const pinned = tabs.filter((t) => t.querySelector('.pinned-toggle'));
         const firstRecent = tabs.find((t) => !t.querySelector('.pinned-toggle'));
@@ -683,12 +694,16 @@
           list.insertBefore(label, firstRecent);
         }
       } finally {
-        // let the observer drain our own mutations first
-        setTimeout(() => { busy = false; }, 0);
+        observer.observe(root, options);
       }
     };
 
-    new MutationObserver(tidy).observe(list, { childList: true });
+    observer = new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(tidy);
+    });
+    observer.observe(root, options);
     tidy();
   }
 

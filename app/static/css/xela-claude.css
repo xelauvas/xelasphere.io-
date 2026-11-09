@@ -3132,3 +3132,11 @@ body.images-page-open .xc-home-artifacts {
   text-align: left !important;
   color: var(--xc-text) !important;
 }
+
+/* ---------- 27. Code: show the characters that were typed (no <= / -> ligatures) ---------- */
+:root:is([data-theme], :not([data-theme])) pre,
+:root:is([data-theme], :not([data-theme])) code,
+:root:is([data-theme], :not([data-theme])) pre code * {
+  font-variant-ligatures: none !important;
+  font-feature-settings: "liga" 0, "calt" 0 !important;
+}

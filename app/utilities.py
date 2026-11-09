@@ -269,6 +269,17 @@ def _model_error_payload(message: str, code: str, **details) -> dict:
     return payload
 
 
+def _apply_local_model_options(provider: str, payload: dict) -> dict:
+    """Request options for the local llama-server model (provider "ollama").
+
+    Without this the model spends hundreds of tokens on hidden reasoning before the
+    first visible word (measured: 18 s vs 0.4 s to first token on a short question).
+    """
+    if provider == "ollama" and not getattr(Config, "OLLAMA_THINKING", False):
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
+    return payload
+
+
 def _get_provider_config(provider: str, resolved_model: str, api_overrides: Dict[str, str]):
     """
     Get API configuration for a provider.
@@ -398,6 +409,7 @@ def _execute_prompt_request(prompt: str, resolved_model: str, provider: str, api
     logger.debug(f"Preparing to send prompt to {url} with model {resolved_model}")
 
     try:
+        _apply_local_model_options(provider, data)
         response = requests.post(url, json=data, headers=headers, timeout=timeout)
         status_code = response.status_code
 
@@ -581,6 +593,7 @@ def send_metadata_prompt(
             payload["response_format"] = {"type": "json_object"}
 
         try:
+            _apply_local_model_options(provider, payload)
             response = requests.post(url, json=payload, headers=headers, timeout=timeout)
             if response.status_code >= 400:
                 logger.warning(
@@ -674,6 +687,7 @@ def stream_deepseek_response(prompt: str, model: str = "deepseek-v4-pro", system
     }
 
     try:
+        _apply_local_model_options(provider, data)
         response = requests.post(url, json=data, headers=headers, stream=True, timeout=(10, 90))
         response.raise_for_status()
 
@@ -795,6 +809,7 @@ def send_prompt_with_images(prompt: str, images: List[Dict[str, str]], model: st
     logger.debug(f"Sending multimodal prompt with {len(images)} image(s) to {url} with model {resolved_model}")
 
     try:
+        _apply_local_model_options(provider, data)
         response = requests.post(url, json=data, headers=headers, timeout=60)  # Longer timeout for vision
         response.raise_for_status()
 

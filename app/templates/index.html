@@ -227,7 +227,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/stream-styles.css') }}?v=4">
 
     <!-- Final skin: claude.ai-style layout with the Xela brand (must stay last) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-claude.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/xela-claude.css') }}?v=3">
 
     <!-- Lightweight Charts (TradingView) — v5 introduces breaking series-creation API
          (addAreaSeries → addSeries(AreaSeries, ...)) handled in cryptoChartModule.js -->
@@ -406,8 +406,7 @@
         <div id="sidebar" class="left-sidebar closed{% if is_guest %} guest-sidebar{% endif %}">
             <div class="sidebar-header">
                 <a href="/" class="sidebar-logo-link" title="Go to Home">
-                    <img class="xc-brand-tile" src="{{ url_for('static', filename='brand/xela-tile.svg') }}" alt="" width="24" height="24">
-                    <span class="sidebar-brand-text">Xela</span>
+                    <span class="sidebar-brand-text">XelaSphere</span>
                 </a>
                 <button type="button" class="sidebar-header-ghost" aria-label="Start incognito chat" data-tooltip="Go Incognito" onclick="window.chatManager?.createNewChat(null, { temporary: true, notifySuccess: false })">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="34" height="34" aria-hidden="true">
@@ -1523,7 +1522,7 @@
     <script src="{{ url_for('static', filename='js/artifactPanel.js') }}?v=67"></script>
     <script src="{{ url_for('static', filename='js/projectsModule.js') }}?v=14" defer></script>
     <script src="{{ url_for('static', filename='js/xela-claude.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='js/xela-pages.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='js/xela-pages.js') }}?v=2"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Dropdown Menu Logic ---

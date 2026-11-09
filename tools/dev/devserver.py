@@ -40,6 +40,7 @@ for k, v in {
     "OLLAMA_MODEL": "qwen3.6-27b",
     "MEMPALACE_MODE": "off",
     "REMINDERS_ENABLED": "true",
+    "RESPONSE_STYLE_ORGANISM_ENABLED": "true",
     "PUSH_ENABLED": "false",
 }.items():
     os.environ.setdefault(k, v)

@@ -47,6 +47,10 @@ class Config:
     OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma4:e2b')
     # Sent as Bearer when the local server requires it (llama-server --api-key)
     OLLAMA_API_KEY = os.getenv('OLLAMA_API_KEY')
+    # Qwen thinks before it answers: ~20-40 s of silence in the chat before the first
+    # visible word. Off by default so the answer starts streaming at once; set
+    # OLLAMA_THINKING=true to trade speed for more deliberate answers.
+    OLLAMA_THINKING = os.getenv('OLLAMA_THINKING', 'false').lower() == 'true'
     # Xela Code (CLI) link: public API host, and the pre-device-flow static key that
     # /api/cli/verify keeps accepting for older clients
     XELA_API_BASE_URL = os.getenv('XELA_API_BASE_URL', 'https://api.xelasphere.com').rstrip('/')
