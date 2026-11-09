@@ -15,6 +15,8 @@
         { id: 'auto',              label: 'Chat',  icon: '', note: '', host: '', mono: false },
         { id: 'deepseek-v4-pro',   label: 'Code',  icon: '', note: '', host: '', mono: true },
         { id: 'deepseek-v4-flash', label: 'Think', icon: '', note: '', host: '', mono: false },
+        // Xela's own model: Qwen3.6-27B on the GPU machine (same model Xela Code uses)
+        { id: 'qwen3.6-27b',       label: 'Xela',  icon: '', note: 'Local GPU', host: 'Local GPU', mono: false },
     ];
 
     const TASK_ICON_MAP = {

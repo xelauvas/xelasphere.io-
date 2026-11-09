@@ -221,10 +221,20 @@ MODEL_CATALOG = {
     # OLLAMA MODELS (Local)
     # ============================================
 
+    # Xela's own model: llama-server on the GPU machine, reached through the reverse SSH
+    # tunnel on 127.0.0.1:11434 (see deploy/XELA-CODE-LINK.md). Same model Xela Code uses.
+    "qwen3.6-27b": {
+        "label": "Xela Qwen3.6 27B (Local GPU)",
+        "provider": "ollama",
+        "selectable": True,
+        "speed": "medium",
+        "context": 65536,
+    },
+
     "gemma4:e2b": {
         "label": "Gemma 4 E2B (Local)",
         "provider": "ollama",
-        "selectable": True,
+        "selectable": False,  # Ollama is not running on the server
         "speed": "fast",
         "context": 32000,
     },
@@ -232,7 +242,7 @@ MODEL_CATALOG = {
     "dolphin3": {
         "label": "Dolphin 3 (Uncensored)",
         "provider": "ollama",
-        "selectable": True,
+        "selectable": False,  # Ollama is not running on the server
         "uncensored": True,
         "speed": "fast",
         "context": 32000,

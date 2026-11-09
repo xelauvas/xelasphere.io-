@@ -282,7 +282,9 @@ def _get_provider_config(provider: str, resolved_model: str, api_overrides: Dict
         headers = {
             "Content-Type": "application/json"
         }
-        timeout = 120  # Local models can be slower on first request
+        if getattr(Config, "OLLAMA_API_KEY", None):
+            headers["Authorization"] = f"Bearer {Config.OLLAMA_API_KEY}"
+        timeout = 300  # Local model: first token can be slow and answers can be long
     elif provider == "openrouter":
         effective_key = (api_overrides.get('openrouter') if api_overrides else None) or Config.OPENROUTER_API_KEY
         if not effective_key:
